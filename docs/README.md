@@ -158,6 +158,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0096](decisions/ADR-0096-the-repository-is-all-rights-reserved-by-anisotropy-and-third-party-values-keep-their-owners-terms.md) | The repository is all rights reserved by Anisotropy (`LICENSE`), and third-party values keep their owners' terms by the rights classes of ADR-0018 (`NOTICE`); a source-available licence may be revisited later (proposed) |
 | [0097](decisions/ADR-0097-the-changelog-gets-a-dated-section-per-production-deploy-one-sentence-and-its-record-per-line.md) | The changelog gets a dated section per production deploy, one sentence and its record per line (proposed) |
 | [0098](decisions/ADR-0098-the-home-pages-demo-shows-an-example-wing-whole-apart-analysed-and-whole-again-from-one-recorded-solve-of-the-mesh-it-draws.md) | The home page's demo shows an example wing in place of the coupon: whole, apart into its parts, coloured by one recorded CalculiX solve of the very mesh it draws, and whole again; ahead of the product, which analyses coupons (proposed) |
+| [0099](decisions/ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) | The assistant answers a question about a result ("stress in ply 5 at element 120", "strain here") by reading the place with fixed patterns and looking the value up in the results the page shows; no model reads it and none writes a number (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

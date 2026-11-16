@@ -601,6 +601,61 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect(browserErrors).toEqual([]);
 });
 
+test("the assistant answers a question about a ply's stress from the results on the page, reads “here” as the clicked element and frames the place (ADR-0099)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await say("what is the stress on ply 5 at element 125?"); // asked before anything is solved: no number, and the setup is not touched
+  await expect(page.getByTestId("chat-value-none")).toContainText("then ask again");
+  expect(calls.checks).toHaveLength(1);
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("chat-ask-hint")).toContainText("at element");
+
+  const fields = fixture("fields");
+  const element = fields.mesh.element_labels.indexOf("Strip-1.125");
+  await say("what is the stress on ply 5 at element 125?");
+  const card = page.getByTestId("chat-values").last();
+  await expect(card).toHaveAttribute("data-element", "125");
+  await expect(card).toHaveAttribute("data-source", "run");
+  const cells = card.getByTestId("chat-values-table").locator("tr[data-ply='5'] td");
+  await expect(cells).toHaveText((fields.element.ply.stress_12[element][4] as number[]).map((v) => printed(v))); // the fields' own numbers, printed as the probe table prints them
+  await expect(card.getByTestId("chat-values-note")).toContainText("Element centroid, no averaging, fibre axes");
+  // the viewer frames the place: the element is read out with every ply, and the model shows σ₁ of ply 5
+  await expect(page.getByTestId("probe")).toContainText("Ply results at element 125");
+  await expect(page.getByLabel("Field", { exact: true })).toHaveValue("S11");
+  await expect(page.getByLabel("Ply", { exact: true })).toHaveValue("5");
+  expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
+
+  await say("s11 in ply 2 at element 125");
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`σ₁ in ply 2 (0°) at element 125 is ${printed(fields.element.ply.stress_12[element][1][0])} MPa.`);
+
+  // “here” is the element picked on the model: the answer card's Show picks the governing element
+  await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click();
+  const title = await page.getByTestId("probe").locator("summary").innerText();
+  const here = title.replace("Ply results at element ", "").trim();
+  await say("shear strain here, ply 3");
+  const picked = fields.mesh.element_labels.indexOf(`Strip-1.${here}`);
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`γ₁₂ in ply 3 (-45°) at element ${here} is ${printed(fields.element.ply.strain_12[picked][2][2])}.`);
+
+  await say("stress on ply 5 at element 1212");
+  await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
+  await say("stress on ply 9 at element 12");
+  await expect(page.getByTestId("chat-value-refused").last()).toContainText("there is no ply 9");
+  // an earlier answer shows its place again
+  await page.getByTestId("chat-values").first().getByTestId("chat-values-show").click();
+  await expect(page.getByTestId("probe")).toContainText("Ply results at element 125");
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]); // the product's own words (ADR-0091)
+  expect(browserErrors).toEqual([]);
+});
+
 test("a thing to fix takes its rows in the chat, and applying them checks again (ADR-0062 amendment 2)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

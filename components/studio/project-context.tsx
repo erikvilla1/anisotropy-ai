@@ -31,7 +31,16 @@ export type ProjectContextValue = {
   rename(name: string): void;
   replace(project: CouponProject): void;
   run: CouponRun;
+  /** The element clicked on the results, by its index in the mesh shown, so the assistant can read "here" (ADR-0099); null for none. */
+  picked: number | null;
+  setPicked(element: number | null): void;
+  /** A place the assistant asks the viewer to frame: the element and, when one is named, the ply, the face and the field. */
+  place: Place | null;
+  showPlace(place: Omit<Place, "at">): void;
 };
+
+/** A place on the results; `at` tells one request from the next, so the same place can be shown twice. */
+export type Place = { element: number; ply: number | null; face?: string | null; /** the viewer's field to colour the model by */ field?: string; at: number };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
@@ -71,6 +80,9 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [towAnswer, setTowAnswer] = useState<TowAnswer | null>(null);
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [place, setPlace] = useState<Place | null>(null);
+  const showPlace = useCallback((next: Omit<Place, "at">) => setPlace((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
@@ -78,8 +90,8 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
-    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run,
-  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run]);
+    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, picked, setPicked, place, showPlace,
+  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, picked, place, showPlace]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

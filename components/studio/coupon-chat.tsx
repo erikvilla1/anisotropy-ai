@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type JobStatus,
-  type ProposalAnswer } from "@/lib/studio-api";
+import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
+  type JobStatus, type ProposalAnswer } from "@/lib/studio-api";
 import { couponOffer, couponRowsFrom } from "@/lib/proposals";
+import { answerResultQuestion, readResultQuestion, RESULT_COLUMNS, resultSentence, resultUnit, type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
 import {
@@ -21,6 +22,7 @@ import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-pa
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
+import { shownResults } from "./use-coupon-run";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
@@ -35,7 +37,9 @@ type Entry =
   | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer }
   | { id: number; role: "assistant"; kind: "job"; job: string }
   | { id: number; role: "assistant"; kind: "result"; job: string }
-  | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer };
+  | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer }
+  // a value read from the results on the page (ADR-0099): the answer as read, the fields it was read from, and whether they were a preview
+  | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -65,6 +69,13 @@ const materialName = (id: string) => libraryOptions.find((m) => m.id === id)?.na
 const estimated = (value: number) => String(Number(value.toPrecision(4)));
 const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
+/** Where an answer is on the model (ADR-0099): its element, its ply and face when it holds one row, and the first quantity asked for as
+ * the field the model is coloured by. */
+function placeOf(answer: ResultValues) {
+  const one = answer.rows.length === 1 ? answer.rows[0] : null;
+  return { element: answer.element, ply: one ? one.ply : null, face: one ? one.face : null, field: RESULT_COLUMNS[answer.columns[0]]?.field };
+}
+
 const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> = {
   test: { title: "What are we analysing?", text: "Pick a test, or describe the coupon in one line, e.g. “unnotched tension, ASTM D3039, IM7/8552, [45/0/-45/90]s, 1 mm pull”." },
   material: { title: "Which material?", text: "Pick one from the library, or enter your own under Layup and material." },
@@ -91,7 +102,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, run: runner, restored, allTests } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const shown = shownResults(runner); // the results on the page: what a question about a value is answered from (ADR-0099)
   // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
@@ -334,11 +346,32 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       </div> });
   }
 
+  /** A question about a value of the results (ADR-0099), answered from the fields the page shows: the page reads the place and the
+   * quantity, looks the rows up and prints them as the probe table does. No model reads it and no number is typed by one. */
+  function answerQuestion(text: string, question: ResultQuestion) {
+    add({ role: "user", text });
+    if (!shown.fields) {
+      add({ role: "assistant", kind: "text", title: "No results to read yet",
+        body: <p data-testid="chat-value-none">Stresses and strains come from a solved model. {checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}</p> });
+      return;
+    }
+    const answer = answerResultQuestion(shown.fields, question, picked);
+    if (answer.kind !== "values") {
+      add({ role: "assistant", kind: "text", tone: answer.kind === "refused" ? "problem" : undefined, title: answer.kind === "ask" ? "Which element?" : "Not in this model",
+        body: <p data-testid={`chat-value-${answer.kind}`}>{answer.kind === "ask" ? answer.text.replace(/^Which element\? /, "") : answer.text}</p> });
+      return;
+    }
+    add({ role: "assistant", kind: "values", answer, from: shown.fields, preview: shown.live });
+    showPlace(placeOf(answer));
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    const question = readResultQuestion(text);
+    if (question) { answerQuestion(text, question); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
@@ -607,12 +640,50 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {check ? <p className={check.verified ? "chat-ok" : "chat-note"} data-testid="chat-result-line">{check.verified ? <Check size={13} /> : null} {check.line}</p> : null}
         {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state !== "running" ? "."
           : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
+        <p className="chat-note" data-testid="chat-ask-hint">Ask for a value: “stress in ply {earliest?.ply ?? 1} at element {(earliest?.label ?? fields.mesh.element_labels[0] ?? "1").split(".").pop()}”, or click an element and ask “strain here”.</p>
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
           <button type="button" onClick={() => ask("material")}>Try another material</button>
           <button type="button" onClick={startOver}>New coupon</button>
         </Chips>
+      </div>
+    );
+  }
+
+  /** The values of an answer (ADR-0099): one value as a sentence, more as a table of the plies asked for, with the place, how the values
+   * are taken, and whether they are a preview's. Show frames the place while the results it was read from are still the page's. */
+  function valuesMessage(entry: Extract<Entry, { kind: "values" }>): ReactNode {
+    const { answer, from, preview } = entry;
+    const lab = from.labels;
+    const sentence = resultSentence(answer, resultUnit(from, answer.columns[0]), printed);
+    const faces = answer.rows.some((r) => r.face);
+    const current = shown.fields === from;
+    const one = answer.rows.length === 1 ? answer.rows[0] : null;
+    return (
+      <div data-testid="chat-values" data-element={answer.label} data-source={preview ? "live" : "run"}>
+        <h4>{sentence ? "Read from the results" : `Element ${answer.label}${one ? `, ply ${one.ply} (${one.angle}°)` : ", every ply"}`}</h4>
+        {sentence ? <p data-testid="chat-value"><strong>{sentence}</strong></p> : (
+          <div className="studio-table-scroll">
+            <table className="studio-table studio-table-num studio-table-compact" data-testid="chat-values-table">
+              <thead><tr><th scope="col">Ply</th>{faces ? <th scope="col">Face</th> : null}
+                {answer.columns.map((c) => <th key={c} scope="col">{RESULT_COLUMNS[c].symbol}{resultUnit(from, c) ? <><br /><span className="studio-muted">{resultUnit(from, c)}</span></> : null}</th>)}</tr></thead>
+              <tbody>{answer.rows.map((r) => (
+                <tr key={`${r.ply}-${r.face ?? ""}`} data-ply={r.ply}><th scope="row">{r.ply} · {r.angle}°</th>{faces ? <td className="studio-text-cell">{r.face}</td> : null}
+                  {r.values.map((v, i) => <td key={answer.columns[i]}>{v === null ? "–" : printed(v)}</td>)}</tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        <p className="chat-note" data-testid="chat-values-note">
+          Element {answer.label} at ({printed(answer.centroid[0])}, {printed(answer.centroid[1])} {lab.length}){answer.sets.length ? `, in ${answer.sets.map(setWords).join(", ")}` : ""}. {answer.note}
+          {preview ? " From the preview: run the analysis to verify it." : ""}
+        </p>
+        <Chips>
+          <button type="button" disabled={!current} data-testid="chat-values-show"
+            onClick={() => showPlace(placeOf(answer))}>Show on the model</button>
+        </Chips>
+        {!current ? <p className="chat-note">The setup has changed since: ask again for the current values.</p> : null}
       </div>
     );
   }
@@ -627,6 +698,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer);
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
+    else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
