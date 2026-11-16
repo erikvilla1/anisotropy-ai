@@ -866,6 +866,62 @@ class ProposalResponse(Contract):
     reason: str | None
 
 
+ResultQuantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
+
+
+class OfferedPly(Contract):
+    ply: Annotated[int, Field(ge=1, le=200)]
+    angle: Annotated[float, Field(ge=-360, le=360)]
+
+
+class ResultQuestionRequest(Contract):
+    """A message to read as a question about a result (ADR-0100): the message and what it may name, the quantities of the page's probe
+    table, the plies from the bottom face with their angles, whether the model has a gauge section, and whether an element is clicked.
+    The model sees these and never a result, a file, a name or a note (R-11)."""
+
+    message: Annotated[str, Field(min_length=1, max_length=2000)]
+    quantities: Annotated[list[ResultQuantity], Field(min_length=1, max_length=12)]
+    plies: Annotated[list[OfferedPly], Field(min_length=1, max_length=200)]
+    gauge: bool
+    picked: bool
+
+    @model_validator(mode="after")
+    def _in_order(self) -> Self:
+        if len(set(self.quantities)) != len(self.quantities):
+            raise ValueError("each quantity is offered once")
+        if [p.ply for p in self.plies] != list(range(1, len(self.plies) + 1)):
+            raise ValueError("the plies are numbered from 1, bottom face first")
+        return self
+
+
+class ResultRequest(Contract):
+    """What a message asks of the results, as the guard kept it: names from the offer and whole numbers, no value of a result. `values`
+    reads the quantities at an element (its number, or the clicked one when `here`); `extreme` finds where they are largest, smallest or
+    largest in magnitude over a region. Empty `plies` is every ply."""
+
+    kind: Literal["values", "extreme"]
+    quantities: list[ResultQuantity]
+    plies: list[int]
+    element: int | None
+    here: bool
+    sense: Literal["largest", "smallest", "magnitude"] | None
+    region: Literal["default", "gauge", "whole"]
+
+
+class ResultQuestionResponse(Contract):
+    """The model's reading of a question about a result, as the guard kept it (ADR-0100); the page looks the values up. `request` is null
+    when the message asks nothing of the results or the reading did not stand (`dropped` says why); `writer` is `template` when no model
+    read the message, with the reason when one was asked."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    request: ResultRequest | None
+    question: str | None
+    dropped: list[str]
+    reason: str | None
+
+
 class CouponTests(Contract):
     """Whether every coupon test is offered here (ADR-0089): the page asks once, and with no answer offers the unnotched tension
     coupon only, the list its form definition carries."""

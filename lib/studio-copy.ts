@@ -33,6 +33,7 @@ export const FAILED_WORDS: Record<string, string> = {
   "the explanation": "The explanation could not be loaded",
   "the laminate solve": "The laminate could not be solved",
   "the proposals": "The message could not be read",
+  "the reading of the question": "The question could not be read",
   "the tests offered": "The tests offered could not be loaded",
   "the assistant": "The assistant could not be reached",
 };

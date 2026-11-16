@@ -33,6 +33,7 @@ from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .proposals import model_view_of_form, source_guard
+from .result_questions import model_view, question_guard, question_schema
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
@@ -52,7 +53,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    ProjectRename, ProposalRequest, ProposalResponse, ResultQuestionRequest, ResultQuestionResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -1364,6 +1365,26 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
                                 question=kept.question, dropped=kept.dropped, reason=None)
 
     return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/result-questions", response_model=ResultQuestionResponse)
+def read_result_question(asked: ResultQuestionRequest, actor: Actor, request: Request, response: Response) -> ResultQuestionResponse:
+    """The model reads a loose question about a result into a fixed request, and the guard keeps it only inside what the page offered
+    (ADR-0100): quantities and a region by name, plies the laminate holds, an element the message writes. No result is sent here, shown to
+    the model or returned: the page runs the request on the results it shows. With no model, or one that does not answer, nothing is read
+    and the page's own patterns stand (ADR-0099). Recorded with the model's name when one read it (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> ResultQuestionResponse:
+        view = model_view(asked.message, list(asked.quantities), [p.model_dump(mode="json") for p in asked.plies], asked.gauge, asked.picked)
+        reading = assistant.read_question(view, question_schema([q["key"] for q in view["quantities"]], [r["key"] for r in view["regions"]]))
+        if reading.raw is None:
+            return ResultQuestionResponse(run_id=None, writer=reading.writer, model=None, request=None, question=None, dropped=[], reason=reading.reason)
+        kept = question_guard(reading.raw, asked.message, view)
+        return ResultQuestionResponse(run_id=None, writer=reading.writer, model=reading.model, request=kept.request, question=kept.question,
+                                      dropped=kept.dropped, reason=None)
+
+    return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)
