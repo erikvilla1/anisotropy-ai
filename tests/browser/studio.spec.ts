@@ -191,6 +191,8 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("answer-factor-tsai_hill")).toHaveText("1.032");
   await expect(page.getByTestId("answer-loading-tsai_hill")).toContainText("1.032 mm");
   await expect(page.getByTestId("answer-outside")).toContainText("At a grip edge, Tsai-Hill is reached earlier, at 1.013 × the applied loading");
+  // where the gauge section is read (ADR-0108), as the package wrote it: the same distance from the tab lines on every mesh
+  await expect(page.getByTestId("answer-gauge-reading")).toHaveText("The gauge section is read at least 6.25 mm from each tab line, a quarter of the width, the same distance on every mesh.");
   await expect(page.getByTestId("answer-extremes").locator("tbody tr")).toHaveCount(5);
   await expect(page.getByTestId("fpf-details")).not.toHaveAttribute("open", ""); // the per-criterion tables of the whole model fold away under the answer
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call

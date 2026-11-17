@@ -90,6 +90,7 @@ def test_a_solve_returns_the_packages_answer_and_sentences_and_an_id_never_the_f
     assert solved["solved"] is True and solved["result_id"] == "r1" and solved["solver"] == "kernel" and "no CalculiX cross-check" in solved["kind"]
     assert solved["answer"]["verdict"] == summary["verdict"] and solved["answer"]["first_ply_failure"] == summary["fpf_gauge"]
     assert solved["answer"]["first_ply_failure_basis"] == "the gauge section" and solved["answer"]["reaction"] == summary["reaction"]
+    assert solved["answer"]["gauge_section_read"] == summary["gauge_reading"] and summary["gauge_reading"]["stand_off"] == 6.25  # ADR-0108
     assert solved["answer"]["first_ply_failure"]["tsai_hill"]["ply"] == 4 and solved["answer"]["applied"] == summary["applied"]
     assert solved["sentences"] == EXPLANATION["sentences"] and solved["coupon"]["layup"] == "[45/0/-45/90]s"
     assert solved["can_be_asked"] == results.offer(FIELDS) and solved["setup"]["blocking"] == []

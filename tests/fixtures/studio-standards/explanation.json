@@ -139,7 +139,10 @@
   "tm_poisson_theory": 0.3152,
   "tm_fpf_criterion": "tsai_hill",
   "tm_fpf_basis": "the gauge section",
-  "tm_fpf_stress": 458.3
+  "tm_fpf_stress": 458.3,
+  "outside_near_tab": false,
+  "gauge_stand_off": 6.25,
+  "gauge_stand_off_of": "width"
  },
  "sentences": [
   "IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries 1.622e+04 N, in tension.",
@@ -149,6 +152,7 @@
   "By the maximum stress criterion the laminate holds at the applied loading, in the gauge section: the first ply to fail would be ply 4 (90 degrees), tied with ply 5, at element 219 (10.42, 181.2 mm), 13 mm from the nearer tab line, by tension across the fibres (sigma_2 reaching F2t, a matrix-dominated mode), at 1.059 times the applied loading (1.059 mm, 1.718e+04 N at the top grip; failure index 0.9441).",
   "The earliest of the criteria is Tsai-Hill.",
   "Outside the gauge section, Tsai-Hill is reached earlier, at 1.004 times the applied loading, at element 67, at the edge of a gripped tab: the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer.",
+  "The gauge section is read at least 6.25 mm from each tab line, a quarter of the width, the same distance on every mesh.",
   "As ASTM D3039/D3039M-17 reduces a test: the gross area is 36.58 mm² (25 by 1.463 mm), so the force along the coupon, 1.622e+04 N, is a stress of 443.5 MPa.",
   "The extensometer over 25 mm reads 7289 microstrain, so the chord modulus between 1000 and 3000 microstrain is 60.85 GPa (laminate theory gives 60.85 GPa), and Poisson's ratio is 0.3152 (laminate theory: 0.3152); a linear model gives the same slope over any range.",
   "By Tsai-Hill in the gauge section, the first ply fails at a gross stress of 458.3 MPa: a first-ply-failure stress, not the ultimate strength the standard takes at the maximum force of a test, which a linear model cannot give."

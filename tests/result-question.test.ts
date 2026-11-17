@@ -118,10 +118,26 @@ test("a quantity with an extreme word asks where it is largest: the end, the pli
   assert.deepEqual(readResultQuestion("highest stress at element 12"), { kind: "values", element: 12, plies: null, columns: ["S11", "S22", "S12"] });
 });
 
+test("the gauge section is read from the list the package wrote, and a result solved before that list by its own rule (ADR-0108)", () => {
+  // a finer mesh: the package leaves out two rows beside each tab line, where the old rule left out one
+  const rows = fields.mesh.gauge_elements!.filter((e) => { const y = fields.element.centroids[e][1]; return y > 66 && y < 184; });
+  assert.ok(rows.length > 0 && rows.length < fields.mesh.gauge_elements!.length);
+  const narrowed = { ...fields, mesh: { ...fields.mesh, gauge_elements: rows } };
+  assert.deepEqual(gaugeSection(narrowed), rows, "the written list is the gauge section, whatever the grips' node sets say");
+  const answer = extremes(answerResultQuestion(narrowed, readResultQuestion("max s22")!, null));
+  assert.equal(answer.elements, rows.length);
+  assert.ok(answer.blocks[0].rows.every((row) => rows.includes(row.element)));
+  const { gauge_elements: _, ...olderMesh } = fields.mesh;
+  const older = { ...fields, mesh: olderMesh };
+  assert.equal(gaugeSection(older)!.length, 130, "no list: the Gauge set less the elements at a gripped node, as that result was read (ADR-0085)");
+  assert.equal(gaugeSection({ ...fields, mesh: { ...fields.mesh, gauge_elements: null } }), null, "the package wrote that there is none");
+});
+
 test("the gauge section is the package's own: the page's extremes over it are the package's largest ply stresses, overall and ply by ply", () => {
   const written = fields.summary.ply_extremes!;
   assert.equal(written.basis, "gauge");
-  assert.equal(gaugeSection(fields)!.length, 130, "the Gauge set's 140 elements less the row at each grip");
+  assert.equal(gaugeSection(fields)!.length, 130, "the Gauge set's 140 elements less those within a quarter width of a tab line");
+  assert.deepEqual(gaugeSection(fields), fields.mesh.gauge_elements, "the elements the package wrote (ADR-0108), none derived on the page");
   const same = (a: number, b: number) => Math.abs(a - b) <= 1e-8 * Math.max(Math.abs(a), Math.abs(b));
   for (const [message, column, end] of [["max s11", "S11", "tension"], ["min s11", "S11", "compression"], ["max s22", "S22", "tension"], ["min s22", "S22", "compression"],
     ["largest shear stress", "S12", "largest"]] as const) {
@@ -165,7 +181,7 @@ test("an extreme names its end, its region and the grip edge; an unsigned quanti
   assert.ok(set.blocks[0].rows.every((r) => fields.mesh.element_sets["Tab-Top"].includes(r.element)));
   assert.equal(answerResultQuestion(fields, { kind: "extreme", sense: "largest", plies: null, region: { set: "Hole" }, columns: ["S11"] }, null).kind, "refused");
   assert.equal(answerResultQuestion(fields, readResultQuestion("max s11 in ply 9")!, null).kind, "refused");
-  const plate: Fields = { ...fields, mesh: { ...fields.mesh, node_sets: {}, element_sets: {} } };
+  const plate: Fields = { ...fields, mesh: { ...fields.mesh, node_sets: {}, element_sets: {}, gauge_elements: null } };  // as the package writes a plate
   assert.equal(gaugeSection(plate), null);
   assert.equal(extremes(answerResultQuestion(plate, readResultQuestion("max s11")!, null)).region, "the whole model");
   assert.equal(answerResultQuestion(plate, readResultQuestion("max s11 in the gauge section")!, null).kind, "refused");

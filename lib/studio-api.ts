@@ -60,6 +60,8 @@ export type Span = [number | null, number | null];
 export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
   touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null;
+  /** ADR-0108: inside the stand-off from a tab line without touching a gripped node; absent on a result solved before it. */
+  near_tab?: boolean;
   /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
    * reaction, as the package wrote them; absent on older jobs. */
   fails?: boolean; at_failure?: AtFailure | null };
@@ -67,7 +69,10 @@ export type AtFailure = { applied: number; unit: string; reaction: number; react
 /** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
 export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
 export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
-  mode: string; place: string; touches_grip: boolean; xy: number[] };
+  mode: string; place: string; touches_grip: boolean; near_tab?: boolean; xy: number[] };
+/** Where the gauge section is read (ADR-0108): at least `stand_off` (the result's length unit) from each tab line, a `fraction` of the coupon's width
+ * or of its gauge length (`of`), with the number of `Gauge` elements read and left out. */
+export type GaugeReading = { stand_off: number; fraction: number; of: "width" | "gauge length"; tab_lines: number[]; elements: number; left_out: number };
 /** A ply stress at its largest of one sign (or magnitude), with where it is; `ply` and `angle` on the extremes over every ply. Null when never reached. */
 export type PlyExtreme = { value: number; element: number; label: string; xy: number[]; face: string | null; ply?: number; angle?: number } | null;
 export type ExtremeSet = { S11: { tension: PlyExtreme; compression: PlyExtreme }; S22: { tension: PlyExtreme; compression: PlyExtreme };
@@ -77,7 +82,9 @@ export type Fields = {
   units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
     element_sets: Record<string, number[]>; node_count: number; element_count: number; plies: number; angles: number[];
-    faces?: string[] | null; translations?: number };
+    faces?: string[] | null; translations?: number;
+    /** The elements the gauge section is read at (ADR-0108), null for a model without one; absent on a result solved before it. */
+    gauge_elements?: number[] | null };
   nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][]; rotation?: number[][]; moment_reaction?: number[][];
     averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
       failure_index: Record<string, (number | null)[]>; curvature?: (number | null)[][]; moment?: (number | null)[][]; shear_force?: (number | null)[][] };
@@ -96,8 +103,9 @@ export type Fields = {
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
-    /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
-    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
+    /** The same over the gauge section alone, read past the stand-off from each tab line (`gauge_reading`, ADR-0108; before it, the Gauge elements
+     * that touch no gripped node): what a test is compared with. Absent on older jobs. */
+    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null; gauge_reading?: GaugeReading | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
     /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */

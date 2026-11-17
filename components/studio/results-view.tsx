@@ -353,6 +353,7 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
   const times = a.everyLoad ? "every applied load" : "the applied loading";
   const who = (r: { ply: number; angle: number; face: string | null }) => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
   const extremes = fields.summary.ply_extremes;
+  const reading = fields.summary.gauge_reading;
   return (
     <div className="studio-panel studio-answer" data-testid="answer" data-basis={a.basis} data-fails={e.fails}>
       <h3>First-ply failure <span className="studio-badge">{a.basisWords}</span></h3>
@@ -380,11 +381,16 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
         </table>
       </div>
       <p className="studio-muted">R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading. First-ply failure is the onset of damage, not ultimate strength.</p>
+      {a.basis === "gauge" && reading ? (
+        <p className="studio-muted" data-testid="answer-gauge-reading">
+          The gauge section is read at least {printed(reading.stand_off)} {L} from each tab line, a quarter of the {reading.of}, the same distance on every mesh.
+        </p>
+      ) : null}
       {a.outside ? (
         <p className="studio-answer-outside" data-testid="answer-outside">
-          {a.outside.touches_grip ? "At a grip edge" : `Outside ${a.basisWords}`}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
+          {a.outside.touches_grip ? "At a grip edge" : a.outside.near_tab ? "Beside a tab line" : `Outside ${a.basisWords}`}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
           {a.outside.label.split(".").pop()} {where(a.outside.xy, L)}.
-          {a.outside.touches_grip ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
+          {a.outside.touches_grip || a.outside.near_tab ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
           <button type="button" className="studio-text-button" onClick={() => onShow(a.outside!.element, a.outside!.ply, a.outside!.criterion, a.outside!.face)}>Show</button>
         </p>
       ) : null}

@@ -22,7 +22,7 @@ Out, per tool, as compact JSON text:
 | `check_setup` | The check: what each passed item read, the items that did not pass with the rows to change, and which of them stop a solve |
 | `solve_coupon` | The check and, when nothing blocks, the answer (verdict, first ply to fail per criterion, loading, reaction), the package's sentences, what can be asked, and a `result_id`. Never the fields |
 | `result_values` | One element's stresses and strains ply by ply in fibre axes, and each criterion's strength ratio, index and mode there |
-| `result_extreme` | Where a quantity is largest over the gauge section, the whole model or a named region: the value, ply, element, tied plies, and each ply's own extreme |
+| `result_extreme` | Where a quantity is largest over the gauge section (the elements the package read, `mesh.gauge_elements`, ADR-0108), the whole model or a named region: the value, ply, element, tied plies, and each ply's own extreme |
 | `explain_result` | The result's fact sheet, the package's sentences and the theory sections the question's words find, with their text |
 | `show_working` | The working of ADR-0103: each formula, the formula with the numbers put in, and its result |
 
