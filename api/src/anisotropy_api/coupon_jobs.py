@@ -39,7 +39,7 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import (claim_coupon, claim_job, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
+from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
                       sweep_stale, update_job)
 from .storage import ObjectStore, content_type, input_key, store_file, store_folder, store_job, sync
 
@@ -280,6 +280,15 @@ class CouponJobs:
                 job.snapshot["message"] = f"queued; {ahead} ahead" if ahead else "queued"  # the words a customer reads (ADR-0091)
         return job
 
+    def coupons_of(self, user_email: str | None) -> set[str]:
+        """The names of the coupons that owner's jobs alone have run, here and in the jobs table (ADR-0104)."""
+        with self.lock:
+            here = list(self.jobs.values())
+        owners = {((job.outcome or {}).get("coupon") or (job.progress() or {}).get("coupon"), job.user_email) for job in here}
+        if self.table is not None:
+            owners |= coupon_owners(self.table)
+        return coupons_of({(coupon, email) for coupon, email in owners if coupon}, user_email)
+
     def sweep(self, force: bool = False) -> int:
         """With the job queue, stop the jobs nothing will finish (`records.sweep_stale`), at most every SWEEP_EVERY_S unless `force`;
         0 without the queue."""
@@ -302,13 +311,14 @@ class CouponJobs:
             print(f"the coupons could not be brought level with the store: {str(exc).splitlines()[0]}", flush=True)
         self.synced_at = time.monotonic()
 
-    def listed(self) -> list[Job]:
-        """Every job, newest first: this process's, and from the jobs table those of earlier processes."""
+    def listed(self, user_email: str | None = EVERYONE) -> list[Job]:
+        """The jobs, newest first: this process's, and from the jobs table those of earlier processes; `user_email` keeps one
+        owner's (ADR-0104)."""
         self.sweep()
         with self.lock:
-            jobs = dict(self.jobs)
+            jobs = {key: job for key, job in self.jobs.items() if user_email == EVERYONE or job.user_email == user_email}
         if self.table is not None:
-            for row in list_jobs(self.table):
+            for row in list_jobs(self.table, user_email=user_email):
                 jobs.setdefault(row.id, Job.from_row(row))
         return sorted(jobs.values(), key=lambda job: job.started_at, reverse=True)
 

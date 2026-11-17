@@ -40,7 +40,7 @@ from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
-from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
@@ -306,6 +306,24 @@ def solve_case_endpoint(problem: CaseRequest, actor: Actor, request: Request, re
     return _deliver(request, response, actor, problem, compute)
 
 
+def _email(request: Request) -> str | None:
+    return getattr(request.state, "user_email", None)
+
+
+def _owner(request: Request) -> str | None:
+    """Whose runs, jobs, files and coupons a request may see (ADR-0104). Behind Cloudflare Access: the signed-in email, or None for a
+    service token, which has no email and sees what was made with none. With no sign-in in front of the API (the local one,
+    ADR-0011) there is one user and nothing is narrowed: EVERYONE."""
+    if getattr(request.app.state, "access_verifier", None) is None:
+        return EVERYONE
+    return _email(request)
+
+
+def _theirs(owner: str | None, user_email: str | None) -> bool:
+    """Whether a record made under `user_email` is that owner's to see."""
+    return owner == EVERYONE or owner == user_email
+
+
 def _records_engine(request: Request):
     """The connection pool, or 503 when recording is switched off: there is nothing to read."""
     engine = getattr(request.app.state, "records", None)
@@ -329,7 +347,7 @@ def list_runs_endpoint(
     since: dt.datetime | None = None, until: dt.datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> list[RunSummary]:
-    """The newest runs first, narrowed by actor, endpoint, status and time (ADR-0026).
+    """The requester's runs, newest first, narrowed by actor, endpoint, status and time (ADR-0026, ADR-0104).
 
     `since` is inclusive and `until` exclusive, both with a timezone offset. An unknown actor or
     status is refused rather than answered with an empty list.
@@ -341,7 +359,7 @@ def list_runs_endpoint(
         raise HTTPException(status_code=422, detail=f"status must be one of {', '.join(STATUSES)}; got {status!r}")
     try:
         runs = list_runs(engine, actor=actor, endpoint=endpoint, status=status,
-                         since=_aware("since", since), until=_aware("until", until), limit=limit)
+                         since=_aware("since", since), until=_aware("until", until), limit=limit, user_email=_owner(request))
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}") from exc
     return [RunSummary.of(run) for run in runs]
@@ -349,13 +367,13 @@ def list_runs_endpoint(
 
 @app.get("/v1/runs/{run_id}", response_model=RunOutput)
 def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
-    """One run record as stored (ADR-0026)."""
+    """One run record as stored (ADR-0026). 404 for a run that is not the requester's, in the same words as for none (ADR-0104)."""
     engine = _records_engine(request)
     try:
         run = fetch_run(engine, run_id)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}") from exc
-    if run is None:
+    if run is None or not _theirs(_owner(request), run.user_email):
         raise HTTPException(status_code=404, detail=f"No run {run_id}")
     return RunOutput.of(run)
 
@@ -367,9 +385,28 @@ def _coupon_jobs(request: Request) -> CouponJobs:
     return jobs
 
 
-def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+def _coupons_unread(exc: SQLAlchemyError) -> HTTPException:
+    print(f"the jobs table did not answer: {str(exc).splitlines()[0]}", flush=True)  # the cause stays in the log, not in the answer
+    return HTTPException(status_code=503, detail="Your coupons could not be read right now. Try again in a minute.")
+
+
+def _their_coupon(request: Request, jobs: CouponJobs, name: str) -> None:
+    """Passes when the coupon of that name is one the requester's jobs alone have run (ADR-0104); 404 otherwise, in the same words
+    as for a name there is no coupon of."""
+    owner = _owner(request)
+    try:
+        known = owner == EVERYONE or name in jobs.coupons_of(owner)
+    except SQLAlchemyError as exc:
+        raise _coupons_unread(exc) from exc
+    if not known:
+        raise HTTPException(status_code=404, detail=f"no coupon of that name: {name}")
+
+
+def _known_job(request: Request, jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    """The job by its id when it is the requester's (ADR-0104). 404 otherwise, in the same words as for none, so no job is confirmed
+    to a stranger."""
     job = jobs.get(job_id)
-    if job is None:
+    if job is None or not _theirs(_owner(request), job.user_email):
         # not in this process, nor in the jobs table (none without records); a job that ended has its receipt among the runs
         raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
     return job
@@ -389,6 +426,8 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
     values = job_request.values_bytes() if job_request.values is not None else None
     project_id = _own_project_id(request, actor, job_request.project_id)
+    if job_request.coupon is not None:
+        _their_coupon(request, jobs, job_request.coupon)
     try:
         # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
         options = [*job_request.options(), *EVERY_TEST[_every_test(request)]]
@@ -642,10 +681,6 @@ def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, r
 
 # ----------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)
 
-def _email(request: Request) -> str | None:
-    return getattr(request.state, "user_email", None)
-
-
 def _uploads(request: Request) -> Uploads:
     uploads = getattr(request.app.state, "uploads", None)
     if uploads is None:
@@ -861,7 +896,9 @@ def _our_run(request: Request, row, job_id: uuid.UUID | None) -> Job:
             raise NotCompared(f"you have no finished run of {row.coupon} here to stand beside it: run the coupon, or name a run with job_id")
         job_id = found.id
     job = jobs.get(job_id)
-    if job is None:
+    # a run named by its id must be the upload's owner's own (ADR-0104); locally, with no sign-in and no email, any run is
+    owner = row.user_email if row.user_email is not None or getattr(request.app.state, "access_verifier", None) is not None else EVERYONE
+    if job is None or not _theirs(owner, job.user_email):
         raise NotCompared(f"there is no coupon job {job_id}")
     if job.state != "done":
         raise NotCompared(f"coupon job {job_id} is {job.state}; an upload stands beside a run that is done")
@@ -1098,9 +1135,9 @@ def delete_upload_endpoint(upload_id: uuid.UUID, actor: Actor, request: Request)
 
 @app.get(COUPON_JOBS, response_model=list[CouponJobOutput])
 def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
-    """Every coupon job of this API process, newest first (ADR-0051); jobs of earlier processes are in GET /v1/runs?endpoint=/v1/coupon-jobs."""
+    """The requester's coupon jobs, newest first (ADR-0051, ADR-0104): this process's and, from the jobs table, those of earlier ones."""
     jobs = _coupon_jobs(request)
-    listed = jobs.listed()
+    listed = jobs.listed(_owner(request))
     with jobs.lock:
         return [CouponJobOutput.of(job) for job in listed]
 
@@ -1109,7 +1146,7 @@ def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
 def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
     """A coupon job as it stands: its state, the end of its console, and once it is done the files it made (ADR-0050)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     with jobs.lock:
         return CouponJobOutput.of(job)
 
@@ -1130,7 +1167,7 @@ def coupon_job_package(job_id: uuid.UUID, request: Request, name: DownloadName =
     """The package of a job that is done, as a zip: the document, the decks, the material, the results and the audit form."""
     filename = _download_name(name, ".zip")
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     with jobs.lock:
         state, outcome = job.state, job.outcome
     if state != "done":
@@ -1154,7 +1191,7 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: Downloa
     customer downloads by their neutral names (`solver_input`, `reference_input`, `reference_results`); the solver inputs are then served
     from here with a neutral header, never as a link to the team's copy (ADR-0091 amendment 2)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     alias, key = key, FILE_ALIASES.get(key, key)
     if alias in NEUTRAL_DECKS:
         try:
@@ -1203,7 +1240,7 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
     named in the settings, the model's rephrasing of them from the same fact sheet, kept only when every number in it is a fact.
     Recorded with its actor and, when a model wrote it, the model's name (ADR-0026)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     explanation = _job_json(jobs, job, "explanation", "no explanation")
     facts, sentences = explanation.get("facts", {}), list(explanation.get("sentences", []))
     checklist = _job_json(jobs, job, "checklist", "no setup check") if problem.kind == "setup" else None
@@ -1223,10 +1260,15 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
 
 @app.get("/v1/coupons", response_model=list[CouponSummary])
 def list_coupons(request: Request) -> list[CouponSummary]:
-    """Every coupon on this machine, from its spec and its case page (ADR-0051): what the studio offers to reopen."""
+    """The coupons the requester's jobs alone have run, from their specs and case pages (ADR-0051, ADR-0104): what the studio
+    offers to reopen. With no sign-in in front of the API, every coupon on this machine."""
     jobs = _coupon_jobs(request)
+    owner = _owner(request)
     try:
-        return [CouponSummary(**entry) for entry in jobs.list_coupons()]
+        mine = None if owner == EVERYONE else jobs.coupons_of(owner)
+        return [CouponSummary(**entry) for entry in jobs.list_coupons() if mine is None or entry.get("name") in mine]
+    except SQLAlchemyError as exc:
+        raise _coupons_unread(exc) from exc
     except CheckTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except JobRefused as exc:
@@ -1235,8 +1277,10 @@ def list_coupons(request: Request) -> list[CouponSummary]:
 
 @app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
 def coupon_values(name: str, request: Request) -> CouponValuesOutput:
-    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading. 404 for a coupon the
+    requester's jobs have not run, or that another person's have run too (ADR-0104)."""
     jobs = _coupon_jobs(request)
+    _their_coupon(request, jobs, name)
     try:
         return CouponValuesOutput(name=name, values=jobs.coupon_values(name, every=_every_test(request)))
     except UnknownCoupon as exc:

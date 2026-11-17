@@ -43,13 +43,13 @@ GET  /v1/coupon-jobs/{job_id}          state (running, done, stopped, refused), 
 GET  /v1/coupon-jobs/{job_id}/package  the package as a zip, once done
 POST /v1/coupon-jobs                   {"values": {...the form's rows by key...}, "run_by": "Erik Villa"}  -> 202 (the studio's input, ADR-0051)
 POST /v1/coupon-jobs/check             {"values": {...}}  -> the setup checklist and the preview, without a run
-GET  /v1/coupon-jobs                   this process's jobs, newest first
+GET  /v1/coupon-jobs                   the jobs, newest first (behind the sign-in, the requester's own: ADR-0104)
 GET  /v1/coupon-jobs/{job_id}/files/{key}  one file by key (fields, explanation, checklist, preview while it runs; every key once done)
 GET  /v1/projects                      the requester's workspace projects, last changed first (ADR-0062 part 6; 503 with run records off)
 PUT  /v1/projects/{id}                 {"kind": "fea", "name": "...", "content": {...}, "form_version": "0.6", "units": "mm-MPa"}  -> 201 created, 200 replaced
 GET  /v1/projects/{id}                 the project with the jobs started for it
 PATCH /v1/projects/{id}                {"name": "..."}
-GET  /v1/coupons                       every coupon on this machine, from its spec and case page
+GET  /v1/coupons                       every coupon on this machine, from its spec and case page (behind the sign-in, those the requester's jobs alone have run)
 GET  /v1/coupons/{name}/values         a coupon's rows as the values object the studio edits
 POST /v1/coupon-jobs/{job_id}/explain  {"kind": "result" | "setup"}  -> the explanation and who wrote it (ADR-0052)
 ```
