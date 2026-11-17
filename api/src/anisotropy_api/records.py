@@ -119,6 +119,9 @@ class JobRow(Base):
     # stages and of the solver's own phases (restore_s, lock_wait_s, gate_s, upload_s).
     claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     timings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    # The answer in a few values, as the run's tool picked it from the summary our engine wrote (ADR-0109, migration 0012): what the list
+    # of past analyses shows. None for a job that did not end done, one before the migration, or a result without a criterion.
+    answer: Mapped[dict | None] = mapped_column(JSONB)
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 

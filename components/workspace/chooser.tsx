@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, Plus } from "lucide-react";
+import { FolderOpen, History, Plus } from "lucide-react";
 import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
-import { listProjects, noProjectStore } from "@/lib/studio-api";
-import { browserStorage, useAllTests } from "@/components/studio/project-context";
+import { answerWords, askToOpen, pastRuns, runWhen, type PastRun } from "@/lib/run-history";
+import { printed } from "@/lib/studio-colors";
+import { listJobs, listProjects, noProjectStore } from "@/lib/studio-api";
+import { browserStorage, tabStorage, useAllTests } from "@/components/studio/project-context";
 import { isTestEnabled } from "@/lib/enabled-tests";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
@@ -15,10 +17,10 @@ function testTitle(test: string): string {
   return TEST_CHOICES.find((c) => c.test === test)?.title ?? test;
 }
 
-function when(stamp: string): string {
-  const date = new Date(stamp);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
+const when = (stamp: string): string => runWhen(stamp);
+
+/** How many past analyses the list shows before "Show all". */
+const RUNS_SHOWN = 8;
 
 /** What a project is about, in a few words: a coupon's test, a laminate's layup; a coupon of a test the studio does not offer yet (ADR-0089)
  * says so, and stays listed. */
@@ -51,7 +53,8 @@ const SOURCE_WORDS: Record<Source, string> = {
   down: "Saved projects could not be loaded. Showing the ones in this browser. Reload to try again.",
 };
 
-/** `/workspace` (ADR-0062): the projects of both kinds, the last changed first, and one tile per kind of work. The list is this browser's
+/** `/workspace` (ADR-0062): the projects of both kinds, the last changed first, one tile per kind of work, and under them the person's
+ * own finished analyses with each one's answer, opened again as they were solved (ADR-0109). The list is this browser's
  * merged with the server's (part 6): a project kept on another machine appears here, and the later change wins. Opening a project moves
  * it to the front, which is what its workspace picks up; a new project starts blank. */
 export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
@@ -59,6 +62,15 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [source, setSource] = useState<Source>(apiBaseUrl ? "checking" : "browser");
   const allTests = useAllTests(apiBaseUrl);
+  // the person's own finished analyses, newest first (ADR-0109); null while loading, "down" when they could not be read
+  const [runs, setRuns] = useState<PastRun[] | "down" | null>(null);
+  const [allRuns, setAllRuns] = useState(false);
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+    const controller = new AbortController();
+    listJobs(apiBaseUrl, controller.signal).then((jobs) => setRuns(pastRuns(jobs))).catch(() => { if (!controller.signal.aborted) setRuns("down"); });
+    return () => controller.abort("replaced");
+  }, [apiBaseUrl]);
   useEffect(() => {
     const local = readProjects(browserStorage());
     setProjects(local);
@@ -82,6 +94,10 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
     const store = browserStorage();
     writeProjects(upsert(readProjects(store), project), store);
     router.push(workspace(ROUTE[project.kind]).href);
+  }
+  /** A past analysis in the coupon workspace, as it was solved; where this tab keeps nothing, its results in the viewer's own page. */
+  function openRun(run: PastRun) {
+    router.push(askToOpen(tabStorage(), run.job_id) ? workspace("fea").href : `/workspace/fea/view?job=${encodeURIComponent(run.job_id)}`);
   }
   function create(id: WorkspaceId) {
     if (id === "fea") open(newProject());
@@ -127,6 +143,36 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
           </table>
         ) : <p className="studio-muted">None yet. Start one from the tiles above.</p>}
       </section>
+      {apiBaseUrl ? (
+        <section className="studio-panel ws-projects" data-testid="workspace-analyses" data-state={runs === null ? "checking" : runs === "down" ? "down" : "listed"}>
+          <h3><History size={15} /> Your analyses</h3>
+          {runs === null ? <p className="studio-muted">Loading your analyses…</p>
+            : runs === "down" ? <p className="studio-muted" data-testid="analyses-down">Your past analyses could not be loaded. Reload to try again.</p>
+            : runs.length ? (
+              <>
+                <table className="studio-table">
+                  <thead><tr><th>Coupon</th><th>Answer</th><th>First to fail</th><th>Finished</th><th></th></tr></thead>
+                  <tbody>
+                    {(allRuns ? runs : runs.slice(0, RUNS_SHOWN)).map((run) => {
+                      const words = answerWords(run.answer, printed);
+                      return (
+                        <tr key={run.job_id} data-run={run.job_id}>
+                          <td>{run.coupon}</td>
+                          <td data-testid="analysis-answer">{words ? <><strong>{words.verdict}</strong> at {words.loading}</> : "–"}</td>
+                          <td>{words ? words.facts.join(" · ") : "–"}</td>
+                          <td>{when(run.finished_at)}</td>
+                          <td><button type="button" className="chat-link" onClick={() => openRun(run)}>Open</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {!allRuns && runs.length > RUNS_SHOWN
+                  ? <p><button type="button" className="chat-link" onClick={() => setAllRuns(true)} data-testid="analyses-all">Show all {runs.length}</button></p> : null}
+              </>
+            ) : <p className="studio-muted" data-testid="analyses-none">None yet. A finished analysis appears here.</p>}
+        </section>
+      ) : null}
     </div>
   );
 }

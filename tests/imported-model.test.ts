@@ -93,7 +93,13 @@ test("while a model is open the stage and the assistant are its; closed, the cou
   const open = resultsOnPage(run, { open: true, model });
   assert.deepEqual([open.imported, open.live, open.fields === model.fields, open.explanation === model.explanation], [true, false, true, true]);
   // open with nothing solved (a refusal, or before a file is sent): no results to answer from, never the coupon's behind it
-  assert.deepEqual(resultsOnPage(run, { open: true, model: null }), { fields: null, live: false, explanation: null, imported: true });
+  assert.deepEqual(resultsOnPage(run, { open: true, model: null }), { fields: null, live: false, explanation: null, imported: true, past: false, readOnly: true });
   const closed = resultsOnPage(run, { open: false, model });
-  assert.deepEqual([closed.imported, closed.live, closed.explanation?.sentences[0]], [false, true, "live"]);
+  assert.deepEqual([closed.imported, closed.live, closed.explanation?.sentences[0], closed.readOnly], [false, true, "live", false]);
+  // a past run opened again (ADR-0109) has the stage as it was solved: its own fields and words, never the project's live answer behind it
+  const stored = { open: true, fields: model.fields, explanation: { writer: "template", facts: { a: 2 }, sentences: ["as it was solved"], setup_sentences: [] } as never };
+  const past = resultsOnPage(run, { open: false, model }, stored);
+  assert.deepEqual([past.past, past.readOnly, past.live, past.imported, past.fields === model.fields, past.explanation?.sentences[0]], [true, true, false, false, true, "as it was solved"]);
+  assert.equal(resultsOnPage(run, { open: true, model }, stored).imported, true); // a model being imported keeps the stage
+  assert.equal(resultsOnPage(run, { open: false, model }, { ...stored, open: false }).past, false);
 });

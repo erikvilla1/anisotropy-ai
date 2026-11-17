@@ -57,6 +57,15 @@ if args.source == "DECK":  # a done job with its solver input, the team's header
     result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "message": "done",
                                   "outputs": {"abaqus_deck": str(deck), "fields": str(fields)}}), encoding="utf-8")
     sys.exit(0)
+if args.source in ("ANSWER", "NOANSWER"):  # a done job with its answer in a few values and its own rows (ADR-0109)
+    rows = result.parent / "IM7-UNT-L1-values.json"
+    rows.write_text(json.dumps({"form_version": 1, "units": "mm-MPa", "test": "unnotched tension", "length": 250}), encoding="utf-8")
+    answer = {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}
+    if args.source == "NOANSWER":
+        answer = {**answer, "factor": "soon"}  # not the shape the list shows: kept out
+    result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "message": "done",
+                                  "outputs": {"fields": str(fields), "values": str(rows)}, "answer": answer}), encoding="utf-8")
+    sys.exit(0)
 if args.source == "CRASHES":
     print("Traceback: something broke", flush=True)
     sys.exit(2)
@@ -344,6 +353,22 @@ def test_a_values_job_and_a_studio_request_have_their_receipts(recording):
     assert recording.get(f"/v1/runs/{studio['run_id']}").json()["actor"] == "studio"  # the constraint admits the new actor (migration 0004)
 
 
+ANSWER = {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}
+
+
+def test_a_done_job_says_its_answer_and_hands_out_its_rows(jobs):
+    """ADR-0109: what the list of past analyses shows and reopens. The answer is the tool's, kept as written; anything else is no answer."""
+    done = ended(client.post("/v1/coupon-jobs", json={"coupon": "ANSWER", "run_by": "A. Engineer"}).json()["job_id"])
+    assert done["state"] == "done" and done["answer"] == ANSWER
+    rows = client.get(f"/v1/coupon-jobs/{done['job_id']}/files/values")
+    assert rows.status_code == 200 and rows.json() == {"form_version": 1, "units": "mm-MPa", "test": "unnotched tension", "length": 250}
+    other = ended(client.post("/v1/coupon-jobs", json={"coupon": "NOANSWER", "run_by": "A. Engineer"}).json()["job_id"])
+    assert other["state"] == "done" and other["answer"] is None
+    stopped = ended(client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"])
+    assert stopped["state"] == "stopped" and stopped["answer"] is None
+    assert [job["answer"] for job in client.get("/v1/coupon-jobs").json()] == [None, None, ANSWER]  # newest first
+
+
 @pytest.fixture
 def recording_with_table(empty_runs, monkeypatch, tmp_path):
     """The API with run records on and its coupon jobs writing the jobs table, as the lifespan sets them up."""
@@ -371,6 +396,20 @@ def test_a_job_started_for_a_project_is_listed_with_it(recording_with_table):
     unknown = recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer", "project_id": str(uuid.uuid4())})
     assert unknown.status_code == 202 and unknown.json()["project_id"] is None  # a project the API does not hold blocks nothing
     ended(unknown.json()["job_id"], recording)
+
+
+@needs_test_database
+def test_a_jobs_row_keeps_its_answer_for_a_later_process(recording_with_table, tmp_path):
+    """ADR-0109, migration 0012: the answer outlives the process that ran the job, in its row, as the list of past analyses reads it."""
+    recording = recording_with_table
+    done = ended(recording.post("/v1/coupon-jobs", json={"coupon": "ANSWER", "run_by": "A. Engineer"}).json()["job_id"], recording)
+    assert done["answer"] == ANSWER
+    stopped = ended(recording.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"], recording)
+    app.state.coupon_jobs = CouponJobs(app.state.coupon_jobs.command, job_recorder(app), tmp_path / "later", table=app.state.records)  # a later process
+    listed = {job["job_id"]: job for job in recording.get("/v1/coupon-jobs").json()}
+    assert listed[done["job_id"]]["answer"] == ANSWER and listed[done["job_id"]]["state"] == "done"
+    assert listed[stopped["job_id"]]["answer"] is None
+    assert recording.get(f"/v1/coupon-jobs/{done['job_id']}").json()["answer"] == ANSWER
 
 
 # --------------------------------------------------------------------------------- behind Cloudflare Access (ADR-0056)

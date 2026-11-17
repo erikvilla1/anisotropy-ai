@@ -315,6 +315,17 @@ def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]
     return out
 
 
+def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
+    """A result's answer in a few values, for a list of past runs (ADR-0109): whether a ply fails at the applied loading, the factor, the
+    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict."""
+    verdict = summary.get("verdict")
+    if not verdict:
+        return None
+    first = summary["fpf_gauge" if verdict["basis"] == "gauge" else "fpf"][verdict["earliest"]]
+    return {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
+            "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
+
+
 def ply_extremes(stress_12: np.ndarray, mises: np.ndarray, elements: np.ndarray, angles: np.ndarray, shell: bool,
                  label: Any, xy: Any, stress: Any) -> dict[str, Any]:
     """The largest ply stresses over `elements` (the gauge section's, or every element), each ply's in its own fibre axes (ADR-0085):

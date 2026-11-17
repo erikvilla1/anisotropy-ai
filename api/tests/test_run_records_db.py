@@ -232,6 +232,7 @@ def test_migration_0006_creates_the_jobs_table_and_refuses_to_drop_it_over_rows(
         "started_at", "finished_at", "run_id", "log_tail", "process", "project_id",  # project_id since migration 0007
         "source", "options", "heartbeat_at", "peak_memory_bytes",  # since migration 0008
         "claimed_at", "timings",  # since migration 0009 (ADR-0056 amendment 6)
+        "answer",  # since migration 0012 (ADR-0109)
     }
     assert {index["name"] for index in inspect(engine).get_indexes("jobs")} == {"jobs_started_at_idx", "jobs_state_idx",
                                                                                 "jobs_one_running_job_per_coupon"}  # since 0008

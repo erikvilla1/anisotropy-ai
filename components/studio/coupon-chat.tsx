@@ -29,6 +29,7 @@ import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { resultsOnPage } from "./use-imported-model";
+import { runWhen } from "@/lib/run-history";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
@@ -131,13 +132,15 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported, past } = useProject(); // the rows and the run live in the project (ADR-0062)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
-  // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105)
-  const shown = resultsOnPage(runner, imported);
+  // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105),
+  // a past run's while one is (ADR-0109)
+  const shown = resultsOnPage(runner, imported, past);
   /** What it takes to have results to ask about, said where a question finds none. */
   const resultsFirst = () => (shown.imported ? "This model has no results: import one that solves, then ask again."
+    : shown.past ? "This run's results are not open yet. Ask again in a moment."
     : checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again.");
   // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
@@ -224,6 +227,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         body: <p data-testid="chat-imported" data-state={brought.state}>{brought.name}: {why}</p> });
     }
   }, [imported.open, imported.model, add]);
+
+  // a past analysis opened again (ADR-0109): said once per run, with what can be asked of it
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    const job = past.job;
+    if (!past.open || !job || !past.fields || opened.current === job.job_id) return;
+    opened.current = job.job_id;
+    add({ role: "assistant", kind: "text", title: "Past run opened",
+      body: <p data-testid="chat-past">{job.coupon}, {runWhen(job.finished_at ?? job.started_at)}. Ask about its results: “which ply fails first?” or “where is the stress highest?”.</p> });
+  }, [past.open, past.job, past.fields, add]);
 
   useEffect(() => {
     if (!apiBaseUrl) return;
@@ -494,7 +507,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const text = value.trim();
     if (!text) return;
     setInput("");
-    if (!shown.imported && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    if (!shown.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
     // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
     if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
     // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
@@ -511,7 +524,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (question) { answerQuestion(text, question); return; }
     // which ply fails first, or whether it fails, is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1)
     if (asksFailure(text)) { answerFailure(text); return; }
-    if (shown.imported) { void readOfImported(text); return; } // its rows are the file's: nothing below reads a message into it (ADR-0105)
+    // an imported model's rows are the file's (ADR-0105) and a past run is shown as it was solved (ADR-0109): nothing below reads a message into either
+    if (shown.readOnly) { void readOfImported(text); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
@@ -531,9 +545,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     readWithPatterns(text);
   }
 
-  /** A message while an imported model has the stage (ADR-0105) that the page's own patterns read no question in: a model may still read
-   * it as a question of the results (ADR-0100). Anything else is answered once: the model is read as it stands, so nothing is changed
-   * by talking, and the coupon's rows behind it are left alone. */
+  /** A message while an imported model (ADR-0105) or a past run (ADR-0109) has the stage that the page's own patterns read no question
+   * in: a model may still read it as a question of the results (ADR-0100). Anything else is answered once: what is shown is read as it
+   * stands, so nothing is changed by talking, and the coupon's rows behind it are left alone. */
   async function readOfImported(text: string) {
     add({ role: "user", text });
     if (model?.proposes && apiBaseUrl && shown.fields) {
@@ -541,6 +555,11 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       try { if (await readQuestionWithModel(text)) return; } catch { /* said below */ } finally { setReading(false); }
     }
     if (shown.fields && ASKING.test(text)) { unread(text, true); return; }
+    if (shown.past) {
+      add({ role: "assistant", kind: "text", title: "A past run is shown as it was solved",
+        body: <p data-testid="chat-past-read-only">Nothing is changed by talking here. Ask about its results, or choose “Use these inputs” to change them and run again.</p> });
+      return;
+    }
     add({ role: "assistant", kind: "text", title: "An imported model is read as it stands",
       body: <p data-testid="chat-import-read-only">Its loads, supports and mesh are the file’s, so nothing is changed by talking yet. Ask about its results, or go back to the coupon to set one up.</p> });
   }
@@ -1065,7 +1084,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
+          placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : shown.past ? "Ask about this run’s results, e.g. “which ply fails first?”" : onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
           <span className="chat-note">Enter to send · “check” · “run” · “start over”</span>
