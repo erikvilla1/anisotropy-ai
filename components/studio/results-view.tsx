@@ -615,7 +615,8 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     setHighlight(place.element); setPicked(place.element);
     const faceIndex = place.face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(place.face)) : undefined;
     const id = place.field && fieldOptions(fields).some((o) => o.id === place.field) ? place.field : undefined;
-    setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face }));
+    const criterion = place.criterion && fields.element.failure[place.criterion] ? place.criterion : undefined;
+    setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face, criterion: criterion ?? c.criterion }));
   }, [place?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>

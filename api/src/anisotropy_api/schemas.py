@@ -1006,9 +1006,10 @@ class ResultQuestionRequest(Contract):
 class ResultRequest(Contract):
     """What a message asks of the results, as the guard kept it: names from the offer and whole numbers, no value of a result. `values`
     reads the quantities at an element (its number, or the clicked one when `here`); `extreme` finds where they are largest, smallest or
-    largest in magnitude over a region. Empty `plies` is every ply."""
+    largest in magnitude over a region. Empty `plies` is every ply. `failure` (ADR-0100 amendment 1) asks which ply fails first or whether
+    the coupon fails: it names nothing, and the page answers with the first-ply failure the package wrote."""
 
-    kind: Literal["values", "extreme"]
+    kind: Literal["values", "extreme", "failure"]
     quantities: list[ResultQuantity]
     plies: list[int]
     element: int | None

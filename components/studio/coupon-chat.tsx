@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
+import { asksFailure, failureAnswer, failureSentences, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
@@ -22,7 +23,7 @@ import {
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
-import { CRITERION_NAMES } from "@/lib/studio-answer";
+import { CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
@@ -54,6 +55,8 @@ type Entry =
   | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" }
   // the working behind the answer, as the package wrote it (ADR-0103): the chain asked for, the fields it is of, and whether they were a preview
   | { id: number; role: "assistant"; kind: "working"; found: Extract<FoundWorking, { kind: "chain" }>; from: Fields; preview: boolean }
+  // which ply fails first, whether the coupon fails and at what loading: the package's own answer (ADR-0099 amendment 1)
+  | { id: number; role: "assistant"; kind: "failure"; found: FailureAnswer; from: Fields; preview: boolean; reader: "patterns" | "model" }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
   | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -95,6 +98,8 @@ function placeOf(answer: ResultValues | ResultExtremes) {
   const one = answer.rows.length === 1 ? answer.rows[0] : null;
   return { element: answer.element, ply: one ? one.ply : null, face: one ? one.face : null, field: RESULT_COLUMNS[answer.columns[0]]?.field };
 }
+/** Where a first-ply failure is on the model: its element and ply, coloured by that ply's failure index in its criterion. */
+const failurePlace = (row: FailureAnswer["row"]) => ({ element: row.element, ply: row.ply, face: row.face, field: "failure_index_ply", criterion: row.criterion });
 const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
 /** A message that opens as a question: with results on the page it asks about them, and the setup's patterns do not read it, so "why is
  * ply 4 in compression?" never changes the test to compression (ADR-0100). */
@@ -424,12 +429,28 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     let reading;
     try { reading = await readResultRequest(apiBaseUrl, resultOffer(from.fields, text, picked)); }
     catch { return false; } // no answer: the setup's reading says so once, as it does today
+    if (reading.request?.kind === "failure") { answerFailure(text, from, "model", true); return true; }
     const question = reading.request ? questionFrom(reading.request) : null;
     if (question) { answerQuestion(text, question, from, "model", true); return true; }
     const back = customerText(reading.question); // the product's own words (ADR-0091), or nothing
     if (!back) return false;
     add({ role: "assistant", kind: "text", title: "One question", body: <p data-testid="chat-value-question">{back}</p> });
     return true;
+  }
+
+  /** A question of failure (ADR-0099 amendment 1): which ply fails first, whether the coupon fails, at what loading. The answer is the
+   * package's own (ADR-0085), in the gauge section where the coupon has one; the page's patterns or a model read only that it was asked. */
+  function answerFailure(text: string, from: { fields: Fields | null; live: boolean } = shown, reader: "patterns" | "model" = "patterns", echoed = false) {
+    if (!echoed) add({ role: "user", text });
+    const found = from.fields ? failureAnswer(from.fields, text) : null;
+    if (!from.fields || !found) {
+      add({ role: "assistant", kind: "text", title: "No answer to read yet",
+        body: <p data-testid="chat-failure-none">{!from.fields ? `Which ply fails first comes from a solved model. ${resultsFirst()}`
+          : "This result carries no first-ply failure. Run the analysis again, then ask."}</p> });
+      return;
+    }
+    add({ role: "assistant", kind: "failure", found, from: from.fields, preview: from.live, reader });
+    showPlace(failurePlace(found.row));
   }
 
   /** A question about the results that nothing here read: what can be asked, in place of a guess at the setup. */
@@ -488,6 +509,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     const question = readResultQuestion(text);
     if (question) { answerQuestion(text, question); return; }
+    // which ply fails first, or whether it fails, is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1)
+    if (asksFailure(text)) { answerFailure(text); return; }
     if (shown.imported) { void readOfImported(text); return; } // its rows are the file's: nothing below reads a message into it (ADR-0105)
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
@@ -881,6 +904,49 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
+  /** Which ply fails first (ADR-0099 amendment 1): the package's answer in two sentences, then each criterion's own first ply, with
+   * where the gauge section is read and the earlier failure at a grip said apart, as the answer card says them. */
+  function failureMessage(entry: Extract<Entry, { kind: "failure" }>): ReactNode {
+    const { found, from, preview, reader } = entry;
+    const { answer, row } = found;
+    const current = shown.fields === from;
+    const L = from.labels.length ?? "";
+    const [first, second] = failureSentences(found, L, printed);
+    const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
+    const outside = answer.outside;
+    return (
+      <div data-testid="chat-failure" data-reader={reader} data-source={preview ? "live" : "run"} data-basis={answer.basis} data-criterion={row.criterion} data-fails={row.fails}>
+        <h4>First ply to fail in {answer.basisWords}</h4>
+        <p data-testid="chat-failure-ply"><strong>{first}</strong></p>
+        <p data-testid="chat-failure-loading">{second}</p>
+        {found.missing ? <p className="chat-note" data-testid="chat-failure-missing">{found.missing} is not among this result’s criteria, so the one that governs is given.</p> : null}
+        {answer.rows.length > 1 ? (
+          <div className="studio-table-scroll">
+            <table className="studio-table studio-table-compact" data-testid="chat-failure-table">
+              <thead><tr><th scope="col">Criterion</th><th scope="col">Verdict</th><th scope="col" className="studio-num-head">R</th><th scope="col">First ply, mode</th></tr></thead>
+              <tbody>{answer.rows.map((r) => (
+                <tr key={r.criterion} data-criterion={r.criterion} className={r.criterion === row.criterion ? "studio-earliest" : undefined}>
+                  <th scope="row">{r.name}{r.earliest ? " (governs)" : ""}</th><td>{r.fails ? "fails" : "holds"}</td><td className="studio-num">{printed(r.factor)}</td>
+                  <td className="studio-text-cell">{plyWords(r)}{r.tied.length ? `, tied with ${r.tied.join(", ")}` : ""}; {modeWords(r.mode)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : null}
+        <p className="chat-note" data-testid="chat-failure-note">
+          R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading. First-ply failure is the onset of damage, not ultimate strength.
+          {reading ? ` The gauge section is read at least ${printed(reading.stand_off)} ${L} from each tab line.` : ""}
+          {outside ? ` ${outside.touches_grip ? "At a grip edge" : outside.near_tab ? "Beside a tab line" : `Outside ${answer.basisWords}`}, ${outside.name} is reached earlier, at ${printed(outside.factor)} × the applied loading, in ${plyWords(outside)}${outside.touches_grip || outside.near_tab ? "; stress there grows as the mesh is refined, so it is reported apart" : ""}.` : ""}
+          {preview ? " From the preview: run the analysis to verify it." : ""}
+        </p>
+        <Chips>
+          <button type="button" disabled={!current} data-testid="chat-failure-show" onClick={() => showPlace(failurePlace(row))}>Show on the model</button>
+          {current && workingOf(from) ? <button type="button" data-testid="chat-failure-working" onClick={() => showWorking(`Show the working for ${row.name}`)}>Show the working</button> : null}
+        </Chips>
+        {!current ? <p className="chat-note">The setup has changed since: ask again for the current answer.</p> : null}
+      </div>
+    );
+  }
+
   /** Where a quantity is largest (ADR-0100): one quantity as a sentence with each ply's own extreme under it, several as one row each;
    * with the region read, how the values are taken, and the grip edge said where the largest sits on it. */
   function extremesMessage(entry: Extract<Entry, { kind: "extremes" }>): ReactNode {
@@ -946,6 +1012,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "extremes") content = extremesMessage(entry);
     else if (entry.kind === "why") content = whyMessage(entry);
+    else if (entry.kind === "failure") content = failureMessage(entry);
     else if (entry.kind === "working") content = workingMessage(entry);
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}

@@ -43,7 +43,8 @@ export type ProjectContextValue = {
 };
 
 /** A place on the results; `at` tells one request from the next, so the same place can be shown twice. */
-export type Place = { element: number; ply: number | null; face?: string | null; /** the viewer's field to colour the model by */ field?: string; at: number };
+export type Place = { element: number; ply: number | null; face?: string | null; /** the viewer's field to colour the model by */ field?: string;
+  /** the failure criterion the field is of, when the place is a first-ply failure */ criterion?: string; at: number };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 

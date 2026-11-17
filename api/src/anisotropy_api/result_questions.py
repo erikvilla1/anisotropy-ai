@@ -6,7 +6,9 @@ words hold the element it names. The page then runs the request on the results i
 engineer reads is one the solver wrote (ADR-0001).
 
 The guard:
-- the kind is one of values, extreme, none; "none" is no request (the message is the setup's, or not about the results);
+- the kind is one of values, extreme, failure, none; "none" is no request (the message is the setup's, or not about the results);
+- "failure" (amendment 1) asks which ply fails first, whether the coupon fails or at what loading: it names no quantity, ply, element
+  or region, and whatever of those the model wrote is dropped; the page answers with the package's own first-ply failure;
 - the quantities are among those offered, each once, at least one;
 - a ply is a whole number the laminate holds (plies may be named by angle or by position, so the message need not write the number;
   the page shows which plies it read);
@@ -43,7 +45,7 @@ REGIONS: dict[str, str] = {
     "gauge": "the gauge section, away from the grips",
     "whole": "the whole model, the grips' clamped edges included",
 }
-KINDS = ("values", "extreme", "none")
+KINDS = ("values", "extreme", "failure", "none")
 SENSES = ("largest", "smallest", "magnitude")
 MAX_PLIES = 200
 
@@ -107,6 +109,9 @@ def question_guard(raw: dict[str, Any], message: str, view: dict[str, Any]) -> K
         return kept
     if kind not in KINDS:
         kept.dropped.append(f"{kind!r} is not a kind of request")
+        return kept
+    if kind == "failure":  # nothing the model names goes with it: the page reads the answer the package wrote (ADR-0100 amendment 1)
+        kept.request = {"kind": "failure", "quantities": [], "plies": [], "element": None, "here": False, "sense": None, "region": "default"}
         return kept
     offered = [q["key"] for q in view["quantities"]]
     named = raw.get("quantities") if isinstance(raw.get("quantities"), list) else []

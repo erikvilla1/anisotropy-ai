@@ -119,7 +119,10 @@ QUESTION_SYSTEM = (
     "yourself and you never write a value of a result: you are shown none. You are given the message, the quantities on offer (each with "
     "its key and what it is), the plies numbered from the bottom face with their fibre angles, the regions on offer, and whether an element "
     "is clicked on the model. Answer with: kind, 'values' to read quantities at one element, 'extreme' to find where a quantity is largest "
-    "or smallest over a region, or 'none' when the message states or changes the setup, asks to run or check, or is not about the results; "
+    "or smallest over a region, 'failure' when the message asks which ply or layer fails, breaks or goes first, whether or when the coupon "
+    "fails or holds, or the load, factor or strength ratio at first-ply failure (the software then shows its own failure answer; leave "
+    "quantities and plies empty, element null, here false, sense null and region 'default'), or 'none' when the message states or changes "
+    "the setup, asks to run or check, or is not about the results; "
     "quantities, the keys asked for (a plain 'stress' is the three ply stresses S11, S22 and S12, a plain 'strain' the three ply strains; "
     "how much load a ply carries is its stress along the fibres); plies, the ply numbers asked about, read from a number, an angle or a "
     "position such as the outer plies, and empty for every ply; element, the element's number only when the message writes it, else null; "
@@ -127,7 +130,8 @@ QUESTION_SYSTEM = (
     "'largest' for the most tensile value, 'smallest' for the most compressive, 'magnitude' for the largest regardless of sign, else null; "
     "region, 'default' unless the message names the gauge section or the whole model. Use 'values' only when an element is named or "
     "clicked; a question about plies in general, a comparison of plies with no element, or a question of why a ply is loaded as it is, is "
-    "an 'extreme' over the plies and quantities it concerns, so the engineer sees the values. When the message is about the results but "
+    "an 'extreme' over the plies and quantities it concerns, so the engineer sees the values; a question of which ply fails is never "
+    "an 'extreme'. When the message is about the results but "
     "too unclear to read, use 'none' and ask one short question; otherwise the question is null. Read through typing mistakes." + VOICE
 )
 

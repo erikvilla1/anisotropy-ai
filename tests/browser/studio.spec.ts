@@ -676,6 +676,7 @@ test("with a model on, a loose question about the results is read into a fixed r
     "which ply carries the most load?": { kind: "extreme", quantities: ["S11"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
     "compare the 0° and 90° plies here": { kind: "values", quantities: ["S11", "S22", "S12"], plies: [2, 4, 5, 7], element: null, here: true, sense: null, region: "default" },
     "worst transverse loading anywhere, grips included?": { kind: "extreme", quantities: ["S22"], plies: [], element: null, here: false, sense: "magnitude", region: "whole" },
+    "whats the weakest layer": { kind: "failure", quantities: [], plies: [], element: null, here: false, sense: null, region: "default" },
   };
   await mockApi(page, calls);
   await page.route(API, async (route) => {
@@ -740,16 +741,38 @@ test("with a model on, a loose question about the results is read into a fixed r
   await expect(whole).toHaveAttribute("data-region", "the whole model");
   await expect(whole.getByTestId("chat-extremes-note")).toContainText("at a grip edge");
 
+  // which ply fails is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1): the page's patterns
+  // read it with no model asked, and a loose wording the model reads as the kind failure gets the same answer
+  const asked = offers.length;
+  await say("what is the the ply that fails");
+  const failing = page.getByTestId("chat-failure").last();
+  const governs = fields.summary.fpf_gauge[fields.summary.verdict.earliest];
+  await expect(failing).toHaveAttribute("data-reader", "patterns");
+  await expect(failing).toHaveAttribute("data-criterion", fields.summary.verdict.earliest);
+  await expect(failing.getByTestId("chat-failure-ply")).toContainText(`Ply ${governs.ply} (${governs.angle}°) is the first to fail`);
+  await expect(failing.getByTestId("chat-failure-ply")).toContainText("in the gauge section");
+  await expect(failing.getByTestId("chat-failure-loading")).toContainText(`it would fail at ${printed(governs.factor)} × the applied loading`);
+  await expect(failing.getByTestId("chat-failure-loading")).toContainText("so the coupon holds at the applied loading");
+  await expect(failing.getByTestId("chat-failure-table").locator("tbody tr")).toHaveCount(Object.keys(fields.summary.fpf_gauge).length);
+  await expect(failing.getByTestId("chat-failure-note")).toContainText("The gauge section is read at least");
+  await expect(page.getByLabel("Field", { exact: true })).toHaveValue("failure_index_ply"); // shown on the model: that ply's failure index
+  expect(offers).toHaveLength(asked);
+  await say("whats the weakest layer");
+  const weakest = page.getByTestId("chat-failure").last();
+  await expect(weakest).toHaveAttribute("data-reader", "model");
+  await expect(weakest.getByTestId("chat-failure-ply")).toHaveText(await failing.getByTestId("chat-failure-ply").innerText());
+  expect(offers).toHaveLength(asked + 1);
+
   // a message the model reads as nothing of the results goes on to the setup's reading, and a setup line never asks about results
   expect(proposalsAsked).toBe(0);
   await say("which is worse here, tension or compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
   await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes (a question of why is ADR-0102's)
-  expect(offers).toHaveLength(5);
-  expect((offers[4] as { message: string }).message).toBe("which is worse here, tension or compression?");
+  expect(offers).toHaveLength(6);
+  expect((offers[5] as { message: string }).message).toBe("which is worse here, tension or compression?");
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
   await say("thanks, looks good");
   await expect(page.getByTestId("chat-redirect").last()).toBeVisible();
-  expect(offers).toHaveLength(6);
+  expect(offers).toHaveLength(7);
   expect(proposalsAsked).toBe(2);
   expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]);
   expect(browserErrors).toEqual([]);

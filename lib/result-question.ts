@@ -123,6 +123,7 @@ export function resultOffer(fields: Fields, message: string, picked: number | nu
 /** A model's reading, as the API's guard kept it, as the typed question the page runs; null when it names nothing the probe table holds.
  * The page judges the place again when it answers: an element or a ply the model does not hold is refused there. */
 export function questionFrom(request: ResultRequest): ResultQuestion | null {
+  if (request.kind === "failure") return null; // the package's own answer, not a value of the probe table (lib/result-failure.ts)
   const columns = PROBE_COLUMNS.filter((c) => request.quantities.includes(c));
   if (!columns.length) return null;
   const plies = request.plies.length ? request.plies : null;
