@@ -31,6 +31,7 @@ export const FAILED_WORDS: Record<string, string> = {
   "the import": "The model could not be imported",
   "the coupon's values": "The coupon could not be opened",
   "the results": "The results could not be loaded",
+  "the run's inputs": "The run's inputs could not be loaded",
   "the explanation": "The explanation could not be loaded",
   "the laminate solve": "The laminate could not be solved",
   "the proposals": "The message could not be read",

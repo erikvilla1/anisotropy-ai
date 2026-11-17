@@ -491,6 +491,19 @@ class CouponJobRequest(Contract):
                 *([] if self.theory else ["--no-theory"])]
 
 
+class JobAnswer(Contract):
+    """A done run's answer in a few values (ADR-0109), as the fea package wrote it: on the gauge section or the whole model, by the
+    criterion that governs, whether a ply fails at the applied loading, the factor on that loading at first-ply failure, and the ply."""
+
+    basis: Literal["gauge", "whole"]
+    criterion: str
+    fails: bool
+    factor: float
+    ply: int
+    angle: float
+    face: str | None = None
+
+
 class CouponJobOutput(Contract):
     """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
     runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
@@ -519,6 +532,7 @@ class CouponJobOutput(Contract):
     documents: str | None = None
     claimed_at: str | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
     timings: dict[str, float] = {}  # the seconds of each stage of the tool and of the solver's phases around it, as far as the job got
+    answer: JobAnswer | None = None  # a done run's answer in a few values, for the list of past analyses (ADR-0109); null when it kept none
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
@@ -540,7 +554,8 @@ class CouponJobOutput(Contract):
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
                    project_id=None if getattr(job, "project_id", None) is None else str(job.project_id),
                    claimed_at=None if getattr(job, "claimed_at", None) is None else job.claimed_at.isoformat(),
-                   timings=job.all_timings() if hasattr(job, "all_timings") else {})
+                   timings=job.all_timings() if hasattr(job, "all_timings") else {},
+                   answer=job.answer() if hasattr(job, "answer") else None)
 
 
 class CouponCheckReceipt(Contract):

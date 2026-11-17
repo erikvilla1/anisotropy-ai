@@ -11,7 +11,7 @@ import pytest
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import MODE_WORDS, explanation, fact_sheet, number, numbers_in, result_sentences, setup_sentences
-from anisotropy_fea.fields import GAUGE_STAND_OFF, MODES, applied_loading, field_data, gauge_elements, gauge_reading, nodal_averages, per_ply_spans, rounded, span
+from anisotropy_fea.fields import GAUGE_STAND_OFF, MODES, applied_loading, field_data, gauge_elements, gauge_reading, nodal_averages, per_ply_spans, rounded, run_answer, span
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
@@ -289,6 +289,9 @@ def test_a_finer_mesh_moves_the_grip_edge_and_not_the_answer():
         assert verdict["basis"] == "gauge" and outside["factor"] == whole["factor"] < verdict["factor"]
         assert outside["touches_grip"] is True and outside["near_tab"] is False and outside["element"] not in data["mesh"]["gauge_elements"]
         answers.append((summary["fpf_gauge"]["tsai_hill"]["factor"], whole["factor"]))
+        first = summary["fpf_gauge"][verdict["earliest"]]  # a list of past runs shows the verdict's own values, picked (ADR-0109)
+        assert run_answer(summary) == {"basis": "gauge", "criterion": verdict["earliest"], "fails": verdict["fails"], "factor": verdict["factor"],
+                                       "ply": first["ply"], "angle": first["angle"], "face": first["face"]}
         sentences = " ".join(result_sentences(fact_sheet(summary, data["coupon"], data["units"], data["labels"])))
         assert "reported apart from the answer" in sentences
         assert "The gauge section is read at least 6.25 mm from each tab line, a quarter of the width, the same distance on every mesh." in sentences
@@ -297,6 +300,7 @@ def test_a_finer_mesh_moves_the_grip_edge_and_not_the_answer():
     assert "inside the stand-off from a tab line, where the corner of the grip sets the stress" in " ".join(result_sentences(facts))
     (gauge_coarse, whole_coarse), (gauge_fine, whole_fine) = answers
     assert gauge_fine == pytest.approx(gauge_coarse, rel=1e-3) and whole_fine < 0.9 * whole_coarse
+    assert run_answer({**summary, "verdict": None}) is None  # no criterion, no answer to list
 
 
 def test_a_failure_inside_the_stand_off_is_marked_and_said_apart():

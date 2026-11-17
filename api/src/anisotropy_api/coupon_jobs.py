@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -183,6 +184,23 @@ def documents_of_row(outputs: dict, inputs: dict) -> str | None:
     return "the package was written without its document"
 
 
+def answer_of_outcome(outcome: dict | None) -> dict | None:
+    """A done run's answer in a few values, as its tool wrote it into the outcome (ADR-0109): the basis, the criterion that governs,
+    whether a ply fails at the applied loading, the factor, and the ply with its angle and face. Kept only in that shape, since the row
+    and the list of past analyses hold it as it is; None for anything else, a factor that is not finite included (no stress, no answer)."""
+    answer = (outcome or {}).get("answer")
+    if not isinstance(answer, dict) or (outcome or {}).get("status") != "done":
+        return None
+    try:
+        factor, face = float(answer["factor"]), answer.get("face")
+        if not math.isfinite(factor) or answer["basis"] not in ("gauge", "whole") or not isinstance(answer["fails"], bool):
+            return None
+        return {"basis": answer["basis"], "criterion": str(answer["criterion"]), "fails": answer["fails"], "factor": factor,
+                "ply": int(answer["ply"]), "angle": float(answer["angle"]), "face": None if face is None else str(face)}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 @dataclass
 class Job:
     id: uuid.UUID
@@ -202,6 +220,10 @@ class Job:
     stop_reason: str | None = None  # why a solver stopped the tool, when it did (the per-job timeout)
     claimed_at: dt.datetime | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
     timings: dict[str, float] = field(default_factory=dict)  # the solver's own phases in seconds: restore, lock wait, gate, upload
+
+    def answer(self) -> dict | None:
+        """The answer in a few values once the job is done (ADR-0109); None before, and for a job that kept none."""
+        return answer_of_outcome(self.outcome) if self.state == "done" else None
 
     def all_timings(self) -> dict[str, float]:
         """The tool's stage times and the solver's phases, one dictionary for the row and the page."""
@@ -237,7 +259,8 @@ class Job:
         """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
         outcome = None if row.state in ("queued", "running") else {"status": row.state, "message": row.message, "coupon": row.coupon,
                                                                    "attempt": row.attempt, "outputs": dict(row.outputs),
-                                                                   "documents": documents_of_row(dict(row.outputs), dict(row.inputs or {}))}
+                                                                   "documents": documents_of_row(dict(row.outputs), dict(row.inputs or {})),
+                                                                   "answer": getattr(row, "answer", None)}
         # a running row's message is the result once its solver reported it (`_heartbeat`); the documents are still being made
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
                     "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message,
@@ -495,7 +518,7 @@ class CouponJobs:
                 update_job(self.table, job.id, state=state, stage=progress.get("stage"), stages_done=list(progress.get("done", [])),
                            stages=list(progress.get("stages", [])), coupon=outcome.get("coupon"), attempt=outcome.get("attempt"), message=outcome.get("message"),
                            outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=finished_at, run_id=run_id, log_tail=job.log_tail(),
-                           timings=job.all_timings(), claimed_at=job.claimed_at, **row)
+                           timings=job.all_timings(), claimed_at=job.claimed_at, answer=answer_of_outcome(outcome) if state == "done" else None, **row)
             except (SQLAlchemyError, LookupError) as exc:
                 outcome = {**outcome, "message": f"{outcome.get('message')}; its row in the jobs table could not be updated: {str(exc).splitlines()[0]}"}
         with self.lock:

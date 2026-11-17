@@ -21,6 +21,8 @@ export type JobStatus = {
   /** When a solver took the queued job up, and the seconds of each of the tool's stages and of the solver's phases around it
    * (restore_s, lock_wait_s, gate_s, upload_s), as far as the job got (ADR-0056 amendment 6). */
   claimed_at?: string | null; timings?: Record<string, number>;
+  /** A done run's answer in a few values, for the list of past analyses (ADR-0109); read with `readJobAnswer` before it is shown. */
+  answer?: unknown;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {
@@ -485,6 +487,13 @@ export function fileUrl(apiBase: string, jobId: string, key: string, name?: stri
 
 export async function fetchFields(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Fields> {
   return readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the results", JOB_GONE));
+}
+
+/** The rows a past run ran on, as the values object the studio edits (ADR-0109): the run's own `values` file, kept beside its result. */
+export async function fetchRunValues(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const payload = await call(fileUrl(apiBase, jobId, "values"), { method: "GET", signal }, "the run's inputs", JOB_GONE);
+  if (!isObject(payload)) throw unreadable("the run's inputs");
+  return payload;
 }
 
 export async function fetchExplanation(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Explanation> {
