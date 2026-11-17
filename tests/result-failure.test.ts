@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { asksFailure, failureAnswer, failureLoading, failureSentences } from "../lib/result-failure";
+import { asksFailure, failureAnswer, failureLines, failureLoading } from "../lib/result-failure";
 import { readResultQuestion, questionFrom } from "../lib/result-question";
 import { asksWhy } from "../lib/result-why";
 import { asksWorking } from "../lib/result-working";
@@ -54,20 +54,24 @@ test("the answer is the package's own first-ply failure: the governing criterion
   assert.equal(failureAnswer({ ...fields, summary: { ...fields.summary, verdict: undefined } } as Fields, "does it fail?"), null); // a result solved before the answer was written
 });
 
-test("the sentences name the ply, the mode, the place, the loading and the verdict, in the package's numbers", () => {
+test("the answer is three short lines: the ply, the loading with the verdict, and what it rests on, in the package's numbers", () => {
   const found = failureAnswer(fields, "which ply fails first?")!;
   const row = fields.summary.fpf_gauge!.tsai_hill;
-  const [first, second] = failureSentences(found, "mm", print);
-  assert.equal(first, `Ply 4 (90°) is the first to fail, tied with ply 5: by the combined stresses, at element 183 (${print(row.xy[0])}, ${print(row.xy[1])} mm), in the gauge section.`);
-  assert.equal(second, `By Tsai-Hill, which governs, it would fail at ${print(row.factor)} × the applied loading (${print(row.at_failure!.applied)} mm, ${print(row.at_failure!.reaction)} N at ${fields.summary.reaction.set}), so the coupon holds at the applied loading.`);
-  assert.equal(failureLoading(found.answer, found.row, print), `${print(row.at_failure!.applied)} mm, ${print(row.at_failure!.reaction)} N at ${fields.summary.reaction.set}`);
+  const loading = `${print(row.at_failure!.applied)} mm, ${print(row.at_failure!.reaction)} N`;
+  const lines = failureLines(found, print);
+  assert.equal(lines.headline, "Ply 4 (90°) fails first");
+  assert.equal(lines.loading, `At ${print(row.factor)} × the applied load (${loading}). The coupon holds.`);
+  assert.deepEqual(lines.facts, ["Tsai-Hill", "combined stresses", "element 183", "gauge section", "tied with ply 5"]);
+  assert.equal(failureLoading(found.answer, found.row, print), loading);
+  assert.ok(lines.headline.length + lines.loading.length < 100, "short enough to read at a glance");
 
-  // a coupon that fails says so, with the fraction of the loading it reaches
+  // a coupon that fails says so in the same line
   const failing = { ...found, row: { ...found.row, fails: true, factor: 0.9435 } };
-  assert.match(failureSentences(failing, "mm", print)[1], /^By Tsai-Hill, which governs, it fails at 0\.9435 of the applied loading \(.+\), so the coupon fails at the applied loading\.$/);
-  // a criterion that is named and does not govern is not said to
+  assert.match(failureLines(failing, print).loading, /^At 0\.9435 × the applied load \(.+\)\. The coupon fails\.$/);
+  // a criterion that is named is the one the lines are of
   const named = failureAnswer(fields, "by max stress, which ply fails?")!;
-  assert.match(failureSentences(named, "mm", print)[1], /^By Maximum stress, it would fail at /);
+  assert.equal(failureLines(named, print).facts[0], "Maximum stress");
+  assert.match(failureLines(named, print).loading, new RegExp(`^At ${String(print(fields.summary.fpf_gauge!.max_stress.factor)).replace(".", "\\.")} ×`));
 });
 
 test("a model's reading of the kind failure is kept as read and is no question of the probe table (ADR-0100 amendment 1)", () => {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
-import { asksFailure, failureAnswer, failureSentences, plyWords, type FailureAnswer } from "@/lib/result-failure";
+import { asksFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
@@ -904,45 +904,45 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
-  /** Which ply fails first (ADR-0099 amendment 1): the package's answer in two sentences, then each criterion's own first ply, with
-   * where the gauge section is read and the earlier failure at a grip said apart, as the answer card says them. */
+  /** Which ply fails first (ADR-0099 amendment 1), kept short: the ply as the heading, the loading and the verdict in one line, what it
+   * rests on in one line of labels. Each criterion's row, where the gauge section is read and the earlier failure at a grip are folded
+   * under "Details", as the answer card says them. */
   function failureMessage(entry: Extract<Entry, { kind: "failure" }>): ReactNode {
     const { found, from, preview, reader } = entry;
     const { answer, row } = found;
     const current = shown.fields === from;
     const L = from.labels.length ?? "";
-    const [first, second] = failureSentences(found, L, printed);
+    const lines = failureLines(found, printed);
     const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
     const outside = answer.outside;
     return (
       <div data-testid="chat-failure" data-reader={reader} data-source={preview ? "live" : "run"} data-basis={answer.basis} data-criterion={row.criterion} data-fails={row.fails}>
-        <h4>First ply to fail in {answer.basisWords}</h4>
-        <p data-testid="chat-failure-ply"><strong>{first}</strong></p>
-        <p data-testid="chat-failure-loading">{second}</p>
-        {found.missing ? <p className="chat-note" data-testid="chat-failure-missing">{found.missing} is not among this result’s criteria, so the one that governs is given.</p> : null}
-        {answer.rows.length > 1 ? (
+        <h4 data-testid="chat-failure-ply">{lines.headline}</h4>
+        <p data-testid="chat-failure-loading"><strong>{lines.loading}</strong></p>
+        <p className="chat-note" data-testid="chat-failure-facts">{lines.facts.join(" · ")}{preview ? " · preview, run the analysis to verify" : ""}</p>
+        {found.missing ? <p className="chat-note" data-testid="chat-failure-missing">{found.missing} is not in this result, so the governing criterion is shown.</p> : null}
+        <details className="chat-details" data-testid="chat-failure-details"><summary>Details</summary>
           <div className="studio-table-scroll">
             <table className="studio-table studio-table-compact" data-testid="chat-failure-table">
-              <thead><tr><th scope="col">Criterion</th><th scope="col">Verdict</th><th scope="col" className="studio-num-head">R</th><th scope="col">First ply, mode</th></tr></thead>
+              <thead><tr><th scope="col">Criterion</th><th scope="col" className="studio-num-head">R</th><th scope="col">Ply</th><th scope="col">Verdict</th></tr></thead>
               <tbody>{answer.rows.map((r) => (
                 <tr key={r.criterion} data-criterion={r.criterion} className={r.criterion === row.criterion ? "studio-earliest" : undefined}>
-                  <th scope="row">{r.name}{r.earliest ? " (governs)" : ""}</th><td>{r.fails ? "fails" : "holds"}</td><td className="studio-num">{printed(r.factor)}</td>
-                  <td className="studio-text-cell">{plyWords(r)}{r.tied.length ? `, tied with ${r.tied.join(", ")}` : ""}; {modeWords(r.mode)}</td></tr>
+                  <th scope="row">{r.name}{r.earliest ? " (governs)" : ""}</th><td className="studio-num">{printed(r.factor)}</td>
+                  <td className="studio-text-cell">{r.ply} · {r.angle}°</td><td>{r.fails ? "fails" : "holds"}</td></tr>
               ))}</tbody>
             </table>
           </div>
-        ) : null}
-        <p className="chat-note" data-testid="chat-failure-note">
-          R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading. First-ply failure is the onset of damage, not ultimate strength.
-          {reading ? ` The gauge section is read at least ${printed(reading.stand_off)} ${L} from each tab line.` : ""}
-          {outside ? ` ${outside.touches_grip ? "At a grip edge" : outside.near_tab ? "Beside a tab line" : `Outside ${answer.basisWords}`}, ${outside.name} is reached earlier, at ${printed(outside.factor)} × the applied loading, in ${plyWords(outside)}${outside.touches_grip || outside.near_tab ? "; stress there grows as the mesh is refined, so it is reported apart" : ""}.` : ""}
-          {preview ? " From the preview: run the analysis to verify it." : ""}
-        </p>
+          <p className="chat-note" data-testid="chat-failure-note">
+            R is the load factor at first-ply failure, the onset of damage.
+            {reading ? ` Read at least ${printed(reading.stand_off)} ${L} from each tab line.` : ""}
+            {outside ? ` ${outside.touches_grip ? "At a grip edge" : outside.near_tab ? "Beside a tab line" : `Outside ${answer.basisWords}`} ${outside.name} is reached at ${printed(outside.factor)} ×, in ${plyWords(outside)}${outside.touches_grip || outside.near_tab ? "; that value grows with a finer mesh, so it is not the answer" : ""}.` : ""}
+          </p>
+        </details>
         <Chips>
           <button type="button" disabled={!current} data-testid="chat-failure-show" onClick={() => showPlace(failurePlace(row))}>Show on the model</button>
           {current && workingOf(from) ? <button type="button" data-testid="chat-failure-working" onClick={() => showWorking(`Show the working for ${row.name}`)}>Show the working</button> : null}
         </Chips>
-        {!current ? <p className="chat-note">The setup has changed since: ask again for the current answer.</p> : null}
+        {!current ? <p className="chat-note">The setup has changed since: ask again.</p> : null}
       </div>
     );
   }

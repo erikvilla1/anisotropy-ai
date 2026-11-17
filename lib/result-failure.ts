@@ -50,25 +50,32 @@ export function failureAnswer(fields: Fields, text: string): FailureAnswer | nul
 /** A ply as the answer names it: "ply 4 (90°)", with its face on a shell. */
 export const plyWords = (r: { ply: number; angle: number; face: string | null }): string => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
 
-/** The loading at first-ply failure as the answer card prints it: the applied quantity and, under a displacement, the reaction with it. */
+/** The loading at first-ply failure: the applied quantity and, under a displacement, the reaction with it. */
 export function failureLoading(answer: Answer, row: AnswerRow, print: (value: number) => string): string | null {
   if (row.applied === null) return null;
-  const reaction = answer.control !== "force" && row.reaction !== null ? `, ${print(Math.abs(row.reaction))} ${answer.forceUnit} at ${answer.reactionSet}` : "";
+  const reaction = answer.control !== "force" && row.reaction !== null ? `, ${print(Math.abs(row.reaction))} ${answer.forceUnit}` : "";
   return `${print(Math.abs(row.applied))} ${answer.appliedUnit}${reaction}`;
 }
 
-/** The answer in two sentences: which ply fails first, by what and where; then at what loading, and whether the coupon holds. Every
- * number is the package's, printed by `print`. */
-export function failureSentences(found: FailureAnswer, lengthUnit: string, print: (value: number) => string): [string, string] {
+export type FailureLines = {
+  /** The answer: "Ply 4 (90°) fails first". */
+  headline: string;
+  /** At what loading, and the verdict: "At 1.032 × the applied load (1.032 mm, 16740 N). The coupon holds." */
+  loading: string;
+  /** What it rests on, as short labels: the criterion, the mode, the element, where it is read, the plies tied. */
+  facts: string[];
+};
+
+/** The answer in three short lines. Every number is the package's, printed by `print`; nothing is computed here. */
+export function failureLines(found: FailureAnswer, print: (value: number) => string): FailureLines {
   const { answer, row } = found;
-  const tied = row.tied.length ? `, tied with ${row.tied.length > 1 ? "plies" : "ply"} ${row.tied.join(", ")}` : "";
-  const xy = `(${row.xy.map((v) => print(v)).join(", ")}${lengthUnit ? ` ${lengthUnit}` : ""})`;
-  const first = `${plyWords(row).replace(/^p/, "P")} is the first to fail${tied}: by ${modeWords(row.mode)}, at element ${row.label.split(".").pop()} ${xy}, in ${answer.basisWords}.`;
-  const times = answer.everyLoad ? "every applied load" : "the applied loading";
-  const loading = failureLoading(answer, row, print);
-  const by = `By ${row.name}${row.earliest ? ", which governs" : ""}`;
-  const second = row.fails
-    ? `${by}, it fails at ${print(row.factor)} of ${times}${loading ? ` (${loading})` : ""}, so the coupon fails at the applied loading.`
-    : `${by}, it would fail at ${print(row.factor)} × ${times}${loading ? ` (${loading})` : ""}, so the coupon holds at the applied loading.`;
-  return [first, second];
+  const times = answer.everyLoad ? "every applied load" : "the applied load";
+  const at = failureLoading(answer, row, print);
+  const facts = [row.name, modeWords(row.mode).replace(/^the /, ""), `element ${row.label.split(".").pop()}`, answer.basisWords.replace(/^the /, "")];
+  if (row.tied.length) facts.push(`tied with ${row.tied.length > 1 ? "plies" : "ply"} ${row.tied.join(", ")}`);
+  return {
+    headline: `${plyWords(row).replace(/^p/, "P")} fails first`,
+    loading: `At ${print(row.factor)} × ${times}${at ? ` (${at})` : ""}. The coupon ${row.fails ? "fails" : "holds"}.`,
+    facts,
+  };
 }

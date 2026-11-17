@@ -749,12 +749,14 @@ test("with a model on, a loose question about the results is read into a fixed r
   const governs = fields.summary.fpf_gauge[fields.summary.verdict.earliest];
   await expect(failing).toHaveAttribute("data-reader", "patterns");
   await expect(failing).toHaveAttribute("data-criterion", fields.summary.verdict.earliest);
-  await expect(failing.getByTestId("chat-failure-ply")).toContainText(`Ply ${governs.ply} (${governs.angle}°) is the first to fail`);
-  await expect(failing.getByTestId("chat-failure-ply")).toContainText("in the gauge section");
-  await expect(failing.getByTestId("chat-failure-loading")).toContainText(`it would fail at ${printed(governs.factor)} × the applied loading`);
-  await expect(failing.getByTestId("chat-failure-loading")).toContainText("so the coupon holds at the applied loading");
+  await expect(failing.getByTestId("chat-failure-ply")).toHaveText(`Ply ${governs.ply} (${governs.angle}°) fails first`);
+  await expect(failing.getByTestId("chat-failure-loading")).toContainText(`At ${printed(governs.factor)} × the applied load`);
+  await expect(failing.getByTestId("chat-failure-loading")).toContainText("The coupon holds.");
+  await expect(failing.getByTestId("chat-failure-facts")).toContainText("Tsai-Hill · combined stresses · element 183 · gauge section");
+  await expect(failing.getByTestId("chat-failure-table")).toBeHidden(); // the rest is folded away until asked for
+  await failing.getByText("Details", { exact: true }).click();
   await expect(failing.getByTestId("chat-failure-table").locator("tbody tr")).toHaveCount(Object.keys(fields.summary.fpf_gauge).length);
-  await expect(failing.getByTestId("chat-failure-note")).toContainText("The gauge section is read at least");
+  await expect(failing.getByTestId("chat-failure-note")).toContainText("from each tab line");
   await expect(page.getByLabel("Field", { exact: true })).toHaveValue("failure_index_ply"); // shown on the model: that ply's failure index
   expect(offers).toHaveLength(asked);
   await say("whats the weakest layer");
