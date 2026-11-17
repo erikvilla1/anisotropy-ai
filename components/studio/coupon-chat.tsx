@@ -10,7 +10,7 @@ import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/res
 import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
-import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
+import { answerResultQuestion, extremeLines, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultUnit, valueLines, type ResultExtremes,
   type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
@@ -841,15 +841,18 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function valuesMessage(entry: Extract<Entry, { kind: "values" }>): ReactNode {
     const { answer, from, preview } = entry;
     const lab = from.labels;
-    const sentence = resultSentence(answer, resultUnit(from, answer.columns[0]), printed);
+    const lines = valueLines(answer, resultUnit(from, answer.columns[0]), printed);
     const faces = answer.rows.some((r) => r.face);
     const current = shown.fields === from;
     const one = answer.rows.length === 1 ? answer.rows[0] : null;
     const read = [...new Set(answer.rows.map((r) => r.ply))]; // the plies read: one, some (a comparison) or every one
+    const sets = answer.sets.map((name) => setWords(name) === name ? `${name} set` : setWords(name).replace(/^the /, "")); // a set with no words of its own is named as a set
+    const glance = [...(lines ? lines.facts : []), ...sets, ...(preview ? ["preview, run the analysis to verify"] : [])];
     return (
       <div data-testid="chat-values" data-element={answer.label} data-source={preview ? "live" : "run"}>
-        <h4>{sentence ? "Read from the results" : `Element ${answer.label}${one ? `, ply ${one.ply} (${one.angle}°)` : read.length < from.mesh.plies ? `, plies ${read.join(", ")}` : ", every ply"}`}</h4>
-        {sentence ? <p data-testid="chat-value"><strong>{sentence}</strong></p> : (
+        {lines ? <h4 data-testid="chat-value">{lines.headline}</h4>
+          : <h4>Element {answer.label}{one ? `, ply ${one.ply} (${one.angle}°)` : read.length < from.mesh.plies ? `, plies ${read.join(", ")}` : ", every ply"}</h4>}
+        {lines ? null : (
           <div className="studio-table-scroll">
             <table className="studio-table studio-table-num studio-table-compact" data-testid="chat-values-table">
               <thead><tr><th scope="col">Ply</th>{faces ? <th scope="col">Face</th> : null}
@@ -861,15 +864,15 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             </table>
           </div>
         )}
-        <p className="chat-note" data-testid="chat-values-note">
-          Element {answer.label} at ({printed(answer.centroid[0])}, {printed(answer.centroid[1])} {lab.length}){answer.sets.length ? `, in ${answer.sets.map(setWords).join(", ")}` : ""}. {answer.note}
-          {preview ? " From the preview: run the analysis to verify it." : ""}
-        </p>
+        {glance.length ? <p className="chat-note" data-testid="chat-value-facts">{glance.join(" · ")}</p> : null}
+        <details className="chat-details"><summary>Details</summary>
+          <p className="chat-note" data-testid="chat-values-note">Element {answer.label} at ({printed(answer.centroid[0])}, {printed(answer.centroid[1])} {lab.length}). {answer.note}</p>
+        </details>
         <Chips>
           <button type="button" disabled={!current} data-testid="chat-values-show"
             onClick={() => showPlace(placeOf(answer))}>Show on the model</button>
         </Chips>
-        {!current ? <p className="chat-note">The setup has changed since: ask again for the current values.</p> : null}
+        {!current ? <p className="chat-note">The setup has changed since: ask again.</p> : null}
       </div>
     );
   }
@@ -883,10 +886,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         <h4>The working: {found.name}</h4>
         <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading.</p>
         <WorkingSteps chain={found.chain} figures={figures} />
-        <p className="chat-note" data-testid="chat-working-note">Every value is the solver’s own. Values put in are shown to {figures} figures and results to 4, so a step repeated by hand meets its result.
-          {preview ? " From the preview: run the analysis to verify it." : ""}</p>
+        <p className="chat-note" data-testid="chat-working-note">Inputs are shown to {figures} figures, results to 4.{preview ? " Preview: run the analysis to verify." : ""}</p>
         {found.others.length ? <Chips>{found.others.map((name) => <button key={name} type="button" onClick={() => showWorking(`Show the working for ${name}`)}>Working for {name}</button>)}</Chips> : null}
-        {shown.fields !== from ? <p className="chat-note">The setup has changed since: ask again for the current working.</p> : null}
+        {shown.fields !== from ? <p className="chat-note">The setup has changed since: ask again.</p> : null}
       </div>
     );
   }
@@ -947,54 +949,64 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
-  /** Where a quantity is largest (ADR-0100): one quantity as a sentence with each ply's own extreme under it, several as one row each;
-   * with the region read, how the values are taken, and the grip edge said where the largest sits on it. */
+  /** Where a quantity is largest (ADR-0100), kept short (ADR-0099 amendment 2): one quantity as the heading with its value and a line of
+   * labels; several as one row each. Each ply's own extreme, the elements and how the values are taken are folded under "Details"; a
+   * largest value at a grip edge is flagged in one line, since it is not a value to rely on. */
   function extremesMessage(entry: Extract<Entry, { kind: "extremes" }>): ReactNode {
     const { answer, from, preview, reader } = entry;
     const current = shown.fields === from;
     const [first] = answer.blocks;
     const single = answer.blocks.length === 1;
+    const region = answer.region.replace(/^the /, "");
     const where = (row: ResultExtremes["blocks"][number]["rows"][number]) => `${row.label}${row.face ? `, ${row.face} face` : ""}`;
+    const lines = single ? extremeLines(first, answer.region, resultUnit(from, first.column), printed) : null;
+    const glance = [...(lines ? lines.facts : []), ...(preview ? ["preview, run the analysis to verify"] : [])];
     return (
       <div data-testid="chat-extremes" data-reader={reader} data-source={preview ? "live" : "run"} data-region={answer.region}>
-        <h4>{single ? capital(`${extremeWords(first.column, first.sense)} in ${answer.region}`) : `Extremes in ${answer.region}`}</h4>
-        {single ? <p data-testid="chat-extreme"><strong>{extremeSentence(first, answer.region, resultUnit(from, first.column), printed)}</strong></p> : null}
-        {single && first.rows.length < 2 ? null : (
+        {lines ? <h4 data-testid="chat-extreme">{lines.headline}</h4> : <h4>Largest in {answer.region}</h4>}
+        {lines ? null : (
           <div className="studio-table-scroll">
             <table className="studio-table studio-table-num studio-table-compact" data-testid="chat-extremes-table">
-              {single ? (
-                <>
-                  <thead><tr><th scope="col">Ply</th><th scope="col">{RESULT_COLUMNS[first.column].symbol}{resultUnit(from, first.column) ? <><br /><span className="studio-muted">{resultUnit(from, first.column)}</span></> : null}</th>
-                    <th scope="col">Element</th></tr></thead>
-                  <tbody>{first.rows.map((r, i) => (
-                    <tr key={r.ply} data-ply={r.ply} className={i === first.best ? "studio-earliest" : undefined}><th scope="row">{r.ply} · {r.angle}°</th><td>{printed(r.value)}</td><td>{where(r)}</td></tr>
-                  ))}</tbody>
-                </>
-              ) : (
-                <>
-                  <thead><tr><th scope="col">Quantity</th><th scope="col">Value</th><th scope="col">Ply</th><th scope="col">Element</th></tr></thead>
-                  <tbody>{answer.blocks.map((b) => {
-                    const r = b.rows[b.best];
-                    return (
-                      <tr key={b.column} data-column={b.column}><th scope="row">{capital(extremeWords(b.column, b.sense))}</th>
-                        <td>{printed(r.value)}{resultUnit(from, b.column) ? ` ${resultUnit(from, b.column)}` : ""}</td>
-                        <td className="studio-text-cell">{r.ply} · {r.angle}°{b.tied.length ? `, tied with ${b.tied.join(", ")}` : ""}</td><td>{where(r)}</td></tr>
-                    );
-                  })}</tbody>
-                </>
-              )}
+              <thead><tr><th scope="col">Quantity</th><th scope="col">Value</th><th scope="col">Ply</th></tr></thead>
+              <tbody>{answer.blocks.map((b) => {
+                const r = b.rows[b.best];
+                return (
+                  <tr key={b.column} data-column={b.column}><th scope="row">{capital(extremeWords(b.column, b.sense))}</th>
+                    <td>{printed(r.value)}{resultUnit(from, b.column) ? ` ${resultUnit(from, b.column)}` : ""}</td>
+                    <td className="studio-text-cell">{r.ply} · {r.angle}°</td></tr>
+                );
+              })}</tbody>
             </table>
           </div>
         )}
-        <p className="chat-note" data-testid="chat-extremes-note">
-          {capital(answer.region)}: {answer.elements} elements read. {answer.note}
-          {answer.atGrip ? " The largest is at a grip edge, where stress grows as the mesh is refined; ask for the gauge section for a value to compare." : ""}
-          {preview ? " From the preview: run the analysis to verify it." : ""}
-        </p>
+        {glance.length ? <p className="chat-note" data-testid="chat-extreme-facts">{glance.join(" · ")}</p> : null}
+        {answer.atGrip ? <p className="chat-note" data-testid="chat-extremes-grip">At a grip edge, so it grows with a finer mesh. Ask for the gauge section.</p> : null}
+        <details className="chat-details" data-testid="chat-extremes-details"><summary>Details</summary>
+          <div className="studio-table-scroll">
+            {single ? (
+              <table className="studio-table studio-table-num studio-table-compact" data-testid="chat-extremes-table">
+                <thead><tr><th scope="col">Ply</th><th scope="col">{RESULT_COLUMNS[first.column].symbol}{resultUnit(from, first.column) ? <><br /><span className="studio-muted">{resultUnit(from, first.column)}</span></> : null}</th>
+                  <th scope="col">Element</th></tr></thead>
+                <tbody>{first.rows.map((r, i) => (
+                  <tr key={r.ply} data-ply={r.ply} className={i === first.best ? "studio-earliest" : undefined}><th scope="row">{r.ply} · {r.angle}°</th><td>{printed(r.value)}</td><td>{where(r)}</td></tr>
+                ))}</tbody>
+              </table>
+            ) : (
+              <table className="studio-table studio-table-compact" data-testid="chat-extremes-places">
+                <thead><tr><th scope="col">Quantity</th><th scope="col">Element</th><th scope="col">Tied plies</th></tr></thead>
+                <tbody>{answer.blocks.map((b) => (
+                  <tr key={b.column} data-column={b.column}><th scope="row">{capital(extremeWords(b.column, b.sense))}</th><td>{where(b.rows[b.best])}</td>
+                    <td className="studio-text-cell">{b.tied.length ? b.tied.join(", ") : "–"}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+          <p className="chat-note" data-testid="chat-extremes-note">{capital(region)}: {answer.elements} elements read. {answer.note}</p>
+        </details>
         <Chips>
           <button type="button" disabled={!current} data-testid="chat-extremes-show" onClick={() => showPlace(placeOf(answer))}>Show on the model</button>
         </Chips>
-        {!current ? <p className="chat-note">The setup has changed since: ask again for the current values.</p> : null}
+        {!current ? <p className="chat-note">The setup has changed since: ask again.</p> : null}
       </div>
     );
   }

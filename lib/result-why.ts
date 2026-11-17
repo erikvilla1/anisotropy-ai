@@ -29,12 +29,11 @@ export type WhyLines = {
 export function whyLines(answer: ResultAnswer, preview: boolean): WhyLines {
   const prose = answer.prose.map(shownSentence).filter((sentence): sentence is string => sentence !== null);
   const sources = answer.sources.map((s) => `${s.document}, ${s.title}`);
-  const named = sources.length ? ` ${sources.length > 1 ? "Sections" : "Section"} of the theory behind it: ${sources.join("; ")}.` : "";
+  const see = sources.length ? ` See: ${sources.join("; ")}.` : "";
   if (!prose.length) {
-    const none = answer.withheld ? "An answer was written, but it held a number the results do not, so it is not shown."
-      : "A question like this is not answered in words here yet.";
-    return { prose, sources, note: none + named };
+    const none = answer.withheld ? "The answer held a number the results do not, so it is not shown." : "Not answered in words yet.";
+    return { prose, sources, note: none + see };
   }
-  const basis = answer.covered && sources.length ? `From the results and the theory: ${sources.join("; ")}.` : "From the results; the theory pages do not explain this yet.";
-  return { prose, sources, note: `${basis} Every number is the results’ own.${preview ? " From the preview: run the analysis to verify it." : ""}` };
+  const basis = answer.covered && sources.length ? `Based on the results and: ${sources.join("; ")}.` : "Based on the results only.";
+  return { prose, sources, note: `${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
 }

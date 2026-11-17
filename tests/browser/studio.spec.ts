@@ -629,6 +629,8 @@ test("the assistant answers a question about a ply's stress from the results on 
   await expect(card).toHaveAttribute("data-source", "run");
   const cells = card.getByTestId("chat-values-table").locator("tr[data-ply='5'] td");
   await expect(cells).toHaveText((fields.element.ply.stress_12[element][4] as number[]).map((v) => printed(v))); // the fields' own numbers, printed as the probe table prints them
+  await expect(card.getByTestId("chat-values-note")).toBeHidden(); // how the values are taken is folded under Details
+  await card.getByText("Details", { exact: true }).click();
   await expect(card.getByTestId("chat-values-note")).toContainText("Element centroid, no averaging, fibre axes");
   // the viewer frames the place: the element is read out with every ply, and the model shows σ₁ of ply 5
   await expect(page.getByTestId("probe")).toContainText("Ply results at element 125");
@@ -637,7 +639,8 @@ test("the assistant answers a question about a ply's stress from the results on 
   expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
 
   await say("s11 in ply 2 at element 125");
-  await expect(page.getByTestId("chat-value").last()).toHaveText(`σ₁ in ply 2 (0°) at element 125 is ${printed(fields.element.ply.stress_12[element][1][0])} MPa.`);
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`σ₁ = ${printed(fields.element.ply.stress_12[element][1][0])} MPa`); // the value is the heading
+  await expect(page.getByTestId("chat-value-facts").last()).toContainText("ply 2 (0°) · element 125");
 
   // “here” is the element picked on the model: the answer card's Show picks the governing element
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click();
@@ -645,7 +648,8 @@ test("the assistant answers a question about a ply's stress from the results on 
   const here = title.replace("Ply results at element ", "").trim();
   await say("shear strain here, ply 3");
   const picked = fields.mesh.element_labels.indexOf(`Strip-1.${here}`);
-  await expect(page.getByTestId("chat-value").last()).toHaveText(`γ₁₂ in ply 3 (-45°) at element ${here} is ${printed(fields.element.ply.strain_12[picked][2][2])}.`);
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`γ₁₂ = ${printed(fields.element.ply.strain_12[picked][2][2])}`);
+  await expect(page.getByTestId("chat-value-facts").last()).toContainText(`ply 3 (-45°) · element ${here}`);
 
   await say("stress on ply 5 at element 1212");
   await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
@@ -718,6 +722,9 @@ test("with a model on, a loose question about the results is read into a fixed r
   await expect(loose.getByTestId("chat-extreme")).toHaveText(await plain.getByTestId("chat-extreme").innerText()); // the same answer, whoever read the question
   const written = fields.summary.ply_extremes.overall.S12.largest;
   await expect(loose.getByTestId("chat-extreme")).toContainText(`${printed(-Math.abs(written.value))} MPa`); // the package's own largest shear, on the element first in the mesh
+  await expect(loose.getByTestId("chat-extreme-facts")).toContainText("gauge section");
+  await expect(loose.getByTestId("chat-extremes-table")).toBeHidden(); // each ply's own extreme is folded under Details
+  await loose.getByText("Details", { exact: true }).click();
   await expect(loose.getByTestId("chat-extremes-table").locator("tbody tr")).toHaveCount(8);
   await expect(loose.getByTestId("chat-extremes-note")).toContainText("130 elements read");
   await expect(page.getByLabel("Field", { exact: true })).toHaveValue("S12");
@@ -728,8 +735,9 @@ test("with a model on, a loose question about the results is read into a fixed r
 
   await say("which ply carries the most load?");
   const load = page.getByTestId("chat-extremes").last();
-  await expect(load.getByTestId("chat-extreme")).toContainText(`The largest |σ₁| in the gauge section is ${printed(fields.summary.ply_extremes.overall.S11.tension.value)} MPa, in ply 2 (0°)`);
-  await expect(load.getByTestId("chat-extreme")).toContainText("ply 7 ties");
+  await expect(load.getByTestId("chat-extreme")).toHaveText(`Largest |σ₁|: ${printed(fields.summary.ply_extremes.overall.S11.tension.value)} MPa`);
+  await expect(load.getByTestId("chat-extreme-facts")).toContainText("ply 2 (0°)");
+  await expect(load.getByTestId("chat-extreme-facts")).toContainText("gauge section · tied with ply 7");
 
   await say("compare the 0° and 90° plies here");
   const compared = page.getByTestId("chat-values").last();
@@ -739,7 +747,7 @@ test("with a model on, a loose question about the results is read into a fixed r
   await say("worst transverse loading anywhere, grips included?");
   const whole = page.getByTestId("chat-extremes").last();
   await expect(whole).toHaveAttribute("data-region", "the whole model");
-  await expect(whole.getByTestId("chat-extremes-note")).toContainText("at a grip edge");
+  await expect(whole.getByTestId("chat-extremes-grip")).toHaveText("At a grip edge, so it grows with a finer mesh. Ask for the gauge section.");
 
   // which ply fails is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1): the page's patterns
   // read it with no model asked, and a loose wording the model reads as the kind failure gets the same answer
@@ -836,7 +844,7 @@ test("a question of why is answered in words from the results and our theory pag
   await expect(why).toHaveAttribute("data-covered", "yes");
   await expect(why).toHaveAttribute("data-source", "run");
   await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
-  await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and the theory: Laminate theory, 5. Failure. Every number is the results’ own.");
+  await expect(why.getByTestId("chat-why-note")).toHaveText("Based on the results and: Laminate theory, 5. Failure.");
   await expect(why.getByTestId("chat-why-working")).toHaveText("Show the working"); // the formulas with the numbers put in are one click away (ADR-0103)
   expect(asked).toHaveLength(1);
   expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
@@ -847,7 +855,7 @@ test("a question of why is answered in words from the results and our theory pag
   const uncovered = page.getByTestId("chat-why").last();
   await expect(uncovered).toHaveAttribute("data-covered", "no");
   await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
-  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("From the results; the theory pages do not explain this yet. Every number is the results’ own.");
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Based on the results only.");
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
 
   // an answer the guard set aside is not shown; the sections the question found are named
@@ -855,7 +863,7 @@ test("a question of why is answered in words from the results and our theory pag
   const withheld = page.getByTestId("chat-why").last();
   await expect(withheld).toHaveAttribute("data-answered", "no");
   await expect(withheld.getByTestId("chat-why-sentence")).toHaveCount(0);
-  await expect(withheld.getByTestId("chat-why-note")).toHaveText("An answer was written, but it held a number the results do not, so it is not shown. Sections of the theory behind it: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
+  await expect(withheld.getByTestId("chat-why-note")).toHaveText("The answer held a number the results do not, so it is not shown. See: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
 
   await page.getByTestId("chat-why").first().scrollIntoViewIfNeeded();
   await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-why.png" });
@@ -922,7 +930,7 @@ test("the working behind an answer is shown when asked: each formula with the so
   await expect(criterion.getByTestId("chat-working-value").nth(1)).toHaveText("64.0523 MPa");
   await expect(criterion.locator("annotation").last()).toHaveText(hill.steps[2].equations[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
   await expect(criterion.getByTestId("chat-working-source")).toHaveText("From: Laminate theory, 5. Failure.");
-  await expect(first.getByTestId("chat-working-note")).toContainText("Values put in are shown to 6 figures and results to 4");
+  await expect(first.getByTestId("chat-working-note")).toContainText("Inputs are shown to 6 figures, results to 4.");
 
   // asked in words, with the criterion named: the engineer's own phrases
   await say("send me the formula for max stress");

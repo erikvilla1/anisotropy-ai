@@ -8,7 +8,7 @@ import { bannedIn } from "../lib/studio-copy";
 import { exampleForm } from "../lib/studio-form";
 import { PROBE_COLUMNS, probeTable } from "../lib/studio-fields";
 import { readResultReading } from "../lib/studio-api";
-import { answerResultQuestion, extremeSentence, extremeWords, gaugeSection, questionFrom, readResultQuestion, resultOffer, RESULT_COLUMNS, resultSentence, resultUnit, type ResultExtremes, type ResultValues } from "../lib/result-question";
+import { answerResultQuestion, extremeLines, extremeWords, gaugeSection, questionFrom, readResultQuestion, resultOffer, RESULT_COLUMNS, resultUnit, valueLines, type ResultExtremes, type ResultValues } from "../lib/result-question";
 
 const fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8")) as Fields;
 /** The mesh index of the element the fixture labels `Strip-1.<number>`. */
@@ -96,16 +96,16 @@ test("a place the model does not hold is refused with what it holds", () => {
   assert.match((both as { text: string }).text, /Strip-1\.1, Tab-1\.1/);
 });
 
-test("one value is said as a sentence with its ply, angle, element and unit; more than one is a table's", () => {
+test("one value is said short, the value first, with its ply and element as labels; more than one is a table's (ADR-0099 amendment 2)", () => {
   const element = indexOf(125);
   const one = values(answerResultQuestion(fields, readResultQuestion("s11 in ply 2 at element 125")!, null));
   const value = (fields.element.ply.stress_12[element][1] as number[])[0];
   assert.equal(resultUnit(fields, "S11"), "MPa");
   assert.equal(resultUnit(fields, "E11"), "");
-  assert.equal(resultSentence(one, resultUnit(fields, "S11"), printed), `σ₁ in ply 2 (0°) at element 125 is ${printed(value)} MPa.`);
+  assert.deepEqual(valueLines(one, resultUnit(fields, "S11"), printed), { headline: `σ₁ = ${printed(value)} MPa`, facts: ["ply 2 (0°)", "element 125"] });
   const strain = values(answerResultQuestion(fields, readResultQuestion("e22 in ply 2 at element 125")!, null));
-  assert.equal(resultSentence(strain, resultUnit(fields, "E22"), printed), `ε₂ in ply 2 (0°) at element 125 is ${printed((fields.element.ply.strain_12[element][1] as number[])[1])}.`);
-  assert.equal(resultSentence(values(answerResultQuestion(fields, readResultQuestion("stress in ply 2 at element 125")!, null)), "MPa", printed), null);
+  assert.equal(valueLines(strain, resultUnit(fields, "E22"), printed)?.headline, `ε₂ = ${printed((fields.element.ply.strain_12[element][1] as number[])[1])}`);
+  assert.equal(valueLines(values(answerResultQuestion(fields, readResultQuestion("stress in ply 2 at element 125")!, null)), "MPa", printed), null);
   for (const column of PROBE_COLUMNS) assert.deepEqual(bannedIn(`${RESULT_COLUMNS[column].symbol} ${RESULT_COLUMNS[column].words}`), [], column);
 });
 
@@ -216,9 +216,9 @@ test("a model is offered what a question may name and never a value; its reading
 
   const answer = extremes(answerResultQuestion(fields, most!, null));
   const block = answer.blocks[0], row = block.rows[block.best];
-  const sentence = extremeSentence(block, answer.region, "MPa", printed);
-  assert.equal(sentence, `The largest |σ₁| in the gauge section is ${printed(row.value)} MPa, in ply ${row.ply} (${row.angle}°) at element ${row.label}; ply ${block.tied[0]} ties.`);
-  assert.deepEqual(bannedIn(`${sentence} ${answer.note}`), []);
+  const lines = extremeLines(block, answer.region, "MPa", printed);
+  assert.deepEqual(lines, { headline: `Largest |σ₁|: ${printed(row.value)} MPa`, facts: [`ply ${row.ply} (${row.angle}°)`, `element ${row.label}`, "gauge section", `tied with ply ${block.tied[0]}`] });
+  assert.deepEqual(bannedIn(`${lines.headline} ${lines.facts.join(" ")} ${answer.note}`), []);
 });
 
 test("an answer of the API that is not a reading is refused by the page", () => {

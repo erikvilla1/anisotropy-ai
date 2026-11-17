@@ -85,7 +85,7 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   const extremes = page.getByTestId("chat-extremes");
   await expect(extremes).toBeVisible();
   await expect(extremes).toHaveAttribute("data-source", "run");
-  await expect(extremes).not.toContainText("From the preview");
+  await expect(extremes).not.toContainText("preview");
   await say(page, "show me the formula");
   await expect(page.getByTestId("chat-working")).toBeVisible();
   await say(page, "finer mesh");
