@@ -1,6 +1,6 @@
 # ADR-0085: A coupon's answer is given per criterion in its gauge section: fails or holds, the loading at first-ply failure and where, with the clamped edge reported apart
 
-- Status: Proposed
+- Status: Proposed; where the gauge section is read, at least a quarter of the coupon's width from each tab line in place of every element past the row at a grip, is set by [ADR-0108](ADR-0108-the-gauge-section-is-read-at-least-a-quarter-of-the-coupons-width-from-each-tab-line-the-same-distance-on-every-mesh-so-a-finer-mesh-does-not-move-the-answer.md)
 - Date: 2026-11-10
 - Decided by: Founder, 2026-11-10 ("the analysis of the specimen is given everything important such as max stress, where it will fail if it will fail ... if it doesn't fail how what is the load factor that causes the failure and where"; the plan of that day, PR 1, approved) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/fields.py` (`answer_of`, `verdict_of`, `ply_extremes`), `fea/src/anisotropy_fea/explain.py`, `fea/docs/theory.md` (section 7), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md), [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md), [ADR-0068](ADR-0068-every-coupon-result-carries-a-mesh-convergence-study-by-the-kernel-on-two-refinements-of-its-mesh.md)

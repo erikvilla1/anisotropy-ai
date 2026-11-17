@@ -80,8 +80,11 @@ def at_grips(fields: dict) -> set[int]:
 
 
 def gauge_section(fields: dict) -> list[int] | None:
-    """The gauge section as the package reads it (ADR-0085): the `Gauge` set less the elements at a gripped node; None for a model
-    without that set or without grips."""
+    """The gauge section as the package reads it: the elements it wrote with the fields (`mesh.gauge_elements`, ADR-0108: the `Gauge`
+    set at least the stand-off from each tab line), so nothing is derived here. A result solved before that record holds no list and
+    is read by its own rule (ADR-0085): the `Gauge` set less the elements at a gripped node. None for a model without a gauge section."""
+    if "gauge_elements" in fields["mesh"]:
+        return list(fields["mesh"]["gauge_elements"] or []) or None
     gauge = fields["mesh"].get("element_sets", {}).get("Gauge")
     grips = at_grips(fields)
     return [e for e in gauge if e not in grips] if gauge and grips else None

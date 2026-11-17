@@ -62,13 +62,13 @@ From: Finite element theory, first-ply failure; Laminate theory, failure.
 
 A grip clamps the tab, so the material under it cannot get narrower, while the free gauge section beside it does. This mismatch at the edge of a gripped tab adds stress there. In the model the clamp is ideal, a perfectly rigid edge, so the stress at that edge keeps growing as the mesh is refined and settles on no value.
 
-A tension test is accepted when the coupon breaks in the gauge section. The answer is therefore read over the gauge section, from the elements that touch no gripped node. A failure that comes earlier at the edge of a grip is reported beside the answer, never as the answer.
+A tension test is accepted when the coupon breaks in the gauge section. The answer is therefore read over the gauge section, from the elements at least a quarter of the coupon's width from each tab line. Closer than that, the corner of the grip sets the value read. A failure that comes earlier at the edge of a grip is reported beside the answer, never as the answer.
 
 From: Finite element theory, first-ply failure.
 
 ## Why the element size changes the numbers
 
-Each element reports the ply stresses at its centre. In the gauge section the stress is nearly uniform, so the value at the centre is the same for a large element or a small one, and the answer moves little with the mesh. Near the edge of a grip the stress changes steeply over a short distance. A smaller element has its centre closer to the edge and reports more of the peak, so the values there rise as the mesh is refined.
+Each element reports the ply stresses at its centre. In the gauge section the stress is nearly uniform, so the value at the centre is the same for a large element or a small one, and the answer moves little with the mesh. Near the edge of a grip the stress changes steeply over a short distance. A smaller element has its centre closer to the edge and reports more of the peak, so the values there rise as the mesh is refined. For that reason the gauge section is read at least a quarter of the coupon's width from each tab line, the same distance on every mesh, so a finer mesh does not move the answer.
 
 The reaction at the grips depends on the stiffness of the whole coupon and changes little with the element size.
 

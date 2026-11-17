@@ -11,7 +11,7 @@ import pytest
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import MODE_WORDS, explanation, fact_sheet, number, numbers_in, result_sentences, setup_sentences
-from anisotropy_fea.fields import MODES, applied_loading, field_data, nodal_averages, per_ply_spans, rounded, span
+from anisotropy_fea.fields import GAUGE_STAND_OFF, MODES, applied_loading, field_data, gauge_elements, gauge_reading, nodal_averages, per_ply_spans, rounded, span
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
@@ -228,6 +228,92 @@ def test_the_gauge_sections_first_ply_failure_sits_away_from_the_tabs(data):
         assert gauge["element"] in public_fields["mesh"]["element_sets"]["Gauge"]
 
 
+def test_the_gauge_section_is_read_a_quarter_width_from_each_tab_line(solved, data):
+    """ADR-0108: the `Gauge` elements whose centroid is at least a quarter of the 25 mm width from the tab lines at 56 and 194 mm, none
+    of them at a gripped node; the rest of the set is left out, and the fields say where the reading is and which elements it holds."""
+    deck, solution = solved
+    mesh = solution.mesh
+    reading = gauge_reading(deck, solution)
+    assert reading["fraction"] == GAUGE_STAND_OFF == 0.25 and reading["of"] == "width"
+    assert reading["stand_off"] == pytest.approx(0.25 * 0.025) and reading["tab_lines"] == pytest.approx((0.056, 0.194)) and reading["width"] == pytest.approx(0.025)
+    gauge = [mesh.element(key) for key in deck.elsets["Gauge"]]
+    assert sorted(reading["elements"] + reading["near"]) == sorted(gauge) and reading["elements"] and reading["near"]
+    y = mesh.xy[mesh.connectivity[:, :4]].mean(axis=1)[:, 1]
+    lo, hi = reading["tab_lines"]
+    assert all(lo + reading["stand_off"] - 1e-9 <= y[e] <= hi - reading["stand_off"] + 1e-9 for e in reading["elements"])
+    assert all(y[e] < lo + reading["stand_off"] or y[e] > hi - reading["stand_off"] for e in reading["near"])
+    assert gauge_elements(deck, solution) == reading["elements"]
+    said = data["summary"]["gauge_reading"]
+    assert said == {"stand_off": pytest.approx(6.25), "fraction": 0.25, "of": "width", "tab_lines": pytest.approx([56.0, 194.0]),
+                    "elements": len(reading["elements"]), "left_out": len(reading["near"])}
+    assert data["mesh"]["gauge_elements"] == reading["elements"]
+    for criterion, found in data["summary"]["fpf_gauge"].items():
+        assert found["element"] in reading["elements"] and found["near_tab"] is False, criterion
+        assert min(found["xy"][1] - 56.0, 194.0 - found["xy"][1]) >= 6.25 - 1e-6
+
+
+def test_a_gauge_shorter_than_the_width_is_read_over_its_middle_half():
+    """ADR-0108: the stand-off is a quarter of the smaller of the width and the gauge length, so a gauge shorter than the coupon is wide
+    is still read, over its middle half, and the reading says which length set it."""
+    from anisotropy_fea.convergence import solve
+    from anisotropy_fea.spec import load_spec
+
+    base = load_spec(paths.FEA / "checks" / "compression-im7-8552" / "compression-im7-8552.toml")
+    _, deck, solution = solve(base)
+    reading = gauge_reading(deck, solution)  # 13 mm between the tabs of a 12 mm wide coupon: the width is the smaller
+    assert reading["of"] == "width" and reading["stand_off"] == pytest.approx(0.003) and reading["elements"]
+    wide = base.model_copy(update={"geometry": base.geometry.model_copy(update={"width": 0.020})})
+    _, deck, solution = solve(wide)
+    reading = gauge_reading(deck, solution)
+    lo, hi = reading["tab_lines"]
+    assert reading["of"] == "gauge length" and reading["stand_off"] == pytest.approx(0.25 * (hi - lo)) and hi - lo == pytest.approx(0.013)
+    y = solution.mesh.xy[solution.mesh.connectivity[:, :4]].mean(axis=1)[:, 1]
+    assert reading["elements"] and all(lo + 0.25 * (hi - lo) - 1e-9 <= y[e] <= hi - 0.25 * (hi - lo) + 1e-9 for e in reading["elements"])
+
+
+def test_a_finer_mesh_moves_the_grip_edge_and_not_the_answer():
+    """ADR-0108: with every element split in two the whole model's first failure, at the row beside a grip, comes 12 % earlier; it is
+    the answer's `outside_earlier`, and the gauge section's answer is the coarse mesh's to three figures. The sentences say where the
+    gauge section is read."""
+    from anisotropy_fea.convergence import refined, solve
+    from anisotropy_fea.spec import load_spec
+
+    spec = load_spec(paths.spec_path("unnotched-im7-8552-nodal"))
+    answers = []
+    for factor in (1, 2):
+        _, deck, solution = solve(refined(spec, factor))
+        data = field_data(deck, solution, UNITS)
+        summary = data["summary"]
+        verdict, whole = summary["verdict"], summary["fpf"][summary["earliest"]]
+        outside = verdict["outside_earlier"]
+        assert verdict["basis"] == "gauge" and outside["factor"] == whole["factor"] < verdict["factor"]
+        assert outside["touches_grip"] is True and outside["near_tab"] is False and outside["element"] not in data["mesh"]["gauge_elements"]
+        answers.append((summary["fpf_gauge"]["tsai_hill"]["factor"], whole["factor"]))
+        sentences = " ".join(result_sentences(fact_sheet(summary, data["coupon"], data["units"], data["labels"])))
+        assert "reported apart from the answer" in sentences
+        assert "The gauge section is read at least 6.25 mm from each tab line, a quarter of the width, the same distance on every mesh." in sentences
+    facts = fact_sheet(summary, data["coupon"], data["units"], data["labels"])
+    facts.update(outside_touches_grip=False, outside_near_tab=True)  # the same failure, had it sat one row further in
+    assert "inside the stand-off from a tab line, where the corner of the grip sets the stress" in " ".join(result_sentences(facts))
+    (gauge_coarse, whole_coarse), (gauge_fine, whole_fine) = answers
+    assert gauge_fine == pytest.approx(gauge_coarse, rel=1e-3) and whole_fine < 0.9 * whole_coarse
+
+
+def test_a_failure_inside_the_stand_off_is_marked_and_said_apart():
+    """ADR-0108: a first failure of the whole model that sits inside the stand-off without touching a gripped node is `near_tab`; the
+    verdict carries the mark and the sentence says why it is not the answer."""
+    from anisotropy_fea.fields import verdict_of
+
+    row = {"index": 1.0, "element": 7, "label": "Strip-1.8", "ply": 4, "angle": 90.0, "face": None, "mode": "transverse tension", "tied_plies": [4, 5], "xy": [1.0, 58.0]}
+    whole = {"tsai_hill": {**row, "factor": 0.93, "place": "2 mm from the nearer tab line", "touches_grip": False, "near_tab": True}}
+    gauge = {"tsai_hill": {**row, "factor": 1.03, "element": 90, "label": "Strip-1.91", "place": "13 mm from the nearer tab line", "touches_grip": False, "near_tab": False}}
+    verdict = verdict_of(whole, gauge)
+    assert verdict["fails"] is False and verdict["factor"] == 1.03
+    assert verdict["outside_earlier"]["near_tab"] is True and verdict["outside_earlier"]["touches_grip"] is False and verdict["outside_earlier"]["factor"] == 0.93
+    older = {"tsai_hill": {k: v for k, v in whole["tsai_hill"].items() if k != "near_tab"}}  # a result written before ADR-0108
+    assert verdict_of(older, gauge)["outside_earlier"]["near_tab"] is False
+
+
 def test_every_ply_has_its_own_peaks_and_the_clamped_edge_is_marked(solved, data):
     # ADR-0066: one entry per ply, each component's largest magnitude over the elements, the element named, the grip row marked
     deck, solution = solved
@@ -290,8 +376,9 @@ def test_the_answer_reads_the_gauge_section_and_reports_the_grip_edge_apart(data
     whole = summary["fpf"][summary["earliest"]]
     outside = verdict["outside_earlier"]
     if whole["factor"] < verdict["factor"]:
-        assert outside["criterion"] == summary["earliest"] and outside["factor"] == whole["factor"] and outside["touches_grip"] is True
-        assert outside["element"] not in data["mesh"]["element_sets"]["Gauge"] or outside["touches_grip"]
+        assert outside["criterion"] == summary["earliest"] and outside["factor"] == whole["factor"]
+        assert outside["touches_grip"] is True or outside["near_tab"] is True  # at the grip or inside the stand-off (ADR-0108)
+        assert outside["element"] not in data["mesh"]["gauge_elements"]
     else:
         assert outside is None
 

@@ -74,7 +74,7 @@ from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.every_output import write_ours as write_every_output  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
-from anisotropy_fea.fields import field_data, gauge_failures  # noqa: E402
+from anisotropy_fea.fields import field_data, gauge_failures, gauge_reading  # noqa: E402
 from anisotropy_fea.results import ShellSolution  # noqa: E402
 from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
@@ -536,12 +536,16 @@ def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: d
         else:  # a plate: the factor scales every load and prescribed value together
             applied, unit = 1.0, "of the loading"
         angles = full_angles(spec)
-        # The answer is read over the gauge section, the elements of its Gauge set that touch no gripped node, since a test coupon is
-        # accepted when it breaks there; a failure that comes earlier at the clamped edge of a grip is reported beside it, never as the
-        # answer (fea/docs/theory.md, Section 7). A coupon without a gauge section is answered over the whole model.
+        # The answer is read over the gauge section, the elements of its Gauge set at least a quarter of the width from each tab line
+        # (ADR-0108, `fields.gauge_reading`), since a test coupon is accepted when it breaks there; a failure that comes earlier at the
+        # clamped edge of a grip is reported beside it, never as the answer (fea/docs/theory.md, Section 7). A coupon without a gauge
+        # section is answered over the whole model.
         wholes = {criterion: strength_ratios(solution, criterion, deck_f12_star(deck)) for criterion in criteria}
-        gauges = gauge_failures(deck, solution, wholes, isinstance(solution, ShellSolution))
+        reading = gauge_reading(deck, solution)
+        gauges = gauge_failures(deck, solution, wholes, isinstance(solution, ShellSolution), reading)
         basis = "the gauge section" if gauges else "the whole model"
+        stand_off_words = (f"{from_si(reading['stand_off'], 'length', units):.4g} {escape(labels['length'])} (a quarter of the {reading['of']})"
+                           if reading else "")
         rows, clamped_rows, found, places, notes, clamped, trends = [], [], [], {}, [], {}, {}
 
         def table_row(name: str, field) -> tuple[str, str, list[int]]:
@@ -583,8 +587,8 @@ def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: d
                 r"criterion together tie (in a membrane model plies at the same angle always do, and plies whose stresses differ only in sign "
                 r"can); the table names the bottom-most and lists the others. The mode "
                 r"``interactive'' means the criterion combines the stress components, so no single one governs. "
-                + (r"The answer is read over the gauge section, the elements between the grips that touch no gripped node, since a test coupon is "
-                   r"accepted when it breaks there. " if gauges else r"The coupon has no gauge section, so the answer is read over the whole model. ")
+                + (r"The answer is read over the gauge section, the elements between the grips at least " + stand_off_words
+                   + r" from each tab line, the same distance on every mesh, since a test coupon is accepted when it breaks there. " if gauges else r"The coupon has no gauge section, so the answer is read over the whole model. ")
                 + (cited("Over the gauge section, " + trend) if trend and gauges else cited(trend[:1].upper() + trend[1:]) if trend else ""),
                 documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", f"Element (x, y in {escape(labels['length'])}), where", "Mode"],
                                      rows, r">{\raggedright\arraybackslash}p{2.1cm}rr>{\raggedright\arraybackslash}p{2cm}Y>{\raggedright\arraybackslash}p{1.9cm}")]

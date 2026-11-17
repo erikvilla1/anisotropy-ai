@@ -3949,6 +3949,7 @@
     135
    ]
   },
+  "gauge_elements": null,
   "node_count": 289,
   "element_count": 256,
   "plies": 1,
@@ -43079,6 +43080,7 @@
     "face": "bottom"
    }
   },
+  "gauge_reading": null,
   "fpf": {},
   "equilibrium_residual": 2.0477841644606087e-11,
   "free_residual": 1.5678291998000304e-11,

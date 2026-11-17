@@ -135,12 +135,14 @@ def said(result: dict) -> str:
 
 def answer_of(summary: dict) -> dict:
     """The solve's answer as the package wrote it (ADR-0085): the verdict, the first ply to fail by each criterion in the gauge section
-    where the coupon has one (the verdict names a criterion reached earlier outside it), the loading and the reaction."""
+    where the coupon has one (the verdict names a criterion reached earlier outside it), where that section is read (ADR-0108: at least
+    `stand_off` from each tab line, the same distance on every mesh), the loading and the reaction."""
     gauge = summary.get("fpf_gauge")
     return {key: value for key, value in {
         "verdict": summary.get("verdict"),
         "first_ply_failure": gauge if gauge else summary.get("fpf"),
         "first_ply_failure_basis": "the gauge section" if gauge else "the whole model",
+        "gauge_section_read": summary.get("gauge_reading") if gauge else None,
         "applied": summary.get("applied"), "reaction": summary.get("reaction"), "max_displacement": summary.get("max_displacement"),
     }.items() if value is not None}
 

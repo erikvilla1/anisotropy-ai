@@ -2506,6 +2506,7 @@
     50
    ]
   },
+  "gauge_elements": null,
   "node_count": 217,
   "element_count": 180,
   "plies": 8,
@@ -144652,6 +144653,7 @@
     "face": "top"
    }
   },
+  "gauge_reading": null,
   "fpf": {
    "max_stress": {
     "factor": 2.7181753982488965,
@@ -144664,6 +144666,7 @@
     "mode": "transverse tension",
     "place": "under the loading nose, where the line load concentrates",
     "touches_grip": false,
+    "near_tab": false,
     "tied_plies": [
      1
     ],
@@ -144691,6 +144694,7 @@
     "mode": "interactive",
     "place": "under the loading nose, where the line load concentrates",
     "touches_grip": false,
+    "near_tab": false,
     "tied_plies": [
      1
     ],

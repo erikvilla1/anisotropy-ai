@@ -67,11 +67,29 @@ def test_two_parts_with_an_element_of_one_number_are_not_guessed_between():
         results.values_at(twice, 1)
 
 
-def test_the_gauge_section_is_the_packages_the_gauge_set_less_the_elements_at_a_gripped_node():
+def test_the_gauge_section_is_the_list_the_package_wrote_with_the_result():
+    """ADR-0108: the package reads the gauge section at least a quarter width from each tab line and writes the elements; the server
+    takes that list and derives none."""
     gauge = results.gauge_section(FIELDS)
     grips = results.at_grips(FIELDS)
-    assert grips and set(gauge) == set(FIELDS["mesh"]["element_sets"]["Gauge"]) - grips and len(gauge) < len(FIELDS["mesh"]["element_sets"]["Gauge"])
+    assert gauge == FIELDS["mesh"]["gauge_elements"] and len(gauge) == FIELDS["summary"]["gauge_reading"]["elements"] == 130
+    assert grips and not set(gauge) & grips and set(gauge) < set(FIELDS["mesh"]["element_sets"]["Gauge"])
     assert FIELDS["summary"]["fpf_gauge"]["tsai_hill"]["element"] in gauge and FIELDS["summary"]["verdict"]["outside_earlier"]["element"] in grips
+    centroids = FIELDS["element"]["centroids"]
+    narrowed = {**FIELDS, "mesh": {**FIELDS["mesh"], "gauge_elements": [e for e in gauge if 66 < centroids[e][1] < 184]}}
+    assert 0 < len(results.gauge_section(narrowed)) < len(gauge)  # a finer mesh leaves out more than the row at the grips
+    found = results.extremes(narrowed, ["S22"], "largest", "gauge")
+    assert found["elements"] == len(narrowed["mesh"]["gauge_elements"])
+    assert results.gauge_section({**FIELDS, "mesh": {**FIELDS["mesh"], "gauge_elements": None}}) is None  # the package wrote that there is none
+
+
+def test_a_result_solved_before_the_list_is_read_by_its_own_rule():
+    """A result from before ADR-0108 holds no list: its gauge section is the `Gauge` set less the elements at a gripped node (ADR-0085),
+    the rule its own summary was written by."""
+    older = {**FIELDS, "mesh": {k: v for k, v in FIELDS["mesh"].items() if k != "gauge_elements"}}
+    gauge = results.gauge_section(older)
+    assert set(gauge) == set(FIELDS["mesh"]["element_sets"]["Gauge"]) - results.at_grips(FIELDS) and len(gauge) == 130
+    assert results.gauge_section(BENDING) is None
 
 
 def test_each_plys_extreme_in_the_gauge_section_is_the_one_the_package_wrote_in_the_summary():

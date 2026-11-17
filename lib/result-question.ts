@@ -5,8 +5,7 @@ import { DEFAULT_CHOICE, PROBE_COLUMNS, probeTable, valuesFor } from "./studio-f
  * most compressive), or the largest magnitude. */
 export type Sense = "largest" | "smallest" | "magnitude";
 
-/** Where an extreme is looked for (ADR-0100): the gauge section as the package means it (the `Gauge` set less the elements at a gripped
- * node, ADR-0085), the whole model, a named element set, or "default": the gauge section where the model has one, else the whole model. */
+/** Where an extreme is looked for (ADR-0100): the gauge section as the package means it (the elements it read, ADR-0108), the whole model, a named element set, or "default": the gauge section where the model has one, else the whole model. */
 export type Region = "default" | "gauge" | "whole" | { set: string };
 
 /** A typed question about a result, read by fixed patterns (ADR-0099) or by a model into the same fixed form (ADR-0100): the place it
@@ -207,9 +206,13 @@ function atGrips(fields: Fields): Set<number> {
   return out;
 }
 
-/** The gauge section as the package reads it (`fields.py` `gauge_elements`, ADR-0085): the `Gauge` set less the elements at a gripped
- * node; null for a model without that set or without grips. A test holds the page's reading to the package's own extremes. */
+/** The gauge section as the package reads it: the elements it wrote with the fields (`mesh.gauge_elements`, ADR-0108: the `Gauge` set at
+ * least the stand-off from each tab line), so the page derives none. A result solved before that record holds no list and is read by its
+ * own rule (ADR-0085): the `Gauge` set less the elements at a gripped node. Null for a model without a gauge section. A test holds the
+ * page's reading to the package's own extremes. */
 export function gaugeSection(fields: Fields): number[] | null {
+  const read = fields.mesh.gauge_elements;
+  if (read !== undefined) return read?.length ? read : null;
   const gauge = fields.mesh.element_sets.Gauge;
   const grips = atGrips(fields);
   return gauge?.length && grips.size ? gauge.filter((e) => !grips.has(e)) : null;
