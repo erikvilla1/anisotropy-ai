@@ -8,6 +8,7 @@ import type { PlateLists } from "@/lib/studio-plate";
 import type { TowSpecimenRow } from "@/lib/studio-tow";
 import { useNewestFromServer, useProjectSync } from "./project-sync";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
+import { useImportedModel, type ImportedState } from "./use-imported-model";
 import { useLiveSolve } from "./use-live-solve";
 
 /** The project the workspace edits and its run, shared by the chat, the form and the viewer (ADR-0062): the rows live in one place, so
@@ -31,6 +32,8 @@ export type ProjectContextValue = {
   rename(name: string): void;
   replace(project: CouponProject): void;
   run: CouponRun;
+  /** A model brought in as a file (ADR-0105): while it is open, the stage and the assistant are its, and the coupon's rows wait. */
+  imported: ImportedState;
   /** The element clicked on the results, by its index in the mesh shown, so the assistant can read "here" (ADR-0099); null for none. */
   picked: number | null;
   setPicked(element: number | null): void;
@@ -65,6 +68,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
   const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
   const allTests = useAllTests(apiBaseUrl);
+  const imported = useImportedModel(apiBaseUrl);
 
   useEffect(() => {
     const store = browserStorage();
@@ -90,8 +94,8 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
-    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, picked, setPicked, place, showPlace,
-  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, picked, place, showPlace]);
+    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, picked, setPicked, place, showPlace,
+  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, picked, place, showPlace]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

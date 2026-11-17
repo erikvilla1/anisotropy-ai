@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, TypeVar
+from urllib.parse import unquote
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -52,7 +53,7 @@ from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, 
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    LiveSolveResponse, TowTestRequest, TowTestResponse,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -69,6 +70,9 @@ ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
+IMPORTED_MODELS = "/v1/imported-models"  # a model brought in as an Abaqus deck, answered and not kept (ADR-0105)
+MODEL_NAME_HEADER = "X-Anisotropy-Model-Name"  # the file's name, percent-encoded: a header, so it stays out of the address
+MAX_MODEL_BYTES = 20_000_000  # the deck as sent; the fea package's own limit (`imported.MAX_BYTES`)
 UPLOADS = "/v1/abaqus-uploads"  # the uploads from Abaqus, each its owner's alone (ADR-0094 part 6)
 UPLOAD_TOKENS = "/v1/upload-tokens"  # what the connector sends with
 PAIRING_CODES = "/v1/pairing-codes"  # a one-time code that a signed-in page hands to the user's machine (ADR-0094 amendment 1)
@@ -157,7 +161,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-Anisotropy-Actor"],
+    allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
     expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, "Location"],
     allow_credentials=False,
 )
@@ -554,6 +558,62 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     parts = [json.dumps(head)[1:-1].encode("utf-8")]
     for name in ("checklist", "preview", "fields", "explanation"):
         parts.append(f'"{name}":'.encode("utf-8") + (found.raw[name].strip() if name in found.raw else b"null"))
+    return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
+
+
+async def _read_model(request: Request) -> bytes:
+    """The request's body, an Abaqus input deck as it is, refused past the size a model may have before more of it is read."""
+    too_large = HTTPException(status_code=413, detail=f"A model is at most {MAX_MODEL_BYTES} bytes as sent")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_MODEL_BYTES:
+        raise too_large
+    received = bytearray()
+    async for chunk in request.stream():
+        received += chunk
+        if len(received) > MAX_MODEL_BYTES:
+            raise too_large
+    if not received:
+        raise HTTPException(status_code=422, detail="The request has no body: send the Abaqus input deck (.inp) as the body")
+    return bytes(received)
+
+
+@app.post(IMPORTED_MODELS, response_model=None, responses={200: {"model": ImportedModelResponse}})
+def import_model(actor: Actor, request: Request, data: Annotated[bytes, Depends(_read_model)], units: ModelUnits,
+                 x_anisotropy_model_name: Annotated[str | None, Header(max_length=800)] = None) -> Response:
+    """A model brought in as an Abaqus input deck (ADR-0105): the request's body is the .inp file, `units` the system it is written
+    in (a deck carries none, and nothing is inferred from its numbers) and the header `X-Anisotropy-Model-Name` the file's name,
+    percent-encoded, which so stays out of the address and its logs. The fea package reads it, or
+    refuses it with the line, draws it and solves it with our kernel as it stands: nothing is repaired or filled in. The answer is
+    the requester's alone and nothing of the deck is kept: the run record holds its name, size and digest, the state, the counts of
+    what was read and the answer's summary. Offered where every test is offered (ADR-0089): 403 otherwise. 413 past the size a
+    model may have, 429 when every solver stays busy, 422 when one does not answer in time, 503 when none can run."""
+    if not _every_test(request):
+        raise HTTPException(status_code=403, detail="Importing a model is not offered yet.")
+    name = unquote(x_anisotropy_model_name or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:200] or "model.inp"
+    live: LiveSolver = request.app.state.live
+    try:
+        found = live.read_model(data, name, units)
+    except LiveBusy as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except LiveTimedOut as exc:
+        print(f"an imported model was not answered: {exc}", flush=True)  # the cause stays in the log
+        raise HTTPException(status_code=422, detail="This model took too long to solve here. Try a coarser mesh.") from exc  # the engineer's to act on
+    except LiveRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    fields = found.raw.get("fields")
+    head = found.head
+    receipt = ImportedModelReceipt(name=name, units=units, bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+    refused = found.state == "refused"  # recorded as a rejection, with the reader's reason
+    run_id = _record(request, actor, receipt, error=str((head.get("problem") or {}).get("message", "refused")) if refused else None, response=None if refused else {
+        "state": found.state, "solver": "kernel", "warm": found.warm, "seconds": round(found.seconds, 3), "timings": found.timings,
+        "problem": head.get("problem"), "reading": head.get("reading"), "summary": found.summary,
+        "fields_sha256": hashlib.sha256(fields).hexdigest() if fields is not None else None})
+    first = {"run_id": None if run_id is None else str(run_id), "state": found.state, "name": name, "units": units, "solver": "kernel",
+             "warm": found.warm, "seconds": round(found.seconds, 3), "timings": found.timings, "problem": head.get("problem"),
+             "reading": head.get("reading")}
+    parts = [json.dumps(first)[1:-1].encode("utf-8")]
+    for part in ("preview", "fields", "explanation"):
+        parts.append(f'"{part}":'.encode("utf-8") + (found.raw[part].strip() if part in found.raw else b"null"))
     return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
 
 

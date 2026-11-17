@@ -7,6 +7,9 @@ package imported, and hands each request to a free one: one JSON line in, one JS
 answer in time, or stops, is killed and replaced, and the request answered 504 or 503; when every worker is busy for longer than the wait,
 429. With no workers configured (`ANISOTROPY_LIVE_WORKERS=0`) each request starts a fresh `studio_tool.py live`.
 
+A model brought in as an Abaqus deck (ADR-0105) is answered by the same workers, one request at a time each, with the deck in place of
+the rows (`read_model`): nothing of it is kept once the answer is read.
+
 The API reads the files the tool wrote and passes them on as written (`raw`): the fields of a fine mesh run to megabytes, and parsing and
 writing them again would cost more than the solve. The API depends on the engine alone; the fea package runs in its own processes (ADR-0051).
 """
@@ -51,6 +54,18 @@ class LiveAnswer:
     timings: dict[str, float]
     seconds: float  # at the API, from the request to the files read
     warm: bool  # answered by a warm worker
+
+
+@dataclass
+class ModelAnswer:
+    """A model brought in as a deck (ADR-0105), as `studio_tool.py import` answered it."""
+    state: str  # refused, read or solved
+    head: dict  # import.json: the state, the name, the units, the problem and what the reader took
+    summary: dict | None
+    raw: dict[str, bytes]  # preview, fields, explanation (those present), as written
+    timings: dict[str, float]
+    seconds: float
+    warm: bool
 
 
 class _Worker:
@@ -147,10 +162,37 @@ class LiveSolver:
             source.write_bytes(values)
             warm = self.workers > 0
             if warm:
-                self._ask_a_worker(source, out, every)
+                self._ask_a_worker({"values": str(source), "out": str(out), "every": every})
             else:
-                self._run_once(source, out, every)
+                self._run_once([*(["--every-test"] if every else []), "live", str(source), "--out", str(out)])
             return self._read(out, time.perf_counter() - started, warm)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def read_model(self, content: bytes, name: str, units: str) -> ModelAnswer:
+        """A model brought in as an Abaqus deck (ADR-0105): written to a folder of its own, read and solved by the tool, and the folder
+        removed, so the deck is on this machine only while it is answered."""
+        if self.command is None:
+            raise LiveRefused("uv is not on PATH; a model is read by fea/tools/studio_tool.py through `uv run --project fea`")
+        started = time.perf_counter()
+        self.folder.mkdir(parents=True, exist_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix="import-", dir=self.folder))
+        try:
+            source, out = folder / "model.inp", folder / "out"
+            source.write_bytes(content)
+            warm = self.workers > 0
+            if warm:
+                self._ask_a_worker({"deck": str(source), "units": units, "name": name, "out": str(out)})
+            else:
+                self._run_once(["import", str(source), "--units", units, "--name", name, "--out", str(out)])
+            head_path = out / "import.json"
+            if not head_path.is_file():
+                raise LiveRefused("the tool wrote no answer for the model")
+            head = json.loads(head_path.read_bytes())
+            raw = {part: (out / f"{part}.json").read_bytes() for part in ("preview", "fields", "explanation") if (out / f"{part}.json").is_file()}
+            summary = json.loads((out / "summary.json").read_bytes()) if (out / "summary.json").is_file() else None
+            timings = json.loads((out / "timings.json").read_bytes()) if (out / "timings.json").is_file() else {}
+            return ModelAnswer(state=head["state"], head=head, summary=summary, raw=raw, timings=timings, seconds=time.perf_counter() - started, warm=warm)
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
@@ -163,7 +205,7 @@ class LiveSolver:
         for _ in range(self.workers):
             self._start_one()
 
-    def _ask_a_worker(self, source: Path, out: Path, every: bool = False) -> None:
+    def _ask_a_worker(self, request: dict) -> None:
         self._start()
         try:
             worker = self.idle.get(timeout=self.wait_s)
@@ -172,7 +214,7 @@ class LiveSolver:
             raise LiveBusy("The preview is busy. Try again in a moment.") from None  # the page's words (ADR-0091 amendment 2)
         healthy = True
         try:
-            answer = worker.ask({"values": str(source), "out": str(out), "every": every}, self.timeout_s)
+            answer = worker.ask(request, self.timeout_s)
         except (LiveTimedOut, LiveRefused):
             healthy = False
             raise
@@ -186,11 +228,11 @@ class LiveSolver:
                 worker.stop()
                 self._start_one()
         if "error" in answer:
-            raise LiveRefused(f"the live solver could not solve these rows: {answer['error']}")
+            raise LiveRefused(f"the live solver could not solve {'this model' if 'deck' in request else 'these rows'}: {answer['error']}")
 
-    def _run_once(self, source: Path, out: Path, every: bool = False) -> None:
+    def _run_once(self, arguments: list[str]) -> None:
         try:
-            done = subprocess.run([*self.command, *(["--every-test"] if every else []), "live", str(source), "--out", str(out)], capture_output=True, text=True, encoding="utf-8",
+            done = subprocess.run([*self.command, *arguments], capture_output=True, text=True, encoding="utf-8",
                                   errors="replace", cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=self.timeout_s, check=False)
         except subprocess.TimeoutExpired:
             raise LiveTimedOut(f"the live solver did not answer in {self.timeout_s:g} s") from None

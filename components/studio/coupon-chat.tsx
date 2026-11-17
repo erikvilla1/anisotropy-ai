@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
+import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
@@ -27,11 +27,11 @@ import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-pa
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
-import { shownResults } from "./use-coupon-run";
+import { resultsOnPage } from "./use-imported-model";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
-import { ANALYSIS_UNAVAILABLE, checkText, customerText, runHeadline, runProblem, setWords, stepOfStage, verificationOf } from "@/lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE, checkText, customerText, importProblemWords, runHeadline, runProblem, setWords, stepOfStage, verificationOf } from "@/lib/studio-copy";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -126,17 +126,21 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported } = useProject(); // the rows and the run live in the project (ADR-0062)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
-  const shown = shownResults(runner); // the results on the page: what a question about a value is answered from (ADR-0099)
+  // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105)
+  const shown = resultsOnPage(runner, imported);
+  /** What it takes to have results to ask about, said where a question finds none. */
+  const resultsFirst = () => (shown.imported ? "This model has no results: import one that solves, then ask again."
+    : checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again.");
   // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
   const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current ? tensionValues(rows)
     : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined)); // a plate goes with its supports and loads
-  const { checking, checked, job, fields, explanation, problem } = runner;
+  const { checking, checked, job, fields, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
   const [input, setInput] = useState("");
@@ -198,6 +202,23 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     void assistantInfo(apiBaseUrl).then((info) => { if (current) setModel(info); });
     return () => { current = false; };
   }, [apiBaseUrl]);
+
+  // a model brought in as a file (ADR-0105): said once per answer, with what can be asked of it, or why it was not read or not solved
+  const announced = useRef<ImportedModel | null>(null);
+  useEffect(() => {
+    const brought = imported.model;
+    if (!imported.open || !brought || announced.current === brought) return;
+    announced.current = brought;
+    const why = importProblemWords(brought);
+    if (brought.state === "solved") {
+      add({ role: "assistant", kind: "text", title: "Model imported",
+        body: <p data-testid="chat-imported" data-state="solved">{brought.name}: {brought.reading?.elements} elements{brought.reading?.layup ? `, ${brought.reading.layup}` : ""}, solved as the file states it.
+          {" "}Ask about its results: “where is the stress highest?”, “why does it fail there?” or “show me the formula”.</p> });
+    } else {
+      add({ role: "assistant", kind: "text", tone: "problem", title: brought.state === "read" ? "Model read, not solved" : "File not read",
+        body: <p data-testid="chat-imported" data-state={brought.state}>{brought.name}: {why}</p> });
+    }
+  }, [imported.open, imported.model, add]);
 
   useEffect(() => {
     if (!apiBaseUrl) return;
@@ -380,7 +401,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (!echoed) add({ role: "user", text });
     if (!from.fields) {
       add({ role: "assistant", kind: "text", title: "No results to read yet",
-        body: <p data-testid="chat-value-none">Stresses and strains come from a solved model. {checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}</p> });
+        body: <p data-testid="chat-value-none">Stresses and strains come from a solved model. {resultsFirst()}</p> });
       return;
     }
     const answer = answerResultQuestion(from.fields, question, picked);
@@ -436,7 +457,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const found = workingFor(from.fields, text);
     if (!from.fields || !found) {
       add({ role: "assistant", kind: "text", title: "No working to show yet",
-        body: <p data-testid="chat-working-none">{!from.fields ? `The working is written with a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`
+        body: <p data-testid="chat-working-none">{!from.fields ? `The working is written with a solved model. ${resultsFirst()}`
           : "This result carries no working. Run the analysis again, then ask."}</p> });
       return;
     }
@@ -452,21 +473,22 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const text = value.trim();
     if (!text) return;
     setInput("");
-    if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    if (!shown.imported && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
     // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
     if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
     // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
-    const facts = factsOf(shown.live ? runner.live?.explanation : explanation);
+    const facts = factsOf(shown.explanation);
     if (asksWhy(text)) {
       if (apiBaseUrl && shown.fields && facts) { void answerWhy(text, facts, shown.live); return; }
       // with no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
       add({ role: "user", text }, { role: "assistant", kind: "text", title: "No results to answer from yet",
         body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
-          : `A question of why is answered from a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`}</p> });
+          : `A question of why is answered from a solved model. ${resultsFirst()}`}</p> });
       return;
     }
     const question = readResultQuestion(text);
     if (question) { answerQuestion(text, question); return; }
+    if (shown.imported) { void readOfImported(text); return; } // its rows are the file's: nothing below reads a message into it (ADR-0105)
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
@@ -484,6 +506,20 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }
     if (shown.fields && ASKING.test(text)) { unread(text); return; }
     readWithPatterns(text);
+  }
+
+  /** A message while an imported model has the stage (ADR-0105) that the page's own patterns read no question in: a model may still read
+   * it as a question of the results (ADR-0100). Anything else is answered once: the model is read as it stands, so nothing is changed
+   * by talking, and the coupon's rows behind it are left alone. */
+  async function readOfImported(text: string) {
+    add({ role: "user", text });
+    if (model?.proposes && apiBaseUrl && shown.fields) {
+      setReading(true);
+      try { if (await readQuestionWithModel(text)) return; } catch { /* said below */ } finally { setReading(false); }
+    }
+    if (shown.fields && ASKING.test(text)) { unread(text, true); return; }
+    add({ role: "assistant", kind: "text", title: "An imported model is read as it stands",
+      body: <p data-testid="chat-import-read-only">Its loads, supports and mesh are the file’s, so nothing is changed by talking yet. Ask about its results, or go back to the coupon to set one up.</p> });
   }
 
   /** The model reads the message into the rows on offer (ADR-0088); what the source guard keeps waits in a card for the engineer's tick.
@@ -950,7 +986,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder={onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
+          placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
           <span className="chat-note">Enter to send · “check” · “run” · “start over”</span>
