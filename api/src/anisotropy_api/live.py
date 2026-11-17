@@ -150,8 +150,10 @@ class LiveSolver:
             except queue.Empty:
                 return
 
-    def solve(self, values: bytes, every: bool = False) -> LiveAnswer:
-        """`every` offers every test for this request (ADR-0089 amendment 5): a warm worker is told per request, a fresh one by option."""
+    def solve(self, values: bytes, every: bool = False, root: Path | None = None) -> LiveAnswer:
+        """`every` offers every test for this request (ADR-0089 amendment 5): a warm worker is told per request, a fresh one by option.
+        `root` is the folder of coupons of whoever asked (ADR-0106), among which the preview names the coupon: one warm worker answers
+        many people, so it is told per request too; None is the tool's own folder."""
         if self.command is None:
             raise LiveRefused("uv is not on PATH; the live solve runs fea/tools/studio_tool.py through `uv run --project fea`")
         started = time.perf_counter()
@@ -162,9 +164,10 @@ class LiveSolver:
             source.write_bytes(values)
             warm = self.workers > 0
             if warm:
-                self._ask_a_worker({"values": str(source), "out": str(out), "every": every})
+                self._ask_a_worker({"values": str(source), "out": str(out), "every": every, **({} if root is None else {"root": str(root.resolve())})})
             else:
-                self._run_once([*(["--every-test"] if every else []), "live", str(source), "--out", str(out)])
+                self._run_once([*([] if root is None else ["--root", str(root.resolve())]), *(["--every-test"] if every else []), "live", str(source),
+                                "--out", str(out)])
             return self._read(out, time.perf_counter() - started, warm)
         finally:
             shutil.rmtree(folder, ignore_errors=True)

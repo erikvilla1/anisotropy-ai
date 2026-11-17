@@ -1,8 +1,10 @@
-"""What one signed-in person may see of another's (ADR-0104): behind Cloudflare Access a run, a job, its files and a coupon are
-their owner's alone, and a stranger is answered as if there were none; with no sign-in in front of the API nothing is narrowed.
-The stand-ins of test_coupon_jobs_api.py and test_coupon_check_api.py play the tools, so these tests need no fea environment."""
+"""What one signed-in person may see of another's (ADR-0104, ADR-0106): behind Cloudflare Access a run, a job, its files and a
+coupon are their owner's alone, each person's coupons in a folder of their own, and a stranger is answered as if there were none;
+with no sign-in in front of the API nothing is narrowed. The stand-in of test_coupon_jobs_api.py plays the job's tool, keeping its
+coupon in the folder it was started with, and a stand-in here the studio's, so these tests need no fea environment."""
 
 import datetime as dt
+import hashlib
 import sys
 import time
 import uuid
@@ -11,14 +13,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from anisotropy_api import access
-from anisotropy_api.coupon_jobs import CouponJobs
+from anisotropy_api.coupon_jobs import COUPONS_ROOT, CouponJobs
+from anisotropy_api.live import LiveSolver
 from anisotropy_api.main import RUN_ID_HEADER, app, job_recorder
 from anisotropy_api.records import EVERYONE, coupon_owners, coupons_of, insert_job, list_jobs, list_runs, update_job
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, AccessSettings
 
 from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, service_token, token
 from conftest import TEST_URL, needs_test_database
-from test_coupon_check_api import STUDIO_STAND_IN
 from test_coupon_jobs_api import STAND_IN, form_request
 
 OTHER = "other.engineer@example.com"
@@ -35,11 +37,71 @@ def machine() -> dict:
     return {access.HEADER: service_token()}
 
 
+# The job's stand-in, keeping its coupon as the tool does: a spec in the folder it was started with, holding who ran it.
+KEEPS_ITS_COUPON = f"""
+import os, pathlib, sys
+_spec = pathlib.Path(os.environ["{COUPONS_ROOT}"]) / "{COUPON}" / "ours" / "{COUPON}.toml"
+if sys.argv[1] == "{COUPON}" and not _spec.is_file():
+    sys.exit("stand-in: started by name for a coupon its folder does not hold")
+if sys.argv[1] != "{COUPON}":
+    _spec.parent.mkdir(parents=True, exist_ok=True)
+    _spec.write_text(sys.argv[sys.argv.index("--run-by") + 1], encoding="utf-8")
+"""
+
+# The studio's stand-in: the coupons of the folder it was started with, and of no other.
+STUDIO_OF_A_FOLDER = f"""
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ["{COUPONS_ROOT}"])
+specs = {{d.name: d / "ours" / (d.name + ".toml") for d in sorted(root.iterdir()) if (d / "ours" / (d.name + ".toml")).is_file()}} if root.is_dir() else {{}}
+if sys.argv[1] == "coupons":
+    print(json.dumps([{{"name": name, "designation": name, "kind": "unnotched_tension", "test": "unnotched tension", "title": name, "layup": "[0]",
+                       "status": "in progress", "accepted": "01", "attempts": 1, "category": "team test"}} for name in specs]))
+elif sys.argv[1] == "values":
+    if sys.argv[2] not in specs:
+        sys.exit(f"studio_tool: {{sys.argv[2]}}: no coupon of that name under {{root}}")
+    print(json.dumps({{"form_version": "0.3", "test": "unnotched tension", "length": 250.0, "filled_by": specs[sys.argv[2]].read_text(encoding="utf-8")}}))
+elif sys.argv[1] == "check":  # the check names the coupon among the coupons of its folder: here, by the folder's own name
+    out = pathlib.Path(sys.argv[sys.argv.index("--out") + 1])
+    out.mkdir(parents=True)
+    (out / "checklist.json").write_text(json.dumps({{"items": [], "designation": root.name, "coupon_exists": False, "attempts": 0, "state": "blocked",
+                                                    "problems": []}}), encoding="utf-8")
+else:
+    sys.exit("stand-in: " + sys.argv[1])
+"""
+
+# The live solver's stand-in, fresh or warm: its checklist names the folder of coupons the request came with, "its own" for none.
+LIVE_OF_A_FOLDER = """
+import argparse, json, pathlib, sys
+
+def answer(out, root):
+    out = pathlib.Path(out)
+    out.mkdir(parents=True)
+    (out / "checklist.json").write_text(json.dumps({"items": [], "designation": pathlib.Path(root).name if root else "its own", "coupon_exists": False,
+                                                    "attempts": 0, "state": "blocked", "problems": []}), encoding="utf-8")
+    return "blocked"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--root")
+commands = parser.add_subparsers(dest="command", required=True)
+p = commands.add_parser("live"); p.add_argument("values"); p.add_argument("--out", required=True)
+commands.add_parser("serve")
+args = parser.parse_args()
+if args.command == "live":
+    answer(args.out, args.root)
+else:
+    print(json.dumps({"ready": True}), flush=True)
+    for line in sys.stdin:
+        request = json.loads(line)
+        print(json.dumps({"state": answer(request["out"], request.get("root"))}), flush=True)
+"""
+
+
 def registry(tmp_path, table) -> CouponJobs:
     runner, studio = tmp_path / "stand_in.py", tmp_path / "studio_stand_in.py"
-    runner.write_text(STAND_IN, encoding="utf-8")
-    studio.write_text(STUDIO_STAND_IN, encoding="utf-8")
-    return CouponJobs([sys.executable, str(runner)], job_recorder(app), tmp_path / "jobs", table=table, studio=[sys.executable, str(studio)])
+    runner.write_text(KEEPS_ITS_COUPON + STAND_IN, encoding="utf-8")
+    studio.write_text(STUDIO_OF_A_FOLDER, encoding="utf-8")
+    return CouponJobs([sys.executable, str(runner)], job_recorder(app), tmp_path / "jobs", table=table, studio=[sys.executable, str(studio)],
+                      local_root=tmp_path / "coupons")
 
 
 @pytest.fixture(params=["with the jobs table", "without it"])
@@ -66,8 +128,8 @@ def ended(client: TestClient, job_id: str, headers: dict) -> dict:
     raise AssertionError(f"coupon job {job_id} still running after 30 s")
 
 
-def a_job_of(client: TestClient, headers: dict) -> dict:
-    started = client.post("/v1/coupon-jobs", json=form_request(), headers=headers)
+def a_job_of(client: TestClient, headers: dict, **changes) -> dict:
+    started = client.post("/v1/coupon-jobs", json=form_request(**changes), headers=headers)
     assert started.status_code == 202, started.text
     done = ended(client, started.json()["job_id"], headers)
     assert done["state"] == "done"
@@ -137,13 +199,13 @@ def test_a_run_record_is_its_owners_alone(hosted):
 # --------------------------------------------------------------------------------------------------------------------- the coupons
 
 @needs_test_database
-def test_a_coupon_is_offered_to_those_whose_jobs_ran_it(hosted):
+def test_each_person_has_a_folder_of_coupons_of_their_own(hosted, tmp_path):
     client = hosted
     assert client.get("/v1/coupons", headers=signed()).json() == []  # before any job of theirs, nothing to reopen
     a_job_of(client, signed())
 
     assert [c["name"] for c in client.get("/v1/coupons", headers=signed()).json()] == [COUPON]
-    assert client.get(f"/v1/coupons/{COUPON}/values", headers=signed()).json()["values"]["length"] == 250.0
+    assert client.get(f"/v1/coupons/{COUPON}/values", headers=signed()).json()["values"]["filled_by"] == "A. Engineer"
 
     never = client.get("/v1/coupons/NONE-UNT-L9/values", headers=signed(OTHER))
     assert never.status_code == 404 and never.json()["detail"] == "no coupon of that name: NONE-UNT-L9"
@@ -158,13 +220,60 @@ def test_a_coupon_is_offered_to_those_whose_jobs_ran_it(hosted):
     again = client.post("/v1/coupon-jobs", json={"coupon": COUPON, "run_by": "A. Engineer"}, headers=signed())  # the owner runs it again by its name
     assert again.status_code == 202 and ended(client, again.json()["job_id"], signed())["state"] == "done"
 
-    # the coupon's folder holds the rows of whoever ran it last: once a second person's job has run that name, it is offered to neither
-    a_job_of(client, signed(OTHER))
-    for either in (signed(), signed(OTHER)):
-        assert client.get("/v1/coupons", headers=either).json() == []
-        assert client.get(f"/v1/coupons/{COUPON}/values", headers=either).status_code == 404
-        assert client.post("/v1/coupon-jobs", json={"coupon": COUPON, "run_by": "A. Engineer"}, headers=either).status_code == 404
-    assert len(client.get("/v1/coupon-jobs", headers=signed()).json()) == 2  # each still has their own jobs and files
+    # a second person's coupon of the same name is another coupon, in their own folder: each keeps their own rows and reopens their own
+    a_job_of(client, signed(OTHER), run_by="B. Other")
+    for person, ran_by in ((signed(), "A. Engineer"), (signed(OTHER), "B. Other")):
+        assert [c["name"] for c in client.get("/v1/coupons", headers=person).json()] == [COUPON]
+        assert client.get(f"/v1/coupons/{COUPON}/values", headers=person).json()["values"]["filled_by"] == ran_by
+        rerun = client.post("/v1/coupon-jobs", json={"coupon": COUPON, "run_by": "Someone"}, headers=person)
+        assert rerun.status_code == 202 and ended(client, rerun.json()["job_id"], person)["state"] == "done"
+    assert client.get("/v1/coupons", headers=machine()).json() == []  # and the shared folder holds neither
+
+    # on the disk: one folder per person under a key that holds no address, and nothing in the shared folder
+    owners = tmp_path / "coupons-owners"
+    assert sorted(p.name for p in owners.iterdir()) == sorted(hashlib.sha256(email.encode()).hexdigest()[:32] for email in (EMAIL, OTHER))
+    assert not (tmp_path / "coupons").exists()
+    assert client.get("/v1/coupons", headers=signed(EMAIL.upper())).json() == []  # the email to the letter, as for the records (ADR-0104)
+
+
+@needs_test_database
+def test_a_request_with_no_email_keeps_the_shared_folder(hosted, tmp_path):
+    """A service token has no email: its jobs keep their coupons in the shared folder, offered to it by the jobs that ran them
+    (ADR-0104), and no person's folder holds them."""
+    client = hosted
+    a_job_of(client, machine(), run_by="The machine")
+    assert [c["name"] for c in client.get("/v1/coupons", headers=machine()).json()] == [COUPON]
+    assert client.get(f"/v1/coupons/{COUPON}/values", headers=machine()).json()["values"]["filled_by"] == "The machine"
+    assert (tmp_path / "coupons" / COUPON / "ours" / f"{COUPON}.toml").is_file() and not (tmp_path / "coupons-owners").exists()
+    assert client.get("/v1/coupons", headers=signed()).json() == []
+    assert client.get(f"/v1/coupons/{COUPON}/values", headers=signed()).status_code == 404
+    # the shared folder's rule is still ADR-0104's, by the names in the jobs table: once a person's job has named a coupon of that
+    # name too (theirs is another coupon, in their own folder), the shared one is offered to no one
+    a_job_of(client, signed())
+    assert client.get("/v1/coupons", headers=machine()).json() == []
+    assert client.get(f"/v1/coupons/{COUPON}/values", headers=signed()).json()["values"]["filled_by"] == "A. Engineer"
+
+
+@needs_test_database
+@pytest.mark.parametrize("workers", [1, 0], ids=["a warm worker", "a fresh tool"])
+def test_the_check_and_the_preview_name_a_coupon_among_the_askers_own(hosted, tmp_path, workers):
+    """The setup check and the live preview read the folder of whoever asked: a coupon's name and its codes are settled among that
+    person's coupons, never among another's (ADR-0106)."""
+    client = hosted
+    stand_in = tmp_path / "live_stand_in.py"
+    stand_in.write_text(LIVE_OF_A_FOLDER, encoding="utf-8")
+    app.state.live = LiveSolver([sys.executable, str(stand_in)], tmp_path / "live", workers, timeout_s=10.0, wait_s=20.0)
+    values = {"values": {"form_version": "0.9", "test": "unnotched tension", "filled_by": "A. Engineer"}}
+    try:
+        for headers, folder, live_folder in ((signed(), hashlib.sha256(EMAIL.encode()).hexdigest()[:32], None),
+                                             (signed(OTHER), hashlib.sha256(OTHER.encode()).hexdigest()[:32], None),
+                                             (machine(), "coupons", "its own")):  # no email: the shared folder, the tool's own
+            checked = client.post("/v1/coupon-jobs/check", json=values, headers=headers)
+            assert checked.status_code == 200 and checked.json()["designation"] == folder
+            previewed = client.post("/v1/coupon-jobs/live", json=values, headers=headers)
+            assert previewed.status_code == 200 and previewed.json()["designation"] == (live_folder or folder)
+    finally:
+        app.state.live.close()
 
 
 # ------------------------------------------------------------------------------------------------ with no sign-in, nothing is narrowed

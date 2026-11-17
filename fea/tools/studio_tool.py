@@ -17,7 +17,8 @@ no document. `serve` is `live` kept warm (ADR-0086): it imports the package once
 per line on stdin, {"values": <path>, "out": <folder>}, and answers each with one line, {"state": ...} or {"error": ...}; anything else
 it would print goes to stderr. `fixtures` is `live` and the mesh study a run adds (ADR-0068), on the public values given, so the browser
 tests need neither CalculiX nor the API. --root moves the coupons'
-folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
+folder (default .local/fea, or the environment's ANISOTROPY_COUPONS_ROOT): the API names a signed-in person's own folder with it, and
+a request to `serve` may name one too, {"root": <folder>}, since one warm worker answers many people (ADR-0106). `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
 when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. `import` takes an Abaqus input deck the engineer
 brought (ADR-0105) and the unit system it is written in, and writes import.json (the state, `refused`, `read` or `solved`, the reason
 with its line, and what the reader took and skipped) and, for a deck that was taken, preview.json, and for one our kernel solved,
@@ -76,7 +77,7 @@ def write_compact(path: Path, data) -> Path:
 def serve(root: Path) -> None:
     """`live` kept warm for the API (ADR-0086): one JSON request per line on stdin, one JSON answer per line on stdout, until stdin closes.
     A request that fails is answered with its error and the worker stays; everything `live` prints goes to stderr, so stdout carries the
-    answers alone."""
+    answers alone. A request's own `root` is the coupons' folder for that request alone (ADR-0106); without one, this worker's."""
     answers = sys.stdout
     sys.stdout = sys.stderr
     print(json.dumps({"ready": True, "imports": IMPORT_SECONDS}), file=answers, flush=True)
@@ -91,10 +92,20 @@ def serve(root: Path) -> None:
                 print(json.dumps(answer), file=answers, flush=True)
                 continue
             with enabled.every_test(request.get("every") is True):  # a founder's request (ADR-0089 amendment 5); the next is judged anew
-                answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
+                answer = {"state": live(Path(request["values"]), Path(request["out"]), request_root(request, root), started=started)}
         except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
             answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
         print(json.dumps(answer), file=answers, flush=True)
+
+
+def request_root(request: dict, root: Path) -> Path:
+    """The coupons' folder one request to `serve` names, or the worker's; one that is not an absolute path is refused."""
+    given = request.get("root")
+    if given is None:
+        return root
+    if not isinstance(given, str) or not Path(given).is_absolute():
+        raise ValueError(f"a request's root is an absolute path; got {given!r}")
+    return Path(given)
 
 
 def unreadable(path: Path, message: str) -> Checklist:
@@ -263,7 +274,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
+    parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea, or ANISOTROPY_COUPONS_ROOT)")
     parser.add_argument("--every-test", action="store_true", help="offer every test for this call, as ANISOTROPY_ALL_TESTS=on does for the "
                         "machine (ADR-0089 amendment 5: the API passes it for a founder's sign-in)")
     commands = parser.add_subparsers(dest="command", required=True)

@@ -39,14 +39,14 @@ from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_
 from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
+from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
-from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
+from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, restore_owners, sync, upload_document_key, upload_key,
                       upload_prefix)
 from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_pairing_code, new_token, ours_of,
                       token_digest)
@@ -112,11 +112,16 @@ async def lifespan(app: FastAPI):
     # never saw end are marked so.
     # With the job queue (ADR-0056 amendment 3) the jobs run in solver containers: the API's container keeps its coupons level
     # with the store (`sync`) and leaves the running rows to their solvers' heartbeats; a solver fetches the coupons per job.
+    # Each signed-in person's own coupons (ADR-0106) come back at startup where this container runs the jobs itself; with the queue
+    # they are brought level when that person asks (`CouponJobs.refresh`), so a start does not grow with the number of people.
     store = R2Store(settings.storage) if settings.storage.on else None
     role = settings.job_role
     if store is not None and role != "solver":
         files, coupons = (sync if role == "queue" else restore)(store, LOCAL_FEA)
         print(f"restored {files} file(s) of {coupons} coupon(s) from the bucket {settings.storage.bucket}", flush=True)
+        if role is None:
+            files, people = restore_owners(store, OWNERS_FEA)
+            print(f"restored {files} file(s) of the coupons of {people} signed-in owner(s)", flush=True)
     if app.state.records is not None and role is None:
         orphans = stop_orphans(app.state.records, "the API stopped while this job ran, so it did not finish; start it again")
         if orphans:
@@ -395,11 +400,17 @@ def _coupons_unread(exc: SQLAlchemyError) -> HTTPException:
 
 
 def _their_coupon(request: Request, jobs: CouponJobs, name: str) -> None:
-    """Passes when the coupon of that name is one the requester's jobs alone have run (ADR-0104); 404 otherwise, in the same words
-    as for a name there is no coupon of."""
+    """Passes when the coupon of that name is the requester's: in a signed-in person's own folder of coupons (ADR-0106); in the
+    shared folder, for a request with no email behind the sign-in (a service token), one that jobs with no email alone have run
+    (ADR-0104). 404 otherwise, in the same words as for a name there is no coupon of."""
     owner = _owner(request)
     try:
-        known = owner == EVERYONE or name in jobs.coupons_of(owner)
+        if owner == EVERYONE:
+            known = True
+        elif owner is not None:
+            known = jobs.has_coupon(name, owner)
+        else:
+            known = name in jobs.coupons_of(owner)
     except SQLAlchemyError as exc:
         raise _coupons_unread(exc) from exc
     if not known:
@@ -516,7 +527,7 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
 
     def compute() -> CouponCheckResponse:
         try:
-            found = jobs.check(problem.values_bytes(), every=every)
+            found = jobs.check(problem.values_bytes(), every=every, user_email=_email(request))
         except CheckTimedOut as exc:
             raise HTTPException(status_code=504, detail=str(exc)) from exc
         except JobRefused as exc:
@@ -540,7 +551,8 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     them. 429 when every live solver stays busy, 504 when one does not answer in time, 503 when none can run."""
     live: LiveSolver = request.app.state.live
     try:
-        found = live.solve(problem.values_bytes(), every=_every_test(request))
+        email = _email(request)  # the preview names the coupon among the coupons of whoever asked (ADR-0106)
+        found = live.solve(problem.values_bytes(), every=_every_test(request), root=None if email is None else _coupon_jobs(request).root_of(email))
     except LiveBusy as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except LiveTimedOut as exc:
@@ -1320,11 +1332,14 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
 
 @app.get("/v1/coupons", response_model=list[CouponSummary])
 def list_coupons(request: Request) -> list[CouponSummary]:
-    """The coupons the requester's jobs alone have run, from their specs and case pages (ADR-0051, ADR-0104): what the studio
-    offers to reopen. With no sign-in in front of the API, every coupon on this machine."""
+    """The requester's coupons, from their specs and case pages (ADR-0051): what the studio offers to reopen. A signed-in person's
+    are those in their own folder (ADR-0106). With no sign-in in front of the API, every coupon on this machine; for a request with
+    no email behind the sign-in (a service token), the shared folder's coupons that jobs with no email alone have run (ADR-0104)."""
     jobs = _coupon_jobs(request)
     owner = _owner(request)
     try:
+        if owner != EVERYONE and owner is not None:
+            return [CouponSummary(**entry) for entry in jobs.list_coupons(user_email=owner)]
         mine = None if owner == EVERYONE else jobs.coupons_of(owner)
         return [CouponSummary(**entry) for entry in jobs.list_coupons() if mine is None or entry.get("name") in mine]
     except SQLAlchemyError as exc:
@@ -1337,12 +1352,12 @@ def list_coupons(request: Request) -> list[CouponSummary]:
 
 @app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
 def coupon_values(name: str, request: Request) -> CouponValuesOutput:
-    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading. 404 for a coupon the
-    requester's jobs have not run, or that another person's have run too (ADR-0104)."""
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading. 404 for a coupon that
+    is not the requester's (ADR-0104, ADR-0106)."""
     jobs = _coupon_jobs(request)
     _their_coupon(request, jobs, name)
     try:
-        return CouponValuesOutput(name=name, values=jobs.coupon_values(name, every=_every_test(request)))
+        return CouponValuesOutput(name=name, values=jobs.coupon_values(name, every=_every_test(request), user_email=_email(request)))
     except UnknownCoupon as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
     except NotOffered as exc:

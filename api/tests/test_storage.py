@@ -3,6 +3,7 @@ and the folder back from the store into a new container. A dictionary stands in 
 S3-compatible store (a local MinIO, or R2) runs only when TEST_S3_ENDPOINT, TEST_S3_BUCKET, TEST_S3_ACCESS_KEY_ID and
 TEST_S3_SECRET_ACCESS_KEY are set."""
 
+import hashlib
 import os
 import urllib.request
 import uuid
@@ -257,3 +258,58 @@ def test_the_folder_copy_leaves_the_big_run_files_out(tmp_path):
     store = MemoryStore()
     assert store_folder(store, folder, "IM7-UNT-L1") == len(kept)
     assert sorted(store.objects) == sorted(f"coupons/IM7-UNT-L1/folder/{r}" for r in kept)
+
+
+# ------------------------------------------------------------------------------------------- one prefix per person (ADR-0106)
+
+MINE, THEIRS = storage.owner_key("a.engineer@example.com"), storage.owner_key("other.engineer@example.com")
+
+
+def test_an_owners_key_is_a_name_made_from_the_email_and_holds_none_of_it():
+    assert MINE == hashlib.sha256(b"a.engineer@example.com").hexdigest()[:32] and MINE != THEIRS
+    assert storage.owner_key("A.Engineer@example.com") != MINE  # the email to the letter, as the records compare it (ADR-0104)
+    with pytest.raises(ValueError, match="there is none"):
+        storage.owner_key("  ")
+    assert storage.coupons_prefix() == "coupons/" and storage.coupons_prefix(MINE) == f"owners/{MINE}/coupons/"
+    for not_a_key in ("a.engineer@example.com", "../coupons", "", MINE.upper(), MINE + "0"):
+        with pytest.raises(ValueError, match="not an owner's key"):
+            storage.coupons_prefix(not_a_key)
+    assert storage.file_key("C-1", "attempt-01", "fields", "f.json", MINE) == f"owners/{MINE}/coupons/C-1/attempt-01/files/fields/f.json"
+    assert storage.package_key("C-1", "attempt-01", MINE) == f"owners/{MINE}/coupons/C-1/attempt-01/package.zip"
+    assert storage.folder_key("C-1", PurePosixPath("ours/C-1.toml"), MINE) == f"owners/{MINE}/coupons/C-1/folder/ours/C-1.toml"
+
+
+def test_each_persons_coupons_are_stored_restored_and_pruned_apart(tmp_path):
+    store = MemoryStore()
+    put_text(store, tmp_path, "coupons/C-1/folder/ours/C-1.toml", "the shared one")
+    for owner, words in ((MINE, "mine"), (THEIRS, "theirs")):
+        folder = tmp_path / "made" / owner / "C-1"
+        (folder / "ours").mkdir(parents=True)
+        (folder / "ours" / "C-1.toml").write_text(words, encoding="utf-8")
+        assert storage.store_folder(store, folder, "C-1", owner) == 1 and storage.store_folder(store, folder, "C-1", owner) == 0
+        fields = folder / "fields.json"
+        fields.write_text("{}", encoding="utf-8")
+        assert storage.store_job(store, "C-1", "attempt-01", {"fields": fields}, None, owner) == {"fields": f"owners/{owner}/coupons/C-1/attempt-01/files/fields/fields.json"}
+        assert storage.store_file(store, "C-1", "attempt-01", "preview", fields, owner) == f"owners/{owner}/coupons/C-1/attempt-01/files/preview/fields.json"
+    put_text(store, tmp_path, f"owners/{MINE}/coupons/../folder/escape.txt", "left out")
+    put_text(store, tmp_path, "owners/not-a-key/coupons/C-9/folder/ours/C-9.toml", "left out")
+
+    # one person's folder: their coupon, and nothing of the other's or of the shared ones
+    mine = tmp_path / "disk" / "owners" / MINE
+    assert storage.sync(store, mine, prune=True, owner=MINE) == (1, 1)
+    assert (mine / "C-1" / "ours" / "C-1.toml").read_text(encoding="utf-8") == "mine"
+    assert sorted(p.relative_to(mine).as_posix() for p in mine.rglob("*") if p.is_file()) == [".store-tags.json", "C-1/ours/C-1.toml"]
+    (mine / "C-1" / "ours" / "stray.toml").write_text("made here, never sent", encoding="utf-8")
+    assert storage.sync(store, mine, prune=True, owner=MINE) == (0, 1) and not (mine / "C-1" / "ours" / "stray.toml").exists()
+
+    # the shared folder is as before: `coupons/` alone
+    shared = tmp_path / "disk" / "shared"
+    assert storage.sync(store, shared, prune=True) == (1, 1) and (shared / "C-1" / "ours" / "C-1.toml").read_text(encoding="utf-8") == "the shared one"
+    assert storage.restore(store, tmp_path / "fresh" / "shared") == (1, 1)
+
+    # a container that runs the jobs itself brings every person's coupons back at its start
+    owners = tmp_path / "fresh" / "owners"
+    assert storage.restore_owners(store, owners) == (2, 2)
+    assert {p.name: (p / "C-1" / "ours" / "C-1.toml").read_text(encoding="utf-8") for p in owners.iterdir()} == {MINE: "mine", THEIRS: "theirs"}
+    assert storage.restore_owners(store, owners) == (0, 2) and not list((tmp_path / "fresh").rglob("escape.txt"))
+    assert storage.restore_owners(MemoryStore(), tmp_path / "none") == (0, 0)
