@@ -3,6 +3,7 @@ reader took and names what it skipped, the preview draws the deck's own sets, su
 with its line, and a deck the kernel cannot solve is still read. On the public check decks, nothing under .local/."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,14 @@ STUDIO = Path(__file__).parents[1] / "tools" / "studio_tool.py"
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
 EDGE = DECKS / "coupon-2x2-im7-8552.inp"
 UNITS = "mm-MPa"
+
+
+PLACE = re.compile(r"at element \d+ \([^)]*\)")
+
+
+def placeless(sentences: list[str]) -> list[str]:
+    """Sentences with each element's number and centroid set aside: what is said, apart from which of two level elements is named."""
+    return [PLACE.sub("at element N", sentence) for sentence in sentences]
 
 
 def brought(path: Path, units: str = UNITS, text: str | None = None) -> dict:
@@ -191,4 +200,20 @@ def test_the_pages_fixture_is_the_packages_answer_today():
     for criterion, found in answer["fields"]["summary"]["fpf"].items():
         assert kept["fields"]["summary"]["fpf"][criterion]["factor"] == pytest.approx(found["factor"], rel=1e-9)
     assert np.allclose(kept["fields"]["nodal"]["displacement"], answer["fields"]["nodal"]["displacement"], rtol=1e-9, atol=1e-12)
-    assert kept["explanation"]["sentences"] == answer["explanation"]["sentences"]
+    # The public coupon is the same seen from either end, so each extreme is held by two elements, level to the last digit, and which of
+    # the two a machine names is round-off (CI named element 3 where the fixture names element 14, 2026-11-17). The sentences are held
+    # with the element's number and place set aside, and the element the fixture names is held to carry today's extreme.
+    assert placeless(kept["explanation"]["sentences"]) == placeless(answer["explanation"]["sentences"])
+    assert kept["explanation"]["sentences"] != placeless(kept["explanation"]["sentences"])  # the sentences do name elements
+    stress = np.asarray(answer["fields"]["element"]["ply"]["stress_12"])
+    for column, quantity in enumerate(("S11", "S22", "S12")):
+        today = answer["fields"]["summary"]["ply_extremes"]["overall"][quantity]
+        for end, named in kept["fields"]["summary"]["ply_extremes"]["overall"][quantity].items():
+            assert (named is None) == (today[end] is None), (quantity, end)
+            if named is not None:
+                assert named["ply"] == today[end]["ply"] and named["angle"] == today[end]["angle"], (quantity, end)
+                assert abs(stress[named["element"], named["ply"] - 1, column]) == pytest.approx(abs(today[end]["value"]), rel=1e-8), (quantity, end)
+    for criterion, found in answer["fields"]["summary"]["fpf"].items():
+        named = kept["fields"]["summary"]["fpf"][criterion]
+        ratio = answer["fields"]["element"]["failure"][criterion]["ratio"][named["element"]][named["ply"] - 1]
+        assert ratio == pytest.approx(found["factor"], rel=1e-8) and (named["ply"], named["mode"], named["tied_plies"]) == (found["ply"], found["mode"], found["tied_plies"])
