@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
-  type JobStatus, type ProposalAnswer } from "@/lib/studio-api";
-import { couponOffer, couponRowsFrom } from "@/lib/proposals";
+import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
+  type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
+import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
+import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
+import dynamic from "next/dynamic";
+import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
+import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
   type ResultQuestion, type ResultValues } from "@/lib/result-question";
-import { ProposalCard, type ProposalLine } from "./proposal-card";
+import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
 import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
@@ -31,6 +35,11 @@ import { ANALYSIS_UNAVAILABLE, checkText, customerText, runHeadline, runProblem,
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
+/** The typeset steps of a working (ADR-0103) load when one is first shown: the typesetter stays out of the workspace's first load. */
+const WorkingSteps = dynamic(() => import("./working-steps").then((module) => module.WorkingSteps), {
+  ssr: false, loading: () => <p className="chat-note" role="status">Typesetting the working…</p>,
+});
+
 type Entry =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
@@ -42,7 +51,11 @@ type Entry =
   // a value read from the results on the page (ADR-0099): the answer as read, the fields it was read from, and whether they were a preview
   | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean }
   // where a quantity is largest in those results (ADR-0100): stored values picked out, by the page's patterns or a model's reading
-  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" };
+  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" }
+  // the working behind the answer, as the package wrote it (ADR-0103): the chain asked for, the fields it is of, and whether they were a preview
+  | { id: number; role: "assistant"; kind: "working"; found: Extract<FoundWorking, { kind: "chain" }>; from: Fields; preview: boolean }
+  // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
+  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -113,13 +126,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
+  plateRef.current = plate;
   const shown = shownResults(runner); // the results on the page: what a question about a value is answered from (ADR-0099)
   // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
-  const valuesOf = (rows: StudioForm) => (simpleRef.current ? tensionValues(rows) : buildValues(rows));
+  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current ? tensionValues(rows)
+    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined)); // a plate goes with its supports and loads
   const { checking, checked, job, fields, explanation, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -205,7 +221,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <><p>Everything is stated.</p><Chips><button type="button" onClick={() => void check(formRef.current)}><Check size={14} /> Check setup</button></Chips></> });
   }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function check(values: StudioForm) {
+  async function check(values: StudioForm, lists?: PlateLists) {
     setActive(null);
     if (!apiBaseUrl) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "Analysis unavailable",
@@ -213,7 +229,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       return;
     }
     try {
-      const answer = await runner.check(valuesOf(values));
+      const answer = await runner.check(valuesOf(values, lists));
       add({ role: "assistant", kind: "check", answer });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The setup could not be checked", body: <p>{error instanceof StudioError ? error.message : "Try again."}</p> });
@@ -401,11 +417,54 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <p data-testid="chat-value-unread">Ask for a quantity and a place: “stress in ply 3 at element 120”, “strain here” after clicking an element, or “where is the shear stress highest?”.</p> });
   }
 
+  /** A question of why, answered in words (ADR-0102): the API puts the shown result's fact sheet beside the sections of our theory pages
+   * the question finds, and keeps a model's answer only when every number in it is the results' or the question's. No row changes. */
+  async function answerWhy(text: string, facts: Record<string, unknown>, preview: boolean) {
+    add({ role: "user", text });
+    setReading(true);
+    let answer: ResultAnswer | null = null;
+    try { answer = await answerResult(apiBaseUrl, text, facts); } catch { /* said below */ } finally { setReading(false); }
+    if (answer) add({ role: "assistant", kind: "why", answer, preview });
+    else add({ role: "assistant", kind: "text", title: "No answer right now", body: <p data-testid="chat-why-failed">That question could not be answered right now. Try again in a moment.</p> });
+  }
+
+  /** The working behind the answer (ADR-0103), when the engineer asks for it: the package's own steps for the criterion named, else the
+   * earliest. No model reads the request and nothing is computed here. */
+  function showWorking(text: string) {
+    const from = shown;
+    add({ role: "user", text });
+    const found = workingFor(from.fields, text);
+    if (!from.fields || !found) {
+      add({ role: "assistant", kind: "text", title: "No working to show yet",
+        body: <p data-testid="chat-working-none">{!from.fields ? `The working is written with a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`
+          : "This result carries no working. Run the analysis again, then ask."}</p> });
+      return;
+    }
+    if (found.kind === "not-worked") {
+      add({ role: "assistant", kind: "text", title: "No working for that criterion yet",
+        body: <p data-testid="chat-working-none">The working of {found.name} is not written yet. Ask for {found.others.join(" or ")}.</p> });
+      return;
+    }
+    add({ role: "assistant", kind: "working", found, from: from.fields, preview: from.live });
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
+    if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
+    // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
+    const facts = factsOf(shown.live ? runner.live?.explanation : explanation);
+    if (asksWhy(text)) {
+      if (apiBaseUrl && shown.fields && facts) { void answerWhy(text, facts, shown.live); return; }
+      // with no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: "No results to answer from yet",
+        body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
+          : `A question of why is answered from a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`}</p> });
+      return;
+    }
     const question = readResultQuestion(text);
     if (question) { answerQuestion(text, question); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
@@ -414,7 +473,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
-    if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
+    // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it
+    // compression"; ADR-0088 amendment 2) or, on a plate read by a model, one that names a region or an action on it (ADR-0101 amendment 1)
+    // nor is a question a name
+    const edit = applyMessage(formRef.current, text).understood.length > 0 || (onPlateNow && namesPlateEdit(text));
+    const asks = /\?\s*$/.test(text) || ASKING.test(text);
+    if (step === "name" && !/\d/.test(text) && !edit && !asks) { answer(text, { filled_by: text }); return; }
     // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
     const named = unitsNamed(text);
     if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }
@@ -430,40 +494,61 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     let answer: ProposalAnswer | null = null;
     let failed: string | null = null;
     try { if (await readQuestionWithModel(text)) { setReading(false); return; } } catch { /* the setup's reading goes on */ }
-    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests) }); }
+    // a plate also offers its regions and the place clicked, so "hold this edge" and "10 kN in tension here" can be read (ADR-0101)
+    const onPlate = allTests && formRef.current.test === PLATE_TEST ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests), ...onPlate }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
-    if (answer && (answer.proposals.length || answer.question)) { add({ role: "assistant", kind: "proposal", answer }); return; }
+    if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) { add({ role: "assistant", kind: "proposal", answer }); return; }
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
       add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
+    const parts = answer?.unread ?? [];
     if (shown.fields && ASKING.test(text)) unread(text, true); // a question nothing read is not a row of the setup
-    else readWithPatterns(text, true);
+    else readWithPatterns(text, true, parts.length ? () => notUsed(parts) : undefined);
   }
 
-  /** The proposals the engineer ticked go into the rows, and the conversation moves on. */
+  /** What the model could not use of a message the patterns read nothing of (ADR-0088 amendment 1): the engineer's words, each with why. */
+  function notUsed(parts: UnreadPart[]) {
+    add({ role: "assistant", kind: "text", title: "Read, but nothing to enter",
+      body: <div data-testid="chat-not-used"><UnreadList lines={unreadLines(parts)} /></div> });
+  }
+
+  /** The proposals the engineer ticked go into the rows, and the conversation moves on. A plate's ticked supports and loads go into its
+   * lists (ADR-0101), and the setup is checked with them, so the model on the page shows what is now held and loaded. */
   function applyProposals(answer: ProposalAnswer, ticked: Set<string>) {
     const { rows, notes } = couponRowsFrom(answer.proposals.filter((p) => ticked.has(p.key)));
     if (notes.length) add({ role: "assistant", kind: "text", tone: "problem", title: "Not applied", body: <ul className="chat-understood">{notes.map((n) => <li key={n}>{n}</li>)}</ul> });
-    if (!Object.keys(rows).length) return;
-    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
-    setForm(next); clearRun();
-    proceed(next);
+    const lists = plateWith(plateRef.current, answer, ticked);
+    const onPlate = lists.supports.length > plateRef.current.supports.length || lists.loads.length > plateRef.current.loads.length;
+    if (!Object.keys(rows).length && !onPlate) return;
+    const next: StudioForm = Object.keys(rows).length ? mergeRows(formRef.current, rows) : formRef.current; // a new test clears a standard it is not under (ADR-0072)
+    if (next !== formRef.current) setForm(next);
+    if (onPlate) setPlate(lists);
+    clearRun();
+    if (onPlate && next.test === PLATE_TEST) void check(next, lists);
+    else proceed(next);
+  }
+
+  /** The plate's own regions the clicked element belongs to, on the mesh the page shows: what "here" means in a message (ADR-0101). */
+  function here() {
+    return regionsHere(picked, shown.fields?.mesh ?? checked?.preview?.mesh ?? null, formRef.current);
   }
 
   /** The card's lines: each value with the unit it goes in with, and how it was written when the API converted it within the system. */
   function proposalLines(answer: ProposalAnswer): ProposalLine[] {
-    return answer.proposals.map((p) => ({
+    return [...answer.proposals.map((p) => ({
       id: p.key, label: p.label.replace(/ \([^)]*\)$/, ""), value: p.key === "library" ? materialName(p.value) : p.value, unit: p.unit ?? "", quote: p.quote,
       note: p.written_unit && p.written_unit !== p.unit ? `written ${p.written_value} ${p.written_unit}` : undefined,
-    }));
+    })), ...plateLines(answer)];
   }
 
-  /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. */
-  function readWithPatterns(text: string, echoed = false) {
+  /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. `nothing`
+   * answers in place of the pointer to the next panel when the patterns read none of it (what the model could not use, amendment 1). */
+  function readWithPatterns(text: string, echoed = false, nothing?: () => void) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const read = applyMessage(formRef.current, text);
     const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, allTests); // what the studio does not offer yet stays out (ADR-0089)
@@ -476,7 +561,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       you.length = 0;
     }
     if (!understood.length) {
-      if (note) add(...you, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
+      if (note) add(...you, { role: "assistant", kind: "text", title: unitsNamed(text) ? "Another unit system" : "Nothing to change yet", tone: "problem", body: <p>{note}</p> });
+      else if (nothing) nothing();
       else redirect(text, echoed);
       return;
     }
@@ -681,6 +767,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
         <p className="chat-note" data-testid="chat-ask-hint">Ask for a value: “stress in ply {earliest?.ply ?? 1} at element {(earliest?.label ?? fields.mesh.element_labels[0] ?? "1").split(".").pop()}”, click an element and ask “strain here”, or ask “where is the shear stress highest?”.</p>
         <Chips>
+          {workingOf(fields) ? <button type="button" data-testid="chat-result-working" onClick={() => showWorking("Show the working")}>Show the working</button> : null}
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
           <button type="button" onClick={() => ask("material")}>Try another material</button>
@@ -724,6 +811,36 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             onClick={() => showPlace(placeOf(answer))}>Show on the model</button>
         </Chips>
         {!current ? <p className="chat-note">The setup has changed since: ask again for the current values.</p> : null}
+      </div>
+    );
+  }
+
+  /** The working behind an answer (ADR-0103): which ply of which element, by which criterion, then each step typeset. */
+  function workingMessage(entry: Extract<Entry, { kind: "working" }>): ReactNode {
+    const { found, from, preview } = entry;
+    const figures = workingOf(from)?.digits.given ?? 6;
+    return (
+      <div data-testid="chat-working" data-criterion={found.criterion} data-source={preview ? "live" : "run"}>
+        <h4>The working: {found.name}</h4>
+        <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading.</p>
+        <WorkingSteps chain={found.chain} figures={figures} />
+        <p className="chat-note" data-testid="chat-working-note">Every value is the solver’s own. Values put in are shown to {figures} figures and results to 4, so a step repeated by hand meets its result.
+          {preview ? " From the preview: run the analysis to verify it." : ""}</p>
+        {found.others.length ? <Chips>{found.others.map((name) => <button key={name} type="button" onClick={() => showWorking(`Show the working for ${name}`)}>Working for {name}</button>)}</Chips> : null}
+        {shown.fields !== from ? <p className="chat-note">The setup has changed since: ask again for the current working.</p> : null}
+      </div>
+    );
+  }
+
+  /** An answer in words to a question of why (ADR-0102): its sentences, and under them what it rests on, the theory sections by name. */
+  function whyMessage(entry: Extract<Entry, { kind: "why" }>): ReactNode {
+    const lines = whyLines(entry.answer, entry.preview);
+    return (
+      <div data-testid="chat-why" data-answered={lines.prose.length ? "yes" : "no"} data-covered={entry.answer.covered ? "yes" : "no"} data-source={entry.preview ? "live" : "run"}>
+        <h4>{lines.prose.length ? "Why" : "No answer in words"}</h4>
+        {lines.prose.map((sentence, i) => <p key={i} data-testid="chat-why-sentence">{sentence}</p>)}
+        <p className="chat-note" data-testid="chat-why-note">{lines.note}</p>
+        {lines.prose.length && workingOf(shown.fields) ? <Chips><button type="button" data-testid="chat-why-working" onClick={() => showWorking("Show the working")}>Show the working</button></Chips> : null}
       </div>
     );
   }
@@ -792,9 +909,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
     else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "extremes") content = extremesMessage(entry);
+    else if (entry.kind === "why") content = whyMessage(entry);
+    else if (entry.kind === "working") content = workingMessage(entry);
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
+        unread={unreadLines(entry.answer.unread)}
         onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     }
     else content = resultMessage(entry.job);
@@ -807,6 +927,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
+  const onPlateNow = allTests && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
+  const hereNow = onPlateNow ? here() : [];
   return (
     <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
       <div className="chat-pane-top">
@@ -823,9 +945,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
         {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
+      {onPlateNow && picked !== null && hereNow.length ? (
+        <p className="chat-note chat-here" data-testid="chat-here">“Here” is the element you clicked: {hereNow.map((r) => r.name).join(", ")}.</p>
+      ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder="Describe the coupon or one change, e.g. “make it [0/90]2s”"
+          placeholder={onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
           <span className="chat-note">Enter to send · “check” · “run” · “start over”</span>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { blankDraft, type LaminateDraft } from "../lib/laminate-chat";
-import { couponOffer, couponRowsFrom, laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded } from "../lib/proposals";
+import { couponOffer, couponRowsFrom, laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded, unreadLines } from "../lib/proposals";
 import { readProposalAnswer, type Proposal } from "../lib/studio-api";
 import { blankForm, exampleForm } from "../lib/studio-form";
 
@@ -87,7 +87,23 @@ test("with no system and no unit written a laminate value is held back, and a ti
 test("the proposals' answer is read only in the shape the API gives", () => {
   const good = { run_id: null, writer: "anthropic", model: "m", proposals: [p("length", "250", "mm")], conditions: [{ id: "temperature", title: "Temperature change", quote: "cooled" }],
     question: null, dropped: [{ key: "width", reason: "not a row on offer" }], reason: null };
-  assert.deepEqual(readProposalAnswer(good), good);
+  assert.deepEqual(readProposalAnswer(good), { ...good, unread: [], supports: [], loads: [] }); // an older API sends no unread parts and no plate lists
   assert.throws(() => readProposalAnswer({ ...good, proposals: [{ key: "length", value: 250 }] }), /could not be read/); // the reason to the console only
   assert.throws(() => readProposalAnswer({ ...good, dropped: null }), /could not be read/);
+});
+
+test("what the model could not use is read with a reason by name, and the page writes the words (ADR-0088 amendment 1)", () => {
+  const good = { run_id: null, writer: "anthropic", model: "m", proposals: [], conditions: [], question: null, dropped: [], reason: null,
+    unread: [{ quote: "same thing", reason: "refers_back" }, { quote: "compresion", reason: "not_offered" }, { quote: "16 plys", reason: "no_value" }] };
+  const read = readProposalAnswer(good);
+  assert.deepEqual(read.unread, good.unread);
+  assert.deepEqual(unreadLines(read.unread), [
+    { quote: "same thing", words: "each message is read on its own, so say the whole change" },
+    { quote: "compresion", words: "not something you can set here yet" },
+    { quote: "16 plys", words: "names no value to enter; state the value itself, for example a layup as [0/90]2s" },
+  ]);
+  // a reason the model phrased, or a part with no words, is not an answer the page shows
+  assert.throws(() => readProposalAnswer({ ...good, unread: [{ quote: "compresion", reason: "the workspace is limited" }] }), /could not be read/);
+  assert.throws(() => readProposalAnswer({ ...good, unread: [{ reason: "not_offered" }] }), /could not be read/);
+  assert.throws(() => readProposalAnswer({ ...good, unread: "compresion" }), /could not be read/);
 });

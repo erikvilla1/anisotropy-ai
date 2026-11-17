@@ -589,8 +589,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     const of = preview.held.filter((h) => h.set === set);
     return { nodes: fields.mesh.node_sets[set] ?? preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
   }) : [];
-  const loaded = preview ? { nodes: fields.mesh.node_sets[preview.loaded.set] ?? preview.mesh.node_sets[preview.loaded.set] ?? [],
-    direction: preview.loaded.direction, label: loadWords(preview.loaded) } : null;
+  const load = preview?.loaded ?? null; // a solved model states a load; a plate's shape, which has none, is never solved (ADR-0101 amendment 1)
+  const loaded = preview && load ? { nodes: fields.mesh.node_sets[load.set] ?? preview.mesh.node_sets[load.set] ?? [],
+    direction: load.direction, label: loadWords(load) } : null;
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
   const show = (element: number, ply: number, criterion: string, face?: string | null) => {
     setHighlight(element); setPicked(element);

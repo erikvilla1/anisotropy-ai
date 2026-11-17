@@ -141,6 +141,10 @@ class UnknownCoupon(KeyError):
     """No coupon of that name on this machine."""
 
 
+# The tools' option that offers every test for one call or one run (ADR-0089 amendment 5), by whether the request is a founder's.
+EVERY_TEST: dict[bool, tuple[str, ...]] = {False: (), True: ("--every-test",)}
+
+
 def runner_command() -> list[str] | None:
     """`uv run --project fea python fea/tools/run_coupon.py`, or None when uv is not on PATH."""
     uv = shutil.which("uv")
@@ -729,25 +733,27 @@ class CouponJobs:
 
     # --- the studio tool -------------------------------------------------------------------------------------------------
 
-    def _studio(self, args: list[str], timeout_s: float) -> subprocess.CompletedProcess:
+    def _studio(self, args: list[str], timeout_s: float, every: bool = False) -> subprocess.CompletedProcess:
+        """The studio tool, asked once. `every` offers every test for this call (`--every-test`, ADR-0089 amendment 5): the caller says
+        so for a founder's sign-in, and for nobody else."""
         if self.studio is None:
             raise JobRefused("uv is not on PATH; the studio's questions run fea/tools/studio_tool.py through `uv run --project fea`")
         try:
-            return subprocess.run([*self.studio, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA,
+            return subprocess.run([*self.studio, *EVERY_TEST[every], *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA,
                                   env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=timeout_s, check=False)
         except subprocess.TimeoutExpired:
             raise CheckTimedOut(f"the studio tool did not answer in {timeout_s:g} s") from None
         except OSError as exc:
             raise JobRefused(f"the studio tool could not run: {exc}") from exc
 
-    def check(self, values: bytes, timeout_s: float | None = None) -> dict:
+    def check(self, values: bytes, timeout_s: float | None = None, every: bool = False) -> dict:
         """The setup check of a values file (ADR-0051): the checklist, and the preview when the inputs build a model."""
         self.refresh()
         folder = Path(tempfile.mkdtemp(prefix="check-", dir=self._folder()))
         try:
             source = folder / "values.json"
             source.write_bytes(values)
-            done = self._studio(["check", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S)
+            done = self._studio(["check", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S, every)
             checklist_path = folder / "out" / "checklist.json"
             if done.returncode != 0 or not checklist_path.is_file():
                 tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
@@ -759,14 +765,14 @@ class CouponJobs:
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
-    def tow(self, values: bytes, timeout_s: float | None = None) -> dict:
+    def tow(self, values: bytes, timeout_s: float | None = None, every: bool = False) -> dict:
         """A fibre tow record (ADR-0074): its checklist and, when nothing blocks, its result, as `studio_tool.py tow` writes them."""
         self.refresh()
         folder = Path(tempfile.mkdtemp(prefix="tow-", dir=self._folder()))
         try:
             source = folder / "values.json"
             source.write_bytes(values)
-            done = self._studio(["tow", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S)
+            done = self._studio(["tow", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S, every)
             answer_path = folder / "out" / "tow.json"
             if done.returncode != 0 or not answer_path.is_file():
                 tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
@@ -783,10 +789,10 @@ class CouponJobs:
             raise JobRefused("the studio tool failed: " + (done.stderr.strip().splitlines() or ["no message"])[-1])
         return json.loads(done.stdout)
 
-    def coupon_values(self, name: str, timeout_s: float | None = None) -> dict:
+    def coupon_values(self, name: str, timeout_s: float | None = None, every: bool = False) -> dict:
         """A coupon's rows as the values object; UnknownCoupon when there is no coupon of that name."""
         self.refresh()
-        done = self._studio(["values", name], timeout_s or CHECK_TIMEOUT_S)
+        done = self._studio(["values", name], timeout_s or CHECK_TIMEOUT_S, every)
         if done.returncode != 0:
             message = (done.stderr.strip().splitlines() or ["no message"])[-1]
             if "no coupon of that name" in message:

@@ -649,8 +649,9 @@ test("the assistant answers a question about a ply's stress from the results on 
   await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
   await say("stress on ply 9 at element 12");
   await expect(page.getByTestId("chat-value-refused").last()).toContainText("there is no ply 9");
-  // a question the patterns do not read is told so; it is never read as a row of the setup ("compression" is a test's name)
-  await say("why is ply 4 in compression?");
+  // a question the patterns do not read is told so; it is never read as a row of the setup ("compression" is a test's name).
+  // A question of why is answered in words (ADR-0102)
+  await say("which is worse here, tension or compression?");
   await expect(page.getByTestId("chat-value-unread")).toContainText("where is the shear stress highest?");
   expect(calls.checks).toHaveLength(1);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
@@ -739,16 +740,189 @@ test("with a model on, a loose question about the results is read into a fixed r
 
   // a message the model reads as nothing of the results goes on to the setup's reading, and a setup line never asks about results
   expect(proposalsAsked).toBe(0);
-  await say("why is ply 4 in compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
-  await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes
+  await say("which is worse here, tension or compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
+  await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes (a question of why is ADR-0102's)
   expect(offers).toHaveLength(5);
-  expect((offers[4] as { message: string }).message).toBe("why is ply 4 in compression?");
+  expect((offers[4] as { message: string }).message).toBe("which is worse here, tension or compression?");
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
   await say("thanks, looks good");
   await expect(page.getByTestId("chat-redirect").last()).toBeVisible();
   expect(offers).toHaveLength(6);
   expect(proposalsAsked).toBe(2);
   expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("a question of why is answered in words from the results and our theory pages, the section named, and no row changes (ADR-0102)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: { question: string; facts: Record<string, unknown> }[] = [];
+  let readings = 0;
+  const FAILURE = { id: "engine:5-failure", document: "Laminate theory", title: "5. Failure" };
+  const PLIES = { id: "fea:6-ply-stresses-in-material-axes", document: "Finite element theory", title: "6. Ply stresses in material axes" };
+  const written = { run_id: "run-w", writer: "anthropic", model: "claude-stand-in", withheld: false, reason: null };
+  // a model behind the API: its answers, as the number guard would keep them, or none
+  const answers: Record<string, unknown> = {
+    "why does ply 4 fail first?": { ...written, covered: true, sources: [FAILURE],
+      prose: ["Ply 4 (90 degrees) fails first by tension across its fibres: sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
+    "why is ply 4 in compression?": { ...written, covered: false, sources: [],
+      prose: ["The results show ply 4 (90 degrees) at -364.8 MPa along its fibres.", "The theory pages do not explain this yet."] },
+    "what does the failure index mean?": { ...written, writer: "template", model: null, covered: false, withheld: true, reason: "numbers", prose: [], sources: [FAILURE, PLIES] },
+  };
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if ((path === "/v1/workspace/proposals" || path === "/v1/workspace/result-questions") && request.method() === "POST") {
+      readings += 1;
+      return json({ run_id: "run-p", writer: "template", model: null, proposals: [], conditions: [], request: null, question: null, dropped: [], reason: null });
+    }
+    if (path !== "/v1/workspace/result-answers" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as { question: string; facts: Record<string, unknown> };
+    asked.push(body);
+    return body.question in answers ? json(answers[body.question]) : json({ detail: "the service is busy" }, 503);
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+
+  // before a result there is nothing to answer from: the page says so, nothing is sent, and no row changes
+  const before = readings;
+  await say("why is ply 4 in compression?");
+  await expect(page.getByTestId("chat-why-none")).toHaveText("A question of why is answered from a solved model. Say “run”, then ask again.");
+  expect(asked).toHaveLength(0);
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension"); // "compression" in a question is not the test
+
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+
+  // answered in words: the fact sheet of the result on the page goes with the question, and the section is named under the answer
+  await say("why does ply 4 fail first?");
+  const why = page.getByTestId("chat-why").last();
+  await expect(why).toHaveAttribute("data-answered", "yes");
+  await expect(why).toHaveAttribute("data-covered", "yes");
+  await expect(why).toHaveAttribute("data-source", "run");
+  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
+  await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and the theory: Laminate theory, 5. Failure. Every number is the results’ own.");
+  await expect(why.getByTestId("chat-why-working")).toHaveText("Show the working"); // the formulas with the numbers put in are one click away (ADR-0103)
+  expect(asked).toHaveLength(1);
+  expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
+  expect(asked[0].facts).toEqual(fixture("explanation").facts); // the engine's fact sheet, as the job wrote it
+
+  // a reason the pages do not hold is said to be missing, and nothing is cited; the setup's patterns do not read "compression"
+  await say("why is ply 4 in compression?");
+  const uncovered = page.getByTestId("chat-why").last();
+  await expect(uncovered).toHaveAttribute("data-covered", "no");
+  await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("From the results; the theory pages do not explain this yet. Every number is the results’ own.");
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+
+  // an answer the guard set aside is not shown; the sections the question found are named
+  await say("what does the failure index mean?");
+  const withheld = page.getByTestId("chat-why").last();
+  await expect(withheld).toHaveAttribute("data-answered", "no");
+  await expect(withheld.getByTestId("chat-why-sentence")).toHaveCount(0);
+  await expect(withheld.getByTestId("chat-why-note")).toHaveText("An answer was written, but it held a number the results do not, so it is not shown. Sections of the theory behind it: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
+
+  await page.getByTestId("chat-why").first().scrollIntoViewIfNeeded();
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-why.png" });
+
+  // a service that does not answer is said plainly
+  await say("explain the shear in ply 1");
+  await expect(page.getByTestId("chat-why-failed")).toBeVisible();
+  expect(asked).toHaveLength(4);
+
+  // a question about a value is still the lookup's, and none of the questions of why was read as a row or a value
+  await say("where is the shear stress highest?");
+  await expect(page.getByTestId("chat-extremes").last()).toHaveAttribute("data-reader", "patterns");
+  expect(asked).toHaveLength(4);
+  expect(readings).toBe(before);
+  expect(calls.checks).toHaveLength(1);
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers of why").toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("the working behind an answer is shown when asked: each formula with the solver's numbers put in, and no model is asked (ADR-0103)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  let asked = 0; // any call that would have a model read or write
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/v1/workspace/assistant") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposes: true, provider: "anthropic", model: "claude-stand-in" }) });
+    if (/^\/v1\/workspace\/(proposals|result-questions|result-answers)$/.test(path)) { asked += 1; return route.fulfill({ status: 503, contentType: "application/json", body: "{}" }); }
+    return route.fallback();
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+
+  // before a result there is no working: the page says so and changes no row
+  await say("show me the formula");
+  await expect(page.getByTestId("chat-working-none")).toHaveText("The working is written with a solved model. Say “run”, then ask again.");
+  await expect(page.getByTestId("chat-working")).toHaveCount(0);
+
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  const working = fixture("fields").summary.working;
+
+  // one click under the results: the earliest criterion's chain, four steps, each formula typeset
+  await page.getByTestId("chat-result-working").click();
+  const first = page.getByTestId("chat-working").nth(0);
+  await expect(first).toHaveAttribute("data-criterion", "tsai_hill");
+  await expect(first).toHaveAttribute("data-source", "run");
+  const hill = working.criteria.tsai_hill;
+  await expect(first.getByTestId("chat-working-where")).toHaveText(`The first ply to fail in the gauge section: ply 4 (90°), element ${hill.element}, at ${printed(hill.factor)} times the applied loading.`);
+  await expect(first.getByTestId("chat-working-step")).toHaveCount(4);
+  await expect(first.getByTestId("chat-working-step").nth(0)).toHaveAttribute("data-step", "strain");
+  await expect(first.getByTestId("chat-working-step").nth(3)).toHaveAttribute("data-step", "loading");
+  const equations = hill.steps.reduce((n: number, step: { equations: unknown[] }) => n + step.equations.length, 0);
+  await expect(first.getByTestId("chat-working-equation")).toHaveCount(equations);
+  await expect(first.locator(".chat-working-equation .katex").first()).toBeVisible(); // typeset, not shown as source
+  await expect(first.locator(".katex-error")).toHaveCount(0);
+  // the values put in are the package's own, to six figures
+  const criterion = first.locator('[data-step="criterion"]');
+  await expect(criterion.getByTestId("chat-working-value").nth(1)).toHaveText("64.0523 MPa");
+  await expect(criterion.locator("annotation").last()).toHaveText(hill.steps[2].equations[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  await expect(criterion.getByTestId("chat-working-source")).toHaveText("From: Laminate theory, 5. Failure.");
+  await expect(first.getByTestId("chat-working-note")).toContainText("Values put in are shown to 6 figures and results to 4");
+
+  // asked in words, with the criterion named: the engineer's own phrases
+  await say("send me the formula for max stress");
+  const second = page.getByTestId("chat-working").nth(1);
+  await expect(second).toHaveAttribute("data-criterion", "max_stress");
+  await expect(second.locator('[data-step="criterion"]').getByTestId("chat-working-text")).toContainText("σ₂ reaching F2t"); // the page's symbols, not sigma_2
+  await expect(second.locator('[data-step="criterion"]').getByTestId("chat-working-equation").nth(1).locator("annotation").last()).toHaveText(working.criteria.max_stress.steps[2].equations[1].substituted.replaceAll("\\frac", "\\dfrac"));
+  await say("the proof of it being solved");
+  await expect(page.getByTestId("chat-working")).toHaveCount(3);
+  await expect(page.getByTestId("chat-working").last()).toHaveAttribute("data-criterion", "tsai_hill");
+
+  // a criterion with no working written is said, with the ones that have one
+  await say("show the working for Tsai-Wu");
+  await expect(page.getByTestId("chat-working-none").last()).toHaveText("The working of Tsai-Wu is not written yet. Ask for Maximum stress or Tsai-Hill.");
+
+  await page.waitForTimeout(600); // the list has settled at its newest message
+  await first.locator('[data-step="stress"]').evaluate((step) => step.scrollIntoView({ block: "start" }));
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working.png" });
+  await first.locator('[data-step="criterion"]').evaluate((step) => step.scrollIntoView({ block: "start" }));
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working-criterion.png" });
+
+  // nothing was sent to a model, nothing was checked or solved again, and no row changed
+  expect(asked).toBe(0);
+  expect(calls.checks).toHaveLength(1);
+  expect(calls.solves).toHaveLength(1);
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the working").toEqual([]);
   expect(browserErrors).toEqual([]);
 });
 
@@ -900,6 +1074,269 @@ test("a model that does not answer leaves the message to the page's patterns, an
   await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("90");
   expect(asked).toBe(1);
   await expect(page.getByTestId("proposal-card")).toHaveCount(0);
+});
+
+test("the assistant says which words it could not use and why, in place of “Not sure what to change” (ADR-0088 amendment 1)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const reading = { run_id: "run-p", writer: "anthropic", model: "claude-stand-in", conditions: [], question: null, dropped: [], reason: null };
+  await mockApi(page, calls, { allTests: false }); // the product's view, as on the hosted tier: the unnotched tension coupon only
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const said = (request.postDataJSON() as { message: string }).message;
+    if (said.includes("16 plys")) {
+      return json({ ...reading, proposals: [], unread: [{ quote: "same thing", reason: "refers_back" }, { quote: "compresion", reason: "not_offered" },
+        { quote: "16 plys", reason: "no_value" }] });
+    }
+    if (said.includes("300")) {
+      return json({ ...reading, unread: [{ quote: "like before", reason: "refers_back" }], proposals: [{ key: "length", label: "Length (mm)", value: "300",
+        unit: "mm", written_value: "300", written_unit: "mm", quote: "300 mm long" }] });
+    }
+    return json({ ...reading, proposals: [], unread: [{ quote: "compression", reason: "not_offered" }] });
+  });
+  await page.goto("/workspace/fea");
+  const chat = page.getByTestId("coupon-chat");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  // the founder's message of 2026-11-16 on the live site: nothing in it can become a row, and the page now says why, part by part
+  await message.fill("same thing but make it compresion and 16 plys");
+  await message.press("Enter");
+  const notUsed = page.getByTestId("chat-not-used");
+  await expect(notUsed).toHaveCount(1);
+  await expect(notUsed.locator("li")).toHaveText([
+    /same thing.*each message is read on its own, so say the whole change/,
+    /compresion.*not something you can set here yet/,
+    /16 plys.*names no value to enter; state the value itself, for example a layup as \[0\/90\]2s/,
+  ]);
+  await expect(page.getByText("Not sure what to change")).toHaveCount(0);
+  await expect(page.getByTestId("proposal-card")).toHaveCount(0);
+  // a test the page knows by name keeps the page's own, fuller answer: the patterns read first
+  await message.fill("make it compression");
+  await message.press("Enter");
+  await expect(page.getByTestId("chat-not-available")).toContainText("not offered yet");
+  await expect(notUsed).toHaveCount(1);
+  // beside values that were read, the card lists the words that were not
+  await message.fill("300 mm long like before");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card.locator("[data-key=length]")).toContainText("300 mm");
+  await expect(card.getByTestId("proposal-unread")).toContainText("like before");
+  await expect(card.getByTestId("proposal-unread")).toContainText("each message is read on its own");
+  const said = (await chat.innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+});
+
+/** The stand-in for the mesh scenarios: with `model`, the assistant has a model that answers a size that is not written as a model does,
+ * with nothing to enter and the words it could not use (api/tests/test_proposals.py); every message it is sent is kept in `asked`. */
+async function meshScenario(page: Page, model: boolean) {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], lives: [] as unknown[] };
+  const asked: string[] = [];
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant" && model) return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked.push((request.postDataJSON() as { message: string }).message);
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null,
+      supports: [], loads: [], unread: [{ quote: "coarser", reason: "no_value" }] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  // the rows the page last asked a preview for: the new size goes to the package, which meshes it (the page computes no mesh)
+  const sizeSent = () => (calls.lives.at(-1) as { values: Record<string, unknown> } | undefined)?.values.element_size;
+  return { calls, asked, sizeSent, chat: page.getByTestId("coupon-chat"), message: page.getByLabel("Message the coupon assistant", { exact: true }) };
+}
+
+test("the mesh is changed by talking: a written element size, and finer as half the size held (ADR-0088 amendment 2)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const { calls, sizeSent, chat, message } = await meshScenario(page, false);
+  // no model on: the page's own patterns read it, say the size before and after, and the preview is asked for with the new size.
+  // “Who is running it?” is open, and “finer mesh” is not taken as the name
+  await message.fill("finer mesh");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 1 mm (half of 2 mm)");
+  await expect.poll(sizeSent).toBe(1);
+  await message.fill("use 4 mm elements");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 4 mm");
+  await expect.poll(sizeSent).toBe(4);
+  // a question about the mesh changes nothing, and is not taken as the name either
+  const livesBefore = calls.lives.length;
+  await message.fill("would a finer mesh change the answer?");
+  await message.press("Enter");
+  await expect(page.getByText("Not sure what to change").last()).toBeVisible();
+  await page.waitForTimeout(1_200); // longer than the preview's wait after an edit
+  expect(calls.lives.length).toBe(livesBefore);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-mesh-talk.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("with a model on, a mesh step the model cannot turn into a value is still read by the page (ADR-0088 amendment 2)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const { asked, sizeSent, chat, message } = await meshScenario(page, true);
+  await message.fill("make the mesh coarser");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 4 mm (twice 2 mm)");
+  expect(asked).toEqual(["make the mesh coarser"]); // the model was asked first
+  await expect(page.getByTestId("chat-not-used")).toHaveCount(0);
+  await expect.poll(sizeSent).toBe(4);
+  expect(browserErrors).toEqual([]);
+});
+
+test("a plate is held and loaded by talking: regions named in words, and “here” as the element clicked (ADR-0101)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: { message: string; plate?: { regions: { name: string }[]; here: string[]; held: string[]; loaded: string[]; force_unit: string; stress_unit: string } }[] = [];
+  const reading = { run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [] };
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as (typeof asked)[number];
+    asked.push(body);
+    if (body.message.includes("bottom edge")) { // what the API's guard keeps of a model's reading (api/tests/test_plate_proposals.py)
+      return json({ ...reading, supports: [{ region: "Edge-Bottom", dofs: [1, 2, 3], quote: "hold the bottom edge" }],
+        loads: [{ region: "Edge-Top", kind: "force", dof: 2, value: "10000", unit: "N", written_value: "10", written_unit: "kN", sense: "tension",
+          quote: "pull the top edge with 10 kN in tension" }] });
+    }
+    return json({ ...reading, loads: [{ region: "Face", kind: "pressure", dof: null, value: "0.01", unit: "MPa", written_value: "0.01", written_unit: "MPa",
+      sense: null, quote: "press here with 0.01 MPa" }],
+      dropped: [{ key: "load on Edge-Left", reason: "the quoted words do not name Edge-Left, and it is not where you clicked" }] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickTest(page, "plate");
+  await page.getByLabel("Length (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Width (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Tab length (mm)", { exact: true }).fill("");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await expect(message).toHaveAttribute("placeholder", /hold this edge/);
+  // with no model on the page yet, the regions are named in words
+  await message.fill("hold the bottom edge and pull the top edge with 10 kN in tension");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card").last();
+  await expect(card.locator("[data-key='support:0']")).toContainText("Hold Edge-Bottom x, y, z");
+  await expect(card.locator("[data-key='load:0']")).toContainText("Force on Edge-Top 10000 N along y");
+  await expect(card.locator("[data-key='load:0']")).toContainText("written 10 kN; tension: pulling outward from the edge");
+  expect(asked[0].plate?.regions.map((r) => r.name)).toEqual(["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right", "Face"]);
+  expect(asked[0].plate).toMatchObject({ here: [], held: [], loaded: [], force_unit: "N", stress_unit: "MPa" });
+  expect(calls.checks).toHaveLength(0); // nothing has entered the plate
+  await expect(page.getByTestId("plate-words")).toHaveCount(0);
+  await card.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText("Edge-Bottom holds x, y, z");
+  await expect(page.getByTestId("plate-words")).toContainText("Edge-Top loaded by 10000 N along y");
+  // applied, the setup is checked with the lists, and the model appears with what is held and loaded
+  await expect(page.getByTestId("preview")).toBeVisible();
+  const first = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect(first.supports).toEqual([{ region: "Edge-Bottom", dofs: [1, 2, 3] }]);
+  expect(first.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }]);
+  // an element clicked on the model is “here”: the page says which regions that is, and sends them with the next message
+  await expect(page.getByTestId("chat-here")).toHaveCount(0);
+  await expect(async () => { // the scene takes a click once it has drawn the new model: on a slow machine the first one can come too early
+    const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
+  }).toPass({ timeout: 20_000 });
+  await expect(page.getByTestId("chat-here")).toContainText("Face");
+  await message.fill("press here with 0.01 MPa");
+  await message.press("Enter");
+  const second = page.getByTestId("proposal-card").last();
+  await expect(second.locator("[data-key='load:0']")).toContainText("Pressure on Face 0.01 MPa");
+  await expect(second.getByTestId("proposal-dropped")).toContainText("it is not where you clicked");
+  expect(asked[1].plate?.here).toContain("Face");
+  expect(asked[1].plate).toMatchObject({ held: ["Edge-Bottom"], loaded: ["Edge-Top"] });
+  await second.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText("Face under a pressure of 0.01 MPa");
+  await expect.poll(() => calls.checks.length).toBe(2);
+  expect((calls.checks[1] as { values: Record<string, unknown> }).values.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }, { region: "Face", pressure: 0.01 }]);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-plate-talk.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("a plate with nothing held shows its shape, and the first hold is the edge clicked (ADR-0101 amendment 1)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const lives: { values: { supports?: unknown[]; loads?: unknown[] } }[] = [];
+  const asked: { message: string; plate?: { here: string[]; held: string[] } }[] = [];
+  const full = fixture("preview", "studio-plate");
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path === "/v1/coupon-jobs/live" && request.method() === "POST") { // the package's answer for a plate that states no support yet: blocked, with its shape
+      const body = request.postDataJSON() as (typeof lives)[number];
+      lives.push(body);
+      if (body.values.supports?.length) return; // held: the scenario goes on with the check the apply sends
+      const checklist = fixture("checklist", "studio-plate");
+      checklist.state = "blocked";
+      checklist.items = checklist.items.map((item: { id: string }) => item.id === "constraints"
+        ? { ...item, state: "missing", message: "Supports: required for a plate (at least one)", rows: [] } : { ...item, state: "pending", message: "" });
+      return json({ run_id: "run-live", state: "blocked", designation: null, solver: "kernel", warm: true, seconds: 0.2, timings: { check: 0.1 }, checklist,
+        preview: { ...full, held: [], loads: [], loaded: null, shape: ["supports", "loads"] }, fields: null, explanation: null });
+    }
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as (typeof asked)[number];
+    asked.push(body);
+    const edge = body.plate?.here.find((name) => name.startsWith("Edge-")) ?? "Edge-Bottom"; // as the API's guard keeps it: the edge clicked
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [],
+      supports: [{ region: edge, dofs: [1, 2, 3], quote: "hold this edge" }], loads: [] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickTest(page, "plate");
+  await page.getByLabel("Length (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Width (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Tab length (mm)", { exact: true }).fill("");
+  // nothing is held or loaded, and the plate is on the page to be clicked: its mesh, no support and no load drawn
+  await expect(page.getByTestId("preview")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("preview-shape")).toContainText("Nothing is held or loaded yet");
+  expect(lives.at(-1)!.values.supports ?? []).toEqual([]);
+  await expect(page.getByTestId("plate-words")).toHaveCount(0);
+  // an element on an edge is clicked: the canvas is walked up from its centre, towards the plate's far edges, until the page names an edge
+  const canvas = page.getByTestId("studio-scene").locator("canvas");
+  let clicked = "";
+  for (let step = 0; step < 60 && !clicked; step += 1) {
+    const box = (await canvas.boundingBox())!; // read at every click: the line under the model moves the page
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - step * box.height / 130);
+    await page.waitForTimeout(60);
+    const picked = page.getByTestId("picked-regions");
+    clicked = ((await picked.count()) ? await picked.innerText() : "").match(/Edge-(Bottom|Top|Left|Right)/)?.[0] ?? "";
+  }
+  expect(clicked).toMatch(/^Edge-/);
+  await expect(page.getByTestId("chat-here")).toContainText(clicked);
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("hold this edge");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card").last();
+  await expect(card.locator("[data-key='support:0']")).toContainText(`Hold ${clicked} x, y, z`);
+  expect(asked[0].plate?.here).toContain(clicked);
+  expect(asked[0].plate?.held).toEqual([]);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-plate-shape.png", fullPage: true });
+  await card.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText(`${clicked} holds x, y, z`);
+  await expect.poll(() => calls.checks.length).toBe(1);
+  expect((calls.checks[0] as { values: Record<string, unknown> }).values.supports).toEqual([{ region: clicked, dofs: [1, 2, 3] }]);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+  expect(browserErrors).toEqual([]);
 });
 
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {

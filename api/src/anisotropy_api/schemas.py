@@ -811,19 +811,60 @@ class OfferedCondition(Contract):
     detail: Annotated[str, Field(max_length=400)] = ""
 
 
+PlateRegion = Literal["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right", "Hole", "Face", "Tab-Bottom", "Tab-Top"]
+PLATE_REGION_KINDS: dict[str, str] = {"Edge-Bottom": "edge", "Edge-Top": "edge", "Edge-Left": "edge", "Edge-Right": "edge", "Hole": "edge",
+                                      "Face": "area", "Tab-Bottom": "area", "Tab-Top": "area"}
+
+
+class OfferedRegion(Contract):
+    name: PlateRegion
+    kind: Literal["edge", "area"]
+
+
+class PlateOffer(Contract):
+    """A plate's regions offered to a message (ADR-0101): the plate's own named regions (never a box the engineer drew and named), those
+    the clicked element belongs to, the units a force and a pressure are stated in, and which regions are already held and loaded."""
+
+    regions: Annotated[list[OfferedRegion], Field(min_length=1, max_length=8)]
+    here: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    force_unit: Literal["N", "lbf"]
+    stress_unit: Literal["MPa", "psi"]
+    held: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    loaded: Annotated[list[PlateRegion], Field(max_length=8)] = []
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        names = [region.name for region in self.regions]
+        if len(set(names)) != len(names):
+            raise ValueError("each region is offered once")
+        for region in self.regions:
+            if PLATE_REGION_KINDS[region.name] != region.kind:
+                raise ValueError(f"{region.name} is an {PLATE_REGION_KINDS[region.name]}, not an {region.kind}")
+        for name in self.here:
+            if name not in names:
+                raise ValueError(f"{name} is clicked and not offered: a clicked region is one of those on offer")
+        if (self.force_unit == "N") != (self.stress_unit == "MPa"):
+            raise ValueError("a plate's force and pressure are stated in one system: N with MPa, or lbf with psi")
+        return self
+
+
 class ProposalRequest(Contract):
     """A message to read into rows (ADR-0088): the product, the message, the rows and conditions on offer, and the rows already filled.
-    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result."""
+    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result. A plate adds its regions
+    and the place clicked (ADR-0101)."""
 
     product: Literal["coupon", "laminate"]
     message: Annotated[str, Field(min_length=1, max_length=2000)]
     rows: Annotated[list[OfferedRow], Field(min_length=1, max_length=200)]
     conditions: Annotated[list[OfferedCondition], Field(max_length=20)] = []
     form: Annotated[dict[str, Annotated[str, Field(max_length=400)]], Field(max_length=400)] = {}
+    plate: PlateOffer | None = None
 
     @model_validator(mode="after")
     def _distinct(self) -> Self:
         keys = [row.key for row in self.rows]
+        if self.plate is not None and self.product != "coupon":
+            raise ValueError("only a coupon's message offers a plate's regions")
         if len(set(keys)) != len(keys):
             raise ValueError("each row is offered once")
         return self
@@ -852,6 +893,37 @@ class DroppedProposal(Contract):
     reason: str
 
 
+class SupportProposal(Contract):
+    """A support the engineer's words or click hold (ADR-0101): the region and the plate's directions it holds, 1 to 6."""
+
+    region: PlateRegion
+    dofs: list[int]
+    quote: str
+
+
+class LoadProposal(Contract):
+    """A load the engineer's words or click hold (ADR-0101): a force along a direction (1 to 3), the total over the region, or a pressure
+    on an area; the value as the plate takes it, signed, and as written. `sense` says a force was stated as tension or compression, so
+    its direction and sign came from the edge."""
+
+    region: PlateRegion
+    kind: Literal["force", "pressure"]
+    dof: int | None
+    value: str
+    unit: str
+    written_value: str
+    written_unit: str | None
+    sense: Literal["tension", "compression", "as_signed"] | None
+    quote: str
+
+
+class UnreadPart(Contract):
+    """Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1). The words are the engineer's own."""
+
+    quote: str
+    reason: Literal["not_offered", "no_value", "refers_back"]
+
+
 class ProposalResponse(Contract):
     """What the model read and the source guard kept (ADR-0088), for the engineer to tick; nothing here has entered the problem. `writer` is
     `template` when no model read the message, with the reason when one was asked; the page then reads it with its own patterns."""
@@ -864,6 +936,9 @@ class ProposalResponse(Contract):
     question: str | None
     dropped: list[DroppedProposal]
     reason: str | None
+    unread: list[UnreadPart] = []
+    supports: list[SupportProposal] = []
+    loads: list[LoadProposal] = []
 
 
 ResultQuantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
@@ -919,6 +994,57 @@ class ResultQuestionResponse(Contract):
     request: ResultRequest | None
     question: str | None
     dropped: list[str]
+    reason: str | None
+
+
+FactValue = bool | int | float | str | None | list[bool | int | float | str | None]
+MAX_FACTS_CHARS = 40_000
+
+
+class ResultAnswerRequest(Contract):
+    """A question to answer in words about a result (ADR-0102): the question, and the fact sheet of the result the page shows, the
+    numbers our engine computed for it (a job's `explanation.json`, or a live solve's). The model sees the sheet without a name, a note,
+    a date or a record name (R-11), beside the theory sections the question finds."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    facts: Annotated[dict[str, FactValue], Field(min_length=1, max_length=400)]
+
+    @model_validator(mode="after")
+    def _a_sheet_not_a_file(self) -> Self:
+        if len(json.dumps(self.facts, ensure_ascii=False)) > MAX_FACTS_CHARS:
+            raise ValueError(f"the fact sheet is longer than {MAX_FACTS_CHARS} characters")
+        return self
+
+
+class ResultAnswerReceipt(Contract):
+    """What the run record keeps of an answer: the question, the digest of the facts the writer saw, and the sections found."""
+
+    question: str
+    facts_sha256: str
+    sections: list[str]
+
+
+class TheorySource(Contract):
+    """A section of our theory pages, as an answer names it."""
+
+    id: str
+    document: str
+    title: str
+
+
+class ResultAnswerResponse(Contract):
+    """An answer in words to a question about a result (ADR-0102). `prose` is the model's, kept only when every number in it is the fact
+    sheet's or the question's; `sources` are the theory sections it rests on. With no model, or an answer the guard set aside
+    (`withheld`), `prose` is empty and `sources` are the sections the question found, so the page can say where to read. `covered` is
+    false when the sections do not hold the reason asked for."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    prose: list[str]
+    sources: list[TheorySource]
+    covered: bool
+    withheld: bool
     reason: str | None
 
 

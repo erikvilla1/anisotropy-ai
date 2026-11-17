@@ -35,14 +35,14 @@ from pathlib import Path
 from anisotropy_fea import enabled, paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
-from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
+from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, plate_shape, setup_checklist
 from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
 from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
-from anisotropy_fea.preview import preview_data
+from anisotropy_fea.preview import preview_data, shape_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.tow_test import tow_answer
@@ -80,7 +80,8 @@ def serve(root: Path) -> None:
         started = time.perf_counter()
         try:
             request = json.loads(line)
-            answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
+            with enabled.every_test(request.get("every") is True):  # a founder's request (ADR-0089 amendment 5); the next is judged anew
+                answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
         except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
             answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
         print(json.dumps(answer), file=answers, flush=True)
@@ -103,10 +104,20 @@ def check(values_path: Path, out: Path, root: Path):
         return
     checklist, model, quality = setup_checklist(form, root)
     write_json(out / "checklist.json", checklist.as_dict())
-    if model is not None:
-        write_json(out / "preview.json", preview_data(model, quality))
+    write_preview(out, form, root, model, quality)
     counts = {state: sum(item.state == state for item in checklist.items) for state in ("pass", "warn", "fail", "missing", "pending")}
     print(f"{checklist.state}: " + ", ".join(f"{n} {state}" for state, n in counts.items() if n) + (f"; {checklist.designation}" if checklist.designation else ""))
+
+
+def write_preview(out: Path, form, root: Path, model, quality) -> None:
+    """preview.json: the model the setup built, or, for a plate that states no support or no load yet, its shape alone, so that a
+    region can be clicked before anything is held (ADR-0101 amendment 1). Nothing is written when neither can be built."""
+    if model is not None:
+        write_json(out / "preview.json", preview_data(model, quality))
+        return
+    shape = plate_shape(form, root)
+    if shape is not None:
+        write_json(out / "preview.json", shape_data(*shape))
 
 
 def coupons(root: Path) -> list[dict]:
@@ -186,8 +197,7 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     checklist, model, quality = setup_checklist(form, root)
     timings["check"] = time.perf_counter() - clock
     write_json(out / "checklist.json", checklist.as_dict())
-    if model is not None:
-        write_json(out / "preview.json", preview_data(model, quality))
+    write_preview(out, form, root, model, quality)
     if not solvable(checklist, model):
         write_json(out / "timings.json", timings)
         print(f"{checklist.state}: nothing solved")
@@ -223,6 +233,8 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
+    parser.add_argument("--every-test", action="store_true", help="offer every test for this call, as ANISOTROPY_ALL_TESTS=on does for the "
+                        "machine (ADR-0089 amendment 5: the API passes it for a founder's sign-in)")
     commands = parser.add_subparsers(dest="command", required=True)
     p = commands.add_parser("check", help="judge a values file; write checklist.json and preview.json")
     p.add_argument("values", type=Path)
@@ -241,6 +253,11 @@ def main() -> None:
     p.add_argument("values", type=Path)
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    with enabled.every_test(args.every_test):
+        answer_command(args)
+
+
+def answer_command(args: argparse.Namespace) -> None:
     try:
         if args.command == "check":
             check(args.values, args.out, args.root)

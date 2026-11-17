@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .proposals import UNREAD_REASONS
+
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
@@ -61,7 +63,11 @@ PROPOSE_SYSTEM = (
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
     "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
-    "row that is not on offer and never state a value the message does not write." + VOICE
+    "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
+    "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
+    "not_offered, no row or choice on offer covers it; no_value, it names a row on offer but writes no value that row takes (a count of "
+    "plies is not a layup's notation); refers_back, it leans on an earlier message, which you were not given. With nothing of the kind, "
+    "unread is an empty list." + VOICE
 )
 # The model's answer: a fixed schema, so the API compiles it once (structured outputs, `output_config.format`).
 PROPOSAL_SCHEMA: dict[str, Any] = {
@@ -76,8 +82,12 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
             "type": "object", "properties": {"id": {"type": "string"}, "quote": {"type": "string"}},
             "required": ["id", "quote"], "additionalProperties": False}},
         "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        # what the message asks for and the model proposes nothing for (ADR-0088 amendment 1): the engineer's own words and a reason by name
+        "unread": {"type": "array", "items": {
+            "type": "object", "properties": {"quote": {"type": "string"}, "reason": {"type": "string", "enum": list(UNREAD_REASONS)}},
+            "required": ["quote", "reason"], "additionalProperties": False}},
     },
-    "required": ["proposals", "conditions", "question"],
+    "required": ["proposals", "conditions", "question", "unread"],
     "additionalProperties": False,
 }
 
@@ -122,6 +132,23 @@ QUESTION_SYSTEM = (
 )
 
 
+# A question about a result answered in words (ADR-0102): the model is shown the result's fact sheet and the sections of our theory pages
+# the question found, and answers in a schema; the number guard then reads the answer, and the page names the sections.
+ANSWER_MAX_TOKENS = 1500
+ANSWER_SYSTEM = (
+    "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
+    "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
+    "with an id. Answer in two to five short sentences, the answer first, from the fact sheet and the sections alone: the sheet says "
+    "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
+    "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
+    "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "
+    "answer; list in 'sections' the ids of those your answer rests on, and the page names them. Set 'covered' to true only when those "
+    "sections hold the reason or the meaning asked for. When they do not, set it to false, say what the fact sheet shows about the "
+    "matter and that the theory pages do not explain it yet, and give no reason of your own. When the question is not about this "
+    "result or its theory, set 'covered' to false and say in one sentence what can be asked here. Do not use markdown." + VOICE
+)
+
+
 @dataclass(frozen=True)
 class Reading:
     """What a writer read from a message (ADR-0088): the model's answer as parsed, before the source guard; None when no model read it,
@@ -162,11 +189,13 @@ class Assistant(Protocol):
 
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
-    def propose(self, view: dict[str, Any]) -> Reading: ...
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading: ...
 
     def choose_tools(self, view: dict[str, Any]) -> Reading: ...
 
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -244,7 +273,7 @@ class TemplateAssistant:
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
         return Draft(tuple(template), "template", None)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The template reads nothing: the page's own patterns read the message (ADR-0055)."""
         return Reading(None, "template", None)
 
@@ -254,6 +283,10 @@ class TemplateAssistant:
 
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The template reads nothing: the page's own patterns read a question about a result (ADR-0099)."""
+        return Reading(None, "template", None)
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template writes no answer to a question: the page names the theory sections found (ADR-0102)."""
         return Reading(None, "template", None)
 
 
@@ -352,15 +385,21 @@ class ClaudeAssistant:
             return Reading(None, "template", None, "the model's answer was not the JSON asked for")
         return Reading(raw, self.name, self.model)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
-        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11)."""
-        return self._read(PROPOSE_SYSTEM, view, PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
+        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11). A plate
+        passes its own schema and instructions, the rows' with its supports and loads added (ADR-0101)."""
+        return self._read(PROPOSE_SYSTEM + system, view, schema or PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
 
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The model's reading of a question about a result (ADR-0100), in a schema of names on offer and whole numbers, which the guard
         then reads. `view` is what the model may see: the message, the quantities, plies and regions on offer; never a result."""
         return self._read(QUESTION_SYSTEM, view, schema, QUESTION_MAX_TOKENS)
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's answer to a question about a result (ADR-0102), as JSON in the schema asked for and not yet judged: the number guard
+        reads its text. `view` is what the model may see: the question, the result's fact sheet and the theory sections found."""
+        return self._read(ANSWER_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is

@@ -10,9 +10,9 @@ import {
 } from "@/lib/laminate-chat";
 import { blankOwn, TemperatureFields } from "@/components/workspace/panels/laminate-fields";
 import { conditionOf, conditionsNamed } from "@/lib/conditions";
-import { laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded } from "@/lib/proposals";
-import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer } from "@/lib/studio-api";
-import { ProposalCard, type ProposalLine } from "./proposal-card";
+import { laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded, unreadLines } from "@/lib/proposals";
+import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
+import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
 import { workspace } from "@/lib/workspaces";
@@ -186,7 +186,14 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
       add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
-    readWithPatterns(text, step, true);
+    const parts = answer?.unread ?? [];
+    readWithPatterns(text, step, true, parts.length ? () => notUsed(parts) : undefined);
+  }
+
+  /** What the model could not use of a message the patterns read nothing of (ADR-0088 amendment 1): the engineer's words, each with why. */
+  function notUsed(parts: UnreadPart[]) {
+    add({ role: "assistant", kind: "text", title: "Read, but nothing to enter",
+      body: <div data-testid="chat-not-used"><UnreadList lines={unreadLines(parts)} /></div> });
   }
 
   /** The proposals and conditions the engineer ticked go into the draft; a condition turned on opens its panel, and the conversation moves on. */
@@ -217,7 +224,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
   }
 
   /** The message read by the page's fixed patterns (ADR-0060); `echoed` when the user's words are already in the conversation. */
-  function readWithPatterns(text: string, step: LaminateStep, echoed = false) {
+  function readWithPatterns(text: string, step: LaminateStep, echoed = false, nothing?: () => void) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const next: LaminateDraft = { ...draftRef.current };
     const understood: string[] = [];
@@ -272,7 +279,8 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     if (!understood.length) {
       if (refused.length) {
         add(...you, { role: "assistant", kind: "text", tone: "problem", title: "A unit does not fit", body: <ul className="chat-understood">{refused.map((r) => <li key={r}>{r}</li>)}</ul> });
-      } else redirect(text, echoed);
+      } else if (nothing) nothing();
+      else redirect(text, echoed);
       return;
     }
     add(...you, { role: "assistant", kind: "text", title: "Got it",
@@ -404,7 +412,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
-        dropped={entry.answer.dropped} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
+        dropped={entry.answer.dropped} unread={unreadLines(entry.answer.unread)} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     } else content = answerMessage(entry.stamp);
     return (
       <div className="chat-assistant" key={entry.id}>

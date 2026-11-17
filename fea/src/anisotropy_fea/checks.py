@@ -10,6 +10,7 @@ tools refuse. A failed or missing item blocks the run; a warning does not.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import shutil
 from collections.abc import Callable
@@ -29,7 +30,7 @@ from .intake import FIELDS, STRENGTH_KEYS, FormInput, IntakeError, Values, check
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
+from .spec import BENDING_KINDS, PLATE_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
@@ -516,3 +517,31 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
     return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality
+
+
+# --------------------------------------------------------------------------------------------- a plate's shape before it is held or loaded
+
+# What stands in for a list a plate does not state yet, only so that its mesh can be built and shown (ADR-0101 amendment 1). The mesh
+# follows the plate's size, hole, tabs, drawn regions and element size, and no support or load (`tests/test_plate_shape.py` pins it).
+# Neither entry is drawn, kept, solved or written to a deck: the setup stays blocked on the list that is missing.
+SHAPE_SUPPORT = {"region": "Edge-Bottom", "dofs": [1, 2, 3]}
+SHAPE_LOAD = {"region": "Face", "pressure": 1.0}
+SHAPE_LISTS = {"supports": SHAPE_SUPPORT, "loads": SHAPE_LOAD}
+
+
+def plate_shape(form: FormInput, root: Path | str | None = None) -> tuple[FEModel, tuple[str, ...]] | None:
+    """The model of a plate whose supports or loads are not stated yet, built to show its shape, with the names of the lists that were
+    stood in. None for any other form, for a plate that states both, and when anything else about the plate is refused: then the
+    checklist's own reasons stand alone, as before."""
+    missing = tuple(name for name in SHAPE_LISTS if not form.lists.get(name))
+    if not missing:
+        return None
+    stood = dataclasses.replace(form, lists={**form.lists, **{name: [dict(SHAPE_LISTS[name])] for name in missing}})
+    try:
+        values = check_form(stood)
+        if values.kind not in PLATE_KINDS:
+            return None
+        spec = spec_from_values(values, designation_for(values, Path(root) if root is not None else paths.LOCAL), form.path.name)
+        return build_model(spec), missing
+    except (IntakeError, SpecError, MeshError, ValueError):
+        return None

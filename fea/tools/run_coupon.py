@@ -588,7 +588,11 @@ def main() -> None:
     parser.add_argument("--result", type=Path, default=None, help="also write the outcome to this JSON file (the API's coupon jobs read it)")
     parser.add_argument("--progress", type=Path, default=None, help="rewrite this JSON file after every step: the stage and the files so far")
     parser.add_argument("--gate", type=Path, default=None, help="once the coupon is named, wait for this file before the attempt: 'go' goes on, other text refuses")
+    parser.add_argument("--every-test", action="store_true", help="offer every test for this run, as ANISOTROPY_ALL_TESTS=on does for the machine "
+                        "(ADR-0089 amendment 5: the API passes it for a founder's sign-in); the steps this run starts inherit it")
     args = parser.parse_args()
+    if args.every_test:  # for this run and the steps it starts, which inherit the environment
+        os.environ[enabled.ALL_TESTS_VARIABLE] = "on"
     progress = Progress(args.progress)
     try:
         done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress,

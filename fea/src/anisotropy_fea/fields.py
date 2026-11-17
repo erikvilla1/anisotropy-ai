@@ -38,6 +38,7 @@ from .report import edge_widths, fpf_place, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
 from .units import UNIT_LABEL, from_si
+from .working import working_of
 
 MODES = ("longitudinal tension", "longitudinal compression", "transverse tension", "transverse compression", "in-plane shear", "interactive",
          "none")  # the engine's governing modes; "none" is an unstressed ply, whose ratio is infinite
@@ -473,6 +474,10 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     summary["ply_extremes"] = ply_extremes(stress_12, mises, np.asarray(inside if inside else range(ne), dtype=int), angles, shell,
                                            lambda e: element_name(mesh.element_keys[e]), lambda e: length(centroids[e]).tolist(), stress)
     summary["ply_extremes"]["basis"] = "gauge" if inside else "whole"
+    # the working behind the answer (ADR-0103): for the first ply to fail by each criterion, each step's formula with the values put in
+    worked = working_of(solution, field, summary, units)
+    if worked is not None:
+        summary["working"] = worked
     if method is not None and applied["dof"] == 2 and len(mesh.sections) == 1:
         # the force along the coupon: the moving grip's reaction under a displacement, the applied total under a force (ADR-0072)
         force = reaction_value if applied["set"] == "the top grip" else float(applied["value"])
