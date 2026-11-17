@@ -123,6 +123,7 @@ export function resultOffer(fields: Fields, message: string, picked: number | nu
 /** A model's reading, as the API's guard kept it, as the typed question the page runs; null when it names nothing the probe table holds.
  * The page judges the place again when it answers: an element or a ply the model does not hold is refused there. */
 export function questionFrom(request: ResultRequest): ResultQuestion | null {
+  if (request.kind === "failure") return null; // the package's own answer, not a value of the probe table (lib/result-failure.ts)
   const columns = PROBE_COLUMNS.filter((c) => request.quantities.includes(c));
   if (!columns.length) return null;
   const plies = request.plies.length ? request.plies : null;
@@ -273,19 +274,25 @@ export function extremeWords(column: string, sense: Sense): string {
   return sense === "magnitude" ? `largest |${symbol}|` : `${sense} ${symbol}`;
 }
 
-/** An extreme as a sentence: "The largest |τ₁₂| in the gauge section is −45.86 MPa, in ply 1 (45°) at element 73; plies 3, 6 and 8 tie." */
-export function extremeSentence(block: ResultExtremes["blocks"][number], region: string, unit: string, print: (value: number | null) => string): string {
+/** A chat answer as the page says it (ADR-0099 amendment 2): the answer itself as the heading, and short labels for what it is of. */
+export type AnswerLines = { headline: string; facts: string[] };
+
+const plyLabel = (row: { ply: number; angle: number; face: string | null }) => `ply ${row.ply} (${row.angle}°)${row.face ? `, ${row.face} face` : ""}`;
+
+/** An extreme in short: "Largest |τ₁₂|: −45.86 MPa", then "ply 1 (45°)", "element 73", "gauge section", "tied with plies 3, 6, 8". */
+export function extremeLines(block: ResultExtremes["blocks"][number], region: string, unit: string, print: (value: number | null) => string): AnswerLines {
   const row = block.rows[block.best];
-  const face = row.face ? `, ${row.face} face` : "";
-  const ties = block.tied.length ? `; ${block.tied.length === 1 ? `ply ${block.tied[0]} ties` : `plies ${block.tied.slice(0, -1).join(", ")} and ${block.tied[block.tied.length - 1]} tie`}` : "";
-  return `The ${extremeWords(block.column, block.sense)} in ${region} is ${print(row.value)}${unit ? ` ${unit}` : ""}, in ply ${row.ply} (${row.angle}°${face}) at element ${row.label}${ties}.`;
+  const words = extremeWords(block.column, block.sense);
+  const tied = block.tied.length ? [`tied with ${block.tied.length > 1 ? "plies" : "ply"} ${block.tied.join(", ")}`] : [];
+  return { headline: `${words.charAt(0).toUpperCase()}${words.slice(1)}: ${print(row.value)}${unit ? ` ${unit}` : ""}`,
+    facts: [plyLabel(row), `element ${row.label}`, region.replace(/^the /, ""), ...tied] };
 }
 
-export function resultSentence(answer: ResultValues, unit: string, print: (value: number | null) => string): string | null {
+/** One value in short: "σ₁ = 1182 MPa", then "ply 2 (0°)", "element 125". Null when the answer holds more than one value, which is a table's. */
+export function valueLines(answer: ResultValues, unit: string, print: (value: number | null) => string): AnswerLines | null {
   if (answer.rows.length !== 1 || answer.columns.length !== 1) return null;
   const row = answer.rows[0];
-  const face = row.face ? `, ${row.face} face` : "";
+  const symbol = RESULT_COLUMNS[answer.columns[0]].symbol;
   const value = row.values[0];
-  if (value === null) return `No ${RESULT_COLUMNS[answer.columns[0]].words} is written for ply ${row.ply} at element ${answer.label}.`;
-  return `${RESULT_COLUMNS[answer.columns[0]].symbol} in ply ${row.ply} (${row.angle}°${face}) at element ${answer.label} is ${print(value)}${unit ? ` ${unit}` : ""}.`;
+  return { headline: value === null ? `No ${symbol} written here` : `${symbol} = ${print(value)}${unit ? ` ${unit}` : ""}`, facts: [plyLabel(row), `element ${answer.label}`] };
 }

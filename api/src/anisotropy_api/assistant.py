@@ -119,7 +119,10 @@ QUESTION_SYSTEM = (
     "yourself and you never write a value of a result: you are shown none. You are given the message, the quantities on offer (each with "
     "its key and what it is), the plies numbered from the bottom face with their fibre angles, the regions on offer, and whether an element "
     "is clicked on the model. Answer with: kind, 'values' to read quantities at one element, 'extreme' to find where a quantity is largest "
-    "or smallest over a region, or 'none' when the message states or changes the setup, asks to run or check, or is not about the results; "
+    "or smallest over a region, 'failure' when the message asks which ply or layer fails, breaks or goes first, whether or when the coupon "
+    "fails or holds, or the load, factor or strength ratio at first-ply failure (the software then shows its own failure answer; leave "
+    "quantities and plies empty, element null, here false, sense null and region 'default'), or 'none' when the message states or changes "
+    "the setup, asks to run or check, or is not about the results; "
     "quantities, the keys asked for (a plain 'stress' is the three ply stresses S11, S22 and S12, a plain 'strain' the three ply strains; "
     "how much load a ply carries is its stress along the fibres); plies, the ply numbers asked about, read from a number, an angle or a "
     "position such as the outer plies, and empty for every ply; element, the element's number only when the message writes it, else null; "
@@ -127,7 +130,8 @@ QUESTION_SYSTEM = (
     "'largest' for the most tensile value, 'smallest' for the most compressive, 'magnitude' for the largest regardless of sign, else null; "
     "region, 'default' unless the message names the gauge section or the whole model. Use 'values' only when an element is named or "
     "clicked; a question about plies in general, a comparison of plies with no element, or a question of why a ply is loaded as it is, is "
-    "an 'extreme' over the plies and quantities it concerns, so the engineer sees the values. When the message is about the results but "
+    "an 'extreme' over the plies and quantities it concerns, so the engineer sees the values; a question of which ply fails is never "
+    "an 'extreme'. When the message is about the results but "
     "too unclear to read, use 'none' and ask one short question; otherwise the question is null. Read through typing mistakes." + VOICE
 )
 
@@ -138,7 +142,7 @@ ANSWER_MAX_TOKENS = 1500
 ANSWER_SYSTEM = (
     "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
     "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
-    "with an id. Answer in two to five short sentences, the answer first, from the fact sheet and the sections alone: the sheet says "
+    "with an id. Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the fact sheet and the sections alone: the sheet says "
     "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
     "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
     "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "

@@ -49,7 +49,7 @@ def test_the_schema_holds_names_on_offer_and_whole_numbers_only():
     properties = schema["properties"]
     assert schema["additionalProperties"] is False and sorted(schema["required"]) == sorted(properties)
     assert properties["quantities"]["items"]["enum"] == ["S11", "E22"] and properties["region"]["enum"] == ["default", "whole"]
-    assert properties["plies"]["items"] == {"type": "integer"} and properties["kind"]["enum"] == ["values", "extreme", "none"]
+    assert properties["plies"]["items"] == {"type": "integer"} and properties["kind"]["enum"] == ["values", "extreme", "failure", "none"]
     # nowhere a decimal number or free text but the question back, which the guard reads
     assert [name for name, p in properties.items() if p.get("type") == "number"] == []
     assert [name for name, p in properties.items() if p.get("type") == "string" and "enum" not in p] == []
@@ -112,6 +112,25 @@ def test_none_is_no_request_and_a_question_back_may_hold_only_the_messages_numbe
     stray = kept("what about ply 4?", answer(kind="none", quantities=(), sense=None, question="Do you mean the 1182 MPa in ply 2?"))
     assert stray.question is None and "numbers the message does not" in stray.dropped[0] and "1182" in stray.dropped[0]
     assert kept("x", answer(kind="none", quantities=(), sense=None, question="why " * 200)).dropped == ["the question back is too long"]
+
+
+def test_a_question_of_failure_is_kept_as_its_kind_alone_whatever_else_the_model_wrote():
+    """ADR-0100 amendment 1: which ply fails first is the package's own answer, so the request names nothing; a quantity, a ply, an
+    element or a region the model wrote beside it does not go with it."""
+    bare = {"kind": "failure", "quantities": [], "plies": [], "element": None, "here": False, "sense": None, "region": "default"}
+    asked = kept("what is the the ply that fails", answer(kind="failure", quantities=(), sense=None))
+    assert asked.request == bare and asked.dropped == [] and asked.question is None
+    loaded = kept("which layer goes first", answer(kind="failure", quantities=("S11", "S22"), plies=(4, 99), element=120, here=True, sense="magnitude", region="whole"))
+    assert loaded.request == bare and loaded.dropped == []
+    assert "'failure'" in QUESTION_SYSTEM and "never an 'extreme'" in QUESTION_SYSTEM
+
+
+def test_the_endpoint_returns_a_question_of_failure(monkeypatch):
+    stub = StubClient(json.dumps(answer(kind="failure", quantities=(), sense=None)))
+    monkeypatch.setattr(app.state, "assistant", ClaudeAssistant("claude-opus-5-5", client=stub), raising=False)
+    body = client.post("/v1/workspace/result-questions", json={**REQUEST, "message": "which layer goes first"}).json()
+    assert body["request"] == {"kind": "failure", "quantities": [], "plies": [], "element": None, "here": False, "sense": None, "region": "default"}
+    assert body["dropped"] == [] and body["writer"] == "anthropic"
 
 
 # --------------------------------------------------------------------------------------------- the writers

@@ -28,24 +28,24 @@ test("a question is answered from a fact sheet that holds facts, and an older re
 test("an answer is shown in the page's symbols with the sections it rests on named under it", () => {
   const lines = whyLines(answer(), false);
   assert.deepEqual(lines.prose, ["Ply 4 (90 degrees) fails first: σ₂ reaches 60.6 MPa at 1.032 times the applied loading."]);
-  assert.equal(lines.note, "From the results and the theory: Laminate theory, 5. Failure. Every number is the results’ own.");
+  assert.equal(lines.note, "Based on the results and: Laminate theory, 5. Failure.");
   const two = whyLines(answer({ sources: [FAILURE, PLIES] }), true);
-  assert.equal(two.note, "From the results and the theory: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes. Every number is the results’ own. From the preview: run the analysis to verify it.");
+  assert.equal(two.note, "Based on the results and: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes. Preview: run the analysis to verify.");
 });
 
 test("an answer the theory pages do not cover says so and cites nothing", () => {
   const lines = whyLines(answer({ covered: false, sources: [], prose: ["The results show ply 4 in compression along its fibres."] }), false);
-  assert.equal(lines.note, "From the results; the theory pages do not explain this yet. Every number is the results’ own.");
+  assert.equal(lines.note, "Based on the results only.");
   assert.deepEqual(lines.sources, []);
 });
 
 test("with no answer written the page says so and names the sections the question found", () => {
   const none = whyLines(answer({ writer: "template", model: null, prose: [], covered: false, sources: [FAILURE, PLIES] }), false);
   assert.deepEqual(none.prose, []);
-  assert.equal(none.note, "A question like this is not answered in words here yet. Sections of the theory behind it: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
+  assert.equal(none.note, "Not answered in words yet. See: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
   const withheld = whyLines(answer({ writer: "template", model: null, prose: [], covered: false, withheld: true, reason: "73", sources: [FAILURE] }), false);
-  assert.equal(withheld.note, "An answer was written, but it held a number the results do not, so it is not shown. Section of the theory behind it: Laminate theory, 5. Failure.");
-  assert.equal(whyLines(answer({ prose: [], covered: false, sources: [] }), false).note, "A question like this is not answered in words here yet.");
+  assert.equal(withheld.note, "The answer held a number the results do not, so it is not shown. See: Laminate theory, 5. Failure.");
+  assert.equal(whyLines(answer({ prose: [], covered: false, sources: [] }), false).note, "Not answered in words yet.");
 });
 
 test("a sentence that names a program is left out, and an answer of only such sentences is no answer (ADR-0091)", () => {
@@ -53,7 +53,7 @@ test("a sentence that names a program is left out, and an answer of only such se
   assert.deepEqual(mixed.prose, ["Ply 4 fails first."]);
   const all = whyLines(answer({ prose: ["Abaqus would show the same."] }), false);
   assert.deepEqual(all.prose, []);
-  assert.match(all.note, /^A question like this is not answered in words here yet\./);
+  assert.match(all.note, /^Not answered in words yet\./);
 });
 
 test("an answer from the API is read only in its own shape", () => {

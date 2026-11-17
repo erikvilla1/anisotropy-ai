@@ -641,7 +641,8 @@ export async function proposeRows(apiBase: string, request: ProposalRequest, sig
 export type ResultOffer = { message: string; quantities: string[]; plies: { ply: number; angle: number }[]; gauge: boolean; picked: boolean };
 /** What a message asks of the results, as the API's guard kept it: names from the offer and whole numbers, never a value. */
 export type ResultRequest = {
-  kind: "values" | "extreme"; quantities: string[]; plies: number[]; element: number | null; here: boolean;
+  /** `failure` asks which ply fails first or whether the coupon fails (ADR-0100 amendment 1): it names no quantity and no place. */
+  kind: "values" | "extreme" | "failure"; quantities: string[]; plies: number[]; element: number | null; here: boolean;
   sense: "largest" | "smallest" | "magnitude" | null; region: "default" | "gauge" | "whole";
 };
 export type ResultReading = { run_id: string | null; writer: string; model: string | null; request: ResultRequest | null; question: string | null; dropped: string[]; reason: string | null };
@@ -653,7 +654,7 @@ export function readResultReading(payload: unknown): ResultReading {
   const r = payload.request;
   if (r !== null) {
     const whole = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
-    if (!isObject(r) || (r.kind !== "values" && r.kind !== "extreme") || !Array.isArray(r.quantities) || !r.quantities.every(isText) || !Array.isArray(r.plies) || !r.plies.every(whole)
+    if (!isObject(r) || (r.kind !== "values" && r.kind !== "extreme" && r.kind !== "failure") || !Array.isArray(r.quantities) || !r.quantities.every(isText) || !Array.isArray(r.plies) || !r.plies.every(whole)
       || !(r.element === null || whole(r.element)) || typeof r.here !== "boolean" || !(r.sense === null || ["largest", "smallest", "magnitude"].includes(r.sense as string))
       || !["default", "gauge", "whole"].includes(r.region as string)) throw bad();
   }

@@ -17,7 +17,7 @@ from .assistant import _sentences, number_guard
 from .theory import Section
 
 SECTIONS_SHOWN = 3  # how many sections a question brings to the model
-MAX_ANSWER = 1500  # characters; the model is asked for two to five short sentences
+MAX_ANSWER = 1500  # characters; the model is asked for one to three short sentences
 
 
 def answer_schema(ids: list[str]) -> dict[str, Any]:

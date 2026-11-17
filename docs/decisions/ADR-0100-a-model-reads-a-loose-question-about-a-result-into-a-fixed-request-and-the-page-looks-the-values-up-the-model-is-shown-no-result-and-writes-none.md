@@ -1,6 +1,6 @@
 # ADR-0100: A model reads a loose question about a result into a fixed request, and the page looks the values up; the model is shown no result and writes none
 
-- Status: Proposed; a question of why is answered in words, and no longer read into a request for values, by [ADR-0102](ADR-0102-a-question-of-why-about-a-result-is-answered-in-words-from-the-results-fact-sheet-and-the-matching-sections-of-our-own-theory-pages-named-under-the-answer.md)
+- Status: Proposed; a question of why is answered in words, and no longer read into a request for values, by [ADR-0102](ADR-0102-a-question-of-why-about-a-result-is-answered-in-words-from-the-results-fact-sheet-and-the-matching-sections-of-our-own-theory-pages-named-under-the-answer.md); the kind `failure` since amendment 1; its answers are shown short by ADR-0099 amendment 2
 - Date: 2026-11-16
 - Decided by: Founder, 2026-11-16 (on the questions the assistant could not read, "which ply carries the most load?", "where is the shear highest?", "compare the 0° and 90° plies", a question with typos: "you said this is next?") | Drafted by: Claude Code
 - Related: [ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md), whose option 2 this builds over its option 1; [ADR-0001](ADR-0001-deterministic-engine.md); [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md); [ADR-0085](ADR-0085-a-coupons-answer-is-given-per-criterion-in-its-gauge-section-fails-or-holds-the-loading-at-first-ply-failure-and-where-with-the-clamped-edge-reported-apart.md) (the gauge section); [ADR-0088](ADR-0088-the-model-proposes-rows-from-the-engineers-words-a-source-guard-keeps-what-the-message-writes-and-the-engineer-ticks-what-enters.md) (the model answers in a fixed schema, a guard reads it); [ADR-0091](ADR-0091-the-workspace-speaks-to-the-customer-in-the-products-own-words-mapped-in-the-page-and-guarded-by-a-test.md); `api/src/anisotropy_api/result_questions.py`, `lib/result-question.ts`, `components/studio/coupon-chat.tsx`
@@ -58,3 +58,17 @@
 - An answer shows a value that is not a cell of the fields, or the gauge-section extremes differ from the package's card on the same page.
 - With a real model, readings are often wrong (the heading names a quantity or plies the engineer did not mean) or often dropped by the guard: the prompt, the offer or the guard needs changing; to be counted from the run records.
 - Engineers mostly ask "why" questions: option 2 is needed sooner.
+
+## Amendment 1, 2026-11-16 (the model may read a message as a question of failure, a kind that names nothing; not yet confirmed by the founder)
+
+**Context.** The model's kinds were `values`, `extreme` and `none`, and its instructions said a question about plies in general is an `extreme`. So "what is the the ply that fails" came back as the largest of the three ply stresses ([ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) amendment 1).
+
+**Options.**
+1. Keep three kinds and tell the model to answer `none` for a question of failure. Rejected: a loose wording of it ("whats the weakest layer") would then get no answer.
+2. Chosen: a fourth kind, `failure`, that carries nothing.
+3. A kind that also carries a criterion and a ply. Rejected for now: the page reads a criterion's name from the message itself, and the answer has no row for a ply that is not the first to fail.
+
+**Decision.** The schema's kinds are `values`, `extreme`, `failure`, `none`. The instructions say `failure` is for which ply or layer fails, breaks or goes first, whether or when the coupon fails or holds, and the load, factor or strength ratio at first-ply failure, and that such a question is never an `extreme`. The guard keeps a `failure` as the kind alone: quantities, plies, an element, an end or a region the model wrote beside it are dropped, since nothing of them is read. The page answers it as ADR-0099 amendment 1 says. The model is still shown no result and writes no number.
+
+**Evidence.** `cd api && uv run pytest -q tests/test_result_questions.py`: 36 passed, 1 skipped (the guard keeps the kind alone; the endpoint returns it; the schema lists it). The browser scenario above answers a loose wording through a stand-in model with the same sentence the patterns give. No evidence yet from a real model: whether it now reads such questions as `failure` is UNVERIFIED.
+
