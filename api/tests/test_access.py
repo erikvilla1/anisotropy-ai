@@ -162,4 +162,6 @@ def test_the_email_is_on_the_run_record(recording_behind_access):
     listed = client.get("/v1/runs", headers=with_token(token())).json()
     assert listed[0]["run_id"] == record["run_id"] and listed[0]["user_email"] == EMAIL
     machine = client.post("/v1/cases/solve", headers=with_token(service_token()), json={"case": {}})
-    assert client.get(f"/v1/runs/{machine.headers[RUN_ID_HEADER]}", headers=with_token(token())).json()["user_email"] is None
+    mine = f"/v1/runs/{machine.headers[RUN_ID_HEADER]}"
+    assert client.get(mine, headers=with_token(service_token())).json()["user_email"] is None  # a service token's run carries no email
+    assert client.get(mine, headers=with_token(token())).status_code == 404  # and is not a signed-in person's to read (ADR-0104)

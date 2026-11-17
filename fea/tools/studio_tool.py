@@ -7,6 +7,7 @@
     uv run python tools/studio_tool.py serve                                # `live` again and again, one JSON line per request: the API's warm worker
     uv run python tools/studio_tool.py fixtures <values.json> --out <dir>   # live + the mesh study: the files the browser tests read
     uv run python tools/studio_tool.py tow <values.json> --out <dir>        # a fibre tow record (ASTM D4018): tow.json, its checklist and result
+    uv run python tools/studio_tool.py import <model.inp> --units mm-MPa --out <dir>   # a model brought in as an Abaqus deck: read, drawn and solved
 
 `check` judges a values file the way `tools/run_coupon.py` will (`checks.setup_checklist`) and exits 0 whatever it finds: the
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
@@ -16,8 +17,13 @@ no document. `serve` is `live` kept warm (ADR-0086): it imports the package once
 per line on stdin, {"values": <path>, "out": <folder>}, and answers each with one line, {"state": ...} or {"error": ...}; anything else
 it would print goes to stderr. `fixtures` is `live` and the mesh study a run adds (ADR-0068), on the public values given, so the browser
 tests need neither CalculiX nor the API. --root moves the coupons'
-folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
-when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. Nothing here computes a result: the modules named do.
+folder (default .local/fea, or the environment's ANISOTROPY_COUPONS_ROOT): the API names a signed-in person's own folder with it, and
+a request to `serve` may name one too, {"root": <folder>}, since one warm worker answers many people (ADR-0106). `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
+when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. `import` takes an Abaqus input deck the engineer
+brought (ADR-0105) and the unit system it is written in, and writes import.json (the state, `refused`, `read` or `solved`, the reason
+with its line, and what the reader took and skipped) and, for a deck that was taken, preview.json, and for one our kernel solved,
+fields.json, summary.json and explanation.json, as `live` writes them; it exits 0 whatever it finds, and `serve` answers it too, for a
+request {"deck": <path>, "units": <system>, "name": <the file's name>, "out": <folder>}. Nothing here computes a result: the modules named do.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, plate_shape, setu
 from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
+from anisotropy_fea.imported import import_model
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
 from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
@@ -70,7 +77,7 @@ def write_compact(path: Path, data) -> Path:
 def serve(root: Path) -> None:
     """`live` kept warm for the API (ADR-0086): one JSON request per line on stdin, one JSON answer per line on stdout, until stdin closes.
     A request that fails is answered with its error and the worker stays; everything `live` prints goes to stderr, so stdout carries the
-    answers alone."""
+    answers alone. A request's own `root` is the coupons' folder for that request alone (ADR-0106); without one, this worker's."""
     answers = sys.stdout
     sys.stdout = sys.stderr
     print(json.dumps({"ready": True, "imports": IMPORT_SECONDS}), file=answers, flush=True)
@@ -80,11 +87,25 @@ def serve(root: Path) -> None:
         started = time.perf_counter()
         try:
             request = json.loads(line)
+            if "deck" in request:  # a model brought in as a deck (ADR-0105): no rows, no coupon folder
+                answer = {"state": imported(Path(request["deck"]), request["units"], Path(request["out"]), request.get("name"), started=started)}
+                print(json.dumps(answer), file=answers, flush=True)
+                continue
             with enabled.every_test(request.get("every") is True):  # a founder's request (ADR-0089 amendment 5); the next is judged anew
-                answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
+                answer = {"state": live(Path(request["values"]), Path(request["out"]), request_root(request, root), started=started)}
         except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
             answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
         print(json.dumps(answer), file=answers, flush=True)
+
+
+def request_root(request: dict, root: Path) -> Path:
+    """The coupons' folder one request to `serve` names, or the worker's; one that is not an absolute path is refused."""
+    given = request.get("root")
+    if given is None:
+        return root
+    if not isinstance(given, str) or not Path(given).is_absolute():
+        raise ValueError(f"a request's root is an absolute path; got {given!r}")
+    return Path(given)
 
 
 def unreadable(path: Path, message: str) -> Checklist:
@@ -214,6 +235,27 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     return checklist.state
 
 
+def imported(deck_path: Path, units: str, out: Path, name: str | None = None, started: float | None = None) -> str:
+    """A model brought in as an Abaqus deck (ADR-0105): import.json always, with the state and what was read or why not; preview.json for
+    a deck that was taken; fields.json, summary.json and explanation.json for one our kernel solved. Returns the state. No file is kept."""
+    clock = time.perf_counter()
+    answer = import_model(deck_path.read_bytes(), name or deck_path.name, units)
+    seconds = time.perf_counter() - clock
+    head = {key: answer.get(key) for key in ("state", "name", "units", "problem", "reading")}
+    write_json(out / "import.json", head)
+    if answer.get("preview") is not None:
+        write_compact(out / "preview.json", answer["preview"])
+    if answer["state"] == "solved":
+        write_compact(out / "fields.json", answer["fields"])
+        write_json(out / "summary.json", answer["fields"]["summary"])
+        write_json(out / "explanation.json", answer["explanation"])
+    timings = ({"imports": IMPORT_SECONDS} if started is None else {}) | {"model": seconds, "total": time.perf_counter() - (_STARTED if started is None else started)}
+    write_json(out / "timings.json", timings)
+    problem = answer.get("problem")
+    print(f"{answer['state']}: {answer['name']}" + (f": {problem['message']}" if problem else "") + f" ({seconds:.2f} s)")
+    return answer["state"]
+
+
 def fixtures(values_path: Path, out: Path, root: Path) -> None:
     """`live` and the mesh study a run writes into the fields (ADR-0068): the files the browser tests read."""
     live(values_path, out, root)
@@ -232,7 +274,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
+    parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea, or ANISOTROPY_COUPONS_ROOT)")
     parser.add_argument("--every-test", action="store_true", help="offer every test for this call, as ANISOTROPY_ALL_TESTS=on does for the "
                         "machine (ADR-0089 amendment 5: the API passes it for a founder's sign-in)")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -252,6 +294,11 @@ def main() -> None:
     p = commands.add_parser("tow", help="a fibre tow record (ASTM D4018): write tow.json, its checklist and result")
     p.add_argument("values", type=Path)
     p.add_argument("--out", type=Path, required=True)
+    p = commands.add_parser("import", help="a model brought in as an Abaqus deck: what was read, the model to draw and our kernel's answer")
+    p.add_argument("deck", type=Path)
+    p.add_argument("--units", required=True, help="the unit system the deck is written in: mm-MPa, m-Pa, in-psi or in-ksi")
+    p.add_argument("--name", help="the file's name as the engineer sent it (default the path's)")
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     with enabled.every_test(args.every_test):
         answer_command(args)
@@ -269,6 +316,8 @@ def answer_command(args: argparse.Namespace) -> None:
             live(args.values, args.out, args.root)
         elif args.command == "serve":
             serve(args.root)
+        elif args.command == "import":
+            imported(args.deck, args.units, args.out, args.name)
         elif args.command == "tow":
             answer = tow_answer(args.values)
             write_json(args.out / "tow.json", answer)

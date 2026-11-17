@@ -29,7 +29,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /usr/local/bin/
 COPY --from=tectonic /usr/local/bin/tectonic /usr/local/bin/tectonic
 
 # One managed Python 3.12 for the three environments, outside any home folder so the service user can read it. The service
-# user owns /app: a coupon job writes its files under /app/.local/fea/ (fea/src/anisotropy_fea/paths.py), as on a laptop.
+# user owns /app: a coupon job writes its files under /app/.local/fea/ (fea/src/anisotropy_fea/paths.py), as on a laptop, or under
+# /app/.local/fea-owners/<key>/ for a signed-in person (ADR-0106).
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python UV_PYTHON_PREFERENCE=only-managed UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
 RUN uv python install 3.12 && useradd --create-home --uid 1001 app && mkdir /app && chown app:app /app
 WORKDIR /app

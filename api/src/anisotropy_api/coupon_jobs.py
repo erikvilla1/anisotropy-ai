@@ -18,6 +18,11 @@ With the job queue (ADR-0056 stage 3, amendment 3) the work splits over containe
   the store (ADR-0056 amendment 5).
 
 The studio's setup check, the list of coupons and a coupon's values run `fea/tools/studio_tool.py` the same way, and wait for it.
+
+Behind the sign-in each person has a folder of coupons of their own (ADR-0106): on the disk beside the shared one, under a key made
+from their signed-in email (`root_of`), and in the store under a prefix of that key. A job, a check, the list and a coupon's values
+read and write the folder of the person who asked, and the tools are started with it; with no sign-in (the local API) there is one
+folder, .local/fea/, as before.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,13 +45,16 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import (claim_coupon, claim_job, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
+from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
                       sweep_stale, update_job)
-from .storage import ObjectStore, content_type, input_key, store_file, store_folder, store_job, sync
+from .storage import ObjectStore, content_type, input_key, owner_key, store_file, store_folder, store_job, sync
 
 REPO = Path(__file__).resolve().parents[3]
 FEA = REPO / "fea"
 LOCAL_FEA = REPO / ".local" / "fea"  # where the tool keeps the coupons (fea/src/anisotropy_fea/paths.py)
+OWNERS_FEA = REPO / ".local" / "fea-owners"  # one folder of coupons per signed-in person, by their key (ADR-0106)
+COUPONS_ROOT = "ANISOTROPY_COUPONS_ROOT"  # how a tool is told which folder holds the coupons (fea/src/anisotropy_fea/paths.py)
+COUPON_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")  # a coupon's name as a job may give it (schemas.CouponJobRequest)
 RUNNER = FEA / "tools" / "run_coupon.py"
 STUDIO = FEA / "tools" / "studio_tool.py"
 STATES = ("running", "done", "stopped", "refused")  # what the tool and this process know; the jobs table adds `queued` (migration 0008)
@@ -247,14 +256,17 @@ class CouponJobs:
 
     def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
                  store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None,
-                 role: str | None = None):
+                 role: str | None = None, owners_root: Path | None = None):
         """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
         2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
-        the coupons, .local/fea/ by default. `per_day`, with the table, is the hosted tier's per-user limit: one running job per
+        the coupons made with no sign-in, .local/fea/ by default, and `owners_root` where each signed-in person's folder of coupons
+        is (ADR-0106), .local/fea-owners/ by default and beside a `local_root` that is given. `per_day`, with the table, is the hosted
+        tier's per-user limit: one running job per
         person and at most that many a day (ADR-0056); None means no such limit. `role` is the job queue's (ADR-0056 amendment 3):
         "queue" files jobs for the queue, "solver" runs the queued job it is given; None runs every job here."""
         self.command, self.recorder, self.root, self.studio = command, recorder, root, studio
         self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
+        self.owners_root = owners_root or (OWNERS_FEA if local_root is None else local_root.with_name(local_root.name + "-owners"))
         if per_day is not None and table is None:
             raise ValueError("a per-user limit counts jobs in the jobs table, so it needs the table")
         if role not in (None, "queue", "solver"):
@@ -262,7 +274,7 @@ class CouponJobs:
         if role is not None and (store is None or table is None):
             raise ValueError(f"the {role} role passes jobs between containers through the jobs table and the object store, so it needs both")
         self.per_day, self.role = per_day, role
-        self.synced_at: float | None = None
+        self.synced_at: dict[str | None, float] = {}  # by owner's key, None for the shared folder
         self.swept_at: float | None = None
         self.process = str(uuid.uuid4())
         self.jobs: dict[uuid.UUID, Job] = {}
@@ -280,6 +292,15 @@ class CouponJobs:
                 job.snapshot["message"] = f"queued; {ahead} ahead" if ahead else "queued"  # the words a customer reads (ADR-0091)
         return job
 
+    def coupons_of(self, user_email: str | None) -> set[str]:
+        """The names of the coupons that owner's jobs alone have run, here and in the jobs table (ADR-0104)."""
+        with self.lock:
+            here = list(self.jobs.values())
+        owners = {((job.outcome or {}).get("coupon") or (job.progress() or {}).get("coupon"), job.user_email) for job in here}
+        if self.table is not None:
+            owners |= coupon_owners(self.table)
+        return coupons_of({(coupon, email) for coupon, email in owners if coupon}, user_email)
+
     def sweep(self, force: bool = False) -> int:
         """With the job queue, stop the jobs nothing will finish (`records.sweep_stale`), at most every SWEEP_EVERY_S unless `force`;
         0 without the queue."""
@@ -291,24 +312,41 @@ class CouponJobs:
         except SQLAlchemyError:
             return 0  # a sweep is housekeeping; the request it rides on goes on
 
-    def refresh(self) -> None:
-        """The API's container under the job queue: its coupons brought level with the store, at most every SYNC_EVERY_S, since the
-        solvers write them; the list, a coupon's values and the setup check read them from this disk."""
-        if self.role != "queue" or (self.synced_at is not None and time.monotonic() - self.synced_at < SYNC_EVERY_S):
+    def root_of(self, user_email: str | None) -> Path:
+        """Where the coupons of whoever asked are kept (ADR-0106): a signed-in person's own folder, named by their key; with no email
+        (the local API, or a service token) the shared one."""
+        return self.local_root if user_email is None else self.owners_root / owner_key(user_email)
+
+    def _tool_env(self, user_email: str | None) -> dict[str, str]:
+        """The environment a tool is started with: this process's, and the coupons' folder of whoever asked, so the tool and the API
+        always mean the same folder."""
+        return {**os.environ, "PYTHONIOENCODING": "utf-8", COUPONS_ROOT: str(self.root_of(user_email).resolve())}
+
+    def has_coupon(self, name: str, user_email: str | None) -> bool:
+        """Whether the folder of whoever asked holds a coupon of that name: its spec is there."""
+        self.refresh(user_email)
+        return COUPON_NAME.fullmatch(name) is not None and (self.root_of(user_email) / name / "ours" / f"{name}.toml").is_file()
+
+    def refresh(self, user_email: str | None = None) -> None:
+        """The API's container under the job queue: the coupons of whoever asked brought level with the store, at most every
+        SYNC_EVERY_S, since the solvers write them; the list, a coupon's values and the setup check read them from this disk."""
+        owner = None if user_email is None else owner_key(user_email)
+        if self.role != "queue" or (owner in self.synced_at and time.monotonic() - self.synced_at[owner] < SYNC_EVERY_S):
             return
         try:
-            sync(self.store, self.local_root)
+            sync(self.store, self.root_of(user_email), owner=owner)
         except Exception as exc:  # the store's own errors or the disk's: the disk as it is serves, a little behind
             print(f"the coupons could not be brought level with the store: {str(exc).splitlines()[0]}", flush=True)
-        self.synced_at = time.monotonic()
+        self.synced_at[owner] = time.monotonic()
 
-    def listed(self) -> list[Job]:
-        """Every job, newest first: this process's, and from the jobs table those of earlier processes."""
+    def listed(self, user_email: str | None = EVERYONE) -> list[Job]:
+        """The jobs, newest first: this process's, and from the jobs table those of earlier processes; `user_email` keeps one
+        owner's (ADR-0104)."""
         self.sweep()
         with self.lock:
-            jobs = dict(self.jobs)
+            jobs = {key: job for key, job in self.jobs.items() if user_email == EVERYONE or job.user_email == user_email}
         if self.table is not None:
-            for row in list_jobs(self.table):
+            for row in list_jobs(self.table, user_email=user_email):
                 jobs.setdefault(row.id, Job.from_row(row))
         return sorted(jobs.values(), key=lambda job: job.started_at, reverse=True)
 
@@ -415,8 +453,7 @@ class CouponJobs:
         result = job.folder / "outcome.json"
         try:
             with job.log.open("wb") as log:
-                done = subprocess.run(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA,
-                                      env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
+                done = subprocess.run(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email), check=False)
             outcome = json.loads(result.read_text(encoding="utf-8")) if result.is_file() else {
                 "status": "stopped", "message": f"{Path(self.command[-1]).name} exited with code {done.returncode} and wrote no outcome; "
                                                 "the end of its console says why", "coupon": None, "attempt": None, "outputs": {}}
@@ -466,17 +503,19 @@ class CouponJobs:
             job.state = state
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
-        """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder."""
+        """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder,
+        under its owner's prefix when the job has one (ADR-0106)."""
         coupon, attempt = outcome["coupon"], Path(outcome["attempt"]).name
+        owner = None if job.user_email is None else owner_key(job.user_email)
         outputs = {key: repository_path(path) for key, path in (outcome.get("outputs") or {}).items()}
         outputs = {key: path for key, path in outputs.items()  # the same rule as output_file: under the repository or the job's folder
                    if path.resolve().is_relative_to(REPO.resolve()) or path.resolve().is_relative_to(job.folder.resolve())}
         package = outputs.get("package")
         archive = self._archive(job, package) if package is not None and package.is_dir() else None
-        stored = store_job(self.store, coupon, attempt, outputs, archive)
-        folder = self.local_root / coupon
+        stored = store_job(self.store, coupon, attempt, outputs, archive, owner)
+        folder = self.root_of(job.user_email) / coupon
         if folder.is_dir():
-            store_folder(self.store, folder, coupon)
+            store_folder(self.store, folder, coupon, owner)
         return stored
 
     def package_archive(self, job: Job) -> Path:
@@ -611,15 +650,22 @@ class CouponJobs:
             self.store.get(source, Path(argument))
         # This container's coupons are the store's, nothing else: a warm solver fetches only what changed since its last job and deletes
         # what the store no longer holds, where wiping the disk first fetched every coupon on every job (ADR-0056 amendment 9). The bulk
-        # of it outside the lock; only what changes meanwhile is fetched under it.
-        sync(self.store, self.local_root, prune=True)
+        # of it outside the lock; only what changes meanwhile is fetched under it. The coupons are the job's owner's (ADR-0106): the
+        # tool is started with their folder, nothing of anyone else's is fetched, and what an earlier job of another person left on
+        # this disk is removed first.
+        owner = None if job.user_email is None else owner_key(job.user_email)
+        coupons = self.root_of(job.user_email)
+        for left in (sorted(self.owners_root.iterdir()) if self.owners_root.is_dir() else []):
+            if left != coupons:
+                shutil.rmtree(left, ignore_errors=True)
+        sync(self.store, coupons, prune=True, owner=owner)
         job.timings["restore_s"] = round(time.monotonic() - started, 1)
         result, gate = job.folder / "outcome.json", job.folder / GATE
         args = [*self.command, argument, *options, "--result", str(result), "--progress", str(job.folder / PROGRESS), "--gate", str(gate)]
         with job.log.open("wb") as log:
             # The tool starts outside the naming lock: its Python start-up and the setup check owe nothing to other solvers. It holds
             # before it names the coupon; the lock then covers one sync and the naming, up to the second hold (ADR-0056 amendment 6).
-            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email))
             with self.lock:
                 job.process = process
             first = self._first_hold(job, process)
@@ -629,7 +675,7 @@ class CouponJobs:
                 with naming_lock(self.table):
                     job.timings["lock_wait_s"] = round(time.monotonic() - started, 1)
                     started = time.monotonic()
-                    sync(self.store, self.local_root)
+                    sync(self.store, coupons, owner=owner)
                     if first == "unnamed":
                         open_gate(gate, GATE_GO)
                     waiting = self._at_gate(job, process)
@@ -670,9 +716,9 @@ class CouponJobs:
                               "number the same attempt")
                     open_gate(job.folder / GATE, reason)
                     return reason
-                folder = self.local_root / coupon
+                folder = self.root_of(job.user_email) / coupon
                 if folder.is_dir():
-                    store_folder(self.store, folder, coupon)
+                    store_folder(self.store, folder, coupon, None if job.user_email is None else owner_key(job.user_email))
                 open_gate(job.folder / GATE, GATE_GO)
                 return None
             time.sleep(TICK_S)
@@ -725,7 +771,8 @@ class CouponJobs:
                 for key in LIVE_KEYS:
                     reported = (progress.get("outputs") or {}).get(key)
                     if reported and key not in job.stored and self._servable(job, repository_path(reported)):
-                        object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported))
+                        object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported),
+                                                None if job.user_email is None else owner_key(job.user_email))
                         with self.lock:
                             job.stored[key] = object_key
             except Exception as exc:  # the store for a moment: the next look tries again
@@ -733,27 +780,29 @@ class CouponJobs:
 
     # --- the studio tool -------------------------------------------------------------------------------------------------
 
-    def _studio(self, args: list[str], timeout_s: float, every: bool = False) -> subprocess.CompletedProcess:
+    def _studio(self, args: list[str], timeout_s: float, every: bool = False, user_email: str | None = None) -> subprocess.CompletedProcess:
         """The studio tool, asked once. `every` offers every test for this call (`--every-test`, ADR-0089 amendment 5): the caller says
-        so for a founder's sign-in, and for nobody else."""
+        so for a founder's sign-in, and for nobody else. `user_email` is whoever asked: the tool is started with their folder of
+        coupons (ADR-0106), the shared one for None."""
         if self.studio is None:
             raise JobRefused("uv is not on PATH; the studio's questions run fea/tools/studio_tool.py through `uv run --project fea`")
         try:
             return subprocess.run([*self.studio, *EVERY_TEST[every], *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA,
-                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=timeout_s, check=False)
+                                  env=self._tool_env(user_email), timeout=timeout_s, check=False)
         except subprocess.TimeoutExpired:
             raise CheckTimedOut(f"the studio tool did not answer in {timeout_s:g} s") from None
         except OSError as exc:
             raise JobRefused(f"the studio tool could not run: {exc}") from exc
 
-    def check(self, values: bytes, timeout_s: float | None = None, every: bool = False) -> dict:
-        """The setup check of a values file (ADR-0051): the checklist, and the preview when the inputs build a model."""
-        self.refresh()
+    def check(self, values: bytes, timeout_s: float | None = None, every: bool = False, user_email: str | None = None) -> dict:
+        """The setup check of a values file (ADR-0051): the checklist, and the preview when the inputs build a model. The coupon is
+        named among the coupons of whoever asked (`user_email`, ADR-0106)."""
+        self.refresh(user_email)
         folder = Path(tempfile.mkdtemp(prefix="check-", dir=self._folder()))
         try:
             source = folder / "values.json"
             source.write_bytes(values)
-            done = self._studio(["check", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S, every)
+            done = self._studio(["check", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S, every, user_email)
             checklist_path = folder / "out" / "checklist.json"
             if done.returncode != 0 or not checklist_path.is_file():
                 tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
@@ -781,18 +830,18 @@ class CouponJobs:
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
-    def list_coupons(self, timeout_s: float | None = None) -> list[dict]:
-        """Every coupon on this machine, as the studio tool lists them."""
-        self.refresh()
-        done = self._studio(["coupons"], timeout_s or CHECK_TIMEOUT_S)
+    def list_coupons(self, timeout_s: float | None = None, user_email: str | None = None) -> list[dict]:
+        """Every coupon in the folder of whoever asked (ADR-0106; the shared one for None), as the studio tool lists them."""
+        self.refresh(user_email)
+        done = self._studio(["coupons"], timeout_s or CHECK_TIMEOUT_S, user_email=user_email)
         if done.returncode != 0:
             raise JobRefused("the studio tool failed: " + (done.stderr.strip().splitlines() or ["no message"])[-1])
         return json.loads(done.stdout)
 
-    def coupon_values(self, name: str, timeout_s: float | None = None, every: bool = False) -> dict:
-        """A coupon's rows as the values object; UnknownCoupon when there is no coupon of that name."""
-        self.refresh()
-        done = self._studio(["values", name], timeout_s or CHECK_TIMEOUT_S, every)
+    def coupon_values(self, name: str, timeout_s: float | None = None, every: bool = False, user_email: str | None = None) -> dict:
+        """A coupon's rows as the values object; UnknownCoupon when the folder of whoever asked has no coupon of that name."""
+        self.refresh(user_email)
+        done = self._studio(["values", name], timeout_s or CHECK_TIMEOUT_S, every, user_email)
         if done.returncode != 0:
             message = (done.stderr.strip().splitlines() or ["no message"])[-1]
             if "no coupon of that name" in message:

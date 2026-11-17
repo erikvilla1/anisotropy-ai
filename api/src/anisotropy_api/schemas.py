@@ -604,6 +604,40 @@ class LiveSolveResponse(Contract):
     explanation: dict[str, Any] | None
 
 
+ModelUnits = Literal["mm-MPa", "m-Pa", "in-psi", "in-ksi"]  # the systems a model may be stated in (fea/src/anisotropy_fea/units.py)
+
+
+class ImportedModelReceipt(Contract):
+    """What the run record keeps of a model brought in as a deck (ADR-0105): its name, its size and digest and the units stated,
+    never the deck."""
+
+    name: str
+    units: ModelUnits
+    bytes: int
+    sha256: str
+
+
+class ImportedModelResponse(Contract):
+    """A model brought in as an Abaqus deck (ADR-0105), as the fea package answered it. `state` is `refused` (outside what the reader
+    takes, or the units; `problem` says why and on which line), `read` (taken, but our kernel could not solve it as it stands;
+    `problem` says why) or `solved`. `reading` is what the reader took and skipped; `preview` the model to draw; `fields` and
+    `explanation` the kernel's answer (ADR-0085), a preview with no mesh study and no CalculiX. Nothing of the deck is kept."""
+
+    run_id: str | None
+    state: Literal["refused", "read", "solved"]
+    name: str
+    units: str
+    solver: str
+    warm: bool
+    seconds: float
+    timings: dict[str, float]
+    problem: dict[str, Any] | None
+    reading: dict[str, Any] | None
+    preview: dict[str, Any] | None
+    fields: dict[str, Any] | None
+    explanation: dict[str, Any] | None
+
+
 class TowTestRequest(CouponCheckRequest):
     """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
     them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""
@@ -1046,6 +1080,29 @@ class ResultAnswerResponse(Contract):
     covered: bool
     withheld: bool
     reason: str | None
+
+
+class TheorySectionsRequest(Contract):
+    """A question whose words find sections of our theory pages (ADR-0107): the question alone, no result with it."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    limit: Annotated[int, Field(ge=1, le=5)] = 3
+
+
+class TheorySection(Contract):
+    """A section of our theory pages with its own text, as a reader is handed it: without the lines that pair equations with functions."""
+
+    id: str
+    document: str
+    title: str
+    text: str
+
+
+class TheorySectionsResponse(Contract):
+    """The sections a question's words find, best first (ADR-0107); none when no word of the question is in any section."""
+
+    run_id: str | None
+    sections: list[TheorySection]
 
 
 class CouponTests(Contract):

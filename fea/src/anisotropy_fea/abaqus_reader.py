@@ -59,6 +59,7 @@ NAMED_BOUNDARIES = {
     "XSYMM": (1, 5, 6), "YSYMM": (2, 4, 6), "ZSYMM": (3, 4, 5),
 }
 REFUSED_NAMED_BOUNDARIES = ("XASYMM", "YASYMM", "ZASYMM")
+MAX_GENERATED = 5_000_000  # labels all the `generate` lines of one deck may name: far above any mesh the kernel solves, far below memory
 AXES_TOLERANCE = 1e-9
 
 
@@ -181,6 +182,7 @@ class _Parser:
     def __init__(self, blocks: list[KeywordBlock], source_sha256: str, source_path: str | None) -> None:
         self.blocks = blocks
         self.source_sha256 = source_sha256
+        self.generated = 0  # labels named by `generate` lines so far
         self.source_path = source_path
         self.heading = ""
         self.parts: dict[str, Part] = {}
@@ -292,6 +294,9 @@ class _Parser:
                 step = self._int(tokens[2], line, "step") if len(tokens) == 3 else 1
                 if step <= 0:
                     raise DeckError(f"line {line}: generate step must be positive")
+                self.generated += max(0, (last - first) // step + 1)
+                if self.generated > MAX_GENERATED:  # a deck from outside (ADR-0105): a range is counted before it is built
+                    raise DeckError(f"line {line}: the generate lines of this deck name more than {MAX_GENERATED} labels; no mesh read here is that large")
                 labels.extend(range(first, last + 1, step))
             return labels
         for tokens, line in zip(block.data, block.data_lines):

@@ -316,6 +316,23 @@ def test_only_the_three_files_of_ours_leave_a_packages_zip(tmp_path):
 
 # ------------------------------------------------------------------------------------------------------- behind Access
 
+def test_behind_access_an_upload_stands_beside_its_owners_runs_alone(hosted, made):
+    """ADR-0104: a run named by its id is put beside an upload only when it is the uploader's own; another person's is answered as
+    one there is none of, at the upload and when the comparison is asked for later."""
+    client, registry, _store, engine = hosted
+    theirs = run_in_the_bucket(registry, engine, made)  # EMAIL's run
+    sent = client.post(ROUTE, content=bundle(made, "unnamed"), params={"job_id": str(theirs)}, headers=signed(OTHER))
+    assert sent.status_code == 201, sent.text
+    upload = sent.json()
+    assert upload["verdict"] is None and upload["job_id"] is None and upload["not_compared"] == f"there is no coupon job {theirs}"
+    asked = client.post(f"{ROUTE}/{upload['id']}/compare", params={"job_id": str(theirs)}, headers=signed(OTHER))
+    assert asked.status_code == 409 and asked.json()["detail"] == f"Not compared: there is no coupon job {theirs}"
+    never = client.post(f"{ROUTE}/{upload['id']}/compare", params={"job_id": str(uuid.uuid4())}, headers=signed(OTHER))
+    assert never.status_code == 409 and "there is no coupon job" in never.json()["detail"]  # the same words for a run there is none of
+    own = client.post(ROUTE, content=bundle(made, "unnamed"), params={"job_id": str(theirs)}, headers=signed()).json()
+    assert own["verdict"] == "agrees" and own["job_id"] == str(theirs)  # and its owner's upload stands beside it
+
+
 def test_behind_access_an_upload_is_its_owners_a_second_user_gets_not_found_and_a_founder_sees_it(hosted, made):
     client, registry, store, engine = hosted
     job_id = run_in_the_bucket(registry, engine, made)

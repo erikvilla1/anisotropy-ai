@@ -301,15 +301,26 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
         return run.id
 
 
+EVERYONE = "*"  # in place of an owner's email: no narrowing by owner (the local API, which has no sign-in; ADR-0104)
+
+
+def _owned(statement, column, user_email: str | None):
+    """The statement narrowed to the rows of one owner (ADR-0104): the signed-in email that made them, None for the rows made with no
+    one signed in, EVERYONE for no narrowing."""
+    if user_email == EVERYONE:
+        return statement
+    return statement.where(column.is_(None) if user_email is None else column == user_email)
+
+
 def fetch_run(engine: Engine, run_id: uuid.UUID) -> Run | None:
     with Session(engine) as session:
         return session.get(Run, run_id)
 
 
 def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None = None, status: str | None = None,
-              since: dt.datetime | None = None, until: dt.datetime | None = None, limit: int = 50) -> list[Run]:
-    """The newest runs first, narrowed by the given filters; `since` is inclusive, `until` exclusive."""
-    statement = select(Run).order_by(Run.created_at.desc(), Run.id).limit(limit)
+              since: dt.datetime | None = None, until: dt.datetime | None = None, limit: int = 50, user_email: str | None = EVERYONE) -> list[Run]:
+    """The newest runs first, narrowed by the given filters; `since` is inclusive, `until` exclusive; `user_email` keeps one owner's."""
+    statement = _owned(select(Run).order_by(Run.created_at.desc(), Run.id).limit(limit), Run.user_email, user_email)
     if actor is not None:
         statement = statement.where(Run.actor == actor)
     if endpoint is not None:
@@ -352,10 +363,26 @@ def fetch_job(engine: Engine, job_id: uuid.UUID) -> JobRow | None:
         return session.get(JobRow, job_id)
 
 
-def list_jobs(engine: Engine, limit: int = 50) -> list[JobRow]:
-    """The newest jobs first."""
+def list_jobs(engine: Engine, limit: int = 50, user_email: str | None = EVERYONE) -> list[JobRow]:
+    """The newest jobs first; `user_email` keeps one owner's (ADR-0104)."""
     with Session(engine) as session:
-        return list(session.scalars(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+        return list(session.scalars(_owned(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit), JobRow.user_email, user_email)))
+
+
+def coupon_owners(engine: Engine) -> set[tuple[str, str | None]]:
+    """Each coupon a job has named, with each owner whose job named it (the signed-in email, None for none)."""
+    with Session(engine) as session:
+        return {(coupon, email) for coupon, email in session.execute(select(JobRow.coupon, JobRow.user_email).where(JobRow.coupon.is_not(None)).distinct())}
+
+
+def coupons_of(owners: set[tuple[str, str | None]], user_email: str | None) -> set[str]:
+    """The names of the coupons that owner's jobs have run and no one else's have (ADR-0104): what the list of coupons shows them
+    and what they may reopen. A coupon's folder holds the rows of whoever ran it last, so a name two people have run is offered to
+    neither."""
+    by_coupon: dict[str, set[str | None]] = {}
+    for coupon, email in owners:
+        by_coupon.setdefault(coupon, set()).add(email)
+    return {coupon for coupon, emails in by_coupon.items() if emails == {user_email}}
 
 
 # ------------------------------------------------------------------------------------------- the projects table (ADR-0062 part 6)

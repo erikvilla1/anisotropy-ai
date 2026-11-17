@@ -36,7 +36,8 @@ export type Preview = {
   /** On a plate that does not state its supports or its loads yet: the lists still missing. The mesh and regions are shown to be clicked,
    * nothing is drawn for a missing list, and the setup stays blocked (ADR-0101 amendment 1). Absent on a model the setup built. */
   shape?: ("supports" | "loads")[];
-  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number }[];
+  /** `range` on an imported model's pressure stated element by element (ADR-0105): its least and its greatest; `value` is then the largest in magnitude. */
+  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number; range?: [number, number] }[];
   regions?: { edges: string[]; areas: string[] } | null;
   plies: { index: number; angle: number; thickness: number; z_bottom: number; z_top: number; material: string }[];
   material: { name: string; source: string; rights: string; E1: number; E2: number; G12: number; nu12: number; G13: number; G23: number;
@@ -237,12 +238,15 @@ export function readChecklist(payload: unknown): Checklist {
   return payload as unknown as Checklist;
 }
 
+/** The `coupon.kind` of a model brought in as a file (ADR-0105): it is drawn as it stands, with or without a load. */
+export const IMPORTED_KIND = "imported";
+
 /** A shape's `shape`: the missing lists by name, at least one. Only a shape may come with no load. */
 const isShape = (value: unknown): boolean => Array.isArray(value) && value.length > 0 && value.every((name) => name === "supports" || name === "loads");
 
 export function readPreview(payload: unknown): Preview {
   if (!isObject(payload) || !isObject(payload.mesh) || !Array.isArray(payload.mesh.nodes) || !Array.isArray(payload.mesh.quads)
-    || !Array.isArray(payload.held) || !(isObject(payload.loaded) || (payload.loaded === null && isShape(payload.shape))) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
+    || !Array.isArray(payload.held) || !(isObject(payload.loaded) || (payload.loaded === null && (isShape(payload.shape) || (isObject(payload.coupon) && payload.coupon.kind === IMPORTED_KIND)))) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
     || typeof payload.units !== "string") {
     throw unreadable("the preview");
   }
@@ -301,6 +305,57 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
   const timings = isObject(payload.timings) ? Object.fromEntries(Object.entries(payload.timings).filter(([, v]) => typeof v === "number")) as Record<string, number> : {};
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview,
     fields, explanation, seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true, timings };
+}
+
+/** A model brought in as an Abaqus input file (ADR-0105). `reading` is what the reader took from the file and what it skipped, in counts
+ * and names; lengths in the units stated. Every value is the fea package's. */
+export type ImportReading = {
+  heading: string; units: string; unit_labels: Record<string, string>;
+  parts: number; instances: number; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
+  node_sets: number; element_sets: number; couplings: number;
+  sections: { element_set: string; plies: number; symmetric: boolean; thickness: number; materials: string[]; rotation_deg: number }[];
+  layup: string; materials: { name: string; kind: string | null; strengths: boolean }[]; step: string | null;
+  boundaries: number; concentrated_loads: number; pressures: number; skipped: string[]; notes: string[]; warnings: string[];
+};
+/** The import's answer: `refused` (the file is outside what is read, or the units; `problem` says why and on which line), `read` (taken,
+ * but not solved as it stands; `problem` says why) or `solved`, with the fields, the answer and its explanation as a live solve has them. */
+export type ImportedModel = {
+  run_id: string | null; state: "refused" | "read" | "solved"; name: string; units: string;
+  problem: { message: string; line: number | null } | null; reading: ImportReading | null;
+  preview: Preview | null; fields: Fields | null; explanation: Explanation | null; seconds: number; warm: boolean;
+};
+/** The unit systems a model may be stated in; a file carries none, so the engineer says. */
+export const MODEL_UNITS = ["mm-MPa", "m-Pa", "in-psi", "in-ksi"] as const;
+export type ModelUnits = (typeof MODEL_UNITS)[number];
+/** The largest file sent, the API's own limit: a larger one is refused here, before it is read into memory. */
+export const MAX_MODEL_BYTES = 20_000_000;
+/** The request header that carries the file's name, percent-encoded. */
+export const MODEL_NAME_HEADER = "X-Anisotropy-Model-Name";
+
+export function readImportedModel(payload: unknown): ImportedModel {
+  if (!isObject(payload) || (payload.state !== "refused" && payload.state !== "read" && payload.state !== "solved") || typeof payload.name !== "string"
+    || typeof payload.units !== "string") throw unreadable("the import");
+  const problem = isObject(payload.problem) && typeof payload.problem.message === "string"
+    ? { message: payload.problem.message, line: typeof payload.problem.line === "number" ? payload.problem.line : null } : null;
+  const reading = isObject(payload.reading) && typeof payload.reading.elements === "number" && Array.isArray(payload.reading.skipped)
+    && Array.isArray(payload.reading.warnings) && Array.isArray(payload.reading.notes) && Array.isArray(payload.reading.sections)
+    && Array.isArray(payload.reading.materials) && isObject(payload.reading.element_types) ? (payload.reading as unknown as ImportReading) : null;
+  if (payload.state === "refused" ? problem === null : reading === null) throw unreadable("the import: no reading");
+  const fields = payload.fields === null || payload.fields === undefined ? null : readFields(payload.fields);
+  if (payload.state === "solved" && fields === null) throw unreadable("the import: solved with no fields");
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: payload.state, name: payload.name, units: payload.units, problem, reading,
+    preview: payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview), fields,
+    explanation: payload.explanation === null || payload.explanation === undefined ? null : readExplanation(payload.explanation),
+    seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true };
+}
+
+/** Send a model's file to be read and solved as it stands (ADR-0105): the body is the file, the address carries the units stated and a
+ * header the file's name, which stays out of the address. Nothing of the file is kept by the service. */
+export async function importModel(apiBase: string, file: Blob, name: string, units: ModelUnits, signal?: AbortSignal): Promise<ImportedModel> {
+  if (file.size > MAX_MODEL_BYTES) throw new StudioError(`This file is larger than ${MAX_MODEL_BYTES / 1e6} MB, the largest model read.`);
+  const sent = { "Content-Type": "application/octet-stream", "X-Anisotropy-Actor": ACTOR, [MODEL_NAME_HEADER]: encodeURIComponent(name.slice(0, 200) || "model.inp") };
+  const payload = await call(`${base(apiBase)}/v1/imported-models?units=${encodeURIComponent(units)}`, { method: "POST", headers: sent, body: file, signal }, "the import");
+  return readImportedModel(payload);
 }
 
 /** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
