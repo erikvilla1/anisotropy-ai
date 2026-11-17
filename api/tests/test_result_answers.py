@@ -206,3 +206,34 @@ def test_an_answer_is_recorded_with_the_question_the_facts_digest_the_sections_a
     assert run["endpoint"] == "/v1/workspace/result-answers"
     assert run["inputs"] == {"question": ASKED["question"], "facts_sha256": digest, "sections": [s.id for s in PAGES]}
     assert run["llm_provider"] == "anthropic" and run["llm_model_version"] == "claude-opus-5-5" and run["response"]["prose"] == [GOOD]
+
+
+# --------------------------------------------------------------------------- the sections themselves, for a reader whose own model writes
+
+def test_a_question_is_handed_the_sections_it_finds_with_their_text_and_no_code_marker():
+    body = client.post("/v1/workspace/theory-sections", json={"question": ASKED["question"]}).json()
+    assert [s["id"] for s in body["sections"]] == [s.id for s in PAGES] and body["run_id"] is None
+    failure = next(s for s in body["sections"] if s["id"] == "engine:5-failure")
+    assert failure["document"] == "Laminate theory" and failure["title"] == "5. Failure"
+    assert failure["text"] == next(s for s in PAGES if s.id == "engine:5-failure").shown and "Tsai-Hill" in failure["text"]
+    assert all("<!-- code:" not in s["text"] for s in body["sections"])
+    one = client.post("/v1/workspace/theory-sections", json={"question": ASKED["question"], "limit": 1}).json()
+    assert [s["id"] for s in one["sections"]] == [PAGES[0].id]
+    assert client.post("/v1/workspace/theory-sections", json={"question": "zzz qqq?"}).json()["sections"] == []
+
+
+@pytest.mark.parametrize("change, where", [({"question": ""}, "question"), ({"question": "x" * 2001}, "question"), ({"limit": 0}, "limit"),
+                                           ({"limit": 6}, "limit"), ({"facts": {"a": 1}}, "facts")])
+def test_a_malformed_request_for_sections_is_refused(change, where):
+    refused = client.post("/v1/workspace/theory-sections", json={"question": ASKED["question"], **change})
+    assert refused.status_code == 422 and where in json.dumps(refused.json())
+    assert TestClient(app).post("/v1/workspace/theory-sections", json={"question": ASKED["question"]}).status_code == 422  # the actor is required
+
+
+@needs_test_database
+def test_the_sections_found_are_recorded_by_their_ids_and_never_their_text(recording):
+    body = recording.post("/v1/workspace/theory-sections", json={"question": ASKED["question"]}, headers={"X-Anisotropy-Actor": "assistant"})
+    run = recording.get(f"/v1/runs/{body.json()['run_id']}").json()
+    assert body.headers["X-Anisotropy-Run-Id"] == body.json()["run_id"] and run["actor"] == "assistant"
+    assert run["endpoint"] == "/v1/workspace/theory-sections" and run["inputs"] == {"question": ASKED["question"]}
+    assert run["response"] == {"sections": [s.id for s in PAGES]}

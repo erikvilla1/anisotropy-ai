@@ -53,6 +53,17 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest tests ../engine/tests
 
+  mcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: uv run pytest
+
   website:
     runs-on: ubuntu-latest
     steps:

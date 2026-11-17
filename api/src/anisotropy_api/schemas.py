@@ -1082,6 +1082,29 @@ class ResultAnswerResponse(Contract):
     reason: str | None
 
 
+class TheorySectionsRequest(Contract):
+    """A question whose words find sections of our theory pages (ADR-0107): the question alone, no result with it."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    limit: Annotated[int, Field(ge=1, le=5)] = 3
+
+
+class TheorySection(Contract):
+    """A section of our theory pages with its own text, as a reader is handed it: without the lines that pair equations with functions."""
+
+    id: str
+    document: str
+    title: str
+    text: str
+
+
+class TheorySectionsResponse(Contract):
+    """The sections a question's words find, best first (ADR-0107); none when no word of the question is in any section."""
+
+    run_id: str | None
+    sections: list[TheorySection]
+
+
 class CouponTests(Contract):
     """Whether every coupon test is offered here (ADR-0089): the page asks once, and with no answer offers the unnotched tension
     coupon only, the list its form definition carries."""

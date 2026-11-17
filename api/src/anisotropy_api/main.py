@@ -57,7 +57,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -1560,6 +1560,20 @@ def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Re
                                     covered=kept.covered, withheld=False, reason=None)
 
     return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/theory-sections", response_model=TheorySectionsResponse)
+def find_theory_sections(asked: TheorySectionsRequest, actor: Actor, request: Request, response: Response) -> TheorySectionsResponse:
+    """The sections of our theory pages a question's words find, with their text (ADR-0107): what `result-answers` hands the API's own
+    model, handed to a reader whose own model writes, such as an MCP client. No result is sent here, no model is called and nothing is
+    computed: the sections are the documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
+    the ids of the sections found, never their text, so the questions that find nothing can be read back."""
+    found = [section for section, _ in find_theory(asked.question, limit=asked.limit)]
+    run_id = _record(request, actor, asked, response={"sections": [section.id for section in found]})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return TheorySectionsResponse(run_id=None if run_id is None else str(run_id),
+                                  sections=[TheorySection(id=s.id, document=s.document, title=s.title, text=s.shown) for s in found])
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)
