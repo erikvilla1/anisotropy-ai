@@ -528,6 +528,37 @@ export async function proposeRows(apiBase: string, request: ProposalRequest, sig
   return readProposalAnswer(payload);
 }
 
+/** What a message may name of the results (ADR-0100): the probe table's quantities, the plies with their angles, whether the model has a
+ * gauge section, and whether an element is clicked. No value of a result goes with it. */
+export type ResultOffer = { message: string; quantities: string[]; plies: { ply: number; angle: number }[]; gauge: boolean; picked: boolean };
+/** What a message asks of the results, as the API's guard kept it: names from the offer and whole numbers, never a value. */
+export type ResultRequest = {
+  kind: "values" | "extreme"; quantities: string[]; plies: number[]; element: number | null; here: boolean;
+  sense: "largest" | "smallest" | "magnitude" | null; region: "default" | "gauge" | "whole";
+};
+export type ResultReading = { run_id: string | null; writer: string; model: string | null; request: ResultRequest | null; question: string | null; dropped: string[]; reason: string | null };
+
+export function readResultReading(payload: unknown): ResultReading {
+  const bad = () => unreadable("the reading of the question");
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.question) || !isTextOrNull(payload.reason)
+    || !Array.isArray(payload.dropped) || !payload.dropped.every(isText)) throw bad();
+  const r = payload.request;
+  if (r !== null) {
+    const whole = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+    if (!isObject(r) || (r.kind !== "values" && r.kind !== "extreme") || !Array.isArray(r.quantities) || !r.quantities.every(isText) || !Array.isArray(r.plies) || !r.plies.every(whole)
+      || !(r.element === null || whole(r.element)) || typeof r.here !== "boolean" || !(r.sense === null || ["largest", "smallest", "magnitude"].includes(r.sense as string))
+      || !["default", "gauge", "whole"].includes(r.region as string)) throw bad();
+  }
+  return payload as unknown as ResultReading;
+}
+
+/** The model's reading of a loose question about a result (ADR-0100), kept by the API's guard: a request the page runs on the results it
+ * shows, or none. */
+export async function readResultRequest(apiBase: string, offer: ResultOffer, signal?: AbortSignal): Promise<ResultReading> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/result-questions`, { method: "POST", headers, body: JSON.stringify(offer), signal }, "the reading of the question");
+  return readResultReading(payload);
+}
+
 const couponTestAnswers = new Map<string, Promise<boolean>>();
 /** Whether every coupon test is offered here (ADR-0089), asked once per API address. False, the unnotched tension coupon only, unless the
  * API says all: before it answers, when it does not (an older API) and with no API at all. */

@@ -46,6 +46,13 @@ export type CouponRun = {
   setProblem(text: string): void;
 };
 
+/** What the stage shows, and the assistant answers from (ADR-0099): the newer of our live answer and the full run's fields (ADR-0086),
+ * an edit after a run being answered live and a run after it replacing that. */
+export function shownResults(run: Pick<CouponRun, "fields" | "live" | "liveAt" | "fieldsAt">): { fields: Fields | null; live: boolean } {
+  const live = Boolean(run.live?.fields) && (!run.fields || run.liveAt > run.fieldsAt);
+  return { fields: live ? run.live?.fields ?? null : run.fields, live };
+}
+
 export function useCouponRun(apiBaseUrl: string, projectId: string | null = null): CouponRun {
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState<CheckAnswer | null>(null);

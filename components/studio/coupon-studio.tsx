@@ -12,6 +12,7 @@ import { ResultsView } from "./results-view";
 import { Scene } from "./scene";
 import type { SceneMarker } from "./scene-canvas";
 import { SketchScene } from "./sketch";
+import { shownResults } from "./use-coupon-run";
 
 /** The nodes a load acts on: a node set, or the corner nodes of an element set (a pressure on an area region). */
 function nodesOf(preview: Preview, set: string): number[] {
@@ -47,11 +48,10 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
  * it, the fields after a run; a plate's regions are picked here by clicking an element (ADR-0054). Every number comes from the fea package
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setPlate, run: runner } = useProject();
-  const { checked, job, fields, explanation, live, living, liveAt, fieldsAt, problem } = runner;
+  const { form, plate, setPlate, run: runner, setPicked, place } = useProject();
+  const { checked, job, explanation, live, living, problem } = runner;
   // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
-  const showLive = Boolean(live?.fields) && (!fields || liveAt > fieldsAt);
-  const shown = showLive ? live?.fields ?? null : fields;
+  const { fields: shown, live: showLive } = shownResults(runner);
   const shownExplanation = showLive ? live?.explanation ?? null : explanation;
   const [pickedElement, setPickedElement] = useState<number | null>(null);
   const { clearChecked } = runner;
@@ -66,7 +66,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         <>
           {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
-            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false} />
+            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
+            onPicked={setPicked} place={place} />
         </>
       ) : (
         <>

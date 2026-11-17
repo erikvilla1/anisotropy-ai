@@ -601,6 +601,157 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect(browserErrors).toEqual([]);
 });
 
+test("the assistant answers a question about a ply's stress from the results on the page, reads “here” as the clicked element and frames the place (ADR-0099)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await say("what is the stress on ply 5 at element 125?"); // asked before anything is solved: no number, and the setup is not touched
+  await expect(page.getByTestId("chat-value-none")).toContainText("then ask again");
+  expect(calls.checks).toHaveLength(1);
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("chat-ask-hint")).toContainText("at element");
+
+  const fields = fixture("fields");
+  const element = fields.mesh.element_labels.indexOf("Strip-1.125");
+  await say("what is the stress on ply 5 at element 125?");
+  const card = page.getByTestId("chat-values").last();
+  await expect(card).toHaveAttribute("data-element", "125");
+  await expect(card).toHaveAttribute("data-source", "run");
+  const cells = card.getByTestId("chat-values-table").locator("tr[data-ply='5'] td");
+  await expect(cells).toHaveText((fields.element.ply.stress_12[element][4] as number[]).map((v) => printed(v))); // the fields' own numbers, printed as the probe table prints them
+  await expect(card.getByTestId("chat-values-note")).toContainText("Element centroid, no averaging, fibre axes");
+  // the viewer frames the place: the element is read out with every ply, and the model shows σ₁ of ply 5
+  await expect(page.getByTestId("probe")).toContainText("Ply results at element 125");
+  await expect(page.getByLabel("Field", { exact: true })).toHaveValue("S11");
+  await expect(page.getByLabel("Ply", { exact: true })).toHaveValue("5");
+  expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
+
+  await say("s11 in ply 2 at element 125");
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`σ₁ in ply 2 (0°) at element 125 is ${printed(fields.element.ply.stress_12[element][1][0])} MPa.`);
+
+  // “here” is the element picked on the model: the answer card's Show picks the governing element
+  await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click();
+  const title = await page.getByTestId("probe").locator("summary").innerText();
+  const here = title.replace("Ply results at element ", "").trim();
+  await say("shear strain here, ply 3");
+  const picked = fields.mesh.element_labels.indexOf(`Strip-1.${here}`);
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`γ₁₂ in ply 3 (-45°) at element ${here} is ${printed(fields.element.ply.strain_12[picked][2][2])}.`);
+
+  await say("stress on ply 5 at element 1212");
+  await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
+  await say("stress on ply 9 at element 12");
+  await expect(page.getByTestId("chat-value-refused").last()).toContainText("there is no ply 9");
+  // a question the patterns do not read is told so; it is never read as a row of the setup ("compression" is a test's name)
+  await say("why is ply 4 in compression?");
+  await expect(page.getByTestId("chat-value-unread")).toContainText("where is the shear stress highest?");
+  expect(calls.checks).toHaveLength(1);
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+  // an earlier answer shows its place again
+  await page.getByTestId("chat-values").first().getByTestId("chat-values-show").click();
+  await expect(page.getByTestId("probe")).toContainText("Ply results at element 125");
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]); // the product's own words (ADR-0091)
+  expect(browserErrors).toEqual([]);
+});
+
+test("with a model on, a loose question about the results is read into a fixed request and answered with the solver's values; the model is sent no result (ADR-0100)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const offers: Record<string, unknown>[] = [];
+  let proposalsAsked = 0;
+  // a model behind the API: its readings, as the guard would keep them
+  const readings: Record<string, unknown> = {
+    "wher is teh shear highest?": { kind: "extreme", quantities: ["S12"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
+    "which ply carries the most load?": { kind: "extreme", quantities: ["S11"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
+    "compare the 0° and 90° plies here": { kind: "values", quantities: ["S11", "S22", "S12"], plies: [2, 4, 5, 7], element: null, here: true, sense: null, region: "default" },
+    "worst transverse loading anywhere, grips included?": { kind: "extreme", quantities: ["S22"], plies: [], element: null, here: false, sense: "magnitude", region: "whole" },
+  };
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path === "/v1/workspace/proposals" && request.method() === "POST") {
+      proposalsAsked += 1;
+      return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null });
+    }
+    if (path !== "/v1/workspace/result-questions" || request.method() !== "POST") return route.fallback();
+    const offer = request.postDataJSON() as Record<string, unknown>;
+    offers.push(offer);
+    const read = readings[offer.message as string] ?? null;
+    return json({ run_id: "run-q", writer: "anthropic", model: "claude-stand-in", request: read, question: null, dropped: [], reason: null });
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  const fields = fixture("fields");
+
+  // the page's own patterns read a plain question: no model is asked
+  await say("where is the shear stress highest?");
+  const plain = page.getByTestId("chat-extremes").last();
+  await expect(plain).toHaveAttribute("data-reader", "patterns");
+  await expect(plain).toHaveAttribute("data-region", "the gauge section");
+  expect(offers).toHaveLength(0);
+
+  // a loose one goes to the model, which answers with a request; the page looks the values up
+  await say("wher is teh shear highest?");
+  const loose = page.getByTestId("chat-extremes").last();
+  await expect(loose).toHaveAttribute("data-reader", "model");
+  await expect(loose.getByTestId("chat-extreme")).toHaveText(await plain.getByTestId("chat-extreme").innerText()); // the same answer, whoever read the question
+  const written = fields.summary.ply_extremes.overall.S12.largest;
+  await expect(loose.getByTestId("chat-extreme")).toContainText(`${printed(-Math.abs(written.value))} MPa`); // the package's own largest shear, on the element first in the mesh
+  await expect(loose.getByTestId("chat-extremes-table").locator("tbody tr")).toHaveCount(8);
+  await expect(loose.getByTestId("chat-extremes-note")).toContainText("130 elements read");
+  await expect(page.getByLabel("Field", { exact: true })).toHaveValue("S12");
+  expect(offers).toHaveLength(1);
+  expect(Object.keys(offers[0]).sort()).toEqual(["gauge", "message", "picked", "plies", "quantities"]); // the offer: no value of the results
+  expect(offers[0].plies).toEqual(fields.mesh.angles.map((angle: number, i: number) => ({ ply: i + 1, angle })));
+  expect(offers[0].picked).toBe(true); // the first answer's place is the element read out on the model
+
+  await say("which ply carries the most load?");
+  const load = page.getByTestId("chat-extremes").last();
+  await expect(load.getByTestId("chat-extreme")).toContainText(`The largest |σ₁| in the gauge section is ${printed(fields.summary.ply_extremes.overall.S11.tension.value)} MPa, in ply 2 (0°)`);
+  await expect(load.getByTestId("chat-extreme")).toContainText("ply 7 ties");
+
+  await say("compare the 0° and 90° plies here");
+  const compared = page.getByTestId("chat-values").last();
+  await expect(compared.locator("h4")).toContainText("plies 2, 4, 5, 7");
+  await expect(compared.getByTestId("chat-values-table").locator("tbody tr")).toHaveCount(4);
+
+  await say("worst transverse loading anywhere, grips included?");
+  const whole = page.getByTestId("chat-extremes").last();
+  await expect(whole).toHaveAttribute("data-region", "the whole model");
+  await expect(whole.getByTestId("chat-extremes-note")).toContainText("at a grip edge");
+
+  // a message the model reads as nothing of the results goes on to the setup's reading, and a setup line never asks about results
+  expect(proposalsAsked).toBe(0);
+  await say("why is ply 4 in compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
+  await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes
+  expect(offers).toHaveLength(5);
+  expect((offers[4] as { message: string }).message).toBe("why is ply 4 in compression?");
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+  await say("thanks, looks good");
+  await expect(page.getByTestId("chat-redirect").last()).toBeVisible();
+  expect(offers).toHaveLength(6);
+  expect(proposalsAsked).toBe(2);
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("a thing to fix takes its rows in the chat, and applying them checks again (ADR-0062 amendment 2)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
