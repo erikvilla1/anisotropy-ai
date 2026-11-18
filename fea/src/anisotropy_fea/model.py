@@ -21,7 +21,7 @@ from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply, abd_matrices
 
 from .spec import normalised_angle
-from .units import deck_unit_factors
+from .units import deck_unit_factors, unit_factors
 
 NodeKey = tuple[str | None, int]  # (instance name, label); None means an assembly-level node (a reference point)
 ElementKey = tuple[str, int]  # (instance name, label)
@@ -487,9 +487,10 @@ def _validate_coupling(deck: Deck, coupling: KinematicCoupling) -> list[str]:
 # --- units --------------------------------------------------------------------------------------
 
 
-def to_si(deck: Deck, units: str) -> Deck:
-    """The same deck with every dimensioned number in SI base units, and `units` recorded; a deck is stated in a deck system only."""
-    factors = deck_unit_factors(units)
+def to_si(deck: Deck, units: str, any_system: bool = False) -> Deck:
+    """The same deck with every dimensioned number in SI base units, and `units` recorded. A deck of ours is stated in a deck system
+    only; `any_system` takes any system a coupon may be stated in, for a deck someone else wrote (ADR-0105)."""
+    factors = unit_factors(units) if any_system else deck_unit_factors(units)
     length, stress, force = factors["length"], factors["stress"], factors["force"]
 
     def scale_nodes(nodes: Nodes) -> Nodes:

@@ -74,6 +74,16 @@ export function regionsOfElement(element: number, quads: number[][], nodeSets: R
   return out;
 }
 
+/** The plate's own regions, with no box the engineer drew: what a message may hold or load (ADR-0101). */
+export const ownRegions = (form: StudioForm): { name: string; kind: "edge" | "area" }[] => regionOptions(form, emptyPlate());
+
+/** The plate's own regions the clicked element belongs to, from the mesh shown (a preview's or a result's); none with nothing clicked. */
+export function regionsHere(element: number | null, mesh: { quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]> } | null,
+  form: StudioForm): { name: string; kind: "edge" | "area" }[] {
+  if (element === null || !mesh || element < 0 || element >= mesh.quads.length) return [];
+  return regionsOfElement(element, mesh.quads, mesh.node_sets, mesh.element_sets, ownRegions(form));
+}
+
 /** The lists with one support added for a region: both in-plane directions and z, the usual start of a fixed edge. */
 export function withSupport(lists: PlateLists, region: string): PlateLists {
   return { ...lists, supports: [...lists.supports, { region, dofs: [1, 2, 3], value: "" }] };
@@ -93,4 +103,18 @@ export function plateWords(lists: PlateLists): string[] {
     ...lists.loads.map((l) => l.kind === "pressure" ? `${l.region} under a pressure of ${l.pressure.trim() || "?"} MPa` : `${l.region} loaded by ${l.total.trim() || "?"} N along ${dof(l.dof)}`),
     ...lists.regions.map((r) => `box ${r.name.trim() || "?"}: x ${r.x0}..${r.x1}, y ${r.y0}..${r.y1} mm`),
   ];
+}
+
+/** What a plate's shape still waits for, in a sentence (ADR-0101 amendment 1): the plate is drawn to be clicked before it is held or loaded. */
+export function shapeWords(shape: ("supports" | "loads")[]): string {
+  const held = !shape.includes("supports"), loaded = !shape.includes("loads");
+  if (!held && !loaded) return "Nothing is held or loaded yet. This is the plate's shape: it cannot be solved until it is held and loaded.";
+  return held ? "No load yet. The plate cannot be solved until it is loaded." : "Nothing is held yet. The plate cannot be solved until it is held.";
+}
+
+/** Whether a message reads as an edit of a plate, not as a person's name (ADR-0101 amendment 1): it names an action on a region, a kind of
+ * region, a load, or the place clicked. The assistant's open question "Who is running it?" takes a typed name, and on a plate "hold this
+ * edge" must not become one. */
+export function namesPlateEdit(text: string): boolean {
+  return /\b(?:hold|held|fix|fixed|clamp|clamped|pin|pinned|support|supported|load|loaded|press|pressure|pull|push|force|tension|compression|edges?|face|hole|tabs?|here|this|that)\b/i.test(text);
 }

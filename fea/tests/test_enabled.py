@@ -242,3 +242,86 @@ def test_the_test_rows_help_names_only_the_tests_offered():
     units = FIELDS["units"].help
     assert "studio" not in enabled.NOT_AVAILABLE and units.startswith("the unit system every number") and "; left blank, it is mm-MPa;" in units
 
+
+
+# ------------------------------------------------------------- amendment 5: every test for one request, where the machine's switch is off
+
+import os
+import subprocess
+
+from anisotropy_fea.enabled import every_test
+
+
+def test_every_test_offers_a_hidden_test_for_its_length_and_puts_the_switch_back(tmp_path, closed):
+    assert checked(tmp_path / "before", OHT_FILL).state == "blocked"
+    with every_test(True):
+        assert all_tests() is True
+        assert not any("not offered yet" in p for p in checked(tmp_path / "during", OHT_FILL).problems)
+    assert all_tests() is False and os.environ[ALL_TESTS_VARIABLE] == "off"
+    assert "Test: open-hole tension " + NOT_AVAILABLE in "\n".join(checked(tmp_path / "after", OHT_FILL).problems)
+
+
+def test_every_test_puts_an_unset_switch_back_unset_and_does_so_when_the_request_fails(monkeypatch):
+    monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
+    with pytest.raises(RuntimeError), every_test(True):
+        assert all_tests() is True
+        raise RuntimeError("a request that fails")
+    assert ALL_TESTS_VARIABLE not in os.environ
+
+
+@pytest.mark.parametrize("machine", ["on", "off"])
+def test_every_test_off_leaves_the_machines_switch_to_decide(monkeypatch, machine):
+    monkeypatch.setenv(ALL_TESTS_VARIABLE, machine)
+    with every_test(False):
+        assert all_tests() is (machine == "on")
+    assert os.environ[ALL_TESTS_VARIABLE] == machine
+
+
+def run_studio_check(folder: Path, *before: str) -> dict:
+    """`studio_tool.py check` as the API starts it, with the machine's switch off: the checklist it wrote."""
+    folder.mkdir(parents=True, exist_ok=True)
+    values = folder / "values.json"
+    values.write_text(json.dumps({"form_version": FORM_VERSION, **OHT_FILL}), encoding="utf-8")
+    tool = paths.ROOT / "fea" / "tools" / "studio_tool.py"
+    done = subprocess.run([sys.executable, str(tool), "--root", str(folder / "none"), *before, "check", str(values), "--out", str(folder / "out")],
+                          capture_output=True, text=True, env={**os.environ, ALL_TESTS_VARIABLE: "off"}, timeout=120, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads((folder / "out" / "checklist.json").read_text(encoding="utf-8"))
+
+
+def test_the_studio_tool_offers_a_hidden_test_only_when_the_option_precedes_its_command(tmp_path):
+    refused = run_studio_check(tmp_path / "plain")
+    assert "Test: open-hole tension " + NOT_AVAILABLE in "\n".join(refused["problems"])
+    offered = run_studio_check(tmp_path / "every", "--every-test")
+    assert not any("not offered yet" in p for p in offered["problems"])
+
+
+def test_the_warm_worker_judges_each_request_on_its_own(tmp_path):
+    """`studio_tool.py serve` with the machine's switch off: a request with `every` is offered the hidden test, and the next is not."""
+    tool = paths.ROOT / "fea" / "tools" / "studio_tool.py"
+    values = tmp_path / "values.json"
+    values.write_text(json.dumps({"form_version": FORM_VERSION, **OHT_FILL}), encoding="utf-8")
+    requests = [{"values": str(values), "out": str(tmp_path / "a"), "every": True}, {"values": str(values), "out": str(tmp_path / "b")},
+                {"values": str(values), "out": str(tmp_path / "c"), "every": "true"}]  # only the JSON true turns it on
+    done = subprocess.run([sys.executable, str(tool), "--root", str(tmp_path / "none"), "serve"], input="".join(json.dumps(r) + "\n" for r in requests),
+                          capture_output=True, text=True, env={**os.environ, ALL_TESTS_VARIABLE: "off"}, timeout=300, check=False)
+    assert done.returncode == 0, done.stderr
+    lists = [json.loads((tmp_path / name / "checklist.json").read_text(encoding="utf-8")) for name in ("a", "b", "c")]
+    hidden = ["not offered yet" in "\n".join(checklist["problems"]) for checklist in lists]
+    assert hidden == [False, True, True]
+
+
+@pytest.mark.parametrize(("option", "seen"), [([], False), (["--every-test"], True)])
+def test_the_run_tool_offers_every_test_for_its_run_only_with_the_option(tmp_path, monkeypatch, closed, option, seen):
+    run_coupon = load_tool("run_coupon", monkeypatch)
+    during: list[bool] = []
+
+    def run(*args, **kwargs):
+        during.append(all_tests())
+        raise run_coupon.Refused("a stand-in run: the switch was read, nothing was run")
+
+    monkeypatch.setattr(run_coupon, "run", run)
+    monkeypatch.setattr(sys, "argv", ["run_coupon.py", "values.json", "--run-by", "a test", *option, "--result", str(tmp_path / "result.json")])
+    with pytest.raises(SystemExit):
+        run_coupon.main()
+    assert during == [seen]

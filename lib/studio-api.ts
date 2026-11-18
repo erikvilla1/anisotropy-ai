@@ -21,6 +21,8 @@ export type JobStatus = {
   /** When a solver took the queued job up, and the seconds of each of the tool's stages and of the solver's phases around it
    * (restore_s, lock_wait_s, gate_s, upload_s), as far as the job got (ADR-0056 amendment 6). */
   claimed_at?: string | null; timings?: Record<string, number>;
+  /** A done run's answer in a few values, for the list of past analyses (ADR-0109); read with `readJobAnswer` before it is shown. */
+  answer?: unknown;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {
@@ -31,8 +33,13 @@ export type Preview = {
   mesh: { nodes: number[][]; quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]>; order: number; mesher: string;
     node_count: number; element_count: number };
   held: { set: string; through: string | null; dofs: number[]; directions: string[]; nodes: number }[];
-  loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number };
-  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number }[];
+  /** The first load; null only on a plate's shape that states no load yet (`shape`). */
+  loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number } | null;
+  /** On a plate that does not state its supports or its loads yet: the lists still missing. The mesh and regions are shown to be clicked,
+   * nothing is drawn for a missing list, and the setup stays blocked (ADR-0101 amendment 1). Absent on a model the setup built. */
+  shape?: ("supports" | "loads")[];
+  /** `range` on an imported model's pressure stated element by element (ADR-0105): its least and its greatest; `value` is then the largest in magnitude. */
+  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number; range?: [number, number] }[];
   regions?: { edges: string[]; areas: string[] } | null;
   plies: { index: number; angle: number; thickness: number; z_bottom: number; z_top: number; material: string }[];
   material: { name: string; source: string; rights: string; E1: number; E2: number; G12: number; nu12: number; G13: number; G23: number;
@@ -40,6 +47,13 @@ export type Preview = {
   probes: { nodes: Record<string, { index: number; xy: number[] }>; elements: Record<string, { index: number; xy: number[] }> };
   quality?: { summary: QualitySummary; per_element: Record<string, number[]> };
 };
+/** The working behind an answer (ADR-0103), as the package wrote it: for the first ply to fail by each criterion, the steps from the
+ * ply's strain to the loading at first-ply failure, each with the values put in and its formulas in LaTeX. Every number is the package's. */
+export type WorkingRow = { symbol: string; value: number; unit: string; what: string };
+export type WorkingEquation = { formula: string | null; substituted: string; result: { symbol: string; value: number; unit: string } | null };
+export type WorkingStep = { id: string; title: string; source: string; text: string; given: WorkingRow[]; equations: WorkingEquation[]; note?: string };
+export type WorkingChain = { ply: number; angle: number; element: string; face: string | null; where: string; factor: number; steps: WorkingStep[] };
+export type Working = { basis: "gauge" | "whole"; digits: { given: number; result: number }; criteria: Record<string, WorkingChain> };
 export type QualitySummary = { elements: number; acceptable: boolean; measures: Record<string, { word: string; worst: number; element: number; threshold: number; warns: string; over: number }> };
 /** One value per ply (a membrane solve), or one per face of the ply, bottom then top (a shell solve, ADR-0053); `Fields.mesh.faces` says which. */
 export type Faced<T> = T | T[];
@@ -48,6 +62,8 @@ export type Span = [number | null, number | null];
 export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
   touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null;
+  /** ADR-0108: inside the stand-off from a tab line without touching a gripped node; absent on a result solved before it. */
+  near_tab?: boolean;
   /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
    * reaction, as the package wrote them; absent on older jobs. */
   fails?: boolean; at_failure?: AtFailure | null };
@@ -55,7 +71,10 @@ export type AtFailure = { applied: number; unit: string; reaction: number; react
 /** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
 export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
 export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
-  mode: string; place: string; touches_grip: boolean; xy: number[] };
+  mode: string; place: string; touches_grip: boolean; near_tab?: boolean; xy: number[] };
+/** Where the gauge section is read (ADR-0108): at least `stand_off` (the result's length unit) from each tab line, a `fraction` of the coupon's width
+ * or of its gauge length (`of`), with the number of `Gauge` elements read and left out. */
+export type GaugeReading = { stand_off: number; fraction: number; of: "width" | "gauge length"; tab_lines: number[]; elements: number; left_out: number };
 /** A ply stress at its largest of one sign (or magnitude), with where it is; `ply` and `angle` on the extremes over every ply. Null when never reached. */
 export type PlyExtreme = { value: number; element: number; label: string; xy: number[]; face: string | null; ply?: number; angle?: number } | null;
 export type ExtremeSet = { S11: { tension: PlyExtreme; compression: PlyExtreme }; S22: { tension: PlyExtreme; compression: PlyExtreme };
@@ -65,7 +84,9 @@ export type Fields = {
   units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
     element_sets: Record<string, number[]>; node_count: number; element_count: number; plies: number; angles: number[];
-    faces?: string[] | null; translations?: number };
+    faces?: string[] | null; translations?: number;
+    /** The elements the gauge section is read at (ADR-0108), null for a model without one; absent on a result solved before it. */
+    gauge_elements?: number[] | null };
   nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][]; rotation?: number[][]; moment_reaction?: number[][];
     averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
       failure_index: Record<string, (number | null)[]>; curvature?: (number | null)[][]; moment?: (number | null)[][]; shear_force?: (number | null)[][] };
@@ -84,10 +105,13 @@ export type Fields = {
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
-    /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
-    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
+    /** The same over the gauge section alone, read past the stand-off from each tab line (`gauge_reading`, ADR-0108; before it, the Gauge elements
+     * that touch no gripped node): what a test is compared with. Absent on older jobs. */
+    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null; gauge_reading?: GaugeReading | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
+    /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */
+    working?: Working | null;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
     calculix?: CalculixBeside | null;
     /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */
@@ -224,9 +248,15 @@ export function readChecklist(payload: unknown): Checklist {
   return payload as unknown as Checklist;
 }
 
+/** The `coupon.kind` of a model brought in as a file (ADR-0105): it is drawn as it stands, with or without a load. */
+export const IMPORTED_KIND = "imported";
+
+/** A shape's `shape`: the missing lists by name, at least one. Only a shape may come with no load. */
+const isShape = (value: unknown): boolean => Array.isArray(value) && value.length > 0 && value.every((name) => name === "supports" || name === "loads");
+
 export function readPreview(payload: unknown): Preview {
   if (!isObject(payload) || !isObject(payload.mesh) || !Array.isArray(payload.mesh.nodes) || !Array.isArray(payload.mesh.quads)
-    || !Array.isArray(payload.held) || !isObject(payload.loaded) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
+    || !Array.isArray(payload.held) || !(isObject(payload.loaded) || (payload.loaded === null && (isShape(payload.shape) || (isObject(payload.coupon) && payload.coupon.kind === IMPORTED_KIND)))) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
     || typeof payload.units !== "string") {
     throw unreadable("the preview");
   }
@@ -285,6 +315,57 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
   const timings = isObject(payload.timings) ? Object.fromEntries(Object.entries(payload.timings).filter(([, v]) => typeof v === "number")) as Record<string, number> : {};
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview,
     fields, explanation, seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true, timings };
+}
+
+/** A model brought in as an Abaqus input file (ADR-0105). `reading` is what the reader took from the file and what it skipped, in counts
+ * and names; lengths in the units stated. Every value is the fea package's. */
+export type ImportReading = {
+  heading: string; units: string; unit_labels: Record<string, string>;
+  parts: number; instances: number; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
+  node_sets: number; element_sets: number; couplings: number;
+  sections: { element_set: string; plies: number; symmetric: boolean; thickness: number; materials: string[]; rotation_deg: number }[];
+  layup: string; materials: { name: string; kind: string | null; strengths: boolean }[]; step: string | null;
+  boundaries: number; concentrated_loads: number; pressures: number; skipped: string[]; notes: string[]; warnings: string[];
+};
+/** The import's answer: `refused` (the file is outside what is read, or the units; `problem` says why and on which line), `read` (taken,
+ * but not solved as it stands; `problem` says why) or `solved`, with the fields, the answer and its explanation as a live solve has them. */
+export type ImportedModel = {
+  run_id: string | null; state: "refused" | "read" | "solved"; name: string; units: string;
+  problem: { message: string; line: number | null } | null; reading: ImportReading | null;
+  preview: Preview | null; fields: Fields | null; explanation: Explanation | null; seconds: number; warm: boolean;
+};
+/** The unit systems a model may be stated in; a file carries none, so the engineer says. */
+export const MODEL_UNITS = ["mm-MPa", "m-Pa", "in-psi", "in-ksi"] as const;
+export type ModelUnits = (typeof MODEL_UNITS)[number];
+/** The largest file sent, the API's own limit: a larger one is refused here, before it is read into memory. */
+export const MAX_MODEL_BYTES = 20_000_000;
+/** The request header that carries the file's name, percent-encoded. */
+export const MODEL_NAME_HEADER = "X-Anisotropy-Model-Name";
+
+export function readImportedModel(payload: unknown): ImportedModel {
+  if (!isObject(payload) || (payload.state !== "refused" && payload.state !== "read" && payload.state !== "solved") || typeof payload.name !== "string"
+    || typeof payload.units !== "string") throw unreadable("the import");
+  const problem = isObject(payload.problem) && typeof payload.problem.message === "string"
+    ? { message: payload.problem.message, line: typeof payload.problem.line === "number" ? payload.problem.line : null } : null;
+  const reading = isObject(payload.reading) && typeof payload.reading.elements === "number" && Array.isArray(payload.reading.skipped)
+    && Array.isArray(payload.reading.warnings) && Array.isArray(payload.reading.notes) && Array.isArray(payload.reading.sections)
+    && Array.isArray(payload.reading.materials) && isObject(payload.reading.element_types) ? (payload.reading as unknown as ImportReading) : null;
+  if (payload.state === "refused" ? problem === null : reading === null) throw unreadable("the import: no reading");
+  const fields = payload.fields === null || payload.fields === undefined ? null : readFields(payload.fields);
+  if (payload.state === "solved" && fields === null) throw unreadable("the import: solved with no fields");
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: payload.state, name: payload.name, units: payload.units, problem, reading,
+    preview: payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview), fields,
+    explanation: payload.explanation === null || payload.explanation === undefined ? null : readExplanation(payload.explanation),
+    seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true };
+}
+
+/** Send a model's file to be read and solved as it stands (ADR-0105): the body is the file, the address carries the units stated and a
+ * header the file's name, which stays out of the address. Nothing of the file is kept by the service. */
+export async function importModel(apiBase: string, file: Blob, name: string, units: ModelUnits, signal?: AbortSignal): Promise<ImportedModel> {
+  if (file.size > MAX_MODEL_BYTES) throw new StudioError(`This file is larger than ${MAX_MODEL_BYTES / 1e6} MB, the largest model read.`);
+  const sent = { "Content-Type": "application/octet-stream", "X-Anisotropy-Actor": ACTOR, [MODEL_NAME_HEADER]: encodeURIComponent(name.slice(0, 200) || "model.inp") };
+  const payload = await call(`${base(apiBase)}/v1/imported-models?units=${encodeURIComponent(units)}`, { method: "POST", headers: sent, body: file, signal }, "the import");
+  return readImportedModel(payload);
 }
 
 /** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
@@ -408,6 +489,13 @@ export async function fetchFields(apiBase: string, jobId: string, signal?: Abort
   return readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the results", JOB_GONE));
 }
 
+/** The rows a past run ran on, as the values object the studio edits (ADR-0109): the run's own `values` file, kept beside its result. */
+export async function fetchRunValues(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const payload = await call(fileUrl(apiBase, jobId, "values"), { method: "GET", signal }, "the run's inputs", JOB_GONE);
+  if (!isObject(payload)) throw unreadable("the run's inputs");
+  return payload;
+}
+
 export async function fetchExplanation(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Explanation> {
   return readExplanation(await call(fileUrl(apiBase, jobId, "explanation"), { method: "GET", signal }, "the explanation", JOB_GONE));
 }
@@ -494,15 +582,29 @@ export type OfferedRow = {
   key: string; label: string; kind: "number" | "choice" | "notation";
   unit?: string; dimension?: string; choices?: { value: string; label: string }[];
 };
+/** A plate's own regions offered to a message, and the place clicked (ADR-0101): `here` names the regions the clicked element belongs to. */
+export type PlateOffer = {
+  regions: { name: string; kind: "edge" | "area" }[]; here: string[]; force_unit: string; stress_unit: string; held: string[]; loaded: string[];
+};
 export type ProposalRequest = {
   product: "coupon" | "laminate"; message: string; rows: OfferedRow[];
-  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>;
+  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>; plate?: PlateOffer;
+};
+/** A support and a load the engineer's words or click hold (ADR-0101), as the plate's lists take them. */
+export type SupportProposal = { region: string; dofs: number[]; quote: string };
+export type LoadProposal = {
+  region: string; kind: "force" | "pressure"; dof: number | null; value: string; unit: string; written_value: string; written_unit: string | null;
+  sense: "tension" | "compression" | "as_signed" | null; quote: string;
 };
 /** A value the engineer wrote, for an offered row: as the row takes it, as written, and the words it came from. */
 export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
+/** Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1); the page writes the sentence. */
+export const UNREAD_REASONS = ["not_offered", "no_value", "refers_back"] as const;
+export type UnreadPart = { quote: string; reason: (typeof UNREAD_REASONS)[number] };
 export type ProposalAnswer = {
   run_id: string | null; writer: string; model: string | null; proposals: Proposal[];
   conditions: { id: string; title: string; quote: string }[]; question: string | null; dropped: { key: string; reason: string }[]; reason: string | null;
+  unread: UnreadPart[]; supports: SupportProposal[]; loads: LoadProposal[];
 };
 export type AssistantInfo = { proposes: boolean; provider: string | null; model: string | null };
 
@@ -519,13 +621,80 @@ export function readProposalAnswer(payload: unknown): ProposalAnswer {
   }
   for (const c of payload.conditions) if (!isObject(c) || !isText(c.id) || !isText(c.title) || !isText(c.quote)) throw bad();
   for (const d of payload.dropped) if (!isObject(d) || !isText(d.key) || !isText(d.reason)) throw bad();
-  return payload as unknown as ProposalAnswer;
+  const unread = payload.unread ?? []; // an API from before amendment 1 sends none
+  if (!Array.isArray(unread)) throw bad();
+  for (const u of unread) if (!isObject(u) || !isText(u.quote) || !(UNREAD_REASONS as readonly unknown[]).includes(u.reason)) throw bad();
+  const supports = payload.supports ?? [], loads = payload.loads ?? []; // a plate's lists (ADR-0101); none from an API before it
+  if (!Array.isArray(supports) || !Array.isArray(loads)) throw bad();
+  const whole = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+  for (const s of supports) {
+    if (!isObject(s) || !isText(s.region) || !isText(s.quote) || !Array.isArray(s.dofs) || !s.dofs.length || !s.dofs.every((d) => whole(d) && d >= 1 && d <= 6)) throw bad();
+  }
+  for (const l of loads) {
+    if (!isObject(l) || !isText(l.region) || !isText(l.quote) || !isText(l.value) || !isText(l.unit) || !isText(l.written_value) || !isTextOrNull(l.written_unit)
+      || !Number.isFinite(Number(l.value)) || l.value.trim() === "") throw bad();
+    if (l.kind === "force" ? !(whole(l.dof) && l.dof >= 1 && l.dof <= 3) : l.kind !== "pressure" || l.dof !== null) throw bad();
+    if (l.sense !== null && !["tension", "compression", "as_signed"].includes(l.sense as string)) throw bad();
+  }
+  return { ...payload, unread, supports, loads } as unknown as ProposalAnswer;
 }
 
 /** The model's reading of a message, kept by the source guard; nothing in it has entered the problem until the engineer applies it. */
 export async function proposeRows(apiBase: string, request: ProposalRequest, signal?: AbortSignal): Promise<ProposalAnswer> {
   const payload = await call(`${base(apiBase)}/v1/workspace/proposals`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the proposals");
   return readProposalAnswer(payload);
+}
+
+/** What a message may name of the results (ADR-0100): the probe table's quantities, the plies with their angles, whether the model has a
+ * gauge section, and whether an element is clicked. No value of a result goes with it. */
+export type ResultOffer = { message: string; quantities: string[]; plies: { ply: number; angle: number }[]; gauge: boolean; picked: boolean };
+/** What a message asks of the results, as the API's guard kept it: names from the offer and whole numbers, never a value. */
+export type ResultRequest = {
+  /** `failure` asks which ply fails first or whether the coupon fails (ADR-0100 amendment 1): it names no quantity and no place. */
+  kind: "values" | "extreme" | "failure"; quantities: string[]; plies: number[]; element: number | null; here: boolean;
+  sense: "largest" | "smallest" | "magnitude" | null; region: "default" | "gauge" | "whole";
+};
+export type ResultReading = { run_id: string | null; writer: string; model: string | null; request: ResultRequest | null; question: string | null; dropped: string[]; reason: string | null };
+
+export function readResultReading(payload: unknown): ResultReading {
+  const bad = () => unreadable("the reading of the question");
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.question) || !isTextOrNull(payload.reason)
+    || !Array.isArray(payload.dropped) || !payload.dropped.every(isText)) throw bad();
+  const r = payload.request;
+  if (r !== null) {
+    const whole = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+    if (!isObject(r) || (r.kind !== "values" && r.kind !== "extreme" && r.kind !== "failure") || !Array.isArray(r.quantities) || !r.quantities.every(isText) || !Array.isArray(r.plies) || !r.plies.every(whole)
+      || !(r.element === null || whole(r.element)) || typeof r.here !== "boolean" || !(r.sense === null || ["largest", "smallest", "magnitude"].includes(r.sense as string))
+      || !["default", "gauge", "whole"].includes(r.region as string)) throw bad();
+  }
+  return payload as unknown as ResultReading;
+}
+
+/** The model's reading of a loose question about a result (ADR-0100), kept by the API's guard: a request the page runs on the results it
+ * shows, or none. */
+export async function readResultRequest(apiBase: string, offer: ResultOffer, signal?: AbortSignal): Promise<ResultReading> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/result-questions`, { method: "POST", headers, body: JSON.stringify(offer), signal }, "the reading of the question");
+  return readResultReading(payload);
+}
+
+/** A section of our theory pages, as an answer names it (ADR-0102). */
+export type TheorySource = { id: string; document: string; title: string };
+/** An answer in words to a question about a result (ADR-0102): the prose, kept by the API only when every number in it is the results'
+ * or the question's, and the theory sections it rests on. With no prose, `sources` are the sections the question found. */
+export type ResultAnswer = { run_id: string | null; writer: string; model: string | null; prose: string[]; sources: TheorySource[]; covered: boolean;
+  withheld: boolean; reason: string | null };
+
+export function readResultAnswer(payload: unknown): ResultAnswer {
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.reason) || !Array.isArray(payload.prose)
+    || !payload.prose.every(isText) || typeof payload.covered !== "boolean" || typeof payload.withheld !== "boolean" || !Array.isArray(payload.sources)
+    || !payload.sources.every((s) => isObject(s) && isText(s.id) && isText(s.document) && isText(s.title))) throw unreadable("the answer");
+  return payload as unknown as ResultAnswer;
+}
+
+/** A question about a result answered in words (ADR-0102), from the fact sheet of the result the page shows and our theory pages. */
+export async function answerResult(apiBase: string, question: string, facts: Record<string, unknown>, signal?: AbortSignal): Promise<ResultAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/result-answers`, { method: "POST", headers, body: JSON.stringify({ question, facts }), signal }, "the answer");
+  return readResultAnswer(payload);
 }
 
 const couponTestAnswers = new Map<string, Promise<boolean>>();

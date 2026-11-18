@@ -491,6 +491,19 @@ class CouponJobRequest(Contract):
                 *([] if self.theory else ["--no-theory"])]
 
 
+class JobAnswer(Contract):
+    """A done run's answer in a few values (ADR-0109), as the fea package wrote it: on the gauge section or the whole model, by the
+    criterion that governs, whether a ply fails at the applied loading, the factor on that loading at first-ply failure, and the ply."""
+
+    basis: Literal["gauge", "whole"]
+    criterion: str
+    fails: bool
+    factor: float
+    ply: int
+    angle: float
+    face: str | None = None
+
+
 class CouponJobOutput(Contract):
     """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
     runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
@@ -519,6 +532,7 @@ class CouponJobOutput(Contract):
     documents: str | None = None
     claimed_at: str | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
     timings: dict[str, float] = {}  # the seconds of each stage of the tool and of the solver's phases around it, as far as the job got
+    answer: JobAnswer | None = None  # a done run's answer in a few values, for the list of past analyses (ADR-0109); null when it kept none
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
@@ -540,7 +554,8 @@ class CouponJobOutput(Contract):
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
                    project_id=None if getattr(job, "project_id", None) is None else str(job.project_id),
                    claimed_at=None if getattr(job, "claimed_at", None) is None else job.claimed_at.isoformat(),
-                   timings=job.all_timings() if hasattr(job, "all_timings") else {})
+                   timings=job.all_timings() if hasattr(job, "all_timings") else {},
+                   answer=job.answer() if hasattr(job, "answer") else None)
 
 
 class CouponCheckReceipt(Contract):
@@ -599,6 +614,40 @@ class LiveSolveResponse(Contract):
     seconds: float
     timings: dict[str, float]
     checklist: dict[str, Any]
+    preview: dict[str, Any] | None
+    fields: dict[str, Any] | None
+    explanation: dict[str, Any] | None
+
+
+ModelUnits = Literal["mm-MPa", "m-Pa", "in-psi", "in-ksi"]  # the systems a model may be stated in (fea/src/anisotropy_fea/units.py)
+
+
+class ImportedModelReceipt(Contract):
+    """What the run record keeps of a model brought in as a deck (ADR-0105): its name, its size and digest and the units stated,
+    never the deck."""
+
+    name: str
+    units: ModelUnits
+    bytes: int
+    sha256: str
+
+
+class ImportedModelResponse(Contract):
+    """A model brought in as an Abaqus deck (ADR-0105), as the fea package answered it. `state` is `refused` (outside what the reader
+    takes, or the units; `problem` says why and on which line), `read` (taken, but our kernel could not solve it as it stands;
+    `problem` says why) or `solved`. `reading` is what the reader took and skipped; `preview` the model to draw; `fields` and
+    `explanation` the kernel's answer (ADR-0085), a preview with no mesh study and no CalculiX. Nothing of the deck is kept."""
+
+    run_id: str | None
+    state: Literal["refused", "read", "solved"]
+    name: str
+    units: str
+    solver: str
+    warm: bool
+    seconds: float
+    timings: dict[str, float]
+    problem: dict[str, Any] | None
+    reading: dict[str, Any] | None
     preview: dict[str, Any] | None
     fields: dict[str, Any] | None
     explanation: dict[str, Any] | None
@@ -811,19 +860,60 @@ class OfferedCondition(Contract):
     detail: Annotated[str, Field(max_length=400)] = ""
 
 
+PlateRegion = Literal["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right", "Hole", "Face", "Tab-Bottom", "Tab-Top"]
+PLATE_REGION_KINDS: dict[str, str] = {"Edge-Bottom": "edge", "Edge-Top": "edge", "Edge-Left": "edge", "Edge-Right": "edge", "Hole": "edge",
+                                      "Face": "area", "Tab-Bottom": "area", "Tab-Top": "area"}
+
+
+class OfferedRegion(Contract):
+    name: PlateRegion
+    kind: Literal["edge", "area"]
+
+
+class PlateOffer(Contract):
+    """A plate's regions offered to a message (ADR-0101): the plate's own named regions (never a box the engineer drew and named), those
+    the clicked element belongs to, the units a force and a pressure are stated in, and which regions are already held and loaded."""
+
+    regions: Annotated[list[OfferedRegion], Field(min_length=1, max_length=8)]
+    here: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    force_unit: Literal["N", "lbf"]
+    stress_unit: Literal["MPa", "psi"]
+    held: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    loaded: Annotated[list[PlateRegion], Field(max_length=8)] = []
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        names = [region.name for region in self.regions]
+        if len(set(names)) != len(names):
+            raise ValueError("each region is offered once")
+        for region in self.regions:
+            if PLATE_REGION_KINDS[region.name] != region.kind:
+                raise ValueError(f"{region.name} is an {PLATE_REGION_KINDS[region.name]}, not an {region.kind}")
+        for name in self.here:
+            if name not in names:
+                raise ValueError(f"{name} is clicked and not offered: a clicked region is one of those on offer")
+        if (self.force_unit == "N") != (self.stress_unit == "MPa"):
+            raise ValueError("a plate's force and pressure are stated in one system: N with MPa, or lbf with psi")
+        return self
+
+
 class ProposalRequest(Contract):
     """A message to read into rows (ADR-0088): the product, the message, the rows and conditions on offer, and the rows already filled.
-    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result."""
+    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result. A plate adds its regions
+    and the place clicked (ADR-0101)."""
 
     product: Literal["coupon", "laminate"]
     message: Annotated[str, Field(min_length=1, max_length=2000)]
     rows: Annotated[list[OfferedRow], Field(min_length=1, max_length=200)]
     conditions: Annotated[list[OfferedCondition], Field(max_length=20)] = []
     form: Annotated[dict[str, Annotated[str, Field(max_length=400)]], Field(max_length=400)] = {}
+    plate: PlateOffer | None = None
 
     @model_validator(mode="after")
     def _distinct(self) -> Self:
         keys = [row.key for row in self.rows]
+        if self.plate is not None and self.product != "coupon":
+            raise ValueError("only a coupon's message offers a plate's regions")
         if len(set(keys)) != len(keys):
             raise ValueError("each row is offered once")
         return self
@@ -852,6 +942,37 @@ class DroppedProposal(Contract):
     reason: str
 
 
+class SupportProposal(Contract):
+    """A support the engineer's words or click hold (ADR-0101): the region and the plate's directions it holds, 1 to 6."""
+
+    region: PlateRegion
+    dofs: list[int]
+    quote: str
+
+
+class LoadProposal(Contract):
+    """A load the engineer's words or click hold (ADR-0101): a force along a direction (1 to 3), the total over the region, or a pressure
+    on an area; the value as the plate takes it, signed, and as written. `sense` says a force was stated as tension or compression, so
+    its direction and sign came from the edge."""
+
+    region: PlateRegion
+    kind: Literal["force", "pressure"]
+    dof: int | None
+    value: str
+    unit: str
+    written_value: str
+    written_unit: str | None
+    sense: Literal["tension", "compression", "as_signed"] | None
+    quote: str
+
+
+class UnreadPart(Contract):
+    """Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1). The words are the engineer's own."""
+
+    quote: str
+    reason: Literal["not_offered", "no_value", "refers_back"]
+
+
 class ProposalResponse(Contract):
     """What the model read and the source guard kept (ADR-0088), for the engineer to tick; nothing here has entered the problem. `writer` is
     `template` when no model read the message, with the reason when one was asked; the page then reads it with its own patterns."""
@@ -864,6 +985,140 @@ class ProposalResponse(Contract):
     question: str | None
     dropped: list[DroppedProposal]
     reason: str | None
+    unread: list[UnreadPart] = []
+    supports: list[SupportProposal] = []
+    loads: list[LoadProposal] = []
+
+
+ResultQuantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
+
+
+class OfferedPly(Contract):
+    ply: Annotated[int, Field(ge=1, le=200)]
+    angle: Annotated[float, Field(ge=-360, le=360)]
+
+
+class ResultQuestionRequest(Contract):
+    """A message to read as a question about a result (ADR-0100): the message and what it may name, the quantities of the page's probe
+    table, the plies from the bottom face with their angles, whether the model has a gauge section, and whether an element is clicked.
+    The model sees these and never a result, a file, a name or a note (R-11)."""
+
+    message: Annotated[str, Field(min_length=1, max_length=2000)]
+    quantities: Annotated[list[ResultQuantity], Field(min_length=1, max_length=12)]
+    plies: Annotated[list[OfferedPly], Field(min_length=1, max_length=200)]
+    gauge: bool
+    picked: bool
+
+    @model_validator(mode="after")
+    def _in_order(self) -> Self:
+        if len(set(self.quantities)) != len(self.quantities):
+            raise ValueError("each quantity is offered once")
+        if [p.ply for p in self.plies] != list(range(1, len(self.plies) + 1)):
+            raise ValueError("the plies are numbered from 1, bottom face first")
+        return self
+
+
+class ResultRequest(Contract):
+    """What a message asks of the results, as the guard kept it: names from the offer and whole numbers, no value of a result. `values`
+    reads the quantities at an element (its number, or the clicked one when `here`); `extreme` finds where they are largest, smallest or
+    largest in magnitude over a region. Empty `plies` is every ply. `failure` (ADR-0100 amendment 1) asks which ply fails first or whether
+    the coupon fails: it names nothing, and the page answers with the first-ply failure the package wrote."""
+
+    kind: Literal["values", "extreme", "failure"]
+    quantities: list[ResultQuantity]
+    plies: list[int]
+    element: int | None
+    here: bool
+    sense: Literal["largest", "smallest", "magnitude"] | None
+    region: Literal["default", "gauge", "whole"]
+
+
+class ResultQuestionResponse(Contract):
+    """The model's reading of a question about a result, as the guard kept it (ADR-0100); the page looks the values up. `request` is null
+    when the message asks nothing of the results or the reading did not stand (`dropped` says why); `writer` is `template` when no model
+    read the message, with the reason when one was asked."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    request: ResultRequest | None
+    question: str | None
+    dropped: list[str]
+    reason: str | None
+
+
+FactValue = bool | int | float | str | None | list[bool | int | float | str | None]
+MAX_FACTS_CHARS = 40_000
+
+
+class ResultAnswerRequest(Contract):
+    """A question to answer in words about a result (ADR-0102): the question, and the fact sheet of the result the page shows, the
+    numbers our engine computed for it (a job's `explanation.json`, or a live solve's). The model sees the sheet without a name, a note,
+    a date or a record name (R-11), beside the theory sections the question finds."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    facts: Annotated[dict[str, FactValue], Field(min_length=1, max_length=400)]
+
+    @model_validator(mode="after")
+    def _a_sheet_not_a_file(self) -> Self:
+        if len(json.dumps(self.facts, ensure_ascii=False)) > MAX_FACTS_CHARS:
+            raise ValueError(f"the fact sheet is longer than {MAX_FACTS_CHARS} characters")
+        return self
+
+
+class ResultAnswerReceipt(Contract):
+    """What the run record keeps of an answer: the question, the digest of the facts the writer saw, and the sections found."""
+
+    question: str
+    facts_sha256: str
+    sections: list[str]
+
+
+class TheorySource(Contract):
+    """A section of our theory pages, as an answer names it."""
+
+    id: str
+    document: str
+    title: str
+
+
+class ResultAnswerResponse(Contract):
+    """An answer in words to a question about a result (ADR-0102). `prose` is the model's, kept only when every number in it is the fact
+    sheet's or the question's; `sources` are the theory sections it rests on. With no model, or an answer the guard set aside
+    (`withheld`), `prose` is empty and `sources` are the sections the question found, so the page can say where to read. `covered` is
+    false when the sections do not hold the reason asked for."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    prose: list[str]
+    sources: list[TheorySource]
+    covered: bool
+    withheld: bool
+    reason: str | None
+
+
+class TheorySectionsRequest(Contract):
+    """A question whose words find sections of our theory pages (ADR-0107): the question alone, no result with it."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    limit: Annotated[int, Field(ge=1, le=5)] = 3
+
+
+class TheorySection(Contract):
+    """A section of our theory pages with its own text, as a reader is handed it: without the lines that pair equations with functions."""
+
+    id: str
+    document: str
+    title: str
+    text: str
+
+
+class TheorySectionsResponse(Contract):
+    """The sections a question's words find, best first (ADR-0107); none when no word of the question is in any section."""
+
+    run_id: str | None
+    sections: list[TheorySection]
 
 
 class CouponTests(Contract):

@@ -232,3 +232,69 @@ def test_a_refused_coupons_codes_stay_its_own(tmp_path):
     blank.write_text(json.dumps({key: value for key, value in values.items() if key not in ("material_code", "layup_code")}), encoding="utf-8")
     named = designation_for(check_form(read_input(blank)), root)
     assert named.material_code != "PLASTIC" and named.layup_code == "L1"  # a blank code never lands on one the refused coupon holds
+
+
+# ------------------------------------------------------------------------------- the coupons' folder named by the environment (ADR-0106)
+
+def test_the_environment_names_the_coupons_folder_for_a_whole_process(tmp_path):
+    """Behind the sign-in the API starts every tool with the folder of coupons of whoever asked: every location in `paths` follows it."""
+    import os
+    assert paths.coupons_root({}) == paths.ROOT / ".local" / "fea" and paths.coupons_root({paths.COUPONS_ROOT: ""}) == paths.ROOT / ".local" / "fea"
+    assert paths.coupons_root({paths.COUPONS_ROOT: str(tmp_path / "mine")}) == tmp_path / "mine"
+    with pytest.raises(ValueError, match="must be an absolute path"):
+        paths.coupons_root({paths.COUPONS_ROOT: "mine/coupons"})
+
+    mine, theirs = tmp_path / "mine", tmp_path / "theirs"
+    convert(values_file(tmp_path), root=mine, day="2026-10-28")
+    asked = "from anisotropy_fea import paths; print(paths.LOCAL); print(paths.ours('X')); print([d.name for d in paths.model_dirs()])"
+    for root, coupons in ((mine, [DESIGNATION]), (theirs, [])):
+        env = {**os.environ, paths.COUPONS_ROOT: str(root)}
+        seen = subprocess.run([sys.executable, "-c", asked], capture_output=True, text=True, encoding="utf-8", env=env)
+        assert seen.stdout.splitlines() == [str(root), str(root / "X" / "ours"), str(coupons)], seen.stderr
+        listed = subprocess.run([sys.executable, str(STUDIO), "coupons"], capture_output=True, text=True, encoding="utf-8", env=env)  # no --root: the environment's
+        assert [entry["name"] for entry in json.loads(listed.stdout)] == coupons, listed.stderr
+    refused = subprocess.run([sys.executable, str(STUDIO), "coupons"], capture_output=True, text=True, encoding="utf-8",
+                             env={**os.environ, paths.COUPONS_ROOT: "mine/coupons"})
+    assert refused.returncode != 0 and "must be an absolute path" in refused.stderr
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the stand-in for CalculiX is a shell script")
+def test_a_run_reads_the_coupons_of_the_folder_it_was_started_with(tmp_path):
+    """`run_coupon.py` by a coupon's name: the coupon is looked for in the environment's folder, and in no other."""
+    import os
+    mine, theirs = tmp_path / "mine", tmp_path / "theirs"
+    convert(values_file(tmp_path), root=mine, day="2026-10-28")
+    ccx = tmp_path / "ccx"
+    ccx.write_text("#!/bin/sh\necho 'This is Version 2.22'\n", encoding="utf-8")
+    ccx.chmod(0o755)
+    result = tmp_path / "outcome.json"
+    done = subprocess.run([sys.executable, str(TOOLS / "run_coupon.py"), DESIGNATION, "--run-by", "A. Engineer", "--result", str(result)],
+                          capture_output=True, text=True, encoding="utf-8", env={**os.environ, paths.COUPONS_ROOT: str(theirs), "ANISOTROPY_CCX": str(ccx)})
+    outcome = json.loads(result.read_text(encoding="utf-8"))
+    assert done.returncode != 0 and outcome["status"] == "refused"
+    assert f"no {DESIGNATION}.toml, {DESIGNATION}-nodal.toml in" in outcome["message"] and str(theirs / DESIGNATION / "ours") in outcome["message"]
+    assert not theirs.exists() and (mine / DESIGNATION / "ours" / f"{DESIGNATION}.toml").is_file()
+
+
+def test_a_warm_worker_is_told_the_coupons_folder_with_each_request(tmp_path):
+    """One warm worker answers many people (ADR-0106): a request's own `root` is the folder its coupon is named among, for that
+    request alone."""
+    mine, theirs = tmp_path / "mine", tmp_path / "theirs"
+    values = values_file(tmp_path)
+    convert(values, root=mine, day="2026-10-28")
+    worker = subprocess.Popen([sys.executable, str(STUDIO), "--root", str(tmp_path / "shared"), "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+    try:
+        assert json.loads(worker.stdout.readline())["ready"] is True
+        answers = {}
+        for name, root in (("mine", str(mine)), ("theirs", str(theirs)), ("shared", None), ("relative", "mine/coupons")):
+            worker.stdin.write(json.dumps({"values": str(values), "out": str(tmp_path / name), **({} if root is None else {"root": root})}) + "\n")
+            worker.stdin.flush()
+            answers[name] = json.loads(worker.stdout.readline())
+        exists = {name: json.loads((tmp_path / name / "checklist.json").read_text(encoding="utf-8"))["coupon_exists"] for name in ("mine", "theirs", "shared")}
+        assert exists == {"mine": True, "theirs": False, "shared": False}  # the coupon is mine alone
+        assert "a request's root is an absolute path" in answers["relative"]["error"] and "state" in answers["shared"]
+        worker.stdin.close()
+        assert worker.wait(timeout=60) == 0
+    finally:
+        worker.kill()

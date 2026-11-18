@@ -116,7 +116,10 @@
   "ext_S12_largest_element": "178",
   "ext_S12_largest_x": 12.5,
   "ext_S12_largest_y": 176.8,
-  "ext_S12_largest_face": null
+  "ext_S12_largest_face": null,
+  "outside_near_tab": false,
+  "gauge_stand_off": 6.25,
+  "gauge_stand_off_of": "width"
  },
  "sentences": [
   "IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries 1.622e+04 N, in tension.",
@@ -125,7 +128,8 @@
   "By the Tsai-Hill criterion the laminate holds at the applied loading, in the gauge section: the first ply to fail would be ply 4 (90 degrees), tied with ply 5, at element 183 (12.5, 181.7 mm), 12 mm from the nearer tab line, by the combined stresses (no single component governs), at 1.032 times the applied loading (1.032 mm, 1.674e+04 N at the top grip; failure index 0.9689).",
   "By the maximum stress criterion the laminate holds at the applied loading, in the gauge section: the first ply to fail would be ply 4 (90 degrees), tied with ply 5, at element 183 (12.5, 181.7 mm), 12 mm from the nearer tab line, by tension across the fibres (sigma_2 reaching F2t, a matrix-dominated mode), at 1.057 times the applied loading (1.057 mm, 1.715e+04 N at the top grip; failure index 0.9461).",
   "The earliest of the criteria is Tsai-Hill.",
-  "Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 times the applied loading, at element 56, at the edge of a gripped tab: the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer."
+  "Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 times the applied loading, at element 56, at the edge of a gripped tab: the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer.",
+  "The gauge section is read at least 6.25 mm from each tab line, a quarter of the width, the same distance on every mesh."
  ],
  "setup_sentences": [
   "The setup is ready to solve.",

@@ -48,7 +48,8 @@ from anisotropy_fea.calculix_summary import calculix_summary, extensometer_of
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.intake import VALUES_SUFFIX, IntakeError, convert, gauge_probes, read_input
+from anisotropy_fea.fields import run_answer
+from anisotropy_fea.intake import VALUES_SUFFIX, IntakeError, convert, gauge_probes, read_input, values_of_spec
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.quality import element_quality
 from anisotropy_fea.spec import load_spec
@@ -65,7 +66,8 @@ INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
 STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study", "CalculiX", "the CalculiX record", "the result",
           "the drawings", "the package", "the outputs")
 DOCUMENT_STAGES = STAGES[STAGES.index("the drawings"):]  # after the result: made in the background of the studio's view (ADR-0064)
-STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run
+STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run, and the rows it ran on
+SETUP_KEYS = ("checklist", "preview", "values")  # that folder's files by key: kept on a run's outputs whatever became of the run
 GATE_GO = "go"  # the word at the gate that lets a held run go on
 GATE_POLL_S = 0.1
 GATE_WAIT_S = 600.0  # a held run that hears nothing in this long is refused: whatever was to answer has gone
@@ -93,6 +95,7 @@ class Outcome:
     documents: str = "written"  # "written", or what is missing and why: a document can fail after the result stands (ADR-0064)
     result_at: float | None = None  # time.perf_counter() when the result was reported
     standard: dict | None = None  # the test standard named and the check's words on it (ADR-0072); None when the coupon names none
+    answer: dict | None = None  # the answer in a few values, for a list of past runs (ADR-0109); None for a result without a criterion
 
 
 class Progress:
@@ -434,6 +437,9 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     progress.attempt = attempt
     print(f"attempt folder: {rel(attempt)}")
     progress.made(**write_studio(out / STUDIO, checklist, model, quality))
+    rows = rows_of_run(spec, out / STUDIO / "values.json")
+    if rows is not None:
+        progress.made(values=rows)
     record = paths.verification(name) / f"{name}-calculix.toml"
     twin_spec = load_spec(twin)
     kind = twin_spec.kind
@@ -463,8 +469,9 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         ("fields", "our engine: every field and the summary, for the studio's viewer", out / "kernel" / f"{name}-fields.json"),
         ("explanation", "our engine: the explanation of the result", out / "kernel" / f"{name}-explanation.json"),
         ("record", "the CalculiX record", record),
-    ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run"}[key], path)
-         for key, path in progress.outputs.items() if key in ("checklist", "preview")]
+    ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run",
+                "values": "the rows of this run, as the studio edits them"}[key], path)
+         for key, path in progress.outputs.items() if key in SETUP_KEYS]
     try:
         for step, args, made in steps:
             progress.start(step)
@@ -489,6 +496,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         if missing:
             raise StepFailed(f"the result: {', '.join(rel(path) for path in missing)} not written")
         result = outcome_line(folder)
+        short = answer_of_run(out / "kernel" / f"{name}-fields.json")
     except StepFailed as exc:
         add_row(folder, [f"{number:02d}", day, what, "--", f"stopped at {exc}", f"`ours/runs/{attempt.name}/run/`"])
         exc.coupon, exc.attempt = name, attempt
@@ -503,7 +511,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     refresh_page(folder)
     opens = [(key, label, path) for key, label, path in opens if path.exists()] + answer
     outputs = {key: path for key, _, path in opens}
-    progress.outputs = {key: path for key, path in progress.outputs.items() if key in outputs or key in ("checklist", "preview")}  # the console and status files are kept only for a run that failed
+    progress.outputs = {key: path for key, path in progress.outputs.items() if key in outputs or key in SETUP_KEYS}  # the console and status files are kept only for a run that failed
     progress.made(**outputs)
     print(f"\nDone: attempt {number:02d} of {name}; its row is in {rel(folder / 'README.md')}. {result}.")
     if documents != "written":
@@ -516,7 +524,30 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     judged = conformance(load_spec(spec))
     standard = None if judged is None else {"designation": judged.profile.designation, "words": judged.words(), "deviations": len(judged.deviations),
                                             "advisories": len(judged.advisories)}
-    return Outcome(name, attempt, result, outputs, documents, result_at, standard)
+    return Outcome(name, attempt, result, outputs, documents, result_at, standard, short)
+
+
+def rows_of_run(spec: Path, path: Path) -> Path | None:
+    """The rows of this attempt as the studio edits them (`intake.values_of_spec`), written into the attempt before anything runs, so a
+    past run is reopened with the rows it ran on, whatever the coupon's spec has become since (ADR-0109). None for a spec the form cannot
+    state: the run goes on without them."""
+    try:
+        values = values_of_spec(load_spec(spec))
+    except (IntakeError, ValueError) as exc:
+        print(f"the rows of this run are not kept: {str(exc).splitlines()[0]}")
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(values, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    return path
+
+
+def answer_of_run(fields: Path) -> dict | None:
+    """The answer in a few values, picked from the summary our engine wrote (`fields.run_answer`); None when the fields hold none."""
+    try:
+        return run_answer(json.loads(fields.read_text(encoding="utf-8"))["summary"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"the answer is not kept with the run: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else fields.name}")
+        return None
 
 
 def outcome_line(folder: Path) -> str:
@@ -564,15 +595,17 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
 
 
 def write_result(path: Path | None, status: str, message: str, coupon: str | None = None, attempt: Path | None = None,
-                 outputs: dict[str, Path] | None = None, documents: str | None = None, result: str | None = None, standard: dict | None = None) -> None:
+                 outputs: dict[str, Path] | None = None, documents: str | None = None, result: str | None = None, standard: dict | None = None,
+                 answer: dict | None = None) -> None:
     """The run's outcome as JSON, for the API's coupon jobs (ADR-0050): done, stopped or refused, and the files by key; for a done
-    run, `result` is the result's one line, `documents` "written" or what is missing and why (ADR-0064), and `standard` the test
-    standard the coupon names with the check's words on it, or None (ADR-0072)."""
+    run, `result` is the result's one line, `documents` "written" or what is missing and why (ADR-0064), `standard` the test
+    standard the coupon names with the check's words on it, or None (ADR-0072), and `answer` the answer in a few values, or None
+    (ADR-0109)."""
     if path is None:
         return
     data = {"status": status, "message": message, "coupon": coupon, "attempt": None if attempt is None else rel(attempt),
             "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "result": result, "documents": documents, "standard": standard,
-            "fea_version": __version__}
+            "answer": answer, "fea_version": __version__}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -588,7 +621,11 @@ def main() -> None:
     parser.add_argument("--result", type=Path, default=None, help="also write the outcome to this JSON file (the API's coupon jobs read it)")
     parser.add_argument("--progress", type=Path, default=None, help="rewrite this JSON file after every step: the stage and the files so far")
     parser.add_argument("--gate", type=Path, default=None, help="once the coupon is named, wait for this file before the attempt: 'go' goes on, other text refuses")
+    parser.add_argument("--every-test", action="store_true", help="offer every test for this run, as ANISOTROPY_ALL_TESTS=on does for the machine "
+                        "(ADR-0089 amendment 5: the API passes it for a founder's sign-in); the steps this run starts inherit it")
     args = parser.parse_args()
+    if args.every_test:  # for this run and the steps it starts, which inherit the environment
+        os.environ[enabled.ALL_TESTS_VARIABLE] = "on"
     progress = Progress(args.progress)
     try:
         done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress,
@@ -604,7 +641,7 @@ def main() -> None:
     progress.finish()
     print("timings: " + ", ".join(f"{stage} {seconds:.1f} s" for stage, seconds in progress.timings.items()), flush=True)
     message = done.result if done.documents == "written" else f"{done.result}; {done.documents}"
-    write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result, done.standard)
+    write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result, done.standard, done.answer)
 
 
 if __name__ == "__main__":

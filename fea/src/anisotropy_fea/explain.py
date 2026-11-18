@@ -111,9 +111,13 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
             facts[f"{criterion}_reaction_at_failure"] = printed(abs(float(at["reaction"])))
             facts["every_load"] = bool(at.get("every_load", False))
     outside = verdict.get("outside_earlier") if verdict else None
-    if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip: reported apart, never as the answer
+    if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip or inside the stand-off (ADR-0108): reported apart
         facts.update(outside_criterion=outside["criterion"], outside_factor=printed(float(outside["factor"])),
-                     outside_element=outside["label"].rsplit(".", 1)[-1], outside_place=outside["place"], outside_touches_grip=bool(outside["touches_grip"]))
+                     outside_element=outside["label"].rsplit(".", 1)[-1], outside_place=outside["place"], outside_touches_grip=bool(outside["touches_grip"]),
+                     outside_near_tab=bool(outside.get("near_tab", False)))
+    reading = summary.get("gauge_reading")
+    if gauge and reading:  # where the gauge section is read (ADR-0108): the stand-off from each tab line, in the result's length unit
+        facts.update(gauge_stand_off=printed(float(reading["stand_off"])), gauge_stand_off_of=reading["of"])
     extremes = summary.get("ply_extremes")
     if extremes:  # the largest ply stresses on the same basis, tension and compression apart (ADR-0085)
         for name, picks in (("S11", ("tension", "compression")), ("S22", ("tension", "compression")), ("S12", ("largest",))):
@@ -209,7 +213,12 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
         out.append(f"Outside {facts['basis']}, {CRITERION.get(facts['outside_criterion'], facts['outside_criterion'])} is reached earlier, at "
                    f"{number(facts['outside_factor'])} times {loads}, at element {facts['outside_element']}, {facts['outside_place']}"
                    + (": the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer."
-                      if facts["outside_touches_grip"] else "."))
+                      if facts["outside_touches_grip"] else
+                      ": inside the stand-off from a tab line, where the corner of the grip sets the stress and it grows as the mesh is refined, "
+                      "so it is reported apart from the answer." if facts.get("outside_near_tab") else "."))
+    if "gauge_stand_off" in facts:
+        out.append(f"The gauge section is read at least {number(facts['gauge_stand_off'])} {facts['length_unit']} from each tab line, a quarter of the "
+                   f"{facts['gauge_stand_off_of']}, the same distance on every mesh.")
     return out + context + method_sentences(facts)
 
 

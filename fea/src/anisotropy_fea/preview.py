@@ -118,3 +118,19 @@ def preview_data(model: FEModel, quality: QualityField | None = None) -> dict[st
                            "per_element": {name: np.round(getattr(quality, name), 6).tolist()
                                            for name in ("aspect_ratio", "min_angle_deg", "max_angle_deg", "jacobian_ratio")}}
     return data
+
+
+def shape_data(model: FEModel, stood_in: tuple[str, ...]) -> dict[str, Any]:
+    """What the studio draws of a plate whose supports or loads are not stated yet (ADR-0101 amendment 1): its mesh and regions, to be
+    clicked, with nothing drawn for a list that was only stood in (`checks.plate_shape`). `shape` names those lists; `loaded` is None
+    when no load is stated. A list the plate does state is drawn as stated."""
+    data = preview_data(model)
+    if "supports" in stood_in:
+        data["held"] = []
+        data["loads"] = [load for load in data["loads"] if load["control"] != "displacement"]
+    if "loads" in stood_in:
+        data["loads"] = [load for load in data["loads"] if load["control"] == "displacement"]
+    data["loaded"] = data["loads"][0] if data["loads"] else None
+    data["shape"] = list(stood_in)
+    return data
+

@@ -29,7 +29,12 @@ test("a gripped coupon is answered in its gauge section, every number the packag
   assert.equal(a.forceUnit, "N");
   assert.ok(a.outside, "the public coupon's clamped edge fails earlier than its gauge section");
   assert.equal(a.outside!.touches_grip, true);
+  assert.equal(a.outside!.near_tab, false);
   assert.ok(a.outside!.factor < a.earliest.factor);
+  // where the gauge section is read (ADR-0108), as the package wrote it: a quarter of the 25 mm width from each tab line
+  assert.deepEqual(s.gauge_reading, { stand_off: 6.25, fraction: 0.25, of: "width", tab_lines: [56, 194], elements: 130, left_out: 10 });
+  assert.equal(fields.mesh.gauge_elements!.length, 130);
+  for (const r of a.rows) assert.ok(fields.mesh.gauge_elements!.includes(r.element) && Math.min(r.xy[1] - 56, 194 - r.xy[1]) >= 6.25);
 });
 
 test("a coupon without a gauge section is answered over the whole model", () => {

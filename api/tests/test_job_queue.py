@@ -17,7 +17,7 @@ from anisotropy_api import coupon_jobs
 from anisotropy_api.coupon_jobs import CouponJobs, JobRefused
 from anisotropy_api.main import ENQUEUE_HEADER, app, job_recorder
 from anisotropy_api.records import fetch_job, update_job
-from anisotropy_api.storage import input_key
+from anisotropy_api.storage import input_key, owner_key
 
 from conftest import needs_test_database
 from memory_store import MemoryStore
@@ -36,7 +36,8 @@ for option in ("--run-by", "--result", "--progress", "--gate"):
 for flag in ("--replace", "--no-pdf", "--no-theory"):
     parser.add_argument(flag, action="store_true")
 args = parser.parse_args()
-root = pathlib.Path(os.environ["STAND_IN_ROOT"])
+root = pathlib.Path(os.environ["ANISOTROPY_COUPONS_ROOT"])  # the folder of coupons the solver started the tool with (ADR-0106)
+releases = pathlib.Path(os.environ["STAND_IN_ROOT"]).parent  # where a test lets a waiting job go on
 result, progress = pathlib.Path(args.result), pathlib.Path(args.progress)
 source = pathlib.Path(args.source)
 coupon = json.loads(source.read_text(encoding="utf-8"))["coupon"] if source.suffix == ".json" else args.source
@@ -79,7 +80,7 @@ print(f"== CalculiX, attempt {number:02d}", flush=True)
 if coupon.startswith("WAIT-RESULT"):  # the result reported, the package still to build (ADR-0064)
     write("the package", False, attempt, {"fields": str(fields)}, result=f"attempt {number:02d}")
 if coupon.startswith("WAIT"):
-    while not (root.parent / f"release-{coupon}").exists():
+    while not (releases / f"release-{coupon}").exists():
         time.sleep(0.02)
 package = attempt / "package"
 package.mkdir()
@@ -115,7 +116,7 @@ def queue(tmp_path, monkeypatch, empty_runs):
 
 
 def solving(solver: CouponJobs, job_id: uuid.UUID, monkeypatch, *, until=("done", "stopped", "refused", "queued")):
-    """Take the job in the solver (its stand-in reads its own coupons root) and wait until it reaches a state in `until`, both in
+    """Take the job in the solver (its stand-in waits for its release beside the solver's own coupons) and wait until it reaches a state in `until`, both in
     the solver and on its row: the solver sets the job's state a moment before it writes the row, so the row can lag behind."""
     monkeypatch.setenv("STAND_IN_ROOT", str(solver.local_root))
     job = solver.take(job_id)
@@ -174,6 +175,41 @@ def test_a_solver_runs_the_queued_job_and_the_api_reads_it_back_from_the_row_and
     assert fields.status_code == 307 and fields.headers["location"].startswith("https://store.test/coupons/IM7-UNT-L1/attempt-02_2026-11-07/files/fields/")
     assert solver.take(uuid.UUID(job_id)).state == "done"  # the job as this solver ran it; a new delivery claims nothing (below)
     assert CouponJobs(solver.command, solver.recorder, solver.root, store=store, table=table, role="solver").take(uuid.UUID(job_id)) is None
+
+
+def test_a_signed_in_persons_job_keeps_its_coupon_in_their_own_folder_and_under_their_own_prefix(queue, monkeypatch):
+    """ADR-0106: the solver starts the tool with the job's owner's folder and files it under their prefix; two people's coupons of
+    one name are two coupons, each numbering its own attempts; a job with no email keeps the shared folder and `coupons/`."""
+    front, solver, _, store, table, _ = queue
+    mine, theirs = "a.engineer@example.com", "other.engineer@example.com"
+    values = json.dumps({"coupon": "IM7-UNT-L1", "form_version": "0.7"}).encode()
+    ran = {}
+    for who in (mine, theirs, mine, None):
+        filed = front.start("browser", {"values": "x"}, ["--run-by", "A. Engineer", "--no-pdf"], values=values, user_email=who)
+        ran.setdefault(who, []).append(solving(solver, filed.id, monkeypatch))
+    assert [job.outcome["message"] for job in ran[mine]] == ["attempt 02", "attempt 03"]  # my second run numbers on from my first
+    assert ran[theirs][0].outcome["message"] == "attempt 02" and ran[None][0].outcome["message"] == "attempt 02"  # theirs and the shared one start their own
+
+    for who in (mine, theirs):
+        key = owner_key(who)
+        assert f"owners/{key}/coupons/IM7-UNT-L1/folder/ours/IM7-UNT-L1.toml" in store.objects
+        row = fetch_job(table, ran[who][0].id)
+        assert row.stored["fields"].startswith(f"owners/{key}/coupons/IM7-UNT-L1/attempt-02_2026-11-07/files/fields/")
+        assert row.stored["package"] == f"owners/{key}/coupons/IM7-UNT-L1/attempt-02_2026-11-07/package.zip"
+    assert "coupons/IM7-UNT-L1/folder/ours/IM7-UNT-L1.toml" in store.objects and fetch_job(table, ran[None][0].id).stored["fields"].startswith("coupons/IM7-UNT-L1/")
+    assert not any("@" in key or "example" in key for key in store.objects), "no key holds an address"
+    assert sorted(p.name for p in (solver.local_root / "IM7-UNT-L1" / "ours" / "runs").iterdir()) == ["attempt-02_2026-11-07"]
+    assert list(solver.owners_root.iterdir()) == []  # a solver's disk keeps no person's coupons past the next person's job: my third attempt came by the store
+    again = front.start("browser", {"values": "x"}, ["--run-by", "A. Engineer", "--no-pdf"], values=values, user_email=theirs)
+    assert solving(solver, again.id, monkeypatch).outcome["message"] == "attempt 03" and [p.name for p in solver.owners_root.iterdir()] == [owner_key(theirs)]
+
+    # the API's container reads each person's coupons from their own prefix into their own folder, when they ask
+    assert not front.owners_root.exists()
+    assert front.has_coupon("IM7-UNT-L1", mine) and front.has_coupon("IM7-UNT-L1", theirs) and not front.has_coupon("IM7-UNT-L1", "nobody@example.com")
+    assert sorted(p.name for p in front.owners_root.iterdir()) == sorted([owner_key(mine), owner_key(theirs), owner_key("nobody@example.com")])
+    assert sorted(p.name for p in (front.root_of(mine) / "IM7-UNT-L1" / "ours" / "runs").iterdir()) == ["attempt-02_2026-11-07", "attempt-03_2026-11-07"]
+    assert not front.has_coupon("../IM7-UNT-L1", mine) and not front.has_coupon("", mine)
+    assert not front.local_root.exists() and front.has_coupon("IM7-UNT-L1", None) and front.local_root.is_dir()  # the shared folder, level only once asked
 
 
 def test_a_solver_that_runs_a_job_is_busy_for_the_next_and_its_row_carries_the_timings(queue, monkeypatch):

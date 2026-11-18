@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { explainJob, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
 import { customerText, downloadable, heldWords, loadWords, setWords, shownSentence } from "@/lib/studio-copy";
-import { useAllTests } from "./project-context";
+import { useAllTests, type Place } from "./project-context";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { AbaqusCard } from "./abaqus-card";
@@ -353,6 +353,7 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
   const times = a.everyLoad ? "every applied load" : "the applied loading";
   const who = (r: { ply: number; angle: number; face: string | null }) => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
   const extremes = fields.summary.ply_extremes;
+  const reading = fields.summary.gauge_reading;
   return (
     <div className="studio-panel studio-answer" data-testid="answer" data-basis={a.basis} data-fails={e.fails}>
       <h3>First-ply failure <span className="studio-badge">{a.basisWords}</span></h3>
@@ -380,11 +381,16 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
         </table>
       </div>
       <p className="studio-muted">R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading. First-ply failure is the onset of damage, not ultimate strength.</p>
+      {a.basis === "gauge" && reading ? (
+        <p className="studio-muted" data-testid="answer-gauge-reading">
+          The gauge section is read at least {printed(reading.stand_off)} {L} from each tab line, a quarter of the {reading.of}, the same distance on every mesh.
+        </p>
+      ) : null}
       {a.outside ? (
         <p className="studio-answer-outside" data-testid="answer-outside">
-          {a.outside.touches_grip ? "At a grip edge" : `Outside ${a.basisWords}`}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
+          {a.outside.touches_grip ? "At a grip edge" : a.outside.near_tab ? "Beside a tab line" : `Outside ${a.basisWords}`}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
           {a.outside.label.split(".").pop()} {where(a.outside.xy, L)}.
-          {a.outside.touches_grip ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
+          {a.outside.touches_grip || a.outside.near_tab ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
           <button type="button" className="studio-text-button" onClick={() => onShow(a.outside!.element, a.outside!.ply, a.outside!.criterion, a.outside!.face)}>Show</button>
         </p>
       ) : null}
@@ -548,8 +554,12 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true }: {
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
+  /** told the element clicked on the model, so the assistant can read "here" (ADR-0099) */
+  onPicked?: (element: number | null) => void;
+  /** a place the assistant answered about: framed on the model once per `at` (ADR-0099) */
+  place?: Place | null;
   /** our kernel's live answer (ADR-0086), shown with its seconds until a full run checks it; null for a full run's result */
   live?: { seconds: number; warm: boolean } | null;
   /** a newer live answer is on its way: the numbers shown are the last rows' */
@@ -585,14 +595,29 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     const of = preview.held.filter((h) => h.set === set);
     return { nodes: fields.mesh.node_sets[set] ?? preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
   }) : [];
-  const loaded = preview ? { nodes: fields.mesh.node_sets[preview.loaded.set] ?? preview.mesh.node_sets[preview.loaded.set] ?? [],
-    direction: preview.loaded.direction, label: loadWords(preview.loaded) } : null;
+  const load = preview?.loaded ?? null; // a solved model states a load; a plate's shape, which has none, is never solved (ADR-0101 amendment 1)
+  const loaded = preview && load ? { nodes: fields.mesh.node_sets[load.set] ?? preview.mesh.node_sets[load.set] ?? [],
+    direction: load.direction, label: loadWords(load) } : null;
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
   const show = (element: number, ply: number, criterion: string, face?: string | null) => {
     setHighlight(element); setPicked(element);
     const faceIndex = face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(face)) : undefined;
     setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion, face: faceIndex ?? c.face }));
   };
+  useEffect(() => { onPicked?.(picked); }, [picked, onPicked]);
+  useEffect(() => () => onPicked?.(null), [onPicked]); // the results gone, nothing is picked
+  const placed = useRef(place?.at ?? 0); // a place asked for before these results were on the page is not shown again
+  useEffect(() => {
+    // the place of an answer in the conversation: its element outlined and read, its ply (and face) on the model
+    if (!place || place.at === placed.current) return;
+    placed.current = place.at;
+    if (place.element < 0 || place.element >= fields.mesh.element_labels.length) return;
+    setHighlight(place.element); setPicked(place.element);
+    const faceIndex = place.face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(place.face)) : undefined;
+    const id = place.field && fieldOptions(fields).some((o) => o.id === place.field) ? place.field : undefined;
+    const criterion = place.criterion && fields.element.failure[place.criterion] ? place.criterion : undefined;
+    setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face, criterion: criterion ?? c.criterion }));
+  }, [place?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>
       {live ? (

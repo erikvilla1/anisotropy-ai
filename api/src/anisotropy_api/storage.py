@@ -14,6 +14,10 @@ The layout, under one prefix per coupon:
                                                             only through the API's owner check, never restored to a coupon's folder
     uploads/<upload id>/compared-<time>.pdf                 the document of that upload's comparison made at <time> (step 7), written when
                                                             its owner first asks for it and deleted with the upload
+    owners/<owner>/coupons/<coupon>/...                     behind the sign-in, a person's coupons, laid out as `coupons/` is, under a
+                                                            prefix of their own (ADR-0106); <owner> is `owner_key` of their signed-in
+                                                            email, so no key holds an address. `coupons/` at the top keeps the coupons
+                                                            made with no sign-in, and those made before each person had a folder
 
 Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before, and an upload's bundle is
 kept in a folder of the local disk under the same key (`FolderStore`).
@@ -33,6 +37,7 @@ from typing import Callable, Protocol
 from .settings import StorageSettings
 
 COUPONS = "coupons"
+OWNERS = "owners"
 FOLDER = "folder"
 JOBS = "jobs"
 UPLOADS = "uploads"
@@ -178,20 +183,42 @@ class FolderStore:
 
 # ------------------------------------------------------------------------------------------------------------- the layout
 
-def attempt_prefix(coupon: str, attempt: str) -> str:
-    return f"{COUPONS}/{coupon}/{attempt}"
+OWNER_KEY = re.compile(r"[0-9a-f]{32}")
 
 
-def file_key(coupon: str, attempt: str, key: str, filename: str) -> str:
-    return f"{attempt_prefix(coupon, attempt)}/files/{key}/{filename}"
+def owner_key(user_email: str) -> str:
+    """The name of a person's folder of coupons, on the disk and in the store (ADR-0106): the first 32 hex digits of the SHA-256 of
+    their signed-in email as Access states it, to the letter, as the records compare it (ADR-0104). Neither a path nor a key holds
+    the address. It is a name, not a secret: who may read a folder is decided by the sign-in, never by knowing its name."""
+    if not user_email.strip():
+        raise ValueError("an owner's key is made from their signed-in email; there is none")
+    return hashlib.sha256(user_email.encode("utf-8")).hexdigest()[:32]
 
 
-def package_key(coupon: str, attempt: str) -> str:
-    return f"{attempt_prefix(coupon, attempt)}/package.zip"
+def coupons_prefix(owner: str | None = None) -> str:
+    """Where the coupons are kept, with its closing slash: `coupons/` for those made with no sign-in, `owners/<owner>/coupons/` for a
+    person's, by their `owner_key`."""
+    if owner is None:
+        return f"{COUPONS}/"
+    if not OWNER_KEY.fullmatch(owner):
+        raise ValueError(f"{owner!r} is not an owner's key")
+    return f"{OWNERS}/{owner}/{COUPONS}/"
 
 
-def folder_key(coupon: str, relative: PurePosixPath) -> str:
-    return f"{COUPONS}/{coupon}/{FOLDER}/{relative.as_posix()}"
+def attempt_prefix(coupon: str, attempt: str, owner: str | None = None) -> str:
+    return f"{coupons_prefix(owner)}{coupon}/{attempt}"
+
+
+def file_key(coupon: str, attempt: str, key: str, filename: str, owner: str | None = None) -> str:
+    return f"{attempt_prefix(coupon, attempt, owner)}/files/{key}/{filename}"
+
+
+def package_key(coupon: str, attempt: str, owner: str | None = None) -> str:
+    return f"{attempt_prefix(coupon, attempt, owner)}/package.zip"
+
+
+def folder_key(coupon: str, relative: PurePosixPath, owner: str | None = None) -> str:
+    return f"{coupons_prefix(owner)}{coupon}/{FOLDER}/{relative.as_posix()}"
 
 
 def input_key(job_id: str, filename: str) -> str:
@@ -217,25 +244,27 @@ def upload_document_key(upload_id: str, compared_at: dt.datetime) -> str:
     return upload_prefix(upload_id) + f"{UPLOAD_DOCUMENT}{compared_at.astimezone(dt.timezone.utc):%Y%m%dT%H%M%S%f}Z.pdf"
 
 
-def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path) -> str:
+def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path, owner: str | None = None) -> str:
     """One reported file by its key, as `store_job` keeps it; returns the object key. For a running job's files (the queue)."""
-    object_key = file_key(coupon, attempt, key, path.name)
+    object_key = file_key(coupon, attempt, key, path.name, owner)
     store.put(object_key, path, content_type(path), disposition(path))
     return object_key
 
 
-def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, Path], package_zip: Path | None) -> dict[str, str]:
+def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, Path], package_zip: Path | None,
+              owner: str | None = None) -> dict[str, str]:
     """Upload every file the tool reported, by its key, and the package zip; returns key -> object key, what the status keeps so a
-    later process can hand out links. A reported folder (the package itself) is left out: the zip stands for it."""
+    later process can hand out links. A reported folder (the package itself) is left out: the zip stands for it. With `owner`, under
+    that person's prefix (ADR-0106)."""
     stored: dict[str, str] = {}
     puts: list[Callable[[], None]] = []
     for key, path in sorted(outputs.items()):
         if path.is_file():
-            object_key = file_key(coupon, attempt, key, path.name)
+            object_key = file_key(coupon, attempt, key, path.name, owner)
             puts.append(lambda k=object_key, p=path: store.put(k, p, content_type(p), disposition(p)))
             stored[key] = object_key
     if package_zip is not None and package_zip.is_file():
-        object_key = package_key(coupon, attempt)
+        object_key = package_key(coupon, attempt, owner)
         puts.append(lambda k=object_key: store.put(k, package_zip, "application/zip", disposition(package_zip)))
         stored["package"] = object_key
     at_once(puts)
@@ -274,16 +303,17 @@ def kept_in_folder(parts: tuple[str, ...] | list[str]) -> bool:
     return not parts[-1].endswith(SKIPPED_SUFFIXES)
 
 
-def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
+def store_folder(store: ObjectStore, folder: Path, coupon: str, owner: str | None = None) -> int:
     """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix, apart
     from a file the store holds unchanged: its tag is the content's MD5 for an object put in one piece, as these are (ADR-0056
-    amendment 5, so the upload at a job's end does not grow with the coupon's attempts). Returns the number of files uploaded."""
-    held = store.tags(f"{COUPONS}/{coupon}/{FOLDER}/")
+    amendment 5, so the upload at a job's end does not grow with the coupon's attempts). Returns the number of files uploaded. With
+    `owner`, under that person's prefix (ADR-0106)."""
+    held = store.tags(f"{coupons_prefix(owner)}{coupon}/{FOLDER}/")
     puts: list[Callable[[], None]] = []
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
         if not kept_in_folder(path.relative_to(folder).parts):
             continue
-        key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()))
+        key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()), owner)
         if held.get(key, "").strip('"') == hashlib.md5(path.read_bytes()).hexdigest():
             continue
         puts.append(lambda k=key, p=path: store.put(k, p, content_type(p)))
@@ -291,17 +321,17 @@ def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
     return len(puts)
 
 
-def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
+def restore(store: ObjectStore, root: Path, owner: str | None = None) -> tuple[int, int]:
     """Every coupon's folder from the store into root/<coupon>/, downloading only the files the disk lacks; returns the number of
-    files downloaded and of coupons seen. A key that would leave its coupon's folder is skipped."""
-    marker = f"/{FOLDER}/"
+    files downloaded and of coupons seen. A key that would leave its coupon's folder is skipped. With `owner`, that person's coupons
+    (ADR-0106), `root` being their folder."""
+    prefix = coupons_prefix(owner)
     files, coupons = 0, set()
-    for key in store.keys(f"{COUPONS}/"):
-        head, found, relative = key.partition(marker)
-        coupon = head.removeprefix(f"{COUPONS}/")
-        parts = relative.split("/") if found else []
-        if not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
+    for key in store.keys(prefix):
+        found = _coupon_path(key, prefix)
+        if found is None:
             continue
+        coupon, parts = found
         coupons.add(coupon)
         if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
             continue
@@ -313,13 +343,25 @@ def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
     return files, len(coupons)
 
 
-def _coupon_path(key: str) -> tuple[str, list[str]] | None:
+def restore_owners(store: ObjectStore, owners_root: Path) -> tuple[int, int]:
+    """Every person's coupons from the store into owners_root/<owner>/<coupon>/ (ADR-0106), as `restore` does for one; returns the
+    number of files downloaded and of people seen. A prefix that is not an owner's key is skipped."""
+    owners = sorted({key.split("/")[1] for key in store.keys(f"{OWNERS}/") if key.count("/") >= 2})
+    files = 0
+    for owner in owners:
+        if OWNER_KEY.fullmatch(owner):
+            files += restore(store, owners_root / owner, owner)[0]
+    return files, sum(1 for owner in owners if OWNER_KEY.fullmatch(owner))
+
+
+def _coupon_path(key: str, prefix: str = f"{COUPONS}/") -> tuple[str, list[str]] | None:
     """A key under a coupon's folder prefix as (coupon, parts of the path under it), or None for any other key or one that would leave
-    the coupon's folder."""
-    head, found, relative = key.partition(f"/{FOLDER}/")
-    coupon = head.removeprefix(f"{COUPONS}/")
+    the coupon's folder. `prefix` is where the coupons are kept (`coupons_prefix`)."""
+    if not key.startswith(prefix):
+        return None
+    coupon, found, relative = key.removeprefix(prefix).partition(f"/{FOLDER}/")
     parts = relative.split("/") if found else []
-    if not head.startswith(f"{COUPONS}/") or not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
+    if not coupon or "/" in coupon or coupon in (".", "..") or not parts or any(part in ("", ".", "..") for part in parts):
         return None
     return coupon, parts
 
@@ -336,13 +378,15 @@ def _held_here(target: Path, key: str, tag: str, marks: dict[str, str]) -> bool:
     return marks.get(key) == tag
 
 
-def sync(store: ObjectStore, root: Path, prune: bool = False) -> tuple[int, int]:
+def sync(store: ObjectStore, root: Path, prune: bool = False, owner: str | None = None) -> tuple[int, int]:
     """Every coupon's folder under root/<coupon>/ brought level with the store (the job queue, ADR-0056 amendment 3): a file is fetched
     when the disk lacks it or holds other content than the store (`_held_here`), up to TRANSFERS at a time. With `prune`, every other
     file under root is deleted and every folder left empty, so the disk holds the store's coupons and nothing else, as a fresh restore
     would, having fetched only what changed (a warm solver's start, ADR-0056 amendment 9); without it, a file the store does not hold is
     left alone. Returns the number of files fetched and of coupons seen. Where `restore` fills a fresh disk once, this keeps a
-    long-lived container's coupons current while other containers solve them."""
+    long-lived container's coupons current while other containers solve them. With `owner`, that person's coupons (ADR-0106), `root`
+    being their folder: nothing of anyone else's is listed, fetched or pruned."""
+    prefix = coupons_prefix(owner)
     marks_path = root / TAGS
     try:
         marks = json.loads(marks_path.read_text(encoding="utf-8")) if marks_path.is_file() else {}
@@ -351,9 +395,9 @@ def sync(store: ObjectStore, root: Path, prune: bool = False) -> tuple[int, int]
     coupons: set[str] = set()
     wanted: set[Path] = {marks_path}
     fetches: list[tuple[str, str, Path]] = []
-    listed = store.tags(f"{COUPONS}/")
+    listed = store.tags(prefix)
     for key, tag in sorted(listed.items()):
-        found = _coupon_path(key)
+        found = _coupon_path(key, prefix)
         if found is None:
             continue
         coupon, parts = found

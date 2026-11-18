@@ -13,8 +13,10 @@ written here and the browser derives none (ADR-0063).
 
 The summary names the applied loading, the reaction that balances it, the largest displacement, the largest ply stresses, and per
 criterion the first ply to fail, with its element, ply, face, mode and place in the words the coupon document uses (`report.fpf_place`).
-It also names, per criterion, the first ply to fail in the gauge section alone (`gauge_failures`: the deck's `Gauge` elements that touch
-no gripped node), the number a test is compared with, away from the clamped edge of a tab.
+It also names, per criterion, the first ply to fail in the gauge section alone (`gauge_failures`), the number a test is compared with.
+The gauge section is read where the mesh does not set the value (ADR-0108, `gauge_reading`): the deck's `Gauge` elements whose centroid
+is at least a quarter of the coupon's width from each tab line, since the corner where a tab line meets a free edge has a stress that
+grows without limit as the mesh is refined. The stand-off and the elements read are written with the fields, so no reader derives them.
 Every number comes from the solve; a non-finite one is refused.
 """
 
@@ -38,12 +40,14 @@ from .report import edge_widths, fpf_place, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
 from .units import UNIT_LABEL, from_si
+from .working import working_of
 
 MODES = ("longitudinal tension", "longitudinal compression", "transverse tension", "transverse compression", "in-plane shear", "interactive",
          "none")  # the engine's governing modes; "none" is an unstressed ply, whose ratio is infinite
 STRESS_NAMES = ("S11", "S22", "S12")  # the material-axis stress components, as the team's CAE exports name them
 DIGITS = 9  # significant digits written for the arrays; the summary keeps full precision
 SENSE = {2: ("in tension", "in compression"), 3: ("lifting the coupon", "pressing the coupon down")}  # by the sign of the reaction, positive first
+GAUGE_STAND_OFF = 0.25  # of the smaller of the coupon's width and its gauge length: how far from a tab line the gauge section is read (ADR-0108)
 SUPPORT_SENSE = {1: ("pushing along +x", "pushing along -x"), 2: ("pushing along +y", "pushing along -y"), 3: ("pushing the plate up", "holding the plate down")}
 
 
@@ -157,24 +161,47 @@ def applied_loading(deck: Deck, solution: Solution) -> dict[str, Any]:
     return {"control": "force", "value": total, "dof": 2, "set": "the top grip", "nodes": sorted(top), "direction": "along the coupon"}
 
 
-def gauge_elements(deck: Deck, solution: Solution) -> list[int]:
-    """The mesh indices of the gauge section's elements that touch no gripped node: the deck's `Gauge` set less the row along each tab
-    line, whose nodes the grips hold. Empty for a deck without that set or without grips (a plate, a bending coupon)."""
+def gauge_reading(deck: Deck, solution: Solution) -> dict[str, Any] | None:
+    """Where the gauge section is read (ADR-0108), in SI: the deck's `Gauge` elements that touch no gripped node and whose centroid is
+    at least `stand_off` from each tab line, the innermost row of gripped nodes at each end. The stand-off is GAUGE_STAND_OFF of the
+    coupon's width, or of the gauge length when that is the smaller (`of` says which), so the middle half of a short gauge is always
+    read. The corner where a tab line meets a free edge is a point where the model's stress has no finite value: an element beside it
+    reads higher on every finer mesh, and a quarter width is past the zone where that sets the smallest strength ratio (the ADR's
+    table). `near` holds the `Gauge` elements left out. None for a deck without that set or without grips (a plate, a bending coupon)."""
     mesh = solution.mesh
     keys = deck.elsets.get("Gauge")
     if not keys:
-        return []
+        return None
     try:
         bottom, top = gripped_groups(deck, solution)
     except KernelError:
-        return []
+        return None
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
-    inside = []
+    instance = [i for i in range(mesh.node_count) if mesh.node_keys[i][0] is not None]
+    lo = max(float(mesh.xy[i, 1]) for i in bottom if mesh.node_keys[i][0] is not None)
+    hi = min(float(mesh.xy[i, 1]) for i in top if mesh.node_keys[i][0] is not None)
+    width = float(mesh.xy[instance, 0].max() - mesh.xy[instance, 0].min())
+    length = hi - lo
+    if length <= 0.0 or width <= 0.0:
+        return None
+    of = "width" if width <= length else "gauge length"
+    stand_off = GAUGE_STAND_OFF * min(width, length)
+    slack = 1e-6 * length  # a centroid on the line itself is read, whatever the round-off of its mean
+    inside, near = [], []
     for key in keys:
         e = mesh.element(key)
-        if not gripped & set(mesh.connectivity[e, :4].tolist()):
-            inside.append(e)
-    return inside
+        corners = mesh.connectivity[e, :4]
+        y = float(mesh.xy[corners, 1].mean())
+        clear = lo + stand_off - slack <= y <= hi - stand_off + slack
+        (inside if clear and not gripped & set(corners.tolist()) else near).append(e)
+    return {"elements": inside, "near": near, "stand_off": stand_off, "fraction": GAUGE_STAND_OFF, "of": of, "tab_lines": (lo, hi), "width": width}
+
+
+def gauge_elements(deck: Deck, solution: Solution) -> list[int]:
+    """The mesh indices of the elements the gauge section is read at (`gauge_reading`, ADR-0108). Empty for a deck without a `Gauge` set
+    or without grips (a plate, a bending coupon)."""
+    reading = gauge_reading(deck, solution)
+    return reading["elements"] if reading else []
 
 
 def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
@@ -218,10 +245,12 @@ def classical_laminate_check(solution: Solution, applied: dict[str, Any], reacti
             "note": "classical laminate theory: the reaction over the width as N_y, N_x = N_xy = 0, each ply at its middle"}
 
 
-def gauge_failures(deck: Deck, solution: Solution, failures: dict[str, FailureField], shell: bool) -> dict[str, FailureField]:
-    """Per criterion, the first ply to fail among the gauge elements alone (`gauge_elements`), as a FailureField with that element, ply,
-    face and mode; a criterion whose gauge plies are all unstressed (an infinite ratio) is left out."""
-    inside = gauge_elements(deck, solution)
+def gauge_failures(deck: Deck, solution: Solution, failures: dict[str, FailureField], shell: bool,
+                   reading: dict[str, Any] | None = None) -> dict[str, FailureField]:
+    """Per criterion, the first ply to fail among the elements the gauge section is read at (`gauge_reading`, ADR-0108; the caller's own
+    reading when it has one), as a FailureField with that element, ply, face and mode; a criterion whose gauge plies are all unstressed
+    (an infinite ratio) is left out."""
+    inside = reading["elements"] if reading is not None else gauge_elements(deck, solution)
     out: dict[str, FailureField] = {}
     for criterion, found in failures.items():
         if not inside:
@@ -265,9 +294,10 @@ def answer_of(factor: float, applied: dict[str, Any], reaction: float, force_uni
 
 
 def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
-    """The answer's basis and its earliest criterion (ADR-0085): the gauge section, away from the clamped edge, when the coupon has one
-    (the number a test coupon that breaks in its gauge is compared with), the whole model otherwise (a plate, a bending coupon). A failure
-    elsewhere that comes earlier, at the clamped edge of a grip, is reported apart as `outside_earlier`. None without a criterion."""
+    """The answer's basis and its earliest criterion (ADR-0085): the gauge section, read past the stand-off from each tab line (ADR-0108),
+    when the coupon has one (the number a test coupon that breaks in its gauge is compared with), the whole model otherwise (a plate, a
+    bending coupon). A failure elsewhere that comes earlier, at the clamped edge of a grip or within the stand-off of a tab line
+    (`near_tab`), is reported apart as `outside_earlier`. None without a criterion."""
     table, basis = (gauge, "gauge") if gauge else (whole, "whole")
     if not table:
         return None
@@ -280,8 +310,20 @@ def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]
         if w["factor"] < factor:
             out["outside_earlier"] = {"criterion": first, "factor": float(w["factor"]), "fails": bool(w["factor"] <= 1.0), "element": w["element"],
                                       "label": w["label"], "ply": w["ply"], "angle": w["angle"], "face": w["face"], "mode": w["mode"],
-                                      "place": w["place"], "touches_grip": w["touches_grip"], "xy": w["xy"]}
+                                      "place": w["place"], "touches_grip": w["touches_grip"], "near_tab": bool(w.get("near_tab", False)),
+                                      "xy": w["xy"]}
     return out
+
+
+def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
+    """A result's answer in a few values, for a list of past runs (ADR-0109): whether a ply fails at the applied loading, the factor, the
+    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict."""
+    verdict = summary.get("verdict")
+    if not verdict:
+        return None
+    first = summary["fpf_gauge" if verdict["basis"] == "gauge" else "fpf"][verdict["earliest"]]
+    return {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
+            "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
 
 
 def ply_extremes(stress_12: np.ndarray, mises: np.ndarray, elements: np.ndarray, angles: np.ndarray, shell: bool,
@@ -444,23 +486,29 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                           "xy": length(centroids[e]).tolist(), "face": FACES[int(where[1])] if shell else None, "touches_grip": e in gripped}
         summary["ply_peaks"].append(peak)
     summary["clt"] = classical_laminate_check(solution, applied, reaction_value, angles, units, deck)
+    # where the gauge section is read (ADR-0108): at least the stand-off from each tab line, the same distance on every mesh
+    reading = gauge_reading(deck, solution)
+    near_tab = set(reading["near"]) if reading else set()  # with no gripped node: inside the stand-off, beside the row at the grip
+    summary["gauge_reading"] = None if reading is None else {
+        "stand_off": float(length(reading["stand_off"])), "fraction": reading["fraction"], "of": reading["of"],
+        "tab_lines": [float(length(v)) for v in reading["tab_lines"]], "elements": len(reading["elements"]), "left_out": len(reading["near"])}
     for criterion, found in failures.items():
         e = mesh.element_keys.index(found.element)
         place, touches_grip, tied = fpf_place(deck, solution, found, units)
         summary["fpf"][criterion] = {"factor": float(found.factor), "index": 1.0 / float(found.factor), "element": int(e),
                                      "label": element_name(found.element), "ply": int(found.ply), "angle": float(angles[found.ply - 1]),
                                      "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
-                                     "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
+                                     "near_tab": e in near_tab and not touches_grip, "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest"] = min(failures, key=lambda c: failures[c].factor) if failures else None
-    # the same, over the gauge section alone: the number a test is compared with, away from the clamped edge of a gripped tab
+    # the same, over the gauge section alone: the number a test is compared with, read past the stand-off from each tab line (ADR-0108)
     summary["fpf_gauge"] = {}
-    for criterion, found in gauge_failures(deck, solution, failures, shell).items():
+    for criterion, found in gauge_failures(deck, solution, failures, shell, reading).items():
         e = mesh.element_keys.index(found.element)
         place, touches_grip, tied = fpf_place(deck, solution, found, units)
         summary["fpf_gauge"][criterion] = {"factor": float(found.factor), "index": 1.0 / float(found.factor), "element": int(e),
                                            "label": element_name(found.element), "ply": int(found.ply), "angle": float(angles[found.ply - 1]),
                                            "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
-                                           "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
+                                           "near_tab": False, "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest_gauge"] = min(summary["fpf_gauge"], key=lambda c: summary["fpf_gauge"][c]["factor"]) if summary["fpf_gauge"] else None
     # the answer (ADR-0085): per criterion, whether a ply fails at the applied loading, and the loading at which the first one would; a
     # linear model scales every stress with the loading, so the loading at first-ply failure is the factor times what is applied
@@ -469,10 +517,14 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         for entry in table.values():
             entry.update(answer_of(entry["factor"], summary["applied"], summary["reaction"]["value"], lab["force"], every_load))
     summary["verdict"] = verdict_of(summary["fpf"], summary["fpf_gauge"])
-    inside = gauge_elements(deck, solution)
+    inside = reading["elements"] if reading else []
     summary["ply_extremes"] = ply_extremes(stress_12, mises, np.asarray(inside if inside else range(ne), dtype=int), angles, shell,
                                            lambda e: element_name(mesh.element_keys[e]), lambda e: length(centroids[e]).tolist(), stress)
     summary["ply_extremes"]["basis"] = "gauge" if inside else "whole"
+    # the working behind the answer (ADR-0103): for the first ply to fail by each criterion, each step's formula with the values put in
+    worked = working_of(solution, field, summary, units)
+    if worked is not None:
+        summary["working"] = worked
     if method is not None and applied["dof"] == 2 and len(mesh.sections) == 1:
         # the force along the coupon: the moving grip's reaction under a displacement, the applied total under a force (ADR-0072)
         force = reaction_value if applied["set"] == "the top grip" else float(applied["value"])
@@ -550,6 +602,7 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                  "element_labels": [element_name(k) for k in mesh.element_keys],
                  "node_sets": {name: [mesh.node(key) for key in keys] for name, keys in deck.nsets.items()},
                  "element_sets": {name: [mesh.element(key) for key in keys] for name, keys in deck.elsets.items()},
+                 "gauge_elements": list(reading["elements"]) if reading else None,  # where the gauge section is read (ADR-0108)
                  "node_count": n, "element_count": ne, "plies": int(plies), "angles": angles.tolist(), "faces": list(FACES) if shell else None,
                  "translations": translations},
         "nodal": nodal,

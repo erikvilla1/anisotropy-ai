@@ -28,7 +28,7 @@ import { isTow } from "@/lib/studio-tow";
  * coupon is and which standard it follows; the steps after it wait for the test, and each shows what the standard asks of it (amendment 1). The rows, the check and the
  * job live in the project store; this column keeps only what belongs to the page: the row errors, the name, the messages. */
 export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setForm, setPlate, run: runner, allTests } = useProject();
+  const { form, plate, setForm, setPlate, run: runner, allTests, imported } = useProject();
   const { checking, checked, job, fields } = runner;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runBy, setRunBy] = useState("");
@@ -149,6 +149,8 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         <SetupLine form={form} />
         <div className="studio-actions">
           <button type="button" className="studio-text-button" onClick={loadExample} disabled={busy}>Load example</button>
+          {/* a model built elsewhere, read and solved as it stands (ADR-0105); offered where every test is (ADR-0089) */}
+          {allTests && apiBaseUrl ? <button type="button" className="studio-text-button" onClick={imported.show} data-testid="import-open">Import a model</button> : null}
           {coupons.length ? (
             <span className="studio-reopen">
               <select value={reopen} onChange={(e) => setReopen(e.target.value)} aria-label="Reopen a coupon" disabled={busy}>

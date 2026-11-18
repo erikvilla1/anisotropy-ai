@@ -61,6 +61,7 @@ docs/         Decision records, theory, evaluations, manuals and the documentati
 engine/       The laminate analysis engine (Python)
 fea/          The finite element package: decks, kernel, checks and the coupon tool (Python)
 lib/          Client logic, material records and physics references
+mcp-server/   Anisotropy as tools for an MCP client such as Claude Desktop or Claude Code, on your own machine (Python)
 public/       Brand marks, images and other files the site serves
 scripts/      Build, export and asset scripts
 services/     The material source monitor
@@ -126,6 +127,7 @@ npm run typecheck
 (cd engine && uv run pytest)
 (cd fea && uv run pytest -q -ra tests ../engine/tests)
 (cd api && uv run pytest -q)
+(cd mcp-server && uv run pytest -q)
 ```
 
 The API's database tests run when `TEST_DATABASE_URL` is set ([api/README.md](api/README.md)) and are skipped with the reason otherwise; finite element tests that need CalculiX or Gmsh are skipped the same way without them.
