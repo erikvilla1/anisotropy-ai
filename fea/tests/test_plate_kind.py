@@ -3,7 +3,6 @@ pressure plate reproduces the Navier case; the spec refuses what it must by name
 the rigid-body motions."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest

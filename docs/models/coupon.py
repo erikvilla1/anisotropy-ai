@@ -69,7 +69,7 @@ from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
-from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
+from anisotropy_fea.case_pages import calculix_record, read_case  # noqa: E402
 from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.every_output import write_ours as write_every_output  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
@@ -80,7 +80,7 @@ from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
-from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, gauge_element, gripped_groups, laminate_check,  # noqa: E402
+from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, laminate_check,  # noqa: E402
                                    model_facts, solve_record, summarize)
 from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import deck_units_of, from_si, units_words  # noqa: E402
@@ -947,7 +947,7 @@ def verification_chapter(src: Sources, deck, solution, record: dict, rows, probl
     missing = unrecorded_probes(src, rows, units)
     out = [r"Verification asks whether another solver gives the same answer on the same model. It is not validation: that needs a test of a real "
            r"coupon, and none exists yet for this one.",
-           rf"\section{{CalculiX, an independent solver}}\label{{sec:summary}}",
+           r"\section{CalculiX, an independent solver}\label{sec:summary}",
            rf"CalculiX {escape(str(solver['version']))} is an open-source finite element program with its own element ({escape(solver['element_type'])}). "
            r"It ran the CalculiX twin of Section~\ref{sec:twin}; our kernel ran the same twin written as an Abaqus deck, "
            rf"{code(Path(record['deck_kernel']).name)}, and every number of the CalculiX record was compared. Both decks are in the package, in "

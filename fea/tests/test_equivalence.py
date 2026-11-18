@@ -10,7 +10,7 @@ from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.mesher import Mesh2D
 from anisotropy_fea.model import to_si
-from anisotropy_fea.spec import load_spec, parse_spec, to_si as spec_to_si
+from anisotropy_fea.spec import parse_spec, to_si as spec_to_si
 from anisotropy_fea.write_abaqus import write_abaqus
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 

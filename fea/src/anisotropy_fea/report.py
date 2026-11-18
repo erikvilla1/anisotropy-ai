@@ -26,7 +26,7 @@ from .abaqus_reader import read_deck
 from .cases import GROUPS, PLY_GROUPS, element_name
 from .compare import compare_record, record_as_case
 from .kernel import solve_deck
-from .mesh import KernelError, mesh_from_deck
+from .mesh import KernelError
 from .model import Deck, all_boundaries, coupled_nodes, expanded_layers, node_name, reference_node, resolve_nodes
 from .recovery import FailureField, element_ply_states, ply_ratio_per_ply
 from .results import MembraneSolution, Solution

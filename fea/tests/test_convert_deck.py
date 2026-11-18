@@ -1,6 +1,5 @@
 """Converting a read Abaqus-dialect deck to CalculiX: mesh promotion, couplings as direct constraints, material and section rewrite (ADR-0030)."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -25,7 +24,7 @@ def test_promotion_adds_one_midside_node_per_edge_and_extends_sets_along_edges()
     promoted = promote_to_order2(mesh, {"bottom": np.array([0, 1, 2]), "corner": np.array([0])})
     assert promoted.xy.shape[0] == 29 + 42  # 2 by 8 grid: 18 horizontal and 24 vertical unique edges; the two reference nodes are already in the mesh
     assert promoted.connectivity.shape == (16, 8)
-    for e, nodes in enumerate(promoted.connectivity):
+    for nodes in promoted.connectivity:
         for k in range(4):
             assert promoted.xy[nodes[4 + k]] == pytest.approx((promoted.xy[nodes[k]] + promoted.xy[nodes[(k + 1) % 4]]) / 2)
     assert promoted.node_sets["bottom"].size == 5 and promoted.node_sets["corner"].size == 1

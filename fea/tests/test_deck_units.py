@@ -1,7 +1,6 @@
 """The units boundary: a coupon is stated in one of four systems, a deck carries no units and is read in one of the two deck
 systems; SI inside (ADR-0002, ADR-0003, ADR-0061)."""
 
-from pathlib import Path
 
 import pytest
 

@@ -459,7 +459,7 @@ def _stresses(quantities: tuple[str, ...]) -> Callable[[Item, Evidence, _Facts],
         lo, hi = ev.inner_band
         layers = sorted({p.layer for p in ev.paired if p.quantity in reported})
         team = [f"Graded band y {lo:g} to {hi:g} {facts.length_unit}; layers {', '.join(map(str, layers))}"]
-        ours = [f"The same elements and layers, from our deck"]
+        ours = ["The same elements and layers, from our deck"]
         difference = [f"Tolerance {_pct(item.tolerance.relative)} of the team's largest value in the band"]
         failed = False
         for q in reported:
@@ -993,7 +993,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                             "How to check: laminate theory is the laminate stiffness A of the card's layup and material times the strains above; our "
                             f"engine's N_y times the width ({width:g} {length_unit}) is our reaction below."))
         ply_rows = []
-        for k, ply in enumerate(check.plies):
+        for k in range(len(check.plies)):
             theory = [float(v) for v in from_si(check.ply_stress_12[k], "stress", ev.units)]
             ours = [float(v) for v in from_si(check.kernel_ply_stress_12[k], "stress", ev.units)]
             ply_rows.append((k + 1, check.angles_deg[k], theory[0], ours[0], theory[1], ours[1], theory[2], ours[2]))

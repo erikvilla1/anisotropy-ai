@@ -319,7 +319,7 @@ def cross_ply_case(name: str, nx: int, tolerance: float) -> tuple[str, str, dict
         "curvature": {f"Plate-1.{centre_element}": [at_centroid["kappa_x"], at_centroid["kappa_y"], at_centroid["kappa_xy"]]},
         "ply_stress_local": {f"Plate-1.{centre_element}": faces},
     }
-    return text, source, {"title": f"A simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure: the shell reproduces Whitney's Navier solution "
+    return text, source, {"title": "A simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure: the shell reproduces Whitney's Navier solution "
                                    "with transverse shear deformation, faces included", "expected": expected}
 
 

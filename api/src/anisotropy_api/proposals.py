@@ -203,7 +203,7 @@ def source_guard(raw: dict[str, Any], message: str, rows: list[dict[str, Any]], 
         unit_text = str(unit_text).strip() if unit_text not in (None, "") else None
 
         def drop(reason: str) -> None:
-            kept.dropped.append({"key": key, "reason": reason})
+            kept.dropped.append({"key": key, "reason": reason})  # noqa: B023  called in this pass of the loop only
 
         if key not in offered:
             drop("not a row on offer")

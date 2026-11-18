@@ -1,7 +1,6 @@
 """Specs: every required key by name, every invalid combination refused, units converted once (ADR-0030, ADR-0003)."""
 
 import re
-from pathlib import Path
 
 import pytest
 

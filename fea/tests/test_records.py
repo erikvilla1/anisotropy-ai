@@ -1,7 +1,6 @@
 """Comparison records: the kernel reproduces every committed record, and the record machinery refuses what it should (ADR-0030)."""
 
 import tomllib
-from pathlib import Path
 
 import pytest
 

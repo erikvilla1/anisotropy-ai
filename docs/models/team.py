@@ -12,7 +12,6 @@ the team's results, which are theirs to publish (ADR-0035).
 
 from __future__ import annotations
 
-import argparse
 import csv
 import hashlib
 import importlib.util
@@ -374,7 +373,7 @@ def verdict(c: Comparison) -> str:
              rf"\textbf{{Not the same model.}} {len(judged) - same} of {len(judged)} items judged differ (Section~\ref{{sec:models}}).")
     stress = (rf" \textbf{{Stress.}} Away from the tab lines (y {lo:g} to {hi:g} {c.length_unit}) every compared value agrees within "
               rf"{pct(worst_inner.worst_fraction)} of its quantity's largest value (" + ", ".join(f"{a.quantity} {pct(a.worst_fraction)}" for a in inner) + "). "
-              rf"Over the whole free length " + ", ".join(f"{a.within} of {a.count} {a.quantity}" for a in free) + rf" values agree within "
+              r"Over the whole free length " + ", ".join(f"{a.within} of {a.count} {a.quantity}" for a in free) + rf" values agree within "
               rf"{pct(c.manifest.agreement, 0)}; the others sit beside the tab lines, the largest difference {pct(worst_free.worst_fraction)} "
               rf"({worst_free.quantity}, team element {worst_free.worst.reference_element}; Section~\ref{{sec:reading}}).")
     return model + stress

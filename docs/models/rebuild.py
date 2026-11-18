@@ -261,7 +261,6 @@ def render(ctx: Context, h: Helpers) -> str:
     out: list[str] = []
     open_items: list[str] = []
     generated = ctx.spec_path is not None
-    abaqus_ref = ctx.solver_name == "abaqus"
 
     # ---------------------------------------------------------------- document control and tags
     out.append("This guide is written so that an engineer can rebuild the model by hand in " + " or in ".join(h.tools)
@@ -512,7 +511,7 @@ def render(ctx: Context, h: Helpers) -> str:
         mid = section.expanded[len(section.expanded) // 2 - 1], section.expanded[len(section.expanded) // 2]
         double = (f" Plies {mid[0].index} and {mid[1].index} are both {mid[0].angle_deg:g} degrees, forming a {length(mid[0].thickness_m + mid[1].thickness_m):g} {L} double layer at the midplane."
                   if section.symmetric and mid[0].angle_deg == mid[1].angle_deg else "")
-        out.append(e(f"Expansion by mirroring and z from the midplane: ") + tag("CALC") + e(double) + " " + e(f"Ply fractions: {fractions}. Total thickness {length(section.total_thickness_m):g} {L}.") + " " + tag("CALC"))
+        out.append(e("Expansion by mirroring and z from the midplane: ") + tag("CALC") + e(double) + " " + e(f"Ply fractions: {fractions}. Total thickness {length(section.total_thickness_m):g} {L}.") + " " + tag("CALC"))
         out.append(gui_steps(h, "Abaqus/CAE", [
             e(f"Property module > Composite Layup Manager > Create. Name {section.layup_name or 'Layup-1'}, Initial ply count {len(section.listed)}, Element type Conventional Shell."),
             e("Section tab: Section integration Simpson (the deck writes no override), Thickness integration points as the table, Poisson definition Default, Temperature Gradient, Density off; Offset Middle surface, Thickness Specify (per ply)."),

@@ -1,7 +1,6 @@
 """The Abaqus-dialect writer: deterministic text our own reader round-trips and our kernel solves (ADR-0030)."""
 
 import hashlib
-from pathlib import Path
 
 import numpy as np
 import pytest

@@ -70,7 +70,6 @@ def test_reopening_a_stored_coupon_of_a_hidden_test_is_a_422_that_says_why(hidde
 # ------------------------------------------- amendment 5: every test by a switch per request; amendment 6: a founder's sign-in is offered the import alone
 
 import dataclasses
-import json
 from types import SimpleNamespace
 
 from anisotropy_api import access

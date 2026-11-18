@@ -21,7 +21,6 @@ import argparse
 import importlib.util
 import math
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -63,12 +62,12 @@ from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea.audit import gauge_text, laminate_distance, load_rubric  # noqa: E402
-from anisotropy_fea.compare import load_record, record_disagreements  # noqa: E402
+from anisotropy_fea.compare import load_record  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, reference_node  # noqa: E402
 from anisotropy_fea.results import ShellSolution  # noqa: E402
-from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
+from anisotropy_fea.report import (GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
 from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, outline_of, spec_material  # noqa: E402
 from anisotropy_fea.units import UNIT_LABEL, from_si, unit_factors  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
@@ -418,7 +417,6 @@ def model_section(record: dict, record_path: Path, deck, solution, units: str, f
     out = []
     spec_path = (base / record["spec"]).resolve() if not record["spec"].startswith("none") else None
     labels = UNIT_LABEL[units]
-    length = lambda v: number(from_si(v, "length", units), 6)  # noqa: E731
     if spec_path is not None and spec_path.is_file():
         spec = load_spec(spec_path)
         model = build_model(spec)
@@ -654,7 +652,7 @@ def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: 
     ply_rows = []
     stress_scale = float(np.max(np.abs(check.ply_stress_12)))
     theory = roundoff(check.ply_stress_12, stress_scale)
-    for k, ply in enumerate(check.plies):
+    for k in range(len(check.plies)):
         for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
             clt, kernel = from_si(float(theory[k, i]), "stress", units), from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units)
             ply_rows.append(rf"{k + 1} & {check.angles_deg[k]:g} & {MATH[name]} & {number(clt)} & {number(kernel)} & {diff(clt, kernel)} & {ref('ply_stress_local', i, k + 1)} \\")
@@ -694,7 +692,7 @@ def reference_section(record: dict, record_path: Path, where=rel) -> str:
             out.append(escape(f"The record names the conventions file {conventions_name}, which is not found from the record's folder; the file "
                               f"shown is the one our tools use today, {where(fea_paths.CONVENTIONS)}."))
         if conventions_path.is_file():
-            conventions = tomllib.loads(conventions_path.read_text(encoding="utf-8"))
+            tomllib.loads(conventions_path.read_text(encoding="utf-8"))  # a file that is not TOML stops the build here
             out.append(heading(1, "How the solver reports composite results (detected, not assumed)"))
             out.append(rf"The mapping from the solver's output to our per-ply quantities depends on its layer order, integration-point order, axes and shear-strain "
                        rf"convention. They were detected by running the solver and are recorded in {code(where(conventions_path))}; the record tool refuses a run on another "

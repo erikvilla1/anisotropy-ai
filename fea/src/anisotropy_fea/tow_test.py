@@ -402,7 +402,7 @@ def check_tow(form: TowInput) -> TowValues:
         problem("specimens", "required; at least one specimen with its forces")
     for n, row in enumerate(form.specimens, start=1):
         name = forms.text_of(row.get("id")) or str(n)
-        say = lambda field_label: (lambda m: problem("specimens", f"specimen {name}, {field_label}: {m}"))  # noqa: E731
+        say = lambda field_label: (lambda m: problem("specimens", f"specimen {name}, {field_label}: {m}"))  # noqa: E731, B023  used in this pass only
         if not forms.text_of(row.get("id")):
             say(SPECIMEN_FIELD["id"].label)("required")
         elif name in seen:

@@ -1,6 +1,5 @@
 """The CalculiX-dialect writer: S8R composite with four-field layers, engineering constants, one orientation per angle (ADR-0030)."""
 
-from pathlib import Path
 
 import pytest
 

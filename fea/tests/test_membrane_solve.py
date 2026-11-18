@@ -1,6 +1,5 @@
 """Whole solves: engine equality, closed forms, couplings, equilibrium, refinement and refusals (fea/docs/theory.md, Checks)."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest

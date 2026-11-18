@@ -1,6 +1,5 @@
 """Ply stresses in material axes and first-ply failure per element equal the engine's on the uniform cases (theory, Section 5)."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest

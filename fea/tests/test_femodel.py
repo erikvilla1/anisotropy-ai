@@ -1,6 +1,5 @@
 """The model built from a spec: boundary tables, grips, loads, probes, headers (ADR-0030)."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest

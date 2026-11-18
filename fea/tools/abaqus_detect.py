@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         if unknown:
             parser.error(f"no candidate {', '.join(unknown)}; the candidates are {', '.join(written)}")
         written = {name: path for name, path in written.items() if name in args.only}
-    for name, path in written.items():
+    for path in written.values():
         print(f"written    {path}")
     if not (args.run or args.read):
         return 0

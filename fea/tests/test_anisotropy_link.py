@@ -83,7 +83,7 @@ def test_a_link_is_one_of_two_shapes_to_the_character(link):
                  f"anisotropy://open?run={RUN}&run={RUN}", f"anisotropy://open?run={RUN}&site=https%3A%2F%2Fevil.example",
                  f"anisotropy://open?run={RUN}#x", f"anisotropy://open/x?run={RUN}", f"anisotropy://open?run={RUN[:-1]}", f"anisotropy://open?run={RUN}0",
                  f"anisotropy://open?run={RUN}%0A", f"anisotropy://open?run={RUN} --replay x", f'anisotropy://open?run={RUN}" & calc & "',
-                 f"anisotropy://open?run={RUN}&&calc", f"anisotropy://open?run=..%2F..%2Fx", f"anisotropy://run?run={RUN}",
+                 f"anisotropy://open?run={RUN}&&calc", "anisotropy://open?run=..%2F..%2Fx", f"anisotropy://run?run={RUN}",
                  f"anisotropy://user@open?run={RUN}", f"anisotropy://open:80?run={RUN}", f"anisotropy://pair?code={CODE}",
                  f"anisotropy://pair?code={CODE[:-1]}&site=https%3A%2F%2Fanisotropy.example",
                  f"anisotropy://pair?code={KEY}&site=https%3A%2F%2Fanisotropy.example", f"anisotropy://pair?code={CODE}&site=https%3A%2F%2Fa.example&name=x",

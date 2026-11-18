@@ -130,7 +130,7 @@ def cae_facts(model: FEModel, units: str | None = None) -> dict:
     else:
         sets["Grip-Bottom"] = ("edges", [0.0])
         sets["Grip-Top"] = ("edges", [g.length])
-    for name, (kind, where) in sets.items():
+    for name, (_kind, where) in sets.items():
         if not where:
             problems.append(f"no stretch of the coupon between its lines makes up {name}")
 
