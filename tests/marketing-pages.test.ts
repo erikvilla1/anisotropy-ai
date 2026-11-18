@@ -23,6 +23,7 @@ const MARKETING_FILES = [
   "app/about/page.tsx",
   "app/industries/page.tsx",
   "app/contact/page.tsx",
+  "components/contact/contact-form.tsx",
   "app/services/page.tsx",
   ...servicePages,
   "components/services/service-page.tsx",
@@ -124,14 +125,20 @@ test("the north-east arrow is kept for links that open a new tab; links on the s
   }
 });
 
-test("The Basement is named in words, and its mark is shown nowhere until written permission is recorded (ADR-0081 amendment 2)", () => {
+test("The Basement's mark is shown once, in the team band on About, and the home hero's corner names it in words (ADR-0081 amendments 2 and 3)", () => {
   const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return sources(path);
     return /\.(tsx?|css)$/.test(entry.name) ? [path] : [];
   });
-  for (const file of ["app", "components", "lib"].flatMap(sources))
-    assert.doesNotMatch(readFileSync(file, "utf8"), /uc-san-diego-the-basement/, file);
+  // One file names the mark, once: the team band, which is on About (ADR-0077 amendment 73). The copy recoloured in
+  // white stays out of the repository.
+  const naming = ["app", "components", "lib"].flatMap(sources).filter((file) => /uc-san-diego-the-basement/.test(readFileSync(file, "utf8")));
+  assert.deepEqual(naming, [join("components", "team-band.tsx")]);
+  assert.equal((readFileSync("components/team-band.tsx", "utf8").match(/uc-san-diego-the-basement/g) ?? []).length, 1);
+  assert.match(readFileSync("app/about/page.tsx", "utf8"), /<TeamBand \/>/);
+  assert.doesNotMatch(readFileSync("app/page.tsx", "utf8"), /TeamBand|team-band/);
+  assert.equal(existsSync(join("public", "assets", "partners", "uc-san-diego-the-basement.png")), true);
   assert.equal(existsSync(join("public", "assets", "partners", "uc-san-diego-the-basement-white.png")), false);
   assert.match(readFileSync("app/page.tsx", "utf8"), /The Basement, UC San Diego/);
 });
@@ -140,7 +147,8 @@ test("a page title's line breaks keep a space before them, since a phone hides t
   // JSX drops the space before a line end, so a title written "Engineering built" + newline + <br /> would read "builton" once
   // the <br /> is hidden; each break needs a {" "} before it.
   let breaks = 0;
-  for (const file of ["app/about/page.tsx", "app/contact/page.tsx", "app/industries/page.tsx", "app/services/page.tsx", ...servicePages]) {
+  // The contact page has no title of this kind since ADR-0058 amendment 7: its heading is one short line.
+  for (const file of ["app/about/page.tsx", "app/industries/page.tsx", "app/services/page.tsx", ...servicePages]) {
     const source = parse(file);
     const inTitle = (node: ts.Node): boolean => {
       for (let up: ts.Node | undefined = node.parent; up; up = up.parent) {
@@ -164,7 +172,7 @@ test("a page title's line breaks keep a space before them, since a phone hides t
     };
     visit(source);
   }
-  assert.equal(breaks, 4 + servicePages.length);
+  assert.equal(breaks, 3 + servicePages.length);
 });
 
 test("the coupon illustration carries no words of its own, which would shrink with it", () => {

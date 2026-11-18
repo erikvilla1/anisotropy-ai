@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
@@ -10,8 +10,10 @@ import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { SplitPicture } from "@/components/home/split-picture";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { releaseDay, releases } from "@/lib/changelog";
+import { citedSources } from "@/lib/cited-sources";
+import { curatedMaterials } from "@/lib/curated-materials";
+import { physicsCardCount } from "@/lib/physics";
 import { serviceHref, services } from "@/lib/services";
-import { team } from "@/lib/team";
 import "./home.css";
 
 /** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into public/media, where it and its poster are committed
@@ -24,8 +26,17 @@ const heroVideoHtml =
   '<video autoplay muted loop playsinline preload="metadata" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
   '<source src="/media/hero.mp4" type="video/mp4" media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"></video>';
 
+/** What the library holds, counted from the library's own lists so the home page cannot say another number than the
+ * library shows: its materials, its equations and the references it cites. */
+const LIBRARY_COUNTS: readonly { label: string; count: number }[] = [
+  { label: "Materials", count: curatedMaterials.length },
+  { label: "Equations", count: physicsCardCount },
+  { label: "References", count: citedSources().reduce((total, group) => total + group.sources.length, 0) },
+];
+
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
- * platform, the team and the changelog, and the closing band. The workflow and the roadmap live on About. */
+ * platform, the library and the changelog, and the closing band. The workflow, the roadmap and the team live on About (the team since
+ * ADR-0077 amendment 73). */
 export default function Home() {
   return (
     <main id="main">
@@ -37,30 +48,19 @@ export default function Home() {
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        {/* The words (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle, and under it a row of the
-            year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types the statement and the small lines in,
-            and a text cursor blinks at the statement's end (components/intro-text.ts). */}
+        {/* The words (ADR-0077 amendments 19, 27, 47, 51 and 74): one statement, written as a sentence, in the clip's lower
+            left. The line that stood over it, the mark, the name, a hairline and the year, is gone since amendment 74: the
+            header's logo says the name. The load-in (ADR-0070 amendments 1 and 4) types the statement in, and a text cursor
+            blinks at its end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
-            one engineering platform
+            One engineering platform
             <br />
             for composite theory
             <br />
             and real test data
             <span className="type-caret" aria-hidden="true" />
           </h1>
-          <div className="home-hero-row">
-            {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
-            <div className="home-hero-notes">
-              <p className="home-hero-note" data-intro="type" data-outro="type">
-                Est 2026
-              </p>
-            </div>
-            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
-            <p className="home-hero-tagline" data-intro="type" data-outro="type">
-              Anisotropy
-            </p>
-          </div>
         </div>
         {/* Three seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
         <HeroOutro />
@@ -89,10 +89,10 @@ export default function Home() {
           set as the demo's words are, in the middle (amendment 34, app/home.css). */}
       {/* Mission and Services are set side by side with a picture each (ADR-0077 amendment 37): Mission's words at the left
           and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
-          in for pictures still to come. Each picture goes where its band's own link goes, About and Services, and lifts
-          under the pointer as a portrait does (amendment 39); the keyboard and a screen reader meet the worded link only,
-          so the same place is not offered twice. Under a mouse's pointer a small lens shows the photograph in the demo's
-          colours (amendment 48, components/home/split-picture.tsx); the filter it draws through is the one below. */}
+          in for pictures still to come. A picture is a picture and no longer a link (amendment 53, which ended amendment
+          39's): the band's worded link is the one way to its page. Under a mouse's pointer, a crosshair over the picture,
+          a small lens shows the photograph in the demo's colours (amendment 48, components/home/split-picture.tsx); the
+          filter it draws through is the one below. */}
       <svg className="home-fea-filter" width="0" height="0" aria-hidden="true" focusable="false">
         <filter id="home-fea" colorInterpolationFilters="sRGB">
           {/* The photograph's light and dark alone, smoothed and stretched over the whole range, */}
@@ -126,7 +126,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <SplitPicture href="/about" />
+        <SplitPicture />
       </section>
       {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
       <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
@@ -150,82 +150,48 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <SplitPicture href="/services" />
+        <SplitPicture />
       </section>
-      {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
-          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
-          head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
-      <section className="band is-light home-blurb home-about" id="working">
-        <div className="band-head">
-          <div className="band-statement">
-            <h2>Five people, two seats each.</h2>
+      {/* The library (ADR-0077 amendment 77): one light grey band between Services and the changelog, where the team band
+          stood until amendment 73. Its head spans the page, the label and the heading at the left and what the library
+          holds from the halfway line, with the way to it; under the head, how much it holds, in large figures counted
+          from the library's own lists (LIBRARY_COUNTS above). No value of any material is shown here: each is shown
+          with its citation, on the library's page. */}
+      <section className="band is-light home-library" id="resources">
+        <div className="home-library-head">
+          <div className="home-library-title">
+            <p className="band-label">Resources</p>
+            <h2>Every value, with its source.</h2>
+          </div>
+          <div className="home-library-text">
             <p>
-              One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
-              could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
-              decisions and their reasons with it.
+              The library lists composite materials with their properties in English and SI units, and the equations of
+              lamina and laminate analysis with their assumptions, each cited to the reference it comes from.
             </p>
+            <Link className="home-link" href="/library">
+              Open the library <ArrowRight size={16} aria-hidden="true" />
+            </Link>
           </div>
         </div>
-        {/* The band's label stands over the portraits, at their left edge, on the white (amendment 42). */}
-        <p className="band-label home-faces-label">Team</p>
-        <div className="home-faces">
-          {team.map((person) => (
-            <article className="home-face" key={person.name}>
-              <div className="home-face-frame">
-                {person.photo ? (
-                  <>
-                    <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
-                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0077 amendment 29). It is a link
-                        once the person's profile address is in lib/team.ts; until then it is only drawn. The mark itself is
-                        the picture the lead uploaded, drawn in black and white by app/home.css (ADR-0077 amendment 39). */}
-                    {person.linkedin ? (
-                      <a
-                        className="home-face-in"
-                        href={person.linkedin}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
-                      />
-                    ) : (
-                      <span className="home-face-in" aria-hidden="true" />
-                    )}
-                  </>
-                ) : (
-                  <span aria-hidden="true">
-                    {person.name
-                      .split(" ")
-                      .map((part) => part.charAt(0))
-                      .join("")}
-                  </span>
-                )}
-              </div>
-              <h3>
-                {person.linkedin ? (
-                  <a
-                    href={person.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
-                  >
-                    {person.name}
-                  </a>
-                ) : (
-                  person.name
-                )}
-              </h3>
-              {/* One short line, as a company's page names its officers (amendment 43); the two seats in full are on About. */}
-              <p>{person.title}</p>
-            </article>
+        <dl className="home-library-counts">
+          {LIBRARY_COUNTS.map((item) => (
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.count}</dd>
+            </div>
           ))}
-        </div>
+        </dl>
       </section>
       {/* The changelog (ADR-0077 amendment 46): where the versions the team publishes are listed, each with its day, its
           name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
           version is published, and the band then says so. */}
       <section className="band is-light home-blurb home-feed" id="changelog">
-        {/* The band is light grey, as the closing band under it is, and its words stand on a card in the colours the demo
-            gives its analysis, blurred into one another (amendment 49). */}
+        {/* The band is white (amendment 59), and its words stand on a card that is the pictures' lens at the card's size
+            (amendment 77): the material photograph drawn through the demo's colours by the filter above, with the lens's
+            fine mesh over it. The two layers are pictures only. */}
         <div className="home-feed-card">
+          <span className="home-feed-view is-photo" aria-hidden="true" />
+          <span className="home-feed-view is-field" aria-hidden="true" />
         <div className="band-head">
           <p className="band-label">Changelog</p>
           <div className="band-statement">
@@ -264,15 +230,12 @@ export default function Home() {
         ) : null}
         </div>
       </section>
+      {/* The home page's closing band is dark grey, between the changelog's light band and the black footer (amendment 54). */}
       <ClosingBand
-        grey
+        dark
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
         action={{ label: "Contact us", href: "/contact" }}
-        links={{
-          label: "EXPLORE THE RESEARCH",
-          items: [{ label: "Materials library", href: "/library" }],
-        }}
       />
     </main>
   );

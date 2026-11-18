@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SERVICES_PANEL_IN_HEADER } from "../../lib/site-nav";
+import { SERVICES_PANEL_IN_HEADER, shownSocialLinks } from "../../lib/site-nav";
 
 // The site's shell after the audit of 2026-11-12 (ADR-0077 amendment 16, ADR-0058 amendment 2): the 404 page, the titles, the folded
 // menu's keyboard order, Back to top and the workspace header's way back to the projects. Runs against the built site.
@@ -92,7 +92,7 @@ test.describe("on a phone", () => {
     await toggle.click();
     const nav = page.getByRole("navigation", { name: "Main navigation" });
     await expect(nav.getByRole("link", { name: "About", exact: true })).toBeFocused();
-    const row = await nav.getByRole("link", { name: "Industries", exact: true }).boundingBox();
+    const row = await nav.getByRole("link", { name: "Resources", exact: true }).boundingBox();
     expect(row!.height).toBeGreaterThanOrEqual(44);
     await page.keyboard.press("Escape");
     await expect(nav).toBeHidden();
@@ -182,14 +182,14 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const services = nav.getByRole("link", { name: "Services", exact: true });
-  // the header's own links, in order, standing in the middle of the page
+  // the header's own links, in order, standing at the right before the Workspace button (ADR-0077 amendment 51)
   const row = await nav.evaluate((el) => {
     const links = [...el.querySelectorAll(":scope > a")].filter((a) => !a.classList.contains("mobile-chat-cta") && a.getBoundingClientRect().width > 0);
     const boxes = links.map((a) => a.getBoundingClientRect());
     return { names: links.map((a) => a.textContent?.trim()), off: (boxes[0].left + boxes[boxes.length - 1].right) / 2 - window.innerWidth / 2 };
   });
-  expect(row.names).toEqual(["About", "Industries", "Resources", "Services", "Contact us"]);
-  expect(Math.abs(row.off)).toBeLessThanOrEqual(2);
+  expect(row.names).toEqual(["About", "Services", "Resources", "Contact us"]);
+  expect(row.off).toBeGreaterThan(100);
   // no plus, no button, no panel
   await expect(page.getByRole("button", { name: "Show services" })).toHaveCount(0);
   await expect(page.locator(".services-menu, .services-menu-plus, .services-panel")).toHaveCount(0);
@@ -200,6 +200,32 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await expect(services).toHaveAttribute("aria-current", "page");
   const footer = page.getByRole("navigation", { name: "Footer" });
   for (const name of five) await expect(footer.getByRole("link", { name, exact: true })).toBeVisible();
+  // The footer has no tagline and no release stage, and its Workspace link has no arrow (ADR-0077 amendment 63).
+  const foot = page.locator(".site-footer");
+  await expect(foot).not.toContainText(/Composites\. Calculated\.|Closed beta/i);
+  await expect(foot.locator(".site-footer-brand p")).toHaveCount(0);
+  await expect(footer.getByRole("link", { name: "Workspace", exact: true })).toBeVisible();
+  await expect(footer.getByRole("link", { name: "Workspace", exact: true }).locator("svg")).toHaveCount(0);
+  await expect(foot.locator(".site-footer-bottom > *")).toHaveCount(2);
+  // The company's pages elsewhere stand on the line under the footer's logo, one link for each address that is filled in,
+  // each in a new tab (ADR-0077 amendments 60 and 63); with none filled in there is no list.
+  if (shownSocialLinks().length) {
+    const gap = await foot.evaluate((element) => element.querySelector(".site-footer-social")!.getBoundingClientRect().top - element.querySelector(".site-footer-brand .wordmark")!.getBoundingClientRect().bottom);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(28);
+  }
+  // The footer's logo is a step larger than the header's (ADR-0080 amendment 8; it was smaller on a wide window).
+  const marks = await page.evaluate(() => [".site-header", ".site-footer"].map((part) => Math.round(document.querySelector(`${part} .wordmark .brand-mark`)!.getBoundingClientRect().height)));
+  expect(marks[1]).toBeGreaterThan(marks[0]);
+  const elsewhere = page.locator(".site-footer-social a");
+  await expect(elsewhere).toHaveCount(shownSocialLinks().length);
+  await expect(page.locator(".site-footer-social")).toHaveCount(shownSocialLinks().length ? 1 : 0);
+  for (const [index, link] of shownSocialLinks().entries()) {
+    await expect(elsewhere.nth(index)).toHaveAttribute("href", link.href);
+    await expect(elsewhere.nth(index)).toHaveAttribute("target", "_blank");
+    await expect(elsewhere.nth(index)).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(elsewhere.nth(index)).toHaveAccessibleName(`Anisotropy on ${link.label} (opens in a new tab)`);
+  }
   await footer.getByRole("link", { name: "Test plans", exact: true }).focus(); // on the home page focus opens what follows the demo
   await footer.getByRole("link", { name: "Test plans", exact: true }).click();
   await expect(page).toHaveURL(/\/services\/test-plans\/?$/);
@@ -224,9 +250,10 @@ test("Back to top takes the focus to the top with the page", async ({ page }) =>
 
 test("on an inner page the header leaves as the page scrolls down and comes back as a black bar on the way up, wherever the page is", async ({ page }) => {
   await page.goto("/about");
-  // At the page's top it is what it was: in the page's flow, on the page's own ground.
+  // At the page's top it is in the page's flow, a black bar over the white page (ADR-0077 amendment 69; until then it had
+  // no ground of its own, on a black page).
   const atTop = await bar(page);
-  expect(atTop).toEqual({ top: 0, bottom: 84, position: "relative", ground: "rgba(0, 0, 0, 0)", state: "top" });
+  expect(atTop).toEqual({ top: 0, bottom: 84, position: "relative", ground: "rgb(0, 0, 0)", state: "top" });
   const before = await places(page);
   await page.mouse.move(720, 500);
   // Down: it scrolls away with the page as it always did, and is then kept above the window.
@@ -365,7 +392,7 @@ test.describe("on the home page", () => {
   /** The states the header has taken since the last look. */
   const seen = (page: Page) => page.evaluate(() => (window as unknown as { headerStates: string[] }).headerStates.splice(0));
 
-  test("the header lies over the hero at the top as before and leaves with it; a scroll up or the keyboard's focus brings it in as the bar, and at the top it is the hero's header again", async ({ page }) => {
+  test("the header lies over the hero at the top as before and leaves with it; a scroll up or the keyboard's focus brings it in as the bar, clear over the hero and the demo and black past them, and at the top it is the hero's header again", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#overview h1")).toBeVisible();
     const atTop = await bar(page);
@@ -377,16 +404,41 @@ test.describe("on the home page", () => {
     await expect.poll(() => pageY(page)).toBe(300);
     await expect(header(page)).toHaveAttribute("data-scroll", "away");
     expect((await bar(page)).bottom).toBeLessThanOrEqual(0);
-    // Up a little: the bar, black, over what the window shows, with the page still off its top.
+    // Up a little: the bar, over what the window shows, with the page still off its top. The hero's clip is under it, so
+    // it has no ground of its own: it is the header the page opened with (ADR-0077 amendment 71; black until then).
     await page.mouse.wheel(0, -100);
     await barIn(page);
-    expect(await bar(page)).toEqual({ top: 0, bottom: 84, position: "fixed", ground: "rgb(0, 0, 0)", state: "shown" });
+    expect(await bar(page)).toEqual({ top: 0, bottom: 84, position: "fixed", ground: "rgba(0, 0, 0, 0)", state: "shown" });
     expect(await pageY(page)).toBe(200);
     expect(await barOnTop(page)).toBe(true);
+    expect(await seen(page)).toEqual(["away", "shown"]);
+    // On the demo's stage it is clear too, and black once the band after the demo is under it.
+    const stageY = await page.evaluate(() => Math.round(document.getElementById("demo")!.getBoundingClientRect().top + window.scrollY) + 400);
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), stageY + 100);
+    await expect.poll(() => pageY(page)).toBe(stageY + 100);
+    await page.mouse.wheel(0, -100);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgba(0, 0, 0, 0)");
+    expect(await bar(page)).toMatchObject({ position: "fixed", state: "shown" });
+    const pastY = await page.evaluate(() => Math.round(document.getElementById("mission")!.getBoundingClientRect().top + window.scrollY));
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), pastY + 300);
+    await expect.poll(() => pageY(page)).toBe(pastY + 300);
+    await page.mouse.wheel(0, -100);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgb(0, 0, 0)");
+    expect(await bar(page)).toMatchObject({ position: "fixed", state: "shown" });
+    // Back in the hero, a little way down, as before.
+    await page.evaluate(() => window.scrollTo({ top: 310, behavior: "instant" }));
+    await expect.poll(() => pageY(page)).toBe(310);
+    await page.mouse.wheel(0, -110);
+    await expect.poll(() => pageY(page)).toBe(200);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgba(0, 0, 0, 0)");
+    await seen(page);
     // Down: gone.
     await page.mouse.wheel(0, 100);
     await barOut(page);
-    expect(await seen(page)).toEqual(["away", "shown", "hidden"]);
+    expect(await seen(page)).toEqual(["hidden"]);
     // The keyboard: Tab to the logo brings the bar in, and the page stays where it is.
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");

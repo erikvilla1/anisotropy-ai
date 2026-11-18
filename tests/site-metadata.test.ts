@@ -98,6 +98,7 @@ test("↗ marks only a link that opens a new tab and says so, in the shell, the 
   // the files this rule has reached (ADR-0077 amendment 16); the pages' own links follow in their fix groups
   const files = ["components/site-shell.tsx", "components/property-table.tsx", "components/studio/job-files.tsx"];
   let links = 0;
+  const inNewTabLinks: Record<string, number> = {};
   for (const file of files) {
     const source = readFileSync(file, "utf8");
     for (const m of source.matchAll(/<(Link|a)\s((?:[^>{]|\{[^}]*\})*)>([\s\S]*?)<\/\1>/g)) {
@@ -106,8 +107,12 @@ test("↗ marks only a link that opens a new tab and says so, in the shell, the 
       if (!/↗|ArrowUpRight|ExternalLink|MoveUpRight/.test(content)) continue;
       assert.match(attributes, /target="_blank"/, `${file}: ${m[0].slice(0, 120)}`);
       assert.match(`${attributes} ${content}`, /new (tab|window)/, `${file} announces the new tab: ${m[0].slice(0, 120)}`);
+      inNewTabLinks[file] = (inNewTabLinks[file] ?? 0) + (content.match(/<(ArrowUpRight|ExternalLink|MoveUpRight)\b/g) ?? []).length;
     }
   }
   assert.ok(links >= 8, `${links} links read`);
-  assert.doesNotMatch(readFileSync("components/site-shell.tsx", "utf8"), /ArrowUpRight|ExternalLink|MoveUpRight/);
+  // The shell draws the arrow nowhere else: every one of them stands in a link that opens a new tab, which since ADR-0077
+  // amendment 60 are the footer's links to the company's pages elsewhere.
+  const shell = readFileSync("components/site-shell.tsx", "utf8");
+  assert.equal((shell.match(/<(ArrowUpRight|ExternalLink|MoveUpRight)\b/g) ?? []).length, inNewTabLinks["components/site-shell.tsx"] ?? 0);
 });

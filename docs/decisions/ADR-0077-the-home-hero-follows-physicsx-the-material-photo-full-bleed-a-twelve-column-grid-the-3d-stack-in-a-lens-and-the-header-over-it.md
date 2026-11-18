@@ -654,3 +654,270 @@ Amendments 33 to 49 were decided after this text was drafted, and they stand whe
 - **The calculator and its tour,** unmounted from the home page by ADR-0095 and kept, take the audit's fixes too; among them the 3D view stops turning by itself after five seconds (`TURN_MS` in `components/home/laminate-scene.tsx`). A visitor of the home page sees none of this.
 
 **Evidence.** `tests/marketing-pages.test.ts`: a paused clip is not resumed by the keeper, and no north-east arrow stands outside a link that opens a new tab; its output is in the pull request. UNVERIFIED: the updated cases of `home.spec.ts` (the corner's words, the link to `#demo`, the pause button), `intro.spec.ts` (the focus on the demo's heading) and `demo.spec.ts` were not run in this change; the clip's contrast under the words was not measured (the audit could not capture a frame of it).
+
+## Amendment 51, 2026-11-14 (the statement is written as a sentence, and the header's links stand at the right)
+
+**Context.** The two steps amendment 47 left to follow, now that the other work on the same files has landed. The lead's word is amendment 47's: the hero and the header were "literally an exact match" of the page their arrangement came from.
+
+**Decision.**
+
+- **The statement is a sentence**, "One engineering platform for composite theory and real test data", in the page's text and on the screen, a little larger and with its lines a little further apart than the capitals were. The typed load-in, the exit and the repeat run on it as before.
+- **The header's links stand at the right**, ending where the gap to the Workspace button begins, in place of the middle of the page, from 1201 px up. Narrower windows keep the folded menu as it was.
+- With these, the framework is told to jump, not glide, to a new page's top (`data-scroll-behavior="smooth"` on the page's root, which its guide for this version names for a site that sets smooth scrolling): a link pressed far down a page had opened the next page gliding up from where the last one stood.
+
+**Evidence.** On 2026-11-14 against the dev server the hero was captured at 1873, 1440 and 390 px and looked at. `home.spec.ts` 7, `intro.spec.ts` 15, `shell.spec.ts` 18 with 1 skipped, `expansion.spec.ts` 5 with 2 skipped, `demo.spec.ts` 13: 58 passed, 3 skipped; the overview case of `portfolio.spec.ts` passed (its heading check was brought into step with amendment 46). `npm test`: 319 tests, 318 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: whether the lead finds the hero and the header different enough now; the jump to a new page's top was not measured, only set as the guide says.
+
+Re-applied on 2026-11-14 on `main` as it stood after pull requests 206, 208 and 209, and renumbered from 50, which main's amendment above had taken. Against the dev server: `home.spec.ts` 8, `intro.spec.ts` 15, `shell.spec.ts` 18 with 1 skipped, `demo.spec.ts` 13, `expansion.spec.ts` 5 with 2 skipped: 59 passed, 3 skipped. `npm test`: 334 tests, 333 passed, 1 skipped. `npm run typecheck` clean. The hero was captured at 1440 and 390 px with main's pause button and corner words and looked at. `portfolio.spec.ts`: its overview case passes with this change and fails without it; its two workspace chat cases fail with and without it (the page shows an unnotched tension coupon where they expect an open-hole one).
+
+
+## Amendment 52, 2026-11-14 (the line over the statement is tidied, and its hairline comes and goes with the words)
+
+**Context.** The lead, with a recording of the hero and two crops of it: "the anisotropy | est 2026 looks off here... also the | stays after the animation is complete." In the recording the hairline between the name and the year stands alone on the clip in every frame after the words have left. It was a border of the year's box, which no move of the load-in or the exit touched: only the year's letters were typed in and taken away. Measured before the change at 1888 px: the mark stood 32 px tall beside capitals of 13 px; the year was set at 14 px against the name's 18, its capitals about three quarters of the name's, with 0.3 em between its letters.
+
+**Options.** For the hairline: (1) a border or a pseudo-element of the year's line, hidden by the rule that hides the words once they have gone: rejected, it would stand until the whole exit had ended and come back at once on the repeat, with no move of its own; (2) an element of its own that fades after the lines have gone, as the corner's words do: rejected, it would stand alone for about a quarter of a second after its line had left; (3) an element of its own that fades as the first line begins to go: chosen.
+
+**Decision.**
+
+- **The hairline is an element of the line** (`.home-hero-rule` in `app/page.tsx`), hidden from assistive technology. It fades in with the mark and the corner's words on the load-in, fades out as the first line begins to go on the exit (`data-outro-at="start"`, a new option of a fade in `components/intro-text.ts`), is gone while the words are gone, and comes back each time the clip starts again (amendment 40). A visitor who asked for reduced motion sees it stand with the words.
+- **The line is one size.** Every part is a share of the row's type size (13 to 18 px): the mark 1.6 of it wide, so about one and three quarters of the capitals tall, not two and a half; the hairline 1.05 of it tall, a little more than the capitals; the year 0.9 of it, so its capitals are nearly the name's, with 0.14 em between its letters. The gaps between the four parts are equal (0.8 of the size), the tracking after each text's last letter taken back. The name, the hairline and the year share one centre line; the mark's box stands 0.05 of the size above it, since a triangle's weight lies below the middle of its box.
+- The words, their order and their faces are as they were.
+
+**Evidence.** On 2026-11-14 against the dev server. The line was captured at 1888, 1440 and 390 px before and after and looked at; the load-in, the exit at four moments, the state with the words gone, the repeat and the state after it were captured at 1440 px, and all but the repeat at 390 px (no clip plays at that width), and looked at: nothing of the line is left on the clip. The hairline's opacity was read through the load-in (0 to 1 in about a second) and the exit (1 while the mark starts its turn, 0 before the last line has gone). `home.spec.ts` 8 and `intro.spec.ts` 15: 21 passed and 2 failed on their count of the moving elements, 5 expected and 6 with the hairline; with the count corrected the two passed on a re-run. The new checks: the order, the equal gaps, the one centre line and the heights in `home.spec.ts`; in `intro.spec.ts` the hairline's fade starts with the first line and ends before the last, its opacity is 0 with the words gone and 1 on the repeat, and the year's box has no border. `npx tsc --noEmit` clean. UNVERIFIED: the year's capitals against the name's on a Mac or on Windows, whose monospace faces differ from the test browser's; whether the lead finds the line right now.
+
+## Amendment 53, 2026-11-14 (the two pictures are pictures, not links: no lift, a crosshair, the lens as it was)
+
+**Context.** The lead, with a recording of Mission's picture under the pointer: "I like the lens effect, now get rid of the clickable animation that happens when you hover over it. also dont make it clickable now and also turn the cursor when its over it into a crosshair +". In the recording the picture grows a little, rises and takes a shadow under the pointer, as amendment 39 made it do for a link.
+
+**Decision.** This ends the part of amendment 39 that made Mission's and Services' pictures links.
+
+- **A picture is a plain element**, not an anchor: no address, no role, no place in the keyboard's order, still hidden from assistive technology. A press on it leads nowhere. The band's worded link ("Learn more about us", "Explore the services") is the one way to its page, as it already was for the keyboard and a screen reader.
+- **It does not move under the pointer:** no lift, no growth, no shadow, no transition of its own.
+- **The pointer over it is a crosshair.**
+- **The lens of amendment 48 is unchanged.**
+
+**Evidence.** On 2026-11-14 against the dev server, Mission's picture was captured at 1440 px with the pointer on it and looked at: the lens is there and the picture has not moved. The case of `home.spec.ts` for the two bands passed with the new checks: the element is a `div` with no `href`, `role` or `tabindex` and holds no link; its cursor is `crosshair`; its transform and shadow are none before and 350 ms after the pointer comes, and its box is the same; the lens still follows the pointer and keeps inside the picture; a press leaves the address as it was. That run was made with the browser's 3D view switched off, because the wing demo's record was being changed in the same working tree at the time and its view stopped the page; the pictures do not depend on it. `npx tsc --noEmit` clean. UNVERIFIED: the crosshair on a real pointer (the test browser reads the style, it draws no cursor); the whole of `home.spec.ts` with the 3D view on.
+
+## Amendment 54, 2026-11-14 (the home page's closing band is dark grey; a thin grid on the changelog's card fades out half way up)
+
+**Context.** The lead, on the page's last two bands, each with a capture: of the closing band, "lets make this section dark grey"; of the changelog's card, "have there be a thin grid too that fades away (gradient) half way thru".
+
+**Decision.** This ends amendment 49's light grey for the closing band; the card's colours stay as amendment 49 made them.
+
+- **The home page's closing band is dark grey** (`#222225`), between the changelog's light grey band and the black footer. It is one of the kit's dark bands (`dark` on `components/closing-band.tsx`, in place of `grey`): the label, the statement and the link are white, the small label over the link `#b9b9be`, the rule a white hairline at 18 %, and the button white with black words; under the pointer the button greys a little and rises, as the site's filled button does on a dark ground. The industries and the services pages keep their light closing band.
+- **A thin grid lies on the changelog's card:** white hairlines of 1 px at 28 %, 36 px apart, over the card's ground and under its words. It is whole at the card's foot, where the colours are, and has faded to nothing half way up the card (at 40 % of its height on windows up to 640 px, where the words fill more of the card), so the heading and the text stand on a clean ground. It takes no press. A list of releases, when there is one, stands on its white panel over it.
+- The grid, like the card's colours, is a ground and shows no result: it is no mesh of any analysis, and it carries no number, legend or caption (risk R-31 already says so of the card).
+
+**Evidence.** On 2026-11-14 against the dev server the card and the closing band with the footer's top were captured at 1873 and 390 px and looked at. Contrast on the closing band, by the WCAG formula: white on `#222225` 15.87 to 1 (label, statement, link); `#b9b9be` on `#222225` 8.12 to 1; the button's black on white 21 to 1; the band against the black footer 1.32 to 1 and against the light grey band above it 14.31 to 1 (two grounds, not text). The case of `home.spec.ts` for these bands passed with the new checks: the grid's layer exists, lies under the card's content, is masked from the foot to half way, and takes no pointer events; the band's ground and every colour named above, each text at 4.5 to 1 or more; the industries and the services pages' bands still white. `tests/marketing-pages.test.ts` 8 of 8; `npx tsc --noEmit` clean. As for amendment 53, the browser run was made with the 3D view switched off while the wing demo's record was being changed. UNVERIFIED: the grid over a list of releases (none is published); the button's hover (its rule is the site's own and was not captured); whether the lead wants this grey or a lighter or darker one.
+
+## Amendment 55, 2026-11-14 (the team band says who is behind the product and what they cover; drafted, not yet confirmed)
+
+**Context.** The team band's head read "Five people, two seats each." and went on to say who decides what and that the repository is public. The lead: "the copy here has also got to change. This is straight from the team structures pdf and is completely irrelevant for a customer scrolling the site."
+
+**Decision.** Drafted here for the lead to confirm. The head is one short heading and one sentence for a visitor: "The team behind the platform." and "Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that connect them." Nothing in it says how the team is run. The fields are the technical seats `docs/brain/people.md` records (reference modeling and validation; fabrication, prototypes and mechanical testing; software and UI/UX; AI architecture and operations; prompt engineering and AI evaluation), in a visitor's words; no degree, employer or other personal fact is said, and no cohort line is added (main's amendment 50 had taken the repeat out). The cards under the head, with their titles, are unchanged.
+
+Not changed: the About page's team block still says "Five people, two seats each" with who decides what. The lead's word was about the home page; whether About's follows is the lead's to say.
+
+**Evidence.** On 2026-11-14 against the dev server the band was captured at 1873 and 390 px and looked at. `home.spec.ts` 8 and `intro.spec.ts` 15: 23 passed, with the 3D view on; the new check reads the heading and the sentence and finds no word of seats, deciding, spending or the repository in the head. The overview case of `portfolio.spec.ts` passed with the new heading. `tests/marketing-pages.test.ts` and `tests/team.test.ts` 10 of 10; `npm test` 333 tests, 332 passed, 1 skipped; `npx tsc --noEmit` clean. In the same run the layout check of amendment 52 was made to wait for the load-in to end before it measures: run with the whole suite it had read the mark while it was still on its way up, and failed twice for that reason. UNVERIFIED: that the wording is what the lead wants (two other drafts were handed over with this one).
+
+## Amendment 56, 2026-11-14 (the closing band is a step lighter)
+
+**Context.** The lead, with a capture of amendment 54's band: "make this less dark."
+
+**Decision.** The home page's closing band is `#3b3b40` (it was `#222225`), and its small label `#c6c6cb` (it was `#b9b9be`), so the label stands as clear of the lighter ground. The rest of amendment 54 stands.
+
+**Evidence.** Contrast, computed: white on the ground 11.14 to 1, the small label 6.55 to 1, the band against the black footer 1.89 to 1. `home.spec.ts`, 8 of 8, computes the same in the page and asks 4.5 to 1 of every text. Captured at 1440 px and looked at. UNVERIFIED: whether this is the shade the lead wants.
+
+## Amendment 57, 2026-11-14 (the clip's pause button is off the clip; it shows to the keyboard's focus and while the clip is paused)
+
+**Context.** The lead, with a capture of the button in the clip's corner: "why is there a pause button? get rid". The button came with amendment 50, drafted after the audit of 2026-11-12, which found that a clip that plays by itself for more than five seconds needs a way to pause it (WCAG 2.2.2, level A).
+
+**Options.** (1) Remove the button and the pausing with it: the widest reading of the lead's words; not taken alone, since the audit's finding would return in full with nothing in its place. (2) Keep the button as it was: against the lead's word. (3) Take it off the clip for the eye and the pointer, and keep it in the page for the keyboard and a screen reader: chosen, as the most both asks leave room for.
+
+**Decision.** Drafted here, for the founder to accept or refuse. The button is not drawn and takes no pointer until the keyboard's focus is on it or the clip stands paused; then it is as amendment 50 drew it, so whoever paused the clip can play it again. The keeper, the clip's source and the rest of amendment 50 stand. This keeps a way to pause for someone on a keyboard or a screen reader. Someone with a pointer only has none, short of asking the system for reduced motion, which gives the clip no source.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the button is in the page with its name, has no opacity and takes no pointer; the keyboard's focus shows it and Enter pauses the clip; a paused clip stays paused after two seconds and its button stays on it wherever the focus goes; playing again, it is off the clip. `intro.spec.ts` 15 of 15. The hero was captured at 1440 px and looked at. UNVERIFIED: how a screen reader reads the button; whether the founder accepts a control that only the keyboard reaches.
+
+## Amendment 58, 2026-11-14 (the closing band is lighter again)
+
+**Context.** The lead, with a capture of amendment 56's band: "less dark."
+
+**Decision.** The home page's closing band is `#5c5c61` (it was `#3b3b40`) and its small label `#dedee2`. The rest of amendments 54 and 56 stands. A band lighter than about `#707075` would need its small label in white to keep 4.5 to 1.
+
+**Evidence.** Contrast, computed: white on the ground 6.65 to 1, the small label 4.96 to 1, the band against the black footer 3.16 to 1 and against the light band above it 6.0 to 1. `home.spec.ts`, 8 of 8. Captured at 1440 px beside a darker and a lighter grey (`#4a4a4f`, `#707075`) for the lead to choose from, and looked at. UNVERIFIED: whether this is the shade the lead wants.
+
+## Amendment 59, 2026-11-14 (the team band is one grey block; the changelog's band is white; the closing band is lighter again)
+
+**Context.** The lead, with captures of the three bands: "this section is feeling useless. perhaps combine the gray box and the headshots box together to condense and make entire box that same gray. and then make the box for the changelog white. also make the contact us box lighter."
+
+**Decision.**
+
+- **The team band is one light grey block** (`#f3f3f4`) from edge to edge: the heading and its sentence stand close over the portraits, about 100 px less tall than the grey head over white portraits of amendment 41. The "Team" label stays over the portraits at their left edge (amendment 42).
+- **The changelog's band is white** round its card, so the page still alternates: white, grey, white, the closing band, the black footer.
+- **The closing band is `#707075`** (it was `#5c5c61`), its small label white and its rule a little stronger. That is about as light as white words allow: lighter, and the small words fall under 4.5 to 1, so the words would have to turn dark.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the band's ground and the head's lack of one, the portraits under the sentence within 100 px, names and titles at 4.5 to 1 or more on the grey, the changelog's band white, the closing band's ground and every text on it at 4.5 to 1 or more. Contrast of white on `#707075`, computed: 4.93 to 1. The bands were captured at 1440 px and looked at. UNVERIFIED: 390 px was captured and not looked at closely; whether the lead finds the team band condensed enough and the grey light enough.
+
+## Amendment 60, 2026-11-14 (the footer links to the company's pages on LinkedIn and X)
+
+**Context.** The lead, with a capture of the footer: "I wanna add X, Linkedin here in this."
+
+**Options.** (1) The two networks' marks as icons: not taken now, a mark is another owner's drawing with its own rules (R-30 is open on one already), and the footer is set in words. (2) The two names as links in the footer's own type, each with the arrow of a link that opens a new tab (amendment 16): chosen.
+
+**Decision.** Under the footer's tagline stand "LinkedIn" and "X", in that order, each a link to the company's page there that opens in a new tab and says so to a screen reader. The addresses are in `lib/site-nav.ts`. A link is drawn only when its address is filled in and is an https address on the network's own host, so the footer never carries a link that leads nowhere. The addresses are not known here and are left empty: until the lead gives them, the footer shows neither.
+
+**Evidence.** `tests/site-map.test.ts`: the two entries, and that one without a full address on its host is not shown. `tests/site-metadata.test.ts`: every north-east arrow in the shell stands in a link that opens a new tab. `shell.spec.ts`, 18 with 1 skipped: one link for each address filled in, in a new tab, with its name; with none, no list. The footer was captured at 1440 px with two example addresses, which are not in the repository, and looked at. `npm test`: 336 tests, 335 passed, 1 skipped. UNVERIFIED: the links themselves, until there are addresses.
+
+## Amendment 61, 2026-11-14 (the team band's head spans the page: "From university to industry.", who the team is, and the programme in words)
+
+**Context.** The lead, with a capture of amendment 59's band: "change the header and text. maybe there we can add back the ucsd basement logo. from university to industry. or something like that. also change the aestheticness of it. having it just be a lil snip in the center with nothing on the sides looks and feels weird. especially with the smaller text "TEAM" on the top left." With it the lead gave the team's degrees: two are pursuing a PhD in structural engineering, two hold a BS in structural engineering, and one a BS in mechanical engineering.
+
+**Options.** For the mark: (1) show The Basement's mark in the band: not done; ADR-0081 amendment 2, which the founder confirmed, lets the mark return only with an amendment there that records The Basement's permission, and its files are no longer in the repository. (2) Name the programme in words, as the hero's corner does: chosen. For the degrees: (1) a line on each person's card: not done, a degree beside a name is a personal fact and no one's agreement to it is recorded (ADR-0057 amendment 1); `lib/team.ts` keeps roles only. (2) One sentence about the team as a whole: chosen.
+
+**Decision.**
+
+- **The head spans the page as the portraits do,** on the page's twelve columns: the band's label "Team" over the heading at the portraits' left edge, and from the halfway line the words. Narrower than 900 px it is one column. The separate label over the portraits (amendment 42) is gone: the label is the heading's own again.
+- **The heading is "From university to industry."**
+- **The words:** "Five engineers trained in structures and mechanics: two are pursuing PhDs in structural engineering, two hold a BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and validation, fabrication and mechanical testing, and the software and AI that connect them." Under them, in the hero corner's small type behind a hairline: "Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego".
+- **For the founder:** the page now names the cohort twice, in the hero's corner and here; ADR-0081 amendment 2 had the page name it once. The wording is a draft for the lead to confirm.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the label and the heading at the portraits' left edge, the words from the halfway line and within the portraits' width, the head less than 80 px over the portraits, the heading and the two paragraphs word for word, no picture in the head, no degree on a card, nothing of how the team is run. `tests/marketing-pages.test.ts` still finds no reference to the mark's file. The band was captured at 1440 and 390 px and looked at; 1024 px was captured and not looked at. UNVERIFIED: that each person agrees to the sentence about the degrees; where the degrees are from, which the page does not say; whether the lead wants this wording.
+
+## Amendment 62, 2026-11-14 (the footer's two addresses)
+
+**Context.** The lead gave the company's addresses for amendment 60's links: `https://x.com/anisotropy_ai` and `https://www.linkedin.com/company/anisotropy/posts/`.
+
+**Decision.** Both are in `lib/site-nav.ts`, so the footer now shows "LinkedIn" and "X". LinkedIn's link goes to the company's page itself, `https://www.linkedin.com/company/anisotropy/`; the address given led to its posts.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: the two links, each with its address, in a new tab, with its name. `tests/site-map.test.ts`: both are https addresses on their own hosts. UNVERIFIED: that the two addresses open the company's pages; neither was opened from here.
+
+## Amendment 63, 2026-11-14 (the footer loses its tagline, its release stage and the arrow beside Workspace)
+
+**Context.** The lead, with a capture of the footer: "get rid of composites. calculated. move linkedin and x up to that line. get rid of closed beta too. and get rid of arrow next to workspace". The tagline and "Closed beta" in the footer were the founder's choice of 2026-11-12 (amendment 16).
+
+**Decision.** The footer's left half is the logo and, on the line under it, LinkedIn and X (amendment 60). "Composites. Calculated." and "Closed beta" are no longer in the footer; the page's title keeps the tagline. The footer's Workspace link is a plain link like the others in its column; the header's Workspace button keeps its arrow. **For the founder:** this takes two of his amendment 16 choices out of the footer.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: no tagline and no stage in the footer, two items in its bottom row, no drawing in its Workspace link, the two links within 28 px under the logo. UNVERIFIED: the footer was not captured again after this change.
+
+## Amendment 64, 2026-11-14 (the five portraits are smaller and stand in the band's middle)
+
+**Context.** The lead, with a capture at about 1900 px: "can you make our headshots a lil smaller, theyre huge rn and stretching from side to side."
+
+**Decision.** From 1280 px, where the portraits stand five to a row, the row takes 76 % of the band's width, never less than 1180 px, in the band's middle, with 24 px between the portraits. At 1900 px a portrait is about 268 px wide where it was 340; at 1280 px it is as it was, so each title still fits on one line. Three and two to a row, below 1280 px, they keep the whole width.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the row is in the band's middle, between 1180 px and 76 % of the width, and every title is one line. Captured at 1900 px and looked at; 1440 px was captured and not looked at. UNVERIFIED: whether this is small enough for the lead.
+
+## Amendment 65, 2026-11-15 (The Basement's mark, in black, beside the cohort in the team band)
+
+**Context.** The lead asked for The Basement's mark in the team band "in all b&w" (ADR-0081 amendment 3 records the permission as the lead states it).
+
+**Decision.** In the team head's right column, under the paragraph, the mark stands 46 px high in black, and beside it, behind a hairline, "Part of the Fall 2026 Launchpad cohort" in the small monospace type. The words no longer name the programme, since the mark does; the picture's alternative text names it for a screen reader. Narrower than the two fit, the words go under the mark.
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the mark and the words. Captured at 1900 px and looked at. UNVERIFIED: phone widths, and the mark's sharpness on a dense screen above 46 px (the file is 202 px high).
+
+## Amendment 66, 2026-11-15 (the hero's clip fills the first screen from edge to edge, with the header over it)
+
+**Context.** The lead, with a capture of the hero and one of another company's home page, whose picture fills the window behind its header: "get rid of the black border around and make similar ... keep the scroll down fade tho. but keep the rescroll up triggering the black header bar". Since amendment 19 the clip played in a box under the header, with the page's black at the sides and the foot.
+
+**Options.** (1) Keep the box and thin its frame: rejected, the lead asked for no border. (2) The clip edge to edge and the header on a black strip above it: rejected, the strip is the border's top. (3) The clip edge to edge with the header over it: chosen.
+
+**Decision.** The clip (and the still under it) fills the hero from the window's top to its foot and from side to side. The header lies over its top with no ground of its own, as it already lay over the black strip; a shade over the clip's top, 60 % black at the window's edge and gone 26 % of the way down, keeps the header's white links readable. The words, the cohort's line and "Scroll to explore" stand on the page's margin (32, 24 and 20 px, the header's own), so the statement starts where the logo does; until now they stood a second margin in, inside the box. The scroll is as it was: the clip dims away into the demo over the same part of the way (ADR-0095 amendment 11 takes out only the box's growth), and a scroll up brings the header in as the black bar (amendment 44, unchanged; no line of it was touched). Only the arrangement of the reference is followed, the picture behind the header; nothing of that page is copied, and amendment 47's words stay as they are.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the clip's four edges are the window's, the header is at the top with a transparent ground, the shade is read, the statement starts at the logo's left edge, at 1280 px and on a 390 px phone. `demo.spec.ts`, 13 of 13: the clip is whole-window at every step of the way and dims as before. `shell.spec.ts`, 18 with 1 skipped: at the top the header has no ground, and a scroll up brings the black bar. Captured at 1900 px (top, words standing, bar back) and 390 px and looked at. UNVERIFIED: the header's links against the clip's brightest frames on a real screen (the shade was judged by eye on two frames, not measured), Safari, Firefox and real phones.
+
+## Amendment 67, 2026-11-15 (the home page's grey closing band is a box, with white round it)
+
+**Context.** The lead, with a capture of the changelog's card and the grey band under it: "make the gray background here for contact us a gray box just as there is a box above it, showing the white background along the edges."
+
+**Decision.** The band is white and the grey (`#707075`, amendment 59) is a box on it: 32 px of white at its sides and its foot, and the changelog band's own 32 px foot between the two boxes, so both have the same left and right edges. The box is a layer under the band's words, so the closing band's markup, shared with the industries and services pages, is unchanged; its words keep 32 px from the box's edge. On a phone both boxes stand on 20 px.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the band's ground is white, the layer's is the grey, its inset is 0, 32, 32, 32, the gap to the card is 32 px, the footer follows at once, and every text on the grey still clears 4.5 to 1. Captured at 1900 px and looked at. UNVERIFIED: the phone's arrangement was not looked at.
+
+## Amendment 68, 2026-11-15 (the changelog's card rises into a near-white blue, with dark words)
+
+**Context.** The lead, with a capture of the card: "can we also have this instead of fading to a dark blue fade to like a really light blue, near white".
+
+**Decision.** The card's colours at its foot are as they were (amendment 49), and the grid over them (amendment 54). Above them the ground rises into a very light blue, `#f4f8ff` at the top, where it was a dark blue. White words would not read there, so the label, the heading and the sentence are a dark blue (`#0a1538`, the sentence `#26335c`).
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the words' colours. Captured at 1900 px and looked at. UNVERIFIED: the words' contrast was not measured where the sentence's last line meets the blue (judged by eye), and a published list of releases on this ground was not looked at.
+
+## Amendment 70, 2026-11-15 ("Scroll to explore" stands in the middle of the hero's foot)
+
+**Context.** The lead, with a capture of the link in the hero's bottom right corner: "now can we have this be centered on the home page instead of rigth corner".
+
+**Decision.** From 1200 px the link stands in the middle of the hero's foot, as far up as before. Narrower it stays in the bottom right corner: the cohort's line, about 450 px long from the left margin, would run into it in the middle.
+
+**Evidence.** `intro.spec.ts`, 15 of 15: the link's middle is the clip's, 24 px or more clear of the cohort's line. `home.spec.ts`, 8 of 8: in the middle at 1280 px, in the corner on the margin at 1199 px. UNVERIFIED: not captured or looked at after the change.
+
+## Amendment 71, 2026-11-15 (over the hero and the demo the returning header has no black ground)
+
+**Context.** The lead, with a recording of the home page: "when on hero homepage first landing page, the header shouldnt be black on rescroll, should be same as first landing. only black on rescroll past the demo". Amendment 44 brought the header back as a black bar wherever the page was; with the clip edge to edge (amendment 66) that bar covered the clip's top.
+
+**Decision.** On the home page the bar a scroll up brings in has no ground of its own while the hero's clip or the demo's black stage lies under the whole of it, so it is the header the page opens with; once the band after the demo is under it, it is the black bar of amendment 44. `components/site-shell.tsx` writes which on the header (`data-clear`) at every scroll, and `app/home.css` draws it; the rule of when the bar comes and goes (`components/header-scroll.ts`) is untouched. This holds where the hero stays in the window on the way to the demo. Where it scrolls away as an ordinary section (a window under 1024 px wide or 600 px high, or reduced motion) the bar stays black, because the clip's shade for the header would not be under it.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: at 200 px down the bar is fixed with a transparent ground, the same on the demo's stage, black 300 px into the band after the demo, and clear again back in the hero. UNVERIFIED: the recording itself was not opened; the bar over the wing where the demo draws near the window's top was not looked at; Safari, Firefox and phones.
+
+## Amendment 72, 2026-11-15 (the changelog's card is the dark blue one again)
+
+**Context.** The lead, with a capture of the card as amendment 68 made it: "revert to previous".
+
+**Decision.** Amendment 68 is taken back: the card rises into the dark blue of amendment 49 and its words are white. The grid (amendment 54) and the grey box under it (amendment 67) are as they were.
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the heading's white. UNVERIFIED: not captured again after the change.
+
+## Amendment 73, 2026-11-15 (the team band leaves the home page for About)
+
+**Context.** The lead, with a capture of the home page's team band: "lets move the entire team headshots section to about only, not shown on homepage."
+
+**Decision.** The band, its head ("From university to industry.", the paragraph, The Basement's mark and the cohort) and the five portraits, is a component (`components/team-band.tsx`, rules in `components/team-band.css`) and is the About page's last section, under `#team`. It replaces About's cards of names and seats and the paragraph on how the team decides ("Five people, two seats each ..."), which the lead had called irrelevant to a customer (amendment 55); the seats stay in `lib/team.ts`, which is unchanged. The home page goes from Services to the changelog, and `#working` is gone from it. The band's classes are renamed from `home-` to `team-`, and the home page's head rules it relied on are written out in its own stylesheet.
+
+**Evidence.** `team.spec.ts`, 2 of 2 (the cases moved from `home.spec.ts`, run on About); `home.spec.ts`, 7 of 7, with no team band on the page; `expansion.spec.ts`, 5 with 2 skipped; `npm test`, 342 of 343 with 1 skipped. Captured on About and on the home page at 1900 px and looked at. UNVERIFIED: phone widths; whether anything outside the repository links to the home page's `#working`.
+
+## Amendment 69, 2026-11-15 (every page but the home page and the workspace is white under a black header)
+
+**Context.** The lead, with a capture of the Industries page: "for all of these pages (excluding workspace, we will get to that later) lets do white background with black header bar at top". Amendments 12 and 23 had every inner page open on black, with light and dark bands by turns, and the header with no ground of its own over the page's black.
+
+**Options.** (1) White openings and keep the dark bands by turns: rejected, the lead asked for a white background. (2) Light grey for the bands that were dark: not chosen, it is not what was asked; it can follow. (3) White throughout, a hairline between bands: chosen.
+
+**Decision.** On every page but the home page the header is a black bar in the page's flow (`app/globals.css`), and the black bar a scroll up brings back is as before. The content of About, Industries, Services and its five pages, Contact and the 404 page reads the light values of the site's variables (`.kit-page`, `app/inner-pages.css`), so the opening and every band are white with dark words; the team band keeps its light grey, and the coupon drawing keeps its dark panel, which it is drawn for. The library, a source's page, the test data page and the calculator are white the same way (`main.inner-page`, `main.calculator-page`; the colours written out for a dark ground in `app/expansion.css`, `app/research.css`, `app/provenance.css`, `app/sources/sources.css`, `app/calculator/calculator.css` and `app/globals.css` now read the variables). The footer stays black, and so does the veil between pages. The workspace is untouched. The home page keeps its own arrangement.
+
+**Evidence.** `expansion.spec.ts`, 6 with 2 skipped: on six inner pages the header and footer are black, the content white, the heading dark and no band dark. `research.spec.ts` and the other library, source and calculator suites, 25 passed with 4 skipped (their own skips), with a case that reads the white ground and 4.5 to 1 for every text on the five pages. `shell.spec.ts`, 18 with 1 skipped. `npm test`, 342 of 343 with 1 skipped. About, Industries, Services, two service pages, Contact and the 404 page were captured whole at 1600 px and looked at; the library, a source, the data page and the calculator at 1900 px. UNVERIFIED: hover and focus states on the library pages (set by reading the rules, not captured); the amber flagged-value styles, which no material shows now; phone widths beyond four pages; Safari, Firefox and a production build. Rules for classes no component uses still hold dark colours in three stylesheets; they match nothing.
+
+## Amendment 74, 2026-11-15 (the line over the hero's statement is gone)
+
+**Context.** The lead, with a capture of the hero: "get rid of anistropy text here, the logo and the est. 2026 text." Since amendments 47 and 52 a line of the mark, the name, a hairline and the year stood over the statement.
+
+**Decision.** The line is taken out of the page and its rules out of `app/home.css`: the hero's words are the statement alone, with the cohort's line in the corner as before. The header's logo, a few lines above on the same clip since amendment 66, says the name. The load-in types the statement and fades the corner's words in; the exit untypes the statement at once, with no mark turning first. The quarter turn and the early fade stay in `components/intro-text.ts` as moves any element may ask for (`data-outro="spin"`, `data-outro-at="start"`); nothing on the page asks for them now.
+
+**Evidence.** `home.spec.ts`, 7 of 7: no element of the line is in the hero, and "Est 2026" is not on it. `intro.spec.ts`, 15 of 15: one copy is typed and two elements take part in the load-in, and the exit's first line starts at 0 ms. `demo.spec.ts`, 13 of 13. Captured at 1900 px with the statement standing and after it left, and looked at. UNVERIFIED: phone widths; the two moves kept in the engine are no longer covered by a browser case.
+
+## Amendment 75, 2026-11-15 (the closing band is set in the site's own way, with a laminate's plies at its foot; the two boxes' corners are round)
+
+**Context.** The lead, with a capture of the home page's closing band: "this feels exactly like physicsx, make feel unique and consistent with rest of anisotropy." And, with a capture of the changelog's card and the grey box: "slightly round off these corners." Amendment 13 laid the closing band out after another company's closing sections: a ticked label, the statement at the left, the action from the halfway line, and a ruled row of links under them.
+
+**Options.** (1) Keep the layout and change its colours: rejected, the layout is what is recognised. (2) A design of its own for the home page only: rejected, the industries and services pages end with the same band and would keep the old one. (3) One closing band for the whole site, set as the home page's band heads and the demo's words are, with a mark of the site's own: chosen.
+
+**Decision.** `components/closing-band.tsx` is centred: a small monospace label without a tick, the statement of medium weight set tight, and under it the page's one action with any quiet link beside it. The ruled row and its label ("Explore the research") are gone; the home page's link to the materials library stands beside its button. Across the band's foot lie seven hairlines, 6 px apart at the foot and wider upwards, fading out: a laminate's plies seen from the edge. They are a picture and show no layup of any coupon (ADR-0001 is not touched: they are no result). On the home page they lie inside the grey box (amendment 67), light on the grey; on the white pages they are the band's hairline colour. The changelog's card and the grey box have corners 12 px round, the radius of the kit's cards.
+
+**Evidence.** `home.spec.ts`, 7 of 7: the label, the statement and the actions stand one under another within 2 px of the window's middle, the link beside the button, no rule and no row's label, seven lines in a picture that takes no press and lies inside the box, both corners 12 px, and every text on the grey at 4.5 to 1 or better. `expansion.spec.ts` and `shell.spec.ts` as before. Captured on the home page and on the services page at 1900 px and looked at. UNVERIFIED: the industries page's band and the phone's arrangement were captured and not looked at; whether the lead finds it distinct enough.
+
+## Amendment 76, 2026-11-15 (the closing band's action stands alone)
+
+**Context.** The lead, with a capture of the home page's closing band: "get rid of the materials library button here".
+
+**Decision.** The link to the materials library beside "Contact us" is gone, and with it the band's way of taking such links (the `links` property and its rules), which no other page used. The band's one link is its action. The library is still reached from Resources in the header and the footer.
+
+**Evidence.** `home.spec.ts`, 7 of 7: the band holds one link, "Contact us", and no words about the library. UNVERIFIED: not captured again after the change.
+
+## Amendment 77, 2026-11-15 (the changelog's card is the lens; a library band stands where the team band stood; the two pictures stand on the page's margin)
+
+**Context.** The lead, with a capture of the Services band over the changelog's card, the lens showing on the picture: "the bottom box should be literally like the same schema as the lens. also I think there should be something else in between the services and the blue box, like something where the team page was, but not the team thing." And, with captures of the Mission and Services bands: "make the pictures either wider or moved to be flush with the changelog card. wasted space and not symmetrical/aesthetic".
+
+**Options, for the band between.** (1) The checks a run passes, with the reference solver's figures: not chosen, those figures belong to one coupon and are on its service page. (2) The cohort and the university: rejected, it is the team's story again. (3) The library, which the header names Resources and the home page did not show: chosen. What goes in that band was left open by the lead; this is the lead's to confirm or replace.
+
+**Decision.**
+- **The card.** Its ground is the lens of the two pictures (amendment 48) at the card's size, drawn the same way and by the same filter (`#home-fea`): the material photograph, a little lighter, with the demo's scale laid on it as colour alone, and the lens's mesh of hairlines 18 px apart over the whole card. Amendment 49's blurred colours over a dark blue and amendment 54's wider, fading grid are gone. One thing is added that the lens has not: a shade under the band's words, so white reads on every colour. It is a picture effect, as the lens is: it measures nothing and shows no result (ADR-0001 is not touched).
+- **The library band.** Between Services and the changelog, one light grey band (`#resources`): "Resources", "Every value, with its source.", a sentence on what the library lists, a link to it, and three figures in large type: its materials, its equations and the references it cites. The figures are counted when the page is built from `curatedMaterials`, `physicsCardCount` and `citedSources()`, the lists the library itself reads; today 26, 42 and 24. No value of any material is shown on the home page, so every value stays beside its citation (ADR-0018).
+- **The pictures.** Mission and Services are laid out on the page's twelve columns from margin to margin. The picture takes six columns and stands on the page's margin, so its outer edge is the card's; the words start on the other margin, or on the halfway line beside a picture at the left. From 1024 px the picture is 3 to 2 (it was 4 to 3), so a band is not taller than a window.
+
+**Evidence.** `home.spec.ts`, 7 of 7: the card's two views have the lens's own filters and blend, read from both and compared; its mesh is the lens's, compared; the library band's place, words, link and three whole numbers, and the first of them found again on the library's page; each picture half the columns wide, 32 px from the window's edge. `demo`, `intro`, `shell` and `expansion` suites, 58 passed with 3 skipped. `npm test`, 342 of 343 with 1 skipped. The ground under the card's words was measured on a capture at 1900 px with the words hidden: white on it is 5.8 to 1 or better under the heading, 6.2 under the sentence and the label. All three were captured at 1900 px and looked at. UNVERIFIED: the card's legibility at other widths, where the photograph is cut differently (not measured); the filter's cost on a large card on a slow machine; Safari and Firefox, which draw the filter themselves; phone widths; whether the lead wants the library in that band.
+

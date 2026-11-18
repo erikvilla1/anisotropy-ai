@@ -218,3 +218,11 @@ The rule is a pure module with unit tests (`components/home/scroll-steps.ts`); `
 
 **Evidence.** On 2026-11-14 against the dev server. `tests/scroll-steps.test.ts`, 3 of 3. `demo.spec.ts`, 13 of 13, rewritten for this: the page is exactly where the wheel put it at every step and none of a swipe's events is taken; each zone plays its beat; a beat still takes its own time (the second about 3.6 s); one wheel event through everything is not held and leaves the demo finished; quick steps through the stage run the beats through; up again the beats are unplayed one by one, the hero comes back, and down again the first beat plays; a finger scrolls through the stage as through any page; reduced motion and a phone are as before. `home.spec.ts` 7 of 7, `shell.spec.ts` 18 passed and 1 skipped, `expansion.spec.ts` passed with its 2 skipped; `npm test` 317 tests, 316 passed, 1 skipped; `npx tsc --noEmit` clean. A scripted trial at 1873 by 866 was read: the scroll positions were exactly the wheel's throughout. UNVERIFIED: a real trackpad, wheel and phone; Safari and Firefox; whether half a stage a beat is the right length of scroll.
 
+## Amendment 11, 2026-11-15 (the clip no longer grows on the way: it is whole-window from the start)
+
+**Context.** ADR-0077 amendment 66 takes the hero's clip to the window's edges, so amendment 5's growth from a box has nothing left to do.
+
+**Decision.** The hand-over keeps its order and its shares of the way: over the first two fifths what stands on the clip goes ("Scroll to explore", and the hero's words if they still stand), then the clip dims, and the first beat's words come up through it. The value the script writes for the first part is now `--hero-clear` (it was `--hero-grow`), and `HANDOVER.clearFrom` and `clearTo` name its ends.
+
+**Evidence.** `demo.spec.ts`, 13 of 13, with the clip's edges on the window's at every step. UNVERIFIED: whether the first two fifths, with nothing but the corner's link going, read as slow to a visitor; the dim could start sooner.
+

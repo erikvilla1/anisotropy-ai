@@ -41,8 +41,8 @@ test("the repository says who owns it: all rights reserved, and third-party valu
 test("NOTICE names every partner's mark the site serves, since LICENSE claims all else for Anisotropy", () => {
   // LICENSE says the media are Anisotropy's "unless NOTICE names another owner"; a partner's mark is someone else's (ADR-0081).
   const notice = readFileSync("NOTICE", "utf8");
-  // Both ways: every partner's mark the site serves is named, and NOTICE names no mark the site no longer serves (since the
-  // audit's D14 The Basement is named in words, ADR-0081 amendment 2, and public/assets/partners is gone).
+  // Both ways: every partner's mark the site serves is named, and NOTICE names no mark the site no longer serves (The
+  // Basement's mark left with the audit's D14, ADR-0081 amendment 2, and is back since amendment 3).
   const dir = "public/assets/partners";
   const marks = existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith(".")) : [];
   for (const mark of marks) assert.ok(notice.includes(mark), `NOTICE does not name ${dir}/${mark}`);

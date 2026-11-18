@@ -1,39 +1,39 @@
 /* Property lookup: one reference, three columns, details on request. */
 .library-intro{padding-top:64px;padding-bottom:32px}
 .library-intro h1{font-size:clamp(32px,4vw,52px);margin:0 0 12px;letter-spacing:-1.5px}
-.library-intro p{font-size:15px;color:#bbbbbb;margin:0;line-height:1.7}
+.library-intro p{font-size:15px;color:var(--muted);margin:0;line-height:1.7}
 .library-intro+.library-section{padding-top:0}
-.material-subtitle{font-size:13px;color:#bcbcbc;margin:12px 0 26px;line-height:1.7}
+.material-subtitle{font-size:13px;color:var(--muted);margin:12px 0 26px;line-height:1.7}
 .source-materials .material-detail-title{margin-bottom:0}
 .source-materials .material-detail-title h2{margin-bottom:0}
-.dataset-picker{display:flex;align-items:center;gap:15px;font-size:13px;color:#b3b3b3;margin-bottom:18px}
-.dataset-picker select{background:#1d1d1d;border:1px solid #505050;border-radius:4px;color:#dedede;padding:10px 12px;font:inherit;max-width:100%}
-.property-reference{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;padding:16px 18px;background:#1f1f1f;border:1px solid #414141;border-radius:5px;font-size:13px;line-height:1.7}
-.property-reference>span{color:#aeaeae}
-.property-reference>a{color:#e7e7e7;display:inline;overflow-wrap:anywhere}
+.dataset-picker{display:flex;align-items:center;gap:15px;font-size:13px;color:var(--muted);margin-bottom:18px}
+.dataset-picker select{background:var(--bg);border:1px solid var(--field);border-radius:4px;color:var(--text);padding:10px 12px;font:inherit;max-width:100%}
+.property-reference{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:5px;font-size:13px;line-height:1.7}
+.property-reference>span{color:var(--muted)}
+.property-reference>a{color:var(--text);display:inline;overflow-wrap:anywhere}
 .property-reference>a svg{display:inline;vertical-align:middle}
-.property-reference>small{grid-column:2;font-size:11px;color:#bdbdbd}
-.dataset-context{font-size:12px;color:#b2b2b2;line-height:1.8;margin:12px 0 22px}
+.property-reference>small{grid-column:2;font-size:11px;color:var(--muted)}
+.dataset-context{font-size:12px;color:var(--muted);line-height:1.8;margin:12px 0 22px}
 .property-filters{display:flex;gap:7px;flex-wrap:wrap;margin:22px 0 16px}
-.property-filters button{font:inherit;font-size:12px;padding:8px 12px;border:1px solid #464646;border-radius:4px;color:#b8b8b8;background:transparent;cursor:pointer}
-.property-filters button[aria-pressed=true]{background:#d0d0d0;color:#1c1c1c;border-color:#d0d0d0}
+.property-filters button{font:inherit;font-size:12px;padding:8px 12px;border:1px solid var(--line-strong);border-radius:4px;color:var(--text);background:transparent;cursor:pointer}
+.property-filters button[aria-pressed=true]{background:var(--accent);color:#ffffff;border-color:var(--accent)}
 .source-materials .material-properties .simple-property-table table{width:100%;min-width:0;table-layout:fixed}
 .source-materials .material-properties .simple-property-table th,.source-materials .material-properties .simple-property-table td{white-space:normal;padding:17px 14px;min-width:0;max-width:none;text-align:left;vertical-align:top;overflow-wrap:anywhere}
-.source-materials .simple-property-table thead th{font-size:12px;color:#b5b5b5;font-weight:500;padding-top:12px;padding-bottom:12px;background:#1e1e1e}
+.source-materials .simple-property-table thead th{font-size:12px;color:var(--muted);font-weight:500;padding-top:12px;padding-bottom:12px;background:var(--raised)}
 .simple-property-table thead th:first-child{width:48%}
-.source-materials .material-properties .simple-property-table td{font-size:14px;line-height:1.65;color:#e9e9e9;font-variant-numeric:tabular-nums}
+.source-materials .material-properties .simple-property-table td{font-size:14px;line-height:1.65;color:var(--text);font-variant-numeric:tabular-nums}
 /* Numbers read right-aligned in tabular figures; the property name stays left (docs/copy-style-guide.md, Tables). */
 .source-materials .material-properties .simple-property-table td,.source-materials .simple-property-table thead th:not(:first-child){text-align:right}
-.simple-property-table thead .column-tag{display:block;margin-top:3px;font-size:11px;font-weight:400;color:#a8a8a8}
+.simple-property-table thead .column-tag{display:block;margin-top:3px;font-size:11px;font-weight:400;color:var(--muted)}
 .source-materials .simple-property-table th[scope=row]{font-weight:400}
-.property-name{font-size:14px;color:#e6e6e6;line-height:1.65}
-.simple-property-table th[scope=row]>small{display:block;margin-top:4px;font-size:12px;color:#a6a6a6;line-height:1.7}
-.source-materials .material-properties .simple-property-table .property-group th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#b6b6b6;padding-top:24px;padding-bottom:9px;background:#181818}
-.value-note{margin-top:8px;color:#d9bd88;font-size:11px;line-height:1.7}
+.property-name{font-size:14px;color:var(--text);line-height:1.65}
+.simple-property-table th[scope=row]>small{display:block;margin-top:4px;font-size:12px;color:var(--muted);line-height:1.7}
+.source-materials .material-properties .simple-property-table .property-group th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding-top:24px;padding-bottom:9px;background:var(--raised)}
+.value-note{margin-top:8px;color:#6b4e0c;font-size:11px;line-height:1.7}
 .value-note summary{cursor:pointer;width:fit-content}
-.value-note p{font-size:11px;line-height:1.8;color:#ceb98d;margin-bottom:0}
-.source-materials .simple-property-table .flagged-property td{color:#ddc494}
-.units-note{font-size:12px;color:#aaaaaa;line-height:1.8;margin:16px 0 22px}
+.value-note p{font-size:11px;line-height:1.8;color:#6b4e0c;margin-bottom:0}
+.source-materials .simple-property-table .flagged-property td{color:#6b4e0c}
+.units-note{font-size:12px;color:var(--muted);line-height:1.8;margin:16px 0 22px}
 @media(max-width:650px){
   .library-intro{padding-top:35px;padding-bottom:24px}
   .library-intro p{font-size:13px}
@@ -55,7 +55,7 @@
 .dataset-summary { margin: 0 0 1.5rem; }
 .dataset-summary strong { color: var(--text); }
 .dataset-application { margin: 1.25rem 0; }
-.cited-reference-details { border-top: 1px solid #3f3f3f; padding: 1.2rem 0; font-size: .82rem; line-height: 1.7; }
+.cited-reference-details { border-top: 1px solid var(--line); padding: 1.2rem 0; font-size: .82rem; line-height: 1.7; }
 .cited-reference-details summary { cursor: pointer; }
 .cited-reference-details summary:focus-visible, .method-entry summary:focus-visible, .value-note summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .cited-reference-details ul { padding-left: 1.2rem; }
@@ -65,10 +65,10 @@
 .cited-properties .property-reference > div { display: flex; flex-direction: column; gap: 5px; }
 .cited-properties .property-reference { grid-template-columns: 1fr auto; }
 .material-dataset-picker { display: grid; gap: 8px; margin: 0 0 24px; font-size: .8rem; color: var(--muted); }
-.material-dataset-picker select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #3f3f3f; border-radius: 4px; background: #1d1d1d; color: var(--text); font: inherit; }
-.property-name a { text-decoration: underline; text-decoration-color: #4c4c4c; text-underline-offset: 4px; }
+.material-dataset-picker select { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--field); border-radius: 4px; background: var(--bg); color: var(--text); font: inherit; }
+.property-name a { text-decoration: underline; text-decoration-color: #b4b4b8; text-underline-offset: 4px; }
 .property-name a:hover { text-decoration-color: currentColor; }
-.equation-reference { border-top: 1px solid #3f3f3f; padding-top: 14px; overflow-wrap: anywhere; }
+.equation-reference { border-top: 1px solid var(--line); padding-top: 14px; overflow-wrap: anywhere; }
 .equation-reference a { text-decoration: underline; text-underline-offset: 3px; }
 .equation-units { color: var(--muted); }
 .physics-equation.typeset-equation { display: grid; gap: 20px; max-width: 100%; padding: 26px 24px; overflow-x: auto; white-space: normal; font-size: 1rem; line-height: normal; }
@@ -81,19 +81,19 @@
 
 /* Source rights class (ADR-0018): what the website may show for each cited source. */
 .source-rights { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 1rem; font-size: .78rem; line-height: 1.6; color: var(--muted); }
-.rights-chip { flex: none; display: inline-block; padding: 5px 9px; border-radius: 3px; border: 1px solid #5b5b5b; background: #333333; color: #d5d5d5; font-size: 11px; line-height: 1.4; letter-spacing: .02em; white-space: nowrap; }
-.rights-public-domain { border-color: #4f7a4a; background: #1d3320; color: #bfe6b8; }
-.rights-licensed-reference { border-color: #8a7a48; background: #2f2a16; color: #e2d3a0; }
+.rights-chip { flex: none; display: inline-block; padding: 5px 9px; border-radius: 3px; border: 1px solid #c4c4c8; background: #efefef; color: #333333; font-size: 11px; line-height: 1.4; letter-spacing: .02em; white-space: nowrap; }
+.rights-public-domain { border-color: #a9d3a3; background: #e6f4e3; color: #1f5a1c; }
+.rights-licensed-reference { border-color: #d9c887; background: #f8f1d6; color: #5a4700; }
 /* The chip sits clear of the publisher box above it, and level with its one-line note on a wide screen; on a phone the
    two stack, left-aligned (the rule at the end of this file). */
 .cited-properties .source-rights { margin-top: 12px; }
 @media (min-width: 651px) { .cited-properties .source-rights { align-items: center; } }
 /* References panel: one group per rights class, the class above its sources, so nothing wraps beside a chip. */
-.references-panel .rights-group { border-top: 1px solid #393939; padding: 22px 0 6px; max-width: 860px; }
+.references-panel .rights-group { border-top: 1px solid var(--line); padding: 22px 0 6px; max-width: 860px; }
 .references-panel .rights-group h3 { margin: 0 0 10px; font-size: inherit; }
 .references-panel .rights-group > p { margin: 0 0 14px; }
 .references-panel .source-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 12px; }
-.references-panel .source-list li { display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.6; color: #d6d6d6; }
-.references-panel .source-list a { color: #dedede; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: #4c4c4c; text-underline-offset: 3px; }
+.references-panel .source-list li { display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.6; color: var(--text); }
+.references-panel .source-list a { color: var(--text); overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: #b4b4b8; text-underline-offset: 3px; }
 .references-panel .source-list small { font-size: 12px; color: var(--muted); }
 @media (max-width: 650px) { .source-rights { flex-direction: column; align-items: flex-start; gap: 8px; } }

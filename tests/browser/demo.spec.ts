@@ -69,17 +69,21 @@ async function openPinned(page: Page) {
 const wing = { ...demoWing, field: demoWing.field!, solve: demoWing.solve!, load: demoWing.load! };
 /** An end of the legend as the page prints it: a share as a percentage when the field has no unit. */
 const legendEnd = (value: number) => (wing.field.unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
-const PARTS = ["UPPER SKIN", "LOWER SKIN", "FRONT SPAR", "REAR SPAR", "RIBS"];
+// The skeleton's parts, each with its layup, then the film in one row that says it is not analysed (ADR-0098 amendment 11).
+const PARTS = ["FRONT SPAR", "REAR SPAR", "RIBS", "SKIN"];
+const LAYUPS = [...wing.parts.filter((part) => !part.cover).map((part) => part.layup), "Clear film, not analysed"];
 
-test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
+test("the demo is a black stage on the page's margin and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
   await openPinned(page);
   const rects = await page.evaluate(() => {
     const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
     return { clip: rect("#overview .home-hero-media"), box: rect("#demo .product-demo-box"), section: rect("#demo"), next: rect("#mission") };
   });
-  // As wide as the clip, a window tall, and followed at once by the next band. With the page at its top it starts half a
-  // window up, behind the hero, which lies over it (ADR-0095 amendment 4): half a window of scrolling brings it up.
-  expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
+  // On the page's 32 px margin, where the hero's clip stood until it went edge to edge (ADR-0077 amendment 66), a window
+  // tall, and followed at once by the next band. With the page at its top it starts half a window up, behind the hero,
+  // which lies over the whole of it (ADR-0095 amendment 4): half a window of scrolling brings it up.
+  expect([rects.box.left, page.viewportSize()!.width - rects.box.right]).toEqual([32, 32]);
+  expect([rects.clip.left, rects.clip.right]).toEqual([0, page.viewportSize()!.width]);
   expect(rects.box.height).toBe(page.viewportSize()!.height);
   expect(rects.box.top).toBe(page.viewportSize()!.height / 2);
   // The stage stays in the window while the page scrolls through its section, which is the stage and half a stage of
@@ -112,7 +116,7 @@ test("the page scrolls to the stage as any page does; the first beat's words com
   await page.waitForTimeout(500);
   expect(await scrollY(page)).toBe(100);
   await expectStop(page, 0);
-  // The model waits for the first beat. The first beat's words wait too, while the hero's clip is still growing (amendments
+  // The model waits for the first beat. The first beat's words wait too, while the hero's clip is still being cleared (amendments
   // 4 and 6), and no other beat's are up.
   await expect(box(page).locator(".product-demo-view")).toHaveCSS("opacity", "0");
   await expect(page.getByTestId("demo-recorded")).toHaveCount(0);
@@ -148,18 +152,17 @@ test("the page scrolls to the stage as any page does; the first beat's words com
   await expect(beat(page, "describe")).toHaveAttribute("data-active", "true");
   await expect(beat(page, "describe").getByRole("heading", { level: 3 })).toHaveText("Start from the part.");
   const facts = page.getByTestId("demo-facts");
-  await expect(facts.locator("[data-filled]")).toHaveCount(6);
-  await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE", "WINGLET"]);
+  await expect(facts.locator("[data-filled]")).toHaveCount(5);
+  await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
   await expect(facts).toContainText("2.13 m");
   await expect(facts).toContainText("IM7 / 8552");
   await expect(facts).toContainText("0.45 m at the root, 0.23 m at the tip");
-  await expect(facts).toContainText("2 skins, 2 spars, 11 ribs");
-  await expect(facts).toContainText("0.33 m tall, canted 75°");
+  await expect(facts).toContainText("2 spars and 9 ribs under a clear film skin");
   await expect(box(page).locator("canvas")).toBeVisible();
   expect(asked).toEqual([]);
 });
 
-test("on the way to the stage the hero stays in the window, its clip grows to the whole window and dims, then the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 to 6)", async ({ page }) => {
+test("on the way to the stage the hero stays in the window, its whole-window clip is cleared and then dims, then the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 to 6, ADR-0077 amendment 66)", async ({ page }) => {
   await openPinned(page);
   const opening = page.locator(".home-opening");
   const read = () => page.evaluate(() => {
@@ -184,9 +187,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   await expect(page.locator(".home-hero-explore")).toHaveCSS("opacity", "1");
   // At the top: the hero whole, the stage behind it, nothing of the demo's words yet.
   await expect(opening).toHaveAttribute("data-handover", "ready");
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
-  // Down by the wheel in steps of a tenth of the way. The hero does not move. First its clip grows to the whole window, at
-  // full strength and with nothing of the demo up (amendments 5 and 6); then it dims; and the first beat's words come in only
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [0, 0, 0, 0] });
+  // Down by the wheel in steps of a tenth of the way. The hero does not move, and its clip is whole-window all the way
+  // (ADR-0077 amendment 66; until then it grew from a box first). First what stands on the clip goes, the clip at full
+  // strength and with nothing of the demo up (amendments 5 and 6); then it dims; and the first beat's words come in only
   // once it is well on its way to black. At every step something is on the screen: the clip, or the words, or both.
   const way = await offLine(page);
   expect(way).toBe(page.viewportSize()!.height / 2);
@@ -200,12 +204,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
     expect(now.heroTop, `the hero's place at ${step}/10`).toBe(0);
     expect(now.hero, `the hero at ${step}/10`).toBeLessThanOrEqual(before.hero);
     expect(now.words, `the words at ${step}/10`).toBeGreaterThanOrEqual(before.words);
-    for (let edge = 0; edge < 4; edge++) expect(now.clip[edge], `the clip's edge ${edge} at ${step}/10`).toBeLessThanOrEqual(before.clip[edge]);
-    if (step < 4) expect(now.clip[0], `the clip's top at ${step}/10`).toBeGreaterThan(0);
-    else expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
-    // growing: the clip at full strength, no words yet
-    if (step <= 4) expect([now.hero, now.words], `growing at ${step}/10`).toEqual([1, 0]);
-    // "Scroll to explore" goes as the clip grows and is gone once it is whole-window
+    expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
+    // clearing: the clip at full strength, no words yet
+    if (step <= 4) expect([now.hero, now.words], `clearing at ${step}/10`).toEqual([1, 0]);
+    // "Scroll to explore" goes first and is gone before the clip dims
     expect(now.button, `the button at ${step}/10`).toBeLessThan(before.button === 0 ? 0.001 : before.button);
     if (step >= 4) expect(now.button, `the button at ${step}/10`).toBe(0);
     // the words wait for the clip to be well on its way to black
@@ -225,10 +227,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await expect(opening).toHaveAttribute("data-handover", "ready");
   await expectStop(page, 0);
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [0, 0, 0, 0] });
 });
 
-test("if the hero's words still stand when the page scrolls, they go as the clip grows and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
+test("if the hero's words still stand when the page scrolls, they go before the clip dims and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
   await openPinned(page);
   const hero = page.locator("#overview");
   // Before the words have left: the load-in is over and they stand.
@@ -249,12 +251,12 @@ test("if the hero's words still stand when the page scrolls, they go as the clip
   });
   expect(await read()).toEqual({ statement: 1, backed: 1, demo: 0 });
   const way = await offLine(page);
-  // A fifth of the way: the clip is half grown and the words half gone. Nothing of the demo is up.
+  // A fifth of the way: the words are half gone. Nothing of the demo is up.
   await page.mouse.wheel(0, way / 5);
   await expect.poll(() => scrollY(page)).toBe(Math.round(way / 5));
   await expect.poll(async () => (await read()).statement).toBeCloseTo(0.5, 1);
   expect((await read()).demo).toBe(0);
-  // From two fifths on the clip is whole-window and the hero's words are gone, before the demo's first words begin.
+  // From two fifths on the hero's words are gone, before the clip dims and the demo's first words begin.
   let seen = { statement: 1, backed: 1, demo: 0 };
   for (let step = 4; step <= 9; step++) {
     await page.mouse.wheel(0, step === 4 ? way / 5 : way / 10);
@@ -279,16 +281,16 @@ test("each zone of scroll plays its beat and the page is never held; the analysi
   const step = await zone(page);
   // The wheel is the browser's: none of a swipe's events is taken, on the stage or off it, and it plays nothing by itself.
   expect(await swipe(page)).toBe(0);
-  // A zone further down, the second beat: the wing apart, and its five parts named with their layups. The page is where
-  // the wheel put it.
+  // A zone further down, the second beat: the wing apart, its three laminates named with their layups and the film beside
+  // them. The page is where the wheel put it.
   await wheelTo(page, start + step);
   await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 2);
   await expect(beat(page, "model")).toHaveAttribute("data-active", "true");
   const parts = page.getByTestId("demo-parts");
-  await expect(parts.locator("[data-filled]")).toHaveCount(5);
+  await expect(parts.locator("[data-filled]")).toHaveCount(PARTS.length);
   await expect(parts.locator("dt")).toHaveText(PARTS);
-  await expect(parts.locator("dd")).toHaveText(wing.parts.map((part) => part.layup));
+  await expect(parts.locator("dd")).toHaveText(LAYUPS);
   expect(await scrollY(page)).toBe(start + step);
   expect(await offLine(page)).toBe(0);
   // A notch inside the same zone moves the page and plays nothing.
@@ -311,8 +313,8 @@ test("each zone of scroll plays its beat and the page is never held; the analysi
   await expect(result).toHaveCSS("opacity", "1");
   const governing = wing.parts.find((part) => part.id === wing.solve.governing.part)!;
   await expect(result).toContainText(`Most loaded: the ${governing.name.toLowerCase()}`);
-  await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the wing's ribs`);
-  await expect(result).toContainText(`the winglet's tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
+  await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the ribs`);
+  await expect(result).toContainText(`the tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
   await expect(box(page).locator("canvas")).toBeVisible();
   // Back up a zone the third beat is unplayed, faster than it played, and down again it plays again.
   await wheelTo(page, start + step);
@@ -437,7 +439,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
   await playTo(page, 4);
   await expect(box(page)).toHaveAttribute("data-turnable", "true");
   // Up a zone at a time: the clock runs back to the beat before, and its words and card stand again.
-  const titles = ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."];
+  const titles = ["Start from the part.", "It comes apart into its parts.", "The skeleton is analysed.", "Back together, with the report."];
   const ids = ["describe", "model", "analysis", "report"];
   for (let stop = 3; stop >= 1; stop--) {
     await wheelTo(page, start + Math.round((stop - 0.5) * step));
@@ -449,7 +451,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
     expect(await offLine(page)).toBe(0);
   }
   await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(0);
-  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
   // Up off the stage: the hero comes back as it went (the hand-over, backwards), and the demo runs back to its start.
   const opening = page.locator(".home-opening");
   await wheelTo(page, start - Math.round(step / 2));
@@ -465,7 +467,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
   await wheelTo(page, start);
   await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 1);
-  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
 });
 
 test("the hero's \"Scroll to explore\" brings the stage to fill the window, and the first beat plays", async ({ page }) => {
@@ -527,9 +529,9 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await expect.poll(() => scrollY(page)).toBe(240);
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A wing, analysed part by part.");
-  for (const title of ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
-  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(5);
+  for (const title of ["Start from the part.", "It comes apart into its parts.", "The skeleton is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
+  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(PARTS.length);
   await expect(page.getByTestId("demo-run").locator(".demo-stages li[data-state='done']")).toHaveCount(5);
   await expect(page.getByTestId("demo-result")).toContainText("Most loaded");
   // The beats follow each other down the page.
