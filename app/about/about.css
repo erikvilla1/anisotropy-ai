@@ -186,41 +186,7 @@
   grid-column: 4 / 11;
 }
 
-/* The team: cards of three columns under the statement. */
-.team-grid {
-  grid-column: 4 / 13;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 32px;
-}
-.team-card {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-}
-.team-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 20px 24px 24px;
-}
-.team-card .team-role {
-  color: var(--text);
-}
-.team-card p {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--muted);
-}
-.team-card .team-role + p {
-  margin-top: 4px;
-}
-
-/* Between 1024 and 1279 px four of three columns are too narrow: they pair up, and the team's cards go two to a row. */
+/* Between 1024 and 1279 px four of three columns are too narrow: they pair up. */
 @media (max-width: 1279px) {
   .about-step,
   .about-stage,
@@ -233,9 +199,6 @@
   .about-step-top,
   .about-stage-number {
     margin-bottom: 28px;
-  }
-  .team-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 1023px) {
@@ -255,8 +218,7 @@
   .about-lab-cycle,
   .about-context-figure,
   .about-context-notes,
-  .about-model-text,
-  .team-grid {
+  .about-model-text {
     grid-column: 1 / -1;
   }
 }
@@ -273,9 +235,5 @@
   .about-model-tags span {
     font-size: 20px;
     line-height: 26px;
-  }
-  .team-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
   }
 }

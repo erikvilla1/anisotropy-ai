@@ -127,3 +127,11 @@ Option 3.
 
 **Evidence.** On 2026-11-13 at 1440 px on the dev server (`/about`): the name is 159.1 px wide where it was 144.7 px, beside the 34.3 by 28 px triangle; a screenshot of the header at twice the size was looked at.
 
+## Amendment 8, 2026-11-15 (the footer's logo is a step larger than the header's)
+
+**Context.** The lead, with a capture of the header and the footer together: "make the anisotropy in the footer bigger, look at how its smaller than the header one, should be at least same size at minimum". The footer's logo stood at the base size, 24 px, under a header's of 28 px on a wide window.
+
+**Decision.** In the footer the triangle is 34 px tall from 1201 px, 28 px below that and 26 px on a phone, against the header's 28, 24 and 22: a step larger at every width. The name follows the triangle, as everywhere (amendment 7).
+
+**Evidence.** `shell.spec.ts` reads both triangles and finds the footer's the taller. UNVERIFIED: not captured or looked at after the change.
+

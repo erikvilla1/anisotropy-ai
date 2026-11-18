@@ -1,7 +1,7 @@
 /** The product demo's words (ADR-0095, ADR-0098), in one place so the unit test can read every one against the product view's
  * banned terms (lib/studio-copy.ts, ADR-0091). The names of the run's stages and the files are the workspace's own and are
  * imported where they are shown; the numbers are the record's (lib/demo-wing.ts). */
-import { BEND_DRAWN, metres, ribCount, type DemoWing } from "@/lib/demo-wing";
+import { BEND_DRAWN, analysedParts, coverParts, metres, type DemoWing } from "@/lib/demo-wing";
 import type { BeatId } from "./product-demo-timeline";
 
 export const DEMO_HEAD = { label: "THE WORKSPACE / ONE PART, START TO FINISH", title: "A wing, analysed part by part." };
@@ -10,17 +10,17 @@ export const BEAT_COPY: Record<BeatId, { label: string; title: string; text: str
   describe: {
     label: "PART",
     title: "Start from the part.",
-    text: "A composite wing: two skins over two spars and a row of ribs, each a laminate with its own plies.",
+    text: "A wing with a composite skeleton: two spars and a row of ribs, each a laminate with its own plies, under a clear film skin.",
   },
   model: {
     label: "BREAKDOWN",
     title: "It comes apart into its parts.",
-    text: "Every part gets its layup and its mesh. There is nothing to draw by hand.",
+    text: "Every composite part gets its layup and its mesh. There is nothing to draw by hand.",
   },
   analysis: {
     label: "ANALYSIS",
-    title: "Every part is analysed.",
-    text: "The stress in every ply is set against its strength, part by part.",
+    title: "The skeleton is analysed.",
+    text: "The stress in every ply is set against its strength, spar by spar and rib by rib. The film carries no load here.",
   },
   report: {
     label: "REPORT",
@@ -44,14 +44,17 @@ export function wingFacts(wing: DemoWing, material: string): [string, string][] 
     ["SPAN", metres(wing.wing.span)],
     ["CHORD", `${metres(wing.wing.root_chord)} at the root, ${metres(wing.wing.tip_chord)} at the tip`],
     ["MATERIAL", material],
-    ["STRUCTURE", `2 skins, ${wing.wing.spars.length} spars, ${ribCount(wing)} ribs`], // the wing's ribs and the winglet's
-    // The span and the chords above are the wing's own, to the rib where the winglet begins; the winglet is stated apart.
-    ["WINGLET", `${metres(wing.wing.winglet.rise)} tall, canted ${Math.round(wing.wing.winglet.cant)}°`],
+    ["STRUCTURE", `${wing.wing.spars.length} spars and ${wing.wing.ribs.length} ribs under a clear film skin`],
   ];
 }
 
-/** The parts and their layups, in the record's order. */
-export const wingParts = (wing: DemoWing): [string, string][] => wing.parts.map((part) => [part.name.toUpperCase(), part.layup]);
+/** What the film is, beside the laminates' layups. */
+export const FILM = "Clear film, not analysed";
+/** The parts as the page lists them: the skeleton's, each with its layup, in the record's order, then the film in one row. */
+export const wingParts = (wing: DemoWing): [string, string][] => [
+  ...analysedParts(wing).map((part): [string, string] => [part.name.toUpperCase(), part.layup]),
+  ...(coverParts(wing).length ? [["SKIN", FILM] as [string, string]] : []),
+];
 
 /** A share as a whole percentage: 0.412 is "41 %". */
 const percent = (share: number): string => `${Math.round(share * 100)} %`;
@@ -67,9 +70,7 @@ export function resultLines(wing: DemoWing): { first: string; when: string } | n
   const how = solve.governing.mode && solve.governing.ply ? `, in ${solve.governing.mode} in ply ${solve.governing.ply}` : "";
   return {
     first: `Most loaded: the ${name} ${where}, ${used}${how}.`,
-    // The load lies on the wing's own ribs, none on the winglet; the largest rise is at the winglet's tip, which stands
-    // furthest out.
-    when: `Held at the root with ${load.total} ${load.unit} pushed up at the wing's ribs; the winglet's tip rises ${Math.round(solve.tip_deflection)} ${wing.units.length}.`,
+    when: `Held at the root with ${load.total} ${load.unit} pushed up at the ribs; the tip rises ${Math.round(solve.tip_deflection)} ${wing.units.length}.`,
   };
 }
 

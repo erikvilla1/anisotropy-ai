@@ -3,7 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BEND_DRAWN, demoWing, wingBox, wingColour } from "@/lib/demo-wing";
+import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
 import { boxOf, fitInto, roomAbove, roomBeside, type Room } from "./product-demo-fit";
 import { DEMO_TOTAL, clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
@@ -14,11 +14,12 @@ export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** 
  * on the black stage. Its place and orientation, how far its parts stand apart, the mesh's lines, the analysis's colours and
  * its bend are all read from the demo's clock on each frame (components/home/product-demo-timeline.ts) and written to
  * transforms and uniforms; nothing is computed here but where things are drawn. The wing is drawn in millimetres: its span
- * along the view's x, its chord along y with the leading edge towards the viewer, and its depth along z. Whole, its skins are
- * seen through, so the spars and the ribs show inside it; apart, every part is solid. */
+ * along the view's x, its chord along y with the leading edge towards the viewer, and its depth along z. The skeleton, two
+ * spars and the ribs, is the laminate and takes the analysis's colours; the skin is a clear film (amendment 11), seen through
+ * at every moment, never coloured, and drawn riding on the skeleton as it bends. */
 
 /** How far each part moves when the wing stands fully apart, in millimetres, as [along the span, along the chord, up]: the
- * skins lift off, the spars step out fore and aft, and the ribs stay where they are, in the middle. */
+ * film lifts off, the spars step out fore and aft, and the ribs stay where they are, in the middle. */
 const APART: Record<string, [number, number, number]> = {
   "upper-skin": [0, 0, 190],
   "lower-skin": [0, 0, -190],
@@ -26,11 +27,11 @@ const APART: Record<string, [number, number, number]> = {
   "rear-spar": [0, 60, 0],
   ribs: [0, 0, 0],
 };
-const SKINS = new Set(["upper-skin", "lower-skin"]);
-/** How much of a skin is there while the wing is whole: the rest is seen through. */
-const SKIN_WHOLE = 0.4;
+/** How much of the film is there: over the whole wing, lifted off it, and how far it steps back once the analysis's colours
+ * are on the skeleton under it. */
+const FILM = { whole: 0.62, apart: 0.8, fade: 0.55 };
 /** The carbon's tone a part, so the parts can be told apart before the analysis colours them. */
-const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.92, "front-spar": 1.7, "rear-spar": 1.7, ribs: 2.2 };
+const TONE: Record<string, number> = { "front-spar": 1.7, "rear-spar": 1.7, ribs: 2.2 };
 const CARBON: [number, number, number] = [0.16, 0.165, 0.178];
 const CAMERA_Z = 12;
 const smoothstep = (x: number) => x * x * (3 - 2 * x);
@@ -76,6 +77,24 @@ const PART_FRAGMENT = /* glsl */ `
     vec3 painted = vField * ( 0.6 + 0.5 * lit + 0.18 * fill ) + vec3( 0.2 ) * shine;
     gl_FragColor = vec4( mix( carbon, painted, uField ), uOpacity );
   }`;
+/** The film: clear, so it is seen by what it mirrors, a highlight where it faces the key light and a sheen where it turns
+ * away from the eye, over a faint haze. It takes no colour of the analysis. */
+const FILM_FRAGMENT = /* glsl */ `
+  uniform float uOpacity;
+  varying vec3 vNormal;
+  varying vec3 vView;
+  void main() {
+    vec3 eye = normalize( -vView );
+    vec3 normal = normalize( vNormal );
+    if ( dot( normal, eye ) < 0.0 ) normal = -normal;
+    vec3 key = normalize( vec3( 0.35, 0.8, 0.55 ) );
+    float mirrored = max( dot( normal, normalize( key + eye ) ), 0.0 );
+    float shine = pow( mirrored, 56.0 );
+    float glow = pow( mirrored, 5.0 );
+    float sheen = pow( 1.0 - max( dot( normal, eye ), 0.0 ), 2.4 );
+    float there = uOpacity * min( 1.0, 0.06 + 0.55 * sheen + 0.2 * glow + 0.85 * shine );
+    gl_FragColor = vec4( vec3( 0.8, 0.86, 0.95 ) + vec3( 0.2 ) * shine, there );
+  }`;
 const LINE_VERTEX = /* glsl */ `
   attribute vec3 bend;
   uniform float uBend;
@@ -90,7 +109,7 @@ const LINE_FRAGMENT = /* glsl */ `
   }`;
 
 type Part = {
-  id: string; skin: boolean; group: THREE.Group; face: THREE.ShaderMaterial; mesh: THREE.ShaderMaterial; rim: THREE.ShaderMaterial; apart: [number, number, number];
+  id: string; /** The film: seen through, never coloured. */ cover: boolean; group: THREE.Group; face: THREE.ShaderMaterial; mesh: THREE.ShaderMaterial; rim: THREE.ShaderMaterial; apart: [number, number, number];
   /** The part's nodes once each, and how far each moves under the load as drawn: what the wing's box on the screen is measured from. */
   places: Float32Array; bends: Float32Array;
 };
@@ -101,12 +120,10 @@ const lineMaterial = (grey: number) => new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, toneMapped: false,
 });
 
-/** The wing's parts, built once from the record, centred in plan on the middle of the whole drawn mesh, winglet and all
- * (the wing's own plane stays the height it turns about). */
+/** The wing's parts, built once from the record, centred on the wing's middle in plan. */
 function buildModel() {
-  const { mesh, parts, field, displacement } = demoWing;
-  const box = wingBox(demoWing);
-  const middle = { span: (box.min[1] + box.max[1]) / 2, chord: (box.min[0] + box.max[0]) / 2 };
+  const { mesh, parts, wing, field, displacement } = demoWing;
+  const middle = { span: wing.span / 2, chord: wingExtent(demoWing) / 2 };
   const at = (node: number): [number, number, number] => [mesh.nodes[node][1] - middle.span, mesh.nodes[node][0] - middle.chord, mesh.nodes[node][2]];
   const moved = (node: number): [number, number, number] => {
     const move = displacement?.values[node];
@@ -129,7 +146,7 @@ function buildModel() {
         if (sum) sum.add(normal);
         else normals.set(node, normal.clone());
         const value = values.get(node) ?? { sum: 0, count: 0 };
-        value.sum += field ? field.values[face] : 0;
+        value.sum += field && !part.cover ? field.values[face] : 0; // a value for each analysed face; the film has none
         value.count += 1;
         values.set(node, value);
       }
@@ -148,7 +165,7 @@ function buildModel() {
         const value = values.get(node)!;
         positions.push(...at(node));
         bends.push(...moved(node));
-        colours.push(...(field ? wingColour(field, value.sum / value.count) : CARBON));
+        colours.push(...(field && !part.cover ? wingColour(field, value.sum / value.count) : CARBON));
         facing.push(...normals.get(node)!.toArray());
       }
       for (let side = 0; side < 4; side++) {
@@ -178,30 +195,30 @@ function buildModel() {
     geometry.setAttribute("field", new THREE.Float32BufferAttribute(colours, 3));
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(facing, 3));
     const tone = TONE[part.id] ?? 1;
-    const skin = SKINS.has(part.id);
+    const cover = Boolean(part.cover);
     const face = new THREE.ShaderMaterial({
-      vertexShader: PART_VERTEX, fragmentShader: PART_FRAGMENT,
+      vertexShader: PART_VERTEX, fragmentShader: cover ? FILM_FRAGMENT : PART_FRAGMENT,
       uniforms: {
         uCarbon: { value: new THREE.Vector3(CARBON[0] * tone, CARBON[1] * tone, CARBON[2] * tone) },
         uField: { value: 0 }, uOpacity: { value: 1 }, uBend: { value: 0 },
       },
       transparent: true, side: THREE.DoubleSide, toneMapped: false,
-      // A skin that is seen through must not hide what is inside it; the faces sit a little back in depth, so the lines
+      // The film is seen through and must not hide what is inside it; the faces sit a little back in depth, so the lines
       // drawn on them never flicker.
-      depthWrite: !skin, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+      depthWrite: !cover, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     });
     const net = lineMaterial(0.88);
     const rim = lineMaterial(0.92);
     const group = new THREE.Group();
     const surface = new THREE.Mesh(geometry, face);
-    surface.renderOrder = skin ? 2 : 1; // the skins after what they cover
+    surface.renderOrder = cover ? 2 : 1; // the film after what it covers
     const wires = new THREE.LineSegments(lines((faces) => faces > 1), net);
     const outline = new THREE.LineSegments(lines((faces) => faces === 1), rim);
     wires.renderOrder = outline.renderOrder = 3;
     group.add(surface, wires, outline);
     root.add(group);
     disposables.push(geometry, face, net, rim);
-    return { id: part.id, skin, group, face, mesh: net, rim, apart: APART[part.id] ?? [0, 0, 0], places, bends: moves };
+    return { id: part.id, cover, group, face, mesh: net, rim, apart: APART[part.id] ?? [0, 0, 0], places, bends: moves };
   });
   const nodes = built.reduce((sum, part) => sum + part.places.length / 3, 0);
   return { root, parts: built, nodes, turned: new Float32Array(nodes * 3), held: new Float32Array(nodes * 3), hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
@@ -350,16 +367,17 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     group.visible = scene.presence > 0;
     for (const part of model.parts) {
       part.group.position.set(part.apart[0] * apart, part.apart[1] * apart, part.apart[2] * apart);
-      // Whole, a skin is seen through; apart, it is solid.
-      const there = part.skin ? Math.min(1, SKIN_WHOLE + (1 - SKIN_WHOLE) * apart + 0.3 * field * (1 - apart)) : 1;
-      part.face.uniforms.uField.value = field;
+      // The film is seen through at every moment, and steps back once the colours are on the skeleton under it.
+      const there = part.cover ? (FILM.whole + (FILM.apart - FILM.whole) * apart) * (1 - FILM.fade * field) : 1;
+      part.face.uniforms.uField.value = part.cover ? 0 : field;
       part.face.uniforms.uOpacity.value = scene.presence * there;
       // The mesh: light lines on the carbon, darker and fainter once the analysis colours the part.
       // The mesh's lines show only while the wing is apart and bare: under the colours, and whole, they would cut it into boxes.
-      part.mesh.uniforms.uOpacity.value = scene.presence * scene.mesh * apart * 0.26 * (1 - field);
+      // The film has none: it is not meshed for the solver.
+      part.mesh.uniforms.uOpacity.value = part.cover ? 0 : scene.presence * scene.mesh * apart * 0.26 * (1 - field);
       part.mesh.uniforms.uColor.value.setScalar(0.88 - 0.8 * field);
-      // The outline: always there, so the plan and the aerofoil read at once.
-      part.rim.uniforms.uOpacity.value = scene.presence * (0.5 - 0.3 * field);
+      // The outline: always there, so the plan and the aerofoil read at once; the film's is fainter.
+      part.rim.uniforms.uOpacity.value = scene.presence * (part.cover ? 0.34 - 0.14 * field : 0.5 - 0.3 * field);
       for (const material of [part.face, part.mesh, part.rim]) material.uniforms.uBend.value = field;
     }
     // A faint pool of light on the black ground, just under the wing as the pose stands it: most of its width on the

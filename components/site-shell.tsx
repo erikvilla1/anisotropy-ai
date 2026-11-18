@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, Menu, X } from "lucide-react";
-import { headerLinksToProjects, isAppPath, primaryNav, siteNav } from "@/lib/site-nav";
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Menu, X } from "lucide-react";
+import { headerLinksToProjects, isAppPath, primaryNav, shownSocialLinks, siteNav } from "@/lib/site-nav";
 import { AT_TOP, headerAfterFocus, headerAfterLock, headerAfterScroll, type HeaderMemory, type HeaderPage } from "@/components/header-scroll";
 import { ServicesMenu } from "@/components/services-menu";
 
@@ -26,7 +26,12 @@ const MENU_ID = "site-menu";
  * whenever the focus comes into the header and whenever a stage locks the page, and writes the answer on the header as
  * `data-scroll`: nothing at the page's top, "away" or "hidden" while it is out of sight above the window, "shown" while it
  * is the bar. It is written straight on the element, not through React's state, so the header changes in the frame the
- * page scrolled in. */
+ * page scrolled in.
+ * On the home page the bar has no ground of its own while the hero's clip or the demo's black stage lies under it
+ * (`data-clear`; app/home.css draws it, ADR-0077 amendment 71): it is then the header as the page opens with it, over the
+ * clip, and it is the black bar only further down, over the bands. That holds where the hero stays in the window while
+ * the page scrolls to the demo (components/home/hero-handover.tsx says so on their wrapper); where it scrolls away as an
+ * ordinary section, the bar is black as soon as it comes in. */
 function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean) {
   useEffect(() => {
     const element = header.current;
@@ -72,8 +77,19 @@ function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean)
       }
       element.dataset.scroll = next.state;
     };
-    const onScroll = () => write(headerAfterScroll(memory, page));
-    const onFocus = () => write(headerAfterFocus(memory, page));
+    // Whether the bar lies wholly over the home page's opening, the hero and the demo, with the hero held in the window.
+    const ground = () => {
+      const opening = element.classList.contains("is-home") ? document.querySelector<HTMLElement>(".home-opening") : null;
+      element.toggleAttribute("data-clear", Boolean(opening?.hasAttribute("data-handover")) && opening!.getBoundingClientRect().bottom >= element.offsetHeight);
+    };
+    const onScroll = () => {
+      ground();
+      write(headerAfterScroll(memory, page));
+    };
+    const onFocus = () => {
+      ground();
+      write(headerAfterFocus(memory, page));
+    };
     // That lock goes on without a scroll, and on a stage that holds the window a gesture plays a step and scrolls nothing.
     const lock = new MutationObserver(() => {
       if (root.hasAttribute("data-tour-lock")) write(headerAfterLock(memory, page));
@@ -87,6 +103,7 @@ function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean)
       element.removeEventListener("focusin", onFocus);
       lock.disconnect();
       delete element.dataset.scroll;
+      element.removeAttribute("data-clear");
     };
   }, [header, active]);
 }
@@ -206,21 +223,36 @@ function backToTop(event: MouseEvent<HTMLAnchorElement>) {
   document.querySelector<HTMLElement>(".site-header .wordmark")?.focus({ preventScroll: true });
 }
 
-/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the site's
+/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and, under it, the company's pages elsewhere in the left half, and the site's
  * navigation (`siteNav` in `lib/site-nav.ts`, Services with its five pages, also while the header hides its panel) as columns of links from the halfway line: the plain pages and the workspace in the first
- * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
- * release stage and the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the
- * stage are the founder's choice of 2026-11-12 (ADR-0077 amendment 16). */
+ * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line and
+ * the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the release stage,
+ * the founder's choice of 2026-11-12 (ADR-0077 amendment 16), left the footer at the lead's word (amendment 63), as did the
+ * arrow beside Workspace. */
 export function SiteFooter() {
   const pathname = usePathname();
   if (isAppPath(pathname)) return null;
   const current = (href: string) => (pathname === href ? "page" : undefined);
+  const elsewhere = shownSocialLinks();
   return (
     <footer className="site-footer">
       <div className="site-footer-top">
         <div className="site-footer-brand">
           <Wordmark />
-          <p>Composites. Calculated.</p>
+          {/* The company's pages elsewhere (lib/site-nav.ts, ADR-0077 amendment 60), on the line under the logo since
+              amendment 63 took the tagline away: each opens in a new tab, so each carries the north-east arrow. None is
+              drawn until its address is filled in. */}
+          {elsewhere.length > 0 && (
+            <ul className="site-footer-social" aria-label="Anisotropy elsewhere">
+              {elsewhere.map((link) => (
+                <li key={link.label}>
+                  <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={`Anisotropy on ${link.label} (opens in a new tab)`}>
+                    {link.label} <ArrowUpRight size={16} aria-hidden="true" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <nav className="site-footer-nav" aria-label="Footer">
           <ul>
@@ -234,9 +266,7 @@ export function SiteFooter() {
                 </li>
               ))}
             <li>
-              <Link href="/workspace">
-                Workspace <ArrowRight size={16} />
-              </Link>
+              <Link href="/workspace">Workspace</Link>
             </li>
           </ul>
           {siteNav
@@ -261,7 +291,6 @@ export function SiteFooter() {
       </div>
       <div className="site-footer-bottom">
         <span>© {new Date().getFullYear()} Anisotropy</span>
-        <span>Closed beta</span>
         <a href="#main" onClick={backToTop}>
           Back to top <ArrowUp size={16} />
         </a>

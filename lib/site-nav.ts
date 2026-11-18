@@ -17,12 +17,18 @@ export const servicesNav: NavItem = {
   children: services.map((service) => ({ label: service.title, href: serviceHref(service) })),
 };
 
-/** Every page the navigation knows, in order. The footer lists them all. */
+/** Whether the Industries page is in the navigation. Off for now, at the lead's request of 2026-11-15 (ADR-0058 amendment
+ * 8: "it feels too premature, hide for now"): no link in the header or the footer leads to it. The page itself stays at
+ * its address, and `true` brings its links back. */
+export const INDUSTRIES_IN_NAV: boolean = false;
+
+/** Every page the navigation knows, in order: About, Services, Resources, Contact us (the lead's order of 2026-11-15,
+ * ADR-0058 amendment 8; Resources stood before Services until then). The footer lists them all. */
 export const siteNav: readonly NavItem[] = [
   { label: "About", href: "/about" },
-  { label: "Industries", href: "/industries" },
-  { label: "Resources", href: "/library" },
+  ...(INDUSTRIES_IN_NAV ? [{ label: "Industries", href: "/industries" }] : []),
   servicesNav,
+  { label: "Resources", href: "/library" },
   { label: "Contact us", href: "/contact" },
 ];
 
@@ -56,3 +62,18 @@ export function headerLinksToProjects(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "");
   return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && !WORKSPACES.some((w) => w.href === path);
 }
+
+/** The company's pages elsewhere, shown in the footer under the tagline (ADR-0077 amendment 60): LinkedIn and X, in that
+ * order. `href` is the page's full address, as the lead gave them on 2026-11-14 (LinkedIn's is the company's page itself;
+ * the address given led to its posts). An entry whose address is not filled in is not shown, so the footer never carries a
+ * link that leads nowhere; `host` is where the address must lead. */
+export type SocialLink = { label: string; host: string; href: string };
+export const socialLinks: readonly SocialLink[] = [
+  { label: "LinkedIn", host: "www.linkedin.com", href: "https://www.linkedin.com/company/anisotropy/" },
+  { label: "X", host: "x.com", href: "https://x.com/anisotropy_ai" },
+];
+/** Whether an entry's address is a full https address on its own host. */
+export const isSocialAddress = (link: SocialLink): boolean => link.href.startsWith(`https://${link.host}/`) && link.href.length > `https://${link.host}/`.length && !/\s/.test(link.href);
+/** The entries the footer shows. */
+export const shownSocialLinks = (links: readonly SocialLink[] = socialLinks): SocialLink[] => links.filter(isSocialAddress);
+

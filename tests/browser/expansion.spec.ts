@@ -22,10 +22,14 @@ test("navigation routes load directly with research-focused About", async ({
     "physical evidence",
   );
   await expect(page.locator(".technology-section")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "The team." })).toBeVisible();
-  await expect(page.locator(".team-card")).toHaveCount(5);
+  // The team band, which stood on the home page until ADR-0077 amendment 73, in place of the cards of names and seats.
+  await expect(page.getByRole("heading", { name: "From university to industry." })).toBeVisible();
+  await expect(page.locator("#team .team-face")).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Start small. Prove it. Build forward." })).toBeVisible();
-  await nav.getByRole("link", { name: "Industries", exact: true }).click();
+  // Industries is hidden from the navigation for now (ADR-0058 amendment 8): no link leads to it, in the header or the
+  // footer, and the page still answers at its address.
+  await expect(page.locator("a[href='/industries']")).toHaveCount(0);
+  await page.goto("/industries");
   await expect(page.getByRole("heading", { name: "Aerospace" })).toBeVisible();
   await nav.getByRole("link", { name: "Services", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
@@ -118,14 +122,64 @@ test("a service page leads to the workspace and the contact page has an address 
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
   await expect(page).toHaveURL(/\/contact\/?$/);
-  // Three addresses, each the words of its own mailto link (the audit of 2026-11-12, decision D2), and no repository link (D3).
-  for (const address of ["e1villa@ucsd.edu", "chvalerio@ucsd.edu", "ka1saucedo@outlook.com"])
-    await expect(page.getByRole("link", { name: address })).toHaveAttribute("href", `mailto:${address}`);
+  // One address, the words of its own mailto link (ADR-0058 amendment 6; the audit's decision D2 had three), and no
+  // repository link (D3). The row of links that stood under the addresses is gone.
+  // The page is white under the header's bar; its heading is one short line, not a statement, and in a laptop's window the
+  // whole form is in view as the page opens (ADR-0058 amendment 7).
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Get in touch");
+  await expect(page.locator("main")).not.toContainText(/Tell us about/i);
+  await expect(page.locator("main")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.setViewportSize({ width: 1440, height: 789 });
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => Math.round(document.querySelector(".contact-card")!.getBoundingClientRect().bottom))).toBeLessThanOrEqual(789);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(await page.evaluate(() => Math.round(document.querySelector(".contact-submit")!.getBoundingClientRect().bottom))).toBeLessThanOrEqual(720);
+  await expect(page.getByRole("link", { name: "chvalerio@ucsd.edu" })).toHaveAttribute("href", "mailto:chvalerio@ucsd.edu");
+  await expect(page.locator("main a[href^='mailto:']")).toHaveCount(1);
+  await expect(page.locator("main")).not.toContainText(/e1villa|saucedo|outlook\.com|Before you write|Workspace access/i);
+  await expect(page.locator("main")).toContainText("Christopher Valerio, co-founder and CEO");
+  // Beside it, the upper half of a turning globe that is a drawing only: hidden from assistive technology, taking no pointer.
+  const globe = page.locator(".contact-globe");
+  await expect(globe).toHaveAttribute("aria-hidden", "true");
+  await expect(globe).toHaveCSS("pointer-events", "none");
+  expect(await globe.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.width)).toBeGreaterThan(200);
+  expect(await page.locator(".contact-globe-window").evaluate((holder) => holder.getBoundingClientRect().height / holder.querySelector(".contact-globe")!.getBoundingClientRect().height)).toBeLessThan(0.65);
+  // The form sends nothing and says so; it will not write an email with a field missing.
+  const form = page.locator(".contact-form");
+  await expect(form.locator(".contact-form-note")).toHaveText("Nothing is sent from this page. Your email app opens with the message written, and you send it from there.");
+  await form.getByRole("button", { name: "Open in your email app" }).click();
+  await expect(form.getByRole("link", { name: "open the email here" })).toHaveCount(0);
+  expect(await form.getByLabel("Full name").evaluate((field: HTMLInputElement) => field.validity.valueMissing)).toBe(true);
+  // Filled in, a press writes the email to that one address from what was typed, and gives it as a link as well.
+  await form.getByLabel("Full name").fill("Ada Example");
+  await form.getByLabel("Company").fill("Example Works");
+  await form.getByLabel("Email address").fill("ada@example.com");
+  await form.getByLabel("Message", { exact: true }).fill("IM7 / 8552 under D3039.\nWhat do you need from me?");
+  await form.getByRole("button", { name: "Open in your email app" }).click();
+  const written = form.getByRole("link", { name: "open the email here" });
+  await expect(written).toHaveAttribute("href", /^mailto:chvalerio@ucsd\.edu\?subject=Inquiry%20from%20Ada%20Example%2C%20Example%20Works&body=/);
+  const body = decodeURIComponent((await written.getAttribute("href"))!.split("&body=")[1]);
+  expect(body).toBe("IM7 / 8552 under D3039.\r\nWhat do you need from me?\r\n\r\nAda Example\r\nExample Works\r\nada@example.com");
+  await expect(page).toHaveURL(/\/contact\/?$/);
   await expect(page.locator("main")).not.toContainText(/gmail|for now|will follow/i);
   await expect(page.locator("main a[href*='github.com']")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Calculator", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveCount(0);
   await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
+});
+
+test("the inner pages are white under the header's black bar, and their footer is black (ADR-0077 amendment 69)", async ({ page }) => {
+  for (const address of ["/about", "/industries", "/services", "/services/finite-element-modeling", "/contact", "/no-such-page"]) {
+    await page.goto(address);
+    await expect(page.locator(".site-header"), address).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(page.locator(".site-footer"), address).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(page.locator("main"), address).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator("main h1"), address).toHaveCSS("color", "rgb(17, 17, 17)");
+    // The opening and every band: white, or the team band's light grey. No band is dark.
+    const grounds = await page.locator("main").evaluate((main) => [...main.querySelectorAll(".page-opening, .band")].map((part) => getComputedStyle(part).backgroundColor));
+    expect(grounds.length, address).toBeGreaterThan(0);
+    for (const ground of grounds) expect(["rgb(255, 255, 255)", "rgb(243, 243, 244)"], address).toContain(ground);
+  }
 });
 
 test("the mobile menu lists the five services under Services", async ({ page }) => {

@@ -1,0 +1,302 @@
+/* The contact page (ADR-0058 amendments 6 and 7): a white page under the header's bar, two columns of the page's twelve
+ * that fit a laptop's window without scrolling. At the left, how to reach us: a small label, the page's heading, what to
+ * write about, the one address, and the upper half of a slowly turning wireframe globe that fades into the page. At the
+ * right, from the halfway line, a card with the form that writes the email. Every colour is one of the page's variables
+ * (app/inner-pages.css), the light ones. */
+.page-opening.contact-opening {
+  padding: 44px 32px 56px;
+}
+.contact-columns {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+}
+.contact-reach {
+  grid-column: 1 / 7;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  max-width: 540px;
+}
+.contact-label {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* The page's heading: a heading's size, not a statement's. */
+.contact-reach h1 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: clamp(30px, 2.6vw, 40px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+.contact-card h2 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.contact-reach > p:not(.contact-label) {
+  max-width: 30em;
+  margin: 0;
+  font-size: 17px;
+  line-height: 26px;
+  color: var(--muted);
+}
+/* The address: who answers in a small line, and under it the address itself as the words of its link, so it can be
+ * selected and copied as well as clicked. Its icon stands in a small outlined square that fills under the pointer. */
+.contact-address {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.contact-person {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.contact-email {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.contact-email-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  background: var(--panel);
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.contact-email:hover .contact-email-icon,
+.contact-email:focus-visible .contact-email-icon {
+  border-color: var(--text);
+  background: var(--text);
+  color: #ffffff;
+}
+/* The globe's window: the globe is a square as wide as the column, and the window shows its upper half; the lower half is
+ * cut away and the cut fades into the page's ground. The globe draws in this element's colour. */
+.contact-globe-window {
+  position: relative;
+  height: 250px;
+  margin-top: 14px;
+  overflow: hidden;
+  color: #2b2b30;
+}
+.contact-globe-window .contact-globe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+.contact-globe-window::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 62%;
+  background: linear-gradient(to top, var(--bg) 4%, transparent);
+  pointer-events: none;
+}
+/* The card. */
+.contact-card {
+  grid-column: 7 / 13;
+  display: grid;
+  gap: 18px;
+  padding: 28px 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+}
+.contact-card-head {
+  display: grid;
+  gap: 4px;
+}
+.contact-card-head p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--muted);
+}
+/* A row of small dots between the card's head and its form, fading out at both ends. */
+.contact-card-rule {
+  height: 6px;
+  background-image: radial-gradient(circle, #11111166 0.9px, transparent 1.1px);
+  background-size: 7px 6px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+.contact-form {
+  display: grid;
+  gap: 14px;
+}
+.contact-form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.contact-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.contact-field > span,
+.contact-field > label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #55555b;
+}
+.contact-field > span i {
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--muted);
+}
+.contact-field input,
+.contact-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid #d4d4d8;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 22px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.contact-field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+.contact-field input:hover,
+.contact-field textarea:hover {
+  border-color: #a3a3aa;
+}
+.contact-field input:focus-visible,
+.contact-field textarea:focus-visible {
+  outline: none;
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px #11111126;
+}
+.contact-field small {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--muted);
+}
+.contact-submit {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--text);
+  color: #ffffff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.contact-submit svg {
+  transition: transform 0.2s;
+}
+.contact-submit:hover {
+  background: #333333;
+}
+.contact-submit:hover svg {
+  transform: translateX(3px);
+}
+.contact-submit:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+.contact-form-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--muted);
+}
+.contact-form-note a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .contact-submit svg,
+  .contact-email-icon {
+    transition: none;
+  }
+  .contact-submit:hover svg {
+    transform: none;
+  }
+}
+/* Narrower than 1000 px the two columns stand one under the other, the card first after the address: the globe, a
+ * picture only, goes last so the form is not pushed down by it. */
+@media (max-width: 1000px) {
+  .contact-columns {
+    row-gap: 32px;
+  }
+  .contact-reach,
+  .contact-card {
+    grid-column: 1 / -1;
+  }
+  .contact-reach {
+    max-width: none;
+  }
+  .contact-globe-window {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .page-opening.contact-opening {
+    padding: 32px 20px 48px;
+  }
+}
+@media (max-width: 560px) {
+  .contact-card {
+    padding: 22px;
+    border-radius: 16px;
+  }
+  .contact-form-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contact-email {
+    gap: 12px;
+    font-size: 19px;
+    line-height: 26px;
+  }
+}
