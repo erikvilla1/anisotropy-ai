@@ -185,3 +185,37 @@ export function nodeMeans(quads: number[][], nodeCount: number, elementValues: n
   quads.forEach((quad, e) => { for (const i of quad) { totals[i] += elementValues[e]; counts[i] += 1; } });
   return totals.map((t, i) => (counts[i] ? t / counts[i] : null));
 }
+
+/** A few nodes of a set, spread over it, where the model draws a boundary condition's symbols or a load's arrows (ADR-0110): along a
+ * line (an edge, or a set whose box is thin) up to `perLine` nodes from end to end, over an area a `perSide` by `perSide` grid. Each
+ * grid point takes the set's nearest node, once; the result is in grid order. An empty set gives none. */
+export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, perLine = 5): number[] {
+  const box = setBox(nodes, indices);
+  if (!box) return [];
+  const span = [box.max[0] - box.min[0], box.max[1] - box.min[1]];
+  const long = Math.max(span[0], span[1]);
+  if (long === 0) return [indices[0]];
+  const thin = Math.min(span[0], span[1]) <= 0.02 * long;
+  const at = (k: number, n: number) => (n === 1 ? 0.5 : k / (n - 1));
+  const targets: Vec2[] = [];
+  if (thin) {
+    const along = span[0] >= span[1] ? 0 : 1;
+    for (let k = 0; k < perLine; k += 1) {
+      const t: Vec2 = [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2];
+      t[along] = box.min[along] + at(k, perLine) * span[along];
+      targets.push(t);
+    }
+  } else {
+    for (let j = 0; j < perSide; j += 1) for (let i = 0; i < perSide; i += 1) targets.push([box.min[0] + at(i, perSide) * span[0], box.min[1] + at(j, perSide) * span[1]]);
+  }
+  const picked: number[] = [];
+  for (const [tx, ty] of targets) {
+    let best = -1, bestDistance = Infinity;
+    for (const i of indices) {
+      const d = (nodes[i][0] - tx) ** 2 + (nodes[i][1] - ty) ** 2;
+      if (d < bestDistance) { best = i; bestDistance = d; }
+    }
+    if (best >= 0 && !picked.includes(best)) picked.push(best);
+  }
+  return picked;
+}

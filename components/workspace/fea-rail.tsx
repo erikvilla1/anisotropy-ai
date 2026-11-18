@@ -183,7 +183,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
             <StandardSize form={form} disabled={busy} onRows={editSize} />
             {grid("geometry")}
             <StepStandard form={form} id="geometry" checklist={checklist} />
-            {isPlate ? <p className="studio-hint">A plate&apos;s regions are listed under Loads and supports.</p> : null}
+            {isPlate ? <p className="studio-hint">A plate&apos;s regions are listed under Boundary conditions and loads.</p> : null}
           </>
         )}
       </StepPanel>
@@ -201,7 +201,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         )}
       </StepPanel>
 
-      <StepPanel id="loads" step={stepNumber("loads")} title="Loads and supports" state={state("loads")}>
+      <StepPanel id="loads" step={stepNumber("loads")} title="Boundary conditions and loads" state={state("loads")}>
         {waiting("loads") ?? (
           <>
             {isPlate ? <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} /> : grid("loads")}

@@ -77,6 +77,7 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
+    <div className="studio-scene-wrap">
     <div className="studio-canvas" data-testid="sketch-scene" data-mode="presentation">
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
         <color attach="background" args={["#0d0d0d"]} />
@@ -117,6 +118,7 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
         {sketch.boxes.map((box, i) => <Line key={`b${i}`} points={frame(box.x0, box.y0, box.x1, box.y1, top)} color={BOX_COLOR} lineWidth={2} />)}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
       </Canvas>
+    </div>
       <p className="studio-scene-key">
         {sketch.tabs !== null ? <span><span className="studio-key-swatch" style={{ borderColor: HELD }} aria-hidden="true" /> the tabs</span> : null}
         {sketch.supports.length ? <span><span className="studio-key-swatch" style={{ borderColor: HELD }} aria-hidden="true" /> the supports</span> : null}

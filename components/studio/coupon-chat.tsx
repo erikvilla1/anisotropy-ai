@@ -6,6 +6,8 @@ import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, li
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
+import { isConditionOrLoad, setupAsked, termAsked, termLines, type AbaqusTerm, type TermQuestion } from "@/lib/abaqus-terms";
+import { appliedOf } from "@/lib/applied";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
@@ -139,7 +141,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported, past } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported, past, setProposed } = useProject(); // the rows and the run live in the project (ADR-0062)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
   // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105),
@@ -315,8 +317,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
-        body: <><p>Pick the held and loaded regions under Loads and supports, or click an element on the model.</p>
-          <Chips><PanelLink id="loads">Open Loads and supports</PanelLink></Chips></> });
+        body: <><p>Pick the held and loaded regions under Boundary conditions and loads, or click an element on the model.</p>
+          <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></> });
       return;
     }
     const step = nextStep(next, simpleRef.current);
@@ -355,6 +357,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   function startOver() {
+    setProposed(null);
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
     setForm(fresh); runner.reset();
     setEntries([]);
@@ -535,11 +538,78 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     add({ role: "assistant", kind: "working", found, from: from.fields, preview: from.live });
   }
 
+  /** What the model on the page holds: an imported model's, or the checked setup's. A past run is shown without one (ADR-0109). */
+  function appliedNow() {
+    const preview = shown.imported ? imported.model?.preview ?? null : shown.past ? null : checked?.preview ?? null;
+    return preview ? appliedOf(preview) : null;
+  }
+
+  /** A question of what an Abaqus word means, answered from the glossary (ADR-0110): the word as the heading, what it is in one line, what
+   * Anisotropy does with it in a second. "What are the boundary conditions?" lists this model's own. */
+  function answerTerm(text: string, asked: TermQuestion) {
+    if (asked.ofModel) { answerApplied(text, asked.term, null); return; }
+    const lines = termLines(asked);
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: lines.title, body: (
+      <div data-testid="chat-term" data-term={asked.term.id}>
+        <p><strong>{lines.means}</strong></p>
+        <p className="chat-note">{lines.here}</p>
+      </div>
+    ) });
+  }
+
+  /** This model's boundary conditions or loads, one line each as the list under the model says them (ADR-0110). `title` replaces the
+   * heading when the message asked to add one where the setup fixes them. */
+  function answerApplied(text: string, term: AbaqusTerm, title: string | null) {
+    const applied = appliedNow();
+    const loads = term.id === "load" || ["concentrated-force", "pressure", "shell-edge-load"].includes(term.id);
+    const both = title !== null; // a request to add one is answered with everything the setup holds
+    const lines = applied ? [...(!loads || both ? applied.conditions.map((c) => c.words) : []), ...(loads || both ? applied.loads.map((l) => l.words) : [])] : [];
+    const onPlate = formRef.current.test === PLATE_TEST && !shown.readOnly;
+    const note = shown.imported ? "They are the file’s own, so nothing is changed by talking."
+      : shown.past ? "A past run is shown without them. Choose “Use these inputs” to see them."
+      : !applied ? "They are drawn on the model and listed under it once the setup is checked."
+      : onPlate ? "Add one by naming a region, for example “fix the left edge” or “10 kN tension on the right edge”."
+      : `A coupon’s are set by its test, as in the test machine. Change the load under Boundary conditions and loads${allTests ? "; for boundary conditions of your own, choose Plate" : ""}.`;
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: title ?? (loads ? "Loads" : "Boundary conditions"), body: (
+      <div data-testid="chat-applied" data-term={term.id}>
+        {lines.length ? <ul className="chat-understood">{lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+        <p className="chat-note">{note}{lines.length ? " Each is drawn on the model and listed under it." : ""}</p>
+      </div>
+    ) });
+  }
+
+  /** A request to add something the setup does not take from a message (ADR-0110): a coupon's boundary conditions and loads are its test's,
+   * a model comes partitioned, there is one step and no interaction. Said once; no row changes. */
+  function answerSetup(text: string, term: AbaqusTerm) {
+    if (isConditionOrLoad(term)) {
+      const onPlate = formRef.current.test === PLATE_TEST;
+      if (onPlate) { // a plate with no model to read the message: its panel takes them
+        add({ role: "user", text }, { role: "assistant", kind: "text", title: "Add it under Boundary conditions and loads", body: (
+          <div data-testid="chat-setup" data-term={term.id}><p>Pick the region and the directions it holds, or the force or pressure on it. Each is drawn on the model as you add it.</p>
+            <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></div>
+        ) });
+        return;
+      }
+      answerApplied(text, term, "Set by the test");
+      return;
+    }
+    const regions = formRef.current.test === PLATE_TEST ? plateOffer(formRef.current, plateRef.current, []).regions.map((r) => r.name) : [];
+    const said = term.id === "partition" && regions.length
+      ? { title: "Already partitioned", body: `The plate comes split into its regions: ${regions.join(", ")}. Name one or click it on the model.` }
+      : term.id === "partition" ? { title: "Already partitioned", body: term.here }
+      : term.id === "step" ? { title: "One static step", body: term.here }
+      : { title: "Not offered yet", body: term.here };
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: said.title, body: <p data-testid="chat-setup" data-term={term.id}>{said.body}</p> });
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     if (!shown.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
+    const term = termAsked(text);
+    if (term) { answerTerm(text, term); return; }
     // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
     if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
     // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
@@ -567,6 +637,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     // an imported model's rows are the file's (ADR-0105) and a past run is shown as it was solved (ADR-0109): nothing below reads a message into either
     if (shown.readOnly) { void readOfImported(text); return; }
+    // "add a boundary condition" where the setup fixes them, "partition the coupon", "create a step": said once, nothing changes (ADR-0110).
+    // On a plate read by a model, a boundary condition or a load is read into its lists instead (ADR-0101)
+    const adding = setupAsked(text);
+    if (adding && !(onPlateNow && isConditionOrLoad(adding)) && !applyMessage(formRef.current, text).understood.length) { answerSetup(text, adding); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
@@ -602,7 +676,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       return;
     }
     add({ role: "assistant", kind: "text", title: "An imported model is read as it stands",
-      body: <p data-testid="chat-import-read-only">Its loads, supports and mesh are the file’s, so nothing is changed by talking yet. Ask about its results, or go back to the coupon to set one up.</p> });
+      body: <p data-testid="chat-import-read-only">Its boundary conditions, loads and mesh are the file’s, so nothing is changed by talking yet. Ask about its results, or go back to the coupon to set one up.</p> });
   }
 
   /** The model reads the message into the rows on offer (ADR-0088); what the source guard keeps waits in a card for the engineer's tick.
@@ -618,7 +692,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests), ...onPlate }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
-    if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) { add({ role: "assistant", kind: "proposal", answer }); return; }
+    if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) {
+      add({ role: "assistant", kind: "proposal", answer });
+      // a plate's proposed boundary conditions and loads are drawn dashed on the model until they are applied (ADR-0110)
+      setProposed(answer.supports.length || answer.loads.length ? { supports: answer.supports, loads: answer.loads } : null);
+      return;
+    }
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
@@ -639,6 +718,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** The proposals the engineer ticked go into the rows, and the conversation moves on. A plate's ticked supports and loads go into its
    * lists (ADR-0101), and the setup is checked with them, so the model on the page shows what is now held and loaded. */
   function applyProposals(answer: ProposalAnswer, ticked: Set<string>) {
+    setProposed(null); // applied: what was ticked is drawn solid from the next check
     const { rows, notes } = couponRowsFrom(answer.proposals.filter((p) => ticked.has(p.key)));
     if (notes.length) add({ role: "assistant", kind: "text", tone: "problem", title: "Not applied", body: <ul className="chat-understood">{notes.map((n) => <li key={n}>{n}</li>)}</ul> });
     const lists = plateWith(plateRef.current, answer, ticked);
@@ -805,16 +885,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         return isBending(form) ? (
           <Chips>
             {(PUSH_CHIPS[units] ?? []).map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} ${lab.length}`, { control: "displacement", value: v })}>Push {v} {lab.length}</button>)}
-            <PanelLink id="loads">Another travel, under Loads and supports</PanelLink>
+            <PanelLink id="loads">Another travel, under Boundary conditions and loads</PanelLink>
           </Chips>
         ) : (
           <>
-            <p className="chat-note">Bottom grip held, top grip {form.test === "unnotched compression" ? "pushes" : "pulls"}.</p>
+            <p className="chat-note">Boundary condition: the bottom grip is fixed. Load: the top grip {form.test === "unnotched compression" ? "pushes" : "pulls"} along the coupon.</p>
             <Chips>
               {(LOAD_CHIPS[units] ?? []).map((chip) => (
                 <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
               ))}
-              <PanelLink id="loads">Another load, under Loads and supports</PanelLink>
+              <PanelLink id="loads">Another load, under Boundary conditions and loads</PanelLink>
             </Chips>
           </>
         );
