@@ -26,27 +26,35 @@ test("overview, the home page's blurbs, and material source document", async ({
 test("the chat keeps a coupon across messages and starts over on request", async ({
   page,
 }) => {
+  // This page is served with no API behind it, so it offers the unnotched tension coupon alone (ADR-0089) and its chat
+  // asks for the material and the layup, the software choosing the rest (ADR-0090).
   await page.goto("/workspace/fea");
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
+  const spec = page.getByTestId("chat-spec");
   await box.fill("Open-hole tension 250 x 36 mm, 6 mm hole");
   await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByTestId("chat-spec")).toContainText("250 × 36 mm");
+  // A test that is not offered is answered in words: its name and its hole stay out of the coupon, the size goes in.
+  await expect(page.getByTestId("chat-not-available")).toContainText("Open-hole tension is not offered yet.");
+  await expect(spec).toContainText("250 × 36 mm");
   await box.fill("AS4/8552, 20 kN");
   await box.press("Enter");
-  await expect(page.getByTestId("chat-spec")).toContainText("Ø6 mm hole");
-  await expect(page.getByTestId("chat-spec")).toContainText("20000 N force");
-  await expect(page.getByTestId("chat-spec")).toContainText("AS4");
+  await expect(spec).toContainText("20000 N force");
+  await expect(spec).toContainText("AS4");
+  // The first message's size stands beside the second's rows, on the one test offered.
+  await expect(spec).toContainText("250 × 36 mm");
+  await expect(spec).toContainText("unnotched tension");
+  await expect(spec).not.toContainText("hole");
   await box.fill("hello");
   await box.press("Enter");
-  // A message that names no value is sent to the panel holding the next thing to state (ADR-0062 part 5);
-  // the library lists no G13 or G23 for AS4/8552, so that is the shear moduli, on the layup and material panel.
-  await expect(page.getByText("Pick a step on the left, or describe one thing")).toBeVisible();
+  // A message that names no value is sent to the panel holding the next thing to state (ADR-0062 part 5), in the product's
+  // own words (ADR-0091); this chat asks for no shear moduli, so with the material stated that is the layup.
+  await expect(page.getByText("Not sure what to change")).toBeVisible();
   const redirect = page.getByTestId("chat-redirect").last();
   await expect(redirect).toHaveAttribute("data-panel", "layup");
-  await expect(redirect).toContainText("The next thing to state is out-of-plane shear moduli, under the Layup and material panel.");
+  await expect(redirect).toContainText("Next: what is the layup (Layup and material).");
   await page.getByRole("button", { name: "Start a new coupon" }).click();
   await expect(page.locator(".chat-user")).toHaveCount(0);
-  await expect(page.getByTestId("chat-spec")).not.toContainText("250");
+  await expect(spec).not.toContainText("250");
 });
 
 test("example data and local CSV imports are checked before the records are downloaded", async ({
@@ -105,8 +113,11 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Message the coupon assistant" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /^Open-hole tension/ }).click();
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
+  // One test is offered (ADR-0089), so the chat has none to pick and opens on the material; a tap on one moves it on to the layup.
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "material");
+  await question.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  await expect(question).toHaveAttribute("data-step", "layup");
   await page.screenshot({
     path: ".preview/mobile-workspace.png",
     fullPage: false,
