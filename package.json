@@ -23,6 +23,7 @@
     "monitor:check": "tsx services/material-monitor/server.ts --once",
     "test:monitor": "tsx --test tests/material-monitor.test.ts",
     "test:studio": "playwright test --config playwright.studio.config.ts",
+    "test:site": "playwright test --config playwright.site.config.ts",
     "test:studio-live": "playwright test --config playwright.studio-live.config.ts"
   },
   "dependencies": {
