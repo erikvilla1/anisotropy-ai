@@ -10,7 +10,10 @@ so the coupon's own attempts, case page and package are never touched. Every com
 CalculiX's, and the run's answer are then set beside those of the last weekly check, kept in `.local/weekly/snapshots/<coupon>.json`:
 our engine's values on the last check's code against today's, row by row. A coupon's first check has no snapshot, so it is set
 beside its last record, whose values our engine computes today on that record's deck (a record keeps CalculiX's values, not ours):
-that first comparison shows what today's decks change, the later ones what the code changed since the week before.
+that first comparison shows what today's decks change, the later ones what the code changed since the week before. A coupon
+whose decks were written again after its last record (the record is stale) has nothing to be set beside: its first check is
+solved all the same, gives it its first snapshot and says the record is stale, and next week's is set beside that (ADR-0114
+amendment 1). The coupon's own record is left as it is.
 
 The report is `<work>/report.md`; it and the snapshots hold the team's numbers and stay local. Exit 0 when every coupon ran and
 nothing moved, 1 when a coupon's numbers moved or its run failed, 2 when there is no coupon to check, 3 when CalculiX cannot be
@@ -33,6 +36,7 @@ from pathlib import Path
 from anisotropy_fea import paths
 from anisotropy_fea.calculix import CalculixError, find_ccx
 from anisotropy_fea.case_pages import calculix_record, reaction_difference, record_rows
+from anisotropy_fea.compare import RecordError
 
 TOOLS = Path(__file__).resolve().parent
 SOLVER_OUTPUTS = ("*.frd", "*.odb", "*.sta", "*.msg", "*.cvg", "*.12d", "*.inp.bak")  # the old attempts' outputs, not needed to run again
@@ -47,6 +51,7 @@ class Check:
     after: str = "no record"
     moved: list[str] = field(default_factory=list)  # one line per row whose value changed
     failed: str | None = None
+    stale: str | None = None  # why the coupon's last record could not be read: its first check only takes a snapshot
     answer: str | None = None
     answer_before: str | None = None
     seconds: float = 0.0
@@ -55,6 +60,8 @@ class Check:
     def status(self) -> str:
         if self.failed:
             return "failed"
+        if self.stale:
+            return "first snapshot"
         changed = self.moved or self.before != self.after or (self.answer_before is not None and self.answer_before != self.answer)
         return "moved" if changed else "same"
 
@@ -117,7 +124,11 @@ def check(source: Path, work: Path, snapshots: Path, coupon: str, python: str, c
     shutil.copytree(source / coupon, copy, ignore=shutil.ignore_patterns(*SOLVER_OUTPUTS))
     last = read_snapshot(snapshots / f"{coupon}.json")
     if last is None:
-        rows_before, result.before = summary(copy)
+        try:
+            rows_before, result.before = summary(copy)
+        except RecordError as exc:
+            rows_before, result.before, result.stale = None, "record stale", str(exc)
+            result.against = "nothing: its last record is older than its deck"
     else:
         rows_before, result.before = last[1], last[0]["line"]
         result.against, result.answer_before = f"the check of {last[0]['date']}", last[0].get("answer")
@@ -138,7 +149,8 @@ def check(source: Path, work: Path, snapshots: Path, coupon: str, python: str, c
         result.answer = (f"{'fails' if answer.get('fails') else 'holds'} at {answer.get('factor')} x the load, "
                          f"{answer.get('criterion')}, ply {answer.get('ply')}")
     rows_after, result.after = summary(copy)
-    result.moved = compare(rows_before or {}, rows_after or {})
+    if result.stale is None:
+        result.moved = compare(rows_before or {}, rows_after or {})
     if rows_after is not None:
         write_snapshot(snapshots / f"{coupon}.json", rows_after, result.after, result.answer, commit)
     return result
@@ -153,6 +165,10 @@ def report(checks: list[Check], work: Path, commit: str | None) -> str:
         lines.append(f"| {c.coupon} | {c.status} | {c.against} | {c.before} | {c.failed or c.after} | {c.answer_before or ''} | "
                      f"{c.answer or ''} | {c.seconds / 60:.1f} |")
     for c in checks:
+        if c.stale:
+            lines += ["", f"## {c.coupon}: record stale", "", f"Its last record could not be read: {c.stale}. Today's numbers are its "
+                      "first snapshot, and next week's check is set beside them. Running the coupon again in its own folder writes "
+                      "it a new record."]
         if c.moved:
             lines += ["", f"## {c.coupon}: what moved", "", *[f"- {m}" for m in c.moved[:200]]]
             if len(c.moved) > 200:
@@ -201,7 +217,7 @@ def main() -> int:
         print(f"  {checks[-1].status}: {checks[-1].failed or checks[-1].after}", flush=True)
     (work / "report.md").write_text(report(checks, work, args.commit), encoding="utf-8")
     print(f"report: {work / 'report.md'}")
-    return 0 if all(c.status == "same" for c in checks) else 1
+    return 0 if all(c.status in ("same", "first snapshot") for c in checks) else 1
 
 
 if __name__ == "__main__":
