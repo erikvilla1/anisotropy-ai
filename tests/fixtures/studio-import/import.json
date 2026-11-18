@@ -55,6 +55,7 @@
   "boundaries": 12,
   "concentrated_loads": 0,
   "pressures": 0,
+  "edge_loads": 0,
   "skipped": [
    "line 8: *preprint",
    "line 127: *restart",

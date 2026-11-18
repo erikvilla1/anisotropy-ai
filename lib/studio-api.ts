@@ -321,11 +321,11 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
  * and names; lengths in the units stated. Every value is the fea package's. */
 export type ImportReading = {
   heading: string; units: string; unit_labels: Record<string, string>;
-  parts: number; instances: number; moved?: { instance: string; by: number[] }[]; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
+  parts: number; instances: number; moved?: { instance: string; by: number[]; turned_deg?: number; about?: number[] }[]; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
   node_sets: number; element_sets: number; couplings: number;
   sections: { element_set: string; plies: number; symmetric: boolean; thickness: number; materials: string[]; rotation_deg: number }[];
   layup: string; materials: { name: string; kind: string | null; strengths: boolean }[]; step: string | null;
-  boundaries: number; concentrated_loads: number; pressures: number; skipped: string[]; notes: string[]; warnings: string[];
+  boundaries: number; concentrated_loads: number; pressures: number; edge_loads?: number; skipped: string[]; notes: string[]; warnings: string[];
 };
 /** One kind of thing a refused file holds that is not read (ADR-0105 amendment 1): in an engineer's words, as the file writes its first,
  * and every line it is on. */

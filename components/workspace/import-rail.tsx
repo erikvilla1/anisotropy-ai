@@ -17,8 +17,10 @@ function Reading({ model }: { model: ImportedModel }) {
   if (!reading) return null;
   const length = reading.unit_labels.length ?? "";
   const types = Object.entries(reading.element_types).map(([type, n]) => `${n} ${type}`).join(", ");
-  const loads = [reading.concentrated_loads ? count(reading.concentrated_loads, "force line") : "", reading.pressures ? count(reading.pressures, "pressure line") : ""].filter(Boolean);
-  const moved = (reading.moved ?? []).map((m) => `Instance ${m.instance} is read where the assembly places it, moved by (${m.by.map(printed).join(", ")}) ${length}.`);
+  const loads = [reading.concentrated_loads ? count(reading.concentrated_loads, "force line") : "", reading.pressures ? count(reading.pressures, "pressure line") : "",
+    reading.edge_loads ? count(reading.edge_loads, "edge load") : ""].filter(Boolean);
+  const moved = (reading.moved ?? []).map((m) => `Instance ${m.instance} is read where the assembly places it: moved by (${m.by.map(printed).join(", ")}) ${length}`
+    + (m.turned_deg ? `, then turned ${printed(m.turned_deg)}° about (${(m.about ?? [0, 0]).map(printed).join(", ")}) ${length}.` : "."));
   const notes = [...moved, ...reading.notes].map((note) => importText(note)).filter((note): note is string => note !== null);
   return (
     <>

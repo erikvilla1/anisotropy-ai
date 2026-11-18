@@ -17,7 +17,8 @@ CASES = [
     # (base text, text to replace, replacement, expected message fragment)
     ("one", "type=S4R", "type=S8R", "element type 'S8R' is not supported"),
     ("one", "nlgeom=NO", "nlgeom=YES", "nlgeom=YES"),
-    ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5., 0., 0.\n0., 0., 0., 0., 0., 1., 90.\n", "instance 'Coupon-1' is rotated"),
+    ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5., 0., 0.\n0., 0., 0., 1., 0., 0., 90.\n", "instance 'Coupon-1' is turned about an axis that is not along z"),
+    ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5., 0., 0.\n0., 0., 0., 0., 0., 1.\n", "an instance's rotation line is `ax, ay, az, bx, by, bz, angle`"),
     ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5., 0., 2.\n", "moved by 2 along z, out of the plane z = 0"),
     ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5.\n", "an instance's translation line is `x, y\\[, z\\]`"),
     ("one", "1., 0., 0., 0., 1., 0.", "0., 0., 1., 0., 1., 0.", "out of the plate's plane"),

@@ -291,9 +291,9 @@ def test_everything_a_file_holds_that_is_not_read_is_said_at_once():
     assert unread(text) == [] and brought(EDGE, text=text.replace("Top, 2, 2, 0.8", "Topp, 2, 2, 0.8"))["problem"]["unread"] == []
 
 
-def test_a_rotated_instance_and_strain_limits_are_named_not_guessed():
+def test_an_instance_turned_out_of_the_plane_and_strain_limits_are_refused_not_guessed():
     text = EDGE.read_text(encoding="utf-8")
-    rotated = brought(EDGE, text=text.replace("*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n0., 0., 0.\n0., 0., 0., 0., 0., 1., 90.\n"))
-    assert rotated["state"] == "refused" and rotated["problem"]["message"] == "line 33: this version does not read a rotated instance (*Instance)"
+    tipped = brought(EDGE, text=text.replace("*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n0., 0., 0.\n0., 0., 0., 1., 0., 0., 90.\n"))
+    assert tipped["state"] == "refused" and tipped["problem"]["line"] == 35 and "turned about an axis that is not along z" in tipped["problem"]["message"]
     limits = brought(EDGE, text=text.replace("*Fail Stress\n", "*Fail Strain\n0.0158, -0.0107, 0.0071, -0.0319, 0.0194\n*Fail Stress\n", 1))
     assert limits["state"] == "refused" and "strain limits (failure is judged from the stress limits)" in limits["problem"]["message"]
