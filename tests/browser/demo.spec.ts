@@ -401,7 +401,10 @@ test("a beat takes its own time: the second about 3.6 s, measured in the page", 
   expect(marks.end - marks.start).toBeLessThan(4800);
 });
 
-test("a fast scroll goes straight through the stage: the page is not held, what follows is there at once, and the demo stands finished", async ({ page }) => {
+test("a fast scroll goes straight through the stage: the page is not held, what follows is there at once, and the demo stands finished", async ({ page, browserName }) => {
+  // WebKit on a CI runner draws the home page's WebGL in software, at about 4 frames a second on two cores in Playwright's image, so
+  // a timing read frame by frame measures the runner, not the page (ADR-0114). The site-browser job runs it in Chromium.
+  test.skip(browserName === "webkit" && Boolean(process.env.CI), "WebKit on a CI runner draws too few frames for this timing");
   await openPinned(page);
   const start = await stageAt(page);
   const step = await zone(page);

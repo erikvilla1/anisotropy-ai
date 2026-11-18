@@ -349,7 +349,10 @@ function expectLanding(seen: Frame[], path: string, title: string, by: "link" | 
 const ABOUT = "Engineering built";
 const SERVICES = "From an engineering question";
 
-test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page }) => {
+test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page, browserName }) => {
+  // WebKit on a CI runner draws the home page's WebGL in software, at about 4 frames a second on two cores in Playwright's image, so
+  // a timing read frame by frame measures the runner, not the page (ADR-0114). The site-browser job runs it in Chromium.
+  test.skip(browserName === "webkit" && Boolean(process.env.CI), "WebKit on a CI runner draws too few frames for this timing");
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
