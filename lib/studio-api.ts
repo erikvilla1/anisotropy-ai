@@ -321,17 +321,21 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
  * and names; lengths in the units stated. Every value is the fea package's. */
 export type ImportReading = {
   heading: string; units: string; unit_labels: Record<string, string>;
-  parts: number; instances: number; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
+  parts: number; instances: number; moved?: { instance: string; by: number[]; turned_deg?: number; about?: number[] }[]; nodes: number; reference_nodes: number; elements: number; element_types: Record<string, number>;
   node_sets: number; element_sets: number; couplings: number;
   sections: { element_set: string; plies: number; symmetric: boolean; thickness: number; materials: string[]; rotation_deg: number }[];
   layup: string; materials: { name: string; kind: string | null; strengths: boolean }[]; step: string | null;
-  boundaries: number; concentrated_loads: number; pressures: number; skipped: string[]; notes: string[]; warnings: string[];
+  boundaries: number; concentrated_loads: number; pressures: number; edge_loads?: number; skipped: string[]; notes: string[]; warnings: string[];
 };
-/** The import's answer: `refused` (the file is outside what is read, or the units; `problem` says why and on which line), `read` (taken,
- * but not solved as it stands; `problem` says why) or `solved`, with the fields, the answer and its explanation as a live solve has them. */
+/** One kind of thing a refused file holds that is not read (ADR-0105 amendment 1): in an engineer's words, as the file writes its first,
+ * and every line it is on. */
+export type UnreadKind = { what: string; keyword: string; lines: number[] };
+/** The import's answer: `refused` (the file is outside what is read, or the units; `problem` says why and on which line, and `unread`
+ * lists every kind of thing in it that is not read), `read` (taken, but not solved as it stands; `problem` says why) or `solved`, with the
+ * fields, the answer and its explanation as a live solve has them. */
 export type ImportedModel = {
   run_id: string | null; state: "refused" | "read" | "solved"; name: string; units: string;
-  problem: { message: string; line: number | null } | null; reading: ImportReading | null;
+  problem: { message: string; line: number | null; unread: UnreadKind[] } | null; reading: ImportReading | null;
   preview: Preview | null; fields: Fields | null; explanation: Explanation | null; seconds: number; warm: boolean;
 };
 /** The unit systems a model may be stated in; a file carries none, so the engineer says. */
@@ -342,11 +346,15 @@ export const MAX_MODEL_BYTES = 20_000_000;
 /** The request header that carries the file's name, percent-encoded. */
 export const MODEL_NAME_HEADER = "X-Anisotropy-Model-Name";
 
+const isUnreadKind = (entry: unknown): entry is UnreadKind => isObject(entry) && typeof entry.what === "string" && typeof entry.keyword === "string"
+  && Array.isArray(entry.lines) && entry.lines.length > 0 && entry.lines.every((line) => typeof line === "number");
+
 export function readImportedModel(payload: unknown): ImportedModel {
   if (!isObject(payload) || (payload.state !== "refused" && payload.state !== "read" && payload.state !== "solved") || typeof payload.name !== "string"
     || typeof payload.units !== "string") throw unreadable("the import");
   const problem = isObject(payload.problem) && typeof payload.problem.message === "string"
-    ? { message: payload.problem.message, line: typeof payload.problem.line === "number" ? payload.problem.line : null } : null;
+    ? { message: payload.problem.message, line: typeof payload.problem.line === "number" ? payload.problem.line : null,
+      unread: Array.isArray(payload.problem.unread) ? payload.problem.unread.filter(isUnreadKind) : [] } : null;
   const reading = isObject(payload.reading) && typeof payload.reading.elements === "number" && Array.isArray(payload.reading.skipped)
     && Array.isArray(payload.reading.warnings) && Array.isArray(payload.reading.notes) && Array.isArray(payload.reading.sections)
     && Array.isArray(payload.reading.materials) && isObject(payload.reading.element_types) ? (payload.reading as unknown as ImportReading) : null;

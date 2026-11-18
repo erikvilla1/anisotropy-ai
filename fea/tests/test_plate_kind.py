@@ -56,7 +56,7 @@ def test_the_unnotched_coupon_stated_as_a_plate_reproduces_it_exactly(tmp_path):
     assert "*NODE PRINT, NSET=Tab-Top, TOTALS=YES" in write_calculix(twin)
 
 
-def test_the_pressure_plate_reproduces_the_navier_case_and_flips_the_sign_for_calculix(tmp_path):
+def test_the_pressure_plate_reproduces_the_navier_case_and_both_decks_state_the_pressure_along_the_normal(tmp_path):
     spec = load_spec(PRESSURE)
     model = build_model(spec)
     assert model.plate and model.bending and model.pressures[0].elset == "Face" and model.pressures[0].value == pytest.approx(-0.01e6)
@@ -64,7 +64,7 @@ def test_the_pressure_plate_reproduces_the_navier_case_and_flips_the_sign_for_ca
     assert model.node_sets["Corner-Origin"].size == 1 and model.element_sets["Corner-Origin"].size == 0  # a corner box holds one node and no centroid
     assert model.element_sets["Face"].size == 256 and model.node_sets["Face"].size == 289
     deck_text = write_abaqus(model)
-    assert "*Dload\nFace, P, -0.01" in deck_text
+    assert "*Dload\nFace, P, 0.01" in deck_text  # the spec's -0.01 MPa, toward +z: Abaqus's P on a shell element is positive along the normal (ADR-0053 amendment 1)
     deck_path = tmp_path / "plate.inp"
     deck_path.write_text(deck_text, encoding="utf-8")
     deck = read_deck(deck_path, spec.units)
@@ -76,7 +76,7 @@ def test_the_pressure_plate_reproduces_the_navier_case_and_flips_the_sign_for_ca
     assert solution.displacement[centre, 2] * 1e3 == pytest.approx(case["expected"]["w"]["Plate-1.145"][0], rel=case["expected"]["tolerance"])
     assert solution.total_reaction[2] == pytest.approx(-100.0, rel=1e-10)  # the 100 N of pressure toward +z are carried by the supports
     ccx = write_calculix(build_model(spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})))
-    assert "*DLOAD\nFace, P, 0.01" in ccx and "sign is flipped" in ccx  # the CalculiX pressure pushes along the normal (the conventions file)
+    assert "*DLOAD\nFace, P, 0.01" in ccx and "with the opposite sign" in ccx  # the CalculiX pressure pushes along the normal too (the conventions file)
 
 
 def test_consistent_area_loads_sum_to_the_total_and_follow_the_area():

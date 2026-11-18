@@ -79,7 +79,7 @@ class LoadDefinition:
 @dataclass(frozen=True)
 class PressureDefinition:
     elset: str  # an element set name
-    value: float  # Pa, positive against the plate's normal (the Abaqus P label; ADR-0053)
+    value: float  # Pa, positive against the plate's normal: pressing on its top face (ADR-0053; the deck writers state it in each solver's own sign)
 
 
 @dataclass(frozen=True)

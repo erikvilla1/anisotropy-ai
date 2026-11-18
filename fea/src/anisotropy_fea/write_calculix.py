@@ -95,7 +95,7 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
         out.append("*CLOAD")
         out += [f"{load.target.rsplit('.', 1)[-1] if '.' in load.target else load.target}, {load.dof}, {number(from_si(load.value, 'force', units))}" for load in model.loads]
     if model.pressures:
-        out.append("** A CalculiX shell pressure is positive along the element normal, the opposite of the Abaqus P label (fea/checks/calculix-conventions.toml): the sign is flipped here.")
+        out.append("** A CalculiX shell pressure is positive along the element normal (fea/checks/calculix-conventions.toml). The spec's pressure is positive against it, pressing on the top face, so it is written here with the opposite sign.")
         out.append("*DLOAD")
         out += [f"{pressure.elset}, P, {number(-stress(pressure.value))}" for pressure in model.pressures]
     requests = spec.output.calculix

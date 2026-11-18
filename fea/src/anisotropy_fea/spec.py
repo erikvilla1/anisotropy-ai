@@ -181,7 +181,7 @@ class Support(Record):
 
 class Load(Record):
     """What a plate carries (ADR-0054): a total force along one dof spread over a region as consistent nodal loads, or a uniform
-    pressure (stress units, positive against the plate's normal as the Abaqus P label) on an area region."""
+    pressure (stress units, positive against the plate's normal: pressing on its top face, toward -z) on an area region."""
 
     region: str
     dof: int | None = None

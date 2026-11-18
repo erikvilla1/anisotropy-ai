@@ -4,7 +4,7 @@ The reading note of the record with the same name: the first plate stated with s
 
 ## What the numbers show
 
-- The centre deflection is 0.6340 mm in CalculiX against 0.6333 mm in the kernel (0.12 %), both toward +z: the CalculiX deck writes the pressure with the opposite sign of the Abaqus deck, as the conventions file records, and the plate moves the way the spec says. The Navier series with transverse shear deformation gives 0.6341 mm for this plate (the validation case `plate-ss-isotropic-uniform-pressure-navier`, the same mesh): the two solvers sit on either side of it within 0.13 %.
+- The centre deflection is 0.6340 mm in CalculiX against 0.6333 mm in the kernel (0.12 %), both toward +z: the CalculiX deck writes the spec's pressure with the opposite sign, as the conventions file records, and the plate moves the way the spec says. The Abaqus deck writes the same number since 2026-11-17: until then it carried the spec's own sign, which Abaqus 2025 reads as a pressure toward -z (ADR-0053 amendment 1). The Navier series with transverse shear deformation gives 0.6341 mm for this plate (the validation case `plate-ss-isotropic-uniform-pressure-navier`, the same mesh): the two solvers sit on either side of it within 0.13 %.
 - Both faces of the one ply at the centre element agree within 0.04 % on the normal stresses (28.48 MPa in tension on the top face and compression on the bottom, as a pressure toward +z bends the plate) and within 0.5 % on the small shear stress (0.14 MPa against the 28 MPa group).
 
 ## What explains the differences
@@ -14,7 +14,7 @@ The reading note of the record with the same name: the first plate stated with s
 
 ## Verified, and not
 
-- Verified by this record: the pressure's sign and magnitude through both decks, the centre deflection, both faces of the ply at the centre element, and the regions (edges and corner boxes) as node and element sets in both decks.
+- Verified by this record: the pressure's sign and magnitude through the CalculiX deck and through the kernel's reading of the Abaqus deck (not through Abaqus itself: the deck has not been run there), the centre deflection, both faces of the ply at the centre element, and the regions (edges and corner boxes) as node and element sets in both decks.
 - UNVERIFIED: the reaction totals of a shell node set in CalculiX; a plate with a hole or with tabs as regions against CalculiX; a plate loaded in its plane through a region against CalculiX (the kernel reproduces the unnotched coupon exactly when the same coupon is stated as a plate, `fea/tests/test_plate_kind.py`).
 
 ## What would settle the open items

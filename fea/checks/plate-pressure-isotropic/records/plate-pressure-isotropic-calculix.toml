@@ -3,8 +3,8 @@ units = "mm-MPa"
 spec = "../plate-pressure-isotropic.toml"
 deck_kernel = "../decks/plate-pressure-isotropic-abaqus.inp"
 deck_reference = "../decks/plate-pressure-isotropic-ccx.inp"
-deck_kernel_sha256 = "f76a9762057647fcbb69fa8bf5250a5d54d1f8c1063cdcedfef067e31d6450ca"
-deck_reference_sha256 = "364d61d9f1984952711571aae8eb3a667191f4d7ec1981faebc78f6381dfd9e3"
+deck_kernel_sha256 = "29e2fd44b5fd7ad8e354ef945500c7da5cf62f35bd54cef9beda36a97cb6c8b9"
+deck_reference_sha256 = "323f11d222ad4530080693a6898f7459223ab004bab9e94852be3bdf8fe4e4cc"
 
 [solver]
 name = "calculix"
