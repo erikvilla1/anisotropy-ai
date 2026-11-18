@@ -9,8 +9,6 @@ import { PastStage } from "@/components/studio/past-stage";
 import { ProjectProvider, useProject } from "@/components/studio/project-context";
 import { TowStage } from "@/components/studio/tow-stage";
 import { isTow } from "@/lib/studio-tow";
-import { underD3039 } from "@/lib/tension-screen";
-import { formDefinition, unitLabels, type StudioForm } from "@/lib/studio-form";
 import { workspace } from "@/lib/workspaces";
 import { FeaRail } from "./fea-rail";
 import { ImportRail } from "./import-rail";
@@ -31,15 +29,8 @@ export function FeaWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
 }
 
 function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate: () => void }) {
-  const { project, form, rename, allTests, run, imported, past } = useProject();
+  const { project, form, rename, allTests, imported, past } = useProject();
   // the tension screen (ADR-0090) leaves the test, the size and the pull to the software: the strip shows what it chose once checked
-  const built = run.checked?.checklist.built ?? [];
-  const shown: StudioForm = allTests ? form : { ...form, test: form.test || "unnotched tension",
-    ...Object.fromEntries(built.filter((b) => !(form[b.row] ?? "").trim()).map((b) => [b.row, String(b.value)])) };
-  // before the check, the size's source and the load the package will apply, in the words the strip uses once checked (audit fea-screens-J1-3)
-  const pull = formDefinition.tension;
-  const fallback = allTests ? undefined : { Size: underD3039(form) ? "ASTM D3039, Table 2" : "your size",
-    Load: pull ? `${pull.value} ${unitLabels(pull.units).length} ${pull.control}` : "" };
   return (
     <WorkspaceShell
       kind={workspace("fea").title}
@@ -49,7 +40,9 @@ function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate
       rail={imported.open ? <ImportRail apiBaseUrl={apiBaseUrl} /> : past.open ? <PastRail apiBaseUrl={apiBaseUrl} />
         : allTests ? <FeaRail apiBaseUrl={apiBaseUrl} /> : <TensionScreen apiBaseUrl={apiBaseUrl} />}
       stage={imported.open ? <ImportedStage apiBaseUrl={apiBaseUrl} /> : past.open ? <PastStage apiBaseUrl={apiBaseUrl} />
-        : isTow(form) && allTests ? <TowStage /> : <><CouponSpec form={shown} fallback={fallback} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
+        // the model tree says the setup tab by tab (ADR-0111), so its view gives the model the room the summary strip took
+        : isTow(form) && allTests ? <TowStage /> : allTests ? <><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>
+        : <CouponStudio apiBaseUrl={apiBaseUrl} />}
       assistant={<CouponChat apiBaseUrl={apiBaseUrl} onLaminate={onLaminate} />}
     />
   );

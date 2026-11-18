@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ABAQUS_TERMS, isConditionOrLoad, setupAsked, termAsked, termLines, termNamed } from "../lib/abaqus-terms";
+import { FEA_TERMS, isConditionOrLoad, setupAsked, termAsked, termLines, termNamed } from "../lib/fea-terms";
 import { asksWhy } from "../lib/result-why";
 import { bannedIn } from "../lib/studio-copy";
 
-test("each Abaqus term is said in one short sentence of meaning and one of what Anisotropy does, and no name belongs to two terms (ADR-0110)", () => {
+test("each setup term, under every program's names for it, is said in one short sentence of meaning and one of what Anisotropy does, and no name belongs to two terms (ADR-0110)", () => {
   const seen = new Map<string, string>();
-  for (const term of ABAQUS_TERMS) {
+  for (const term of FEA_TERMS) {
     assert.ok(term.names.length, term.id);
     for (const sentence of [term.means, ...Object.values(term.exact ?? {})]) {
       assert.match(sentence, /^[A-Z].*\.$/, `${term.id}: ${sentence}`);
@@ -21,10 +21,10 @@ test("each Abaqus term is said in one short sentence of meaning and one of what 
     for (const name of Object.keys(term.exact ?? {})) assert.ok(term.names.includes(name), `${term.id}: ${name}`);
   }
   // our own words: no sentence is lifted from a manual's procedure ("Toggle on", "click", "dialog box", "module")
-  const all = ABAQUS_TERMS.flatMap((t) => [t.means, t.here]).join(" ");
+  const all = FEA_TERMS.flatMap((t) => [t.means, t.here]).join(" ");
   assert.doesNotMatch(all, /toggle|dialog|click mouse|module|model tree|abaqus\/cae/i);
   // and in the product's own words: no program is named (ADR-0091), so the answers can be shown as they are
-  for (const sentence of ABAQUS_TERMS.flatMap((t) => [t.title, t.means, t.here, ...Object.values(t.exact ?? {})])) assert.deepEqual(bannedIn(sentence), [], sentence);
+  for (const sentence of FEA_TERMS.flatMap((t) => [t.title, t.means, t.here, ...Object.values(t.exact ?? {})])) assert.deepEqual(bannedIn(sentence), [], sentence);
 });
 
 test("a question of what a word means is answered from the glossary; a question of a value or of why is left alone (ADR-0110)", () => {
@@ -77,4 +77,25 @@ test("a request to add a boundary condition, a load, a partition, a step or an i
   for (const text of ["make it compression", "add a ply", "apply 10 kN", "set the element size to 2", "add a hole", "what is a load?"]) assert.equal(added(text), null, text);
   assert.equal(isConditionOrLoad(termNamed("xsymm")!), true);
   assert.equal(isConditionOrLoad(termNamed("partition")!), false);
+});
+
+test("another program's name for a setup word is the same answer: fixed support, named selection, edge sizing, UY (ADR-0110 amendment 1)", () => {
+  const asked = (text: string) => termAsked(text)?.term.id ?? null;
+  assert.equal(asked("what is a fixed support?"), "encastre");
+  assert.equal(asked("what does frictionless support mean?"), "roller");
+  assert.equal(asked("what is a named selection in Ansys?"), "set");
+  assert.equal(asked("what is edge sizing"), "seed");
+  assert.equal(asked("what is static structural?"), "step");
+  assert.equal(asked("what is a remote displacement"), "boundary-condition");
+  assert.equal(asked("what is a modeling ply?"), "section");
+  assert.equal(asked("what is a rosette?"), "material-orientation");
+  assert.equal(asked("what is a force reaction"), "reaction-force");
+  assert.equal(asked("what does encastre mean in Abaqus/CAE?"), "encastre");
+  const uy = termAsked("what is UY?");
+  assert.ok(uy);
+  assert.deepEqual([termLines(uy).title, termLines(uy).means], ["UY", "UY is the move along y."]);
+  assert.equal(termLines(termAsked("what does ROTZ mean")!).means, "ROTZ is the turn about z.");
+  assert.equal(setupAsked("add a fixed support to the bottom edge")?.id, "encastre");
+  assert.equal(setupAsked("apply a remote force")?.id, "concentrated-force");
+  assert.equal(isConditionOrLoad(termNamed("frictionless support")!), true);
 });

@@ -76,7 +76,7 @@
    "id": "criterion",
    "label": "Failure criterion",
    "state": "warn",
-   "message": "no failure criterion: first-ply failure will not be reported (the material has no strengths)",
+   "message": "no failure criterion: first-ply failure will not be reported (the material has no strengths: it needs F1t, F1c, F2t, F2c and F6, along and across the fibres in tension and compression, and in shear)",
    "rows": [
     "Failure criterion"
    ],

@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
+import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
-import { isConditionOrLoad, setupAsked, termAsked, termLines, type AbaqusTerm, type TermQuestion } from "@/lib/abaqus-terms";
+import { isConditionOrLoad, setupAsked, termAsked, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
@@ -26,8 +26,9 @@ import {
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
-import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
-import { showPanel } from "@/components/workspace/panels/step-panel";
+import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
+import { tab, TAB_OF_STEP, tabOfKey, tabToFix, type TabId } from "@/lib/model-tree";
+import { revealPanel, showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { resultsOnPage } from "./use-imported-model";
@@ -129,8 +130,9 @@ const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> =
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5). */
-function PanelLink({ id, children }: { id: PanelId; children: ReactNode }) {
+/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5); a step panel of the full form, or a tab of the
+ * model tree (ADR-0111). */
+function PanelLink({ id, children }: { id: PanelId | TabId; children: ReactNode }) {
   return <button type="button" data-panel={id} onClick={() => showPanel(id)}><SlidersHorizontal size={14} /> {children}</button>;
 }
 
@@ -141,7 +143,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported, past, setProposed } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const lastSaid = useRef<string | null>(null); // the engineer's last message: the reason a change it led to is kept with its version (ADR-0113)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
   // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105),
@@ -155,8 +158,15 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
-  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current ? tensionValues(rows)
-    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined)); // a plate goes with its supports and loads
+  // a plate goes with its supports and loads, every row sent, on the full form and on the model tree alike (ADR-0089 amendment 7)
+  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current && rows.test !== PLATE_TEST ? tensionValues(rows)
+    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined));
+  /** Whether a plate's regions are offered to a message: every test is, or a plate is, and the coupon is one. */
+  const platesRef = useRef(plates);
+  platesRef.current = plates;
+  const plateHere = () => formRef.current.test === PLATE_TEST && (allTests || platesRef.current);
+  /** Whether every row of the coupon as it stands is offered (ADR-0089): the switch, or a founder's plate (amendment 7). */
+  const offersAll = () => allTests || plateHere();
   const { checking, checked, job, fields, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -296,8 +306,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function proceed(next: StudioForm) {
     const hidden = hiddenReason(next, false);
     if (!hidden) { proceedWith(next); return; }
-    void allCouponTests(apiBaseUrl).then((all) => {
-      if (all) { proceedWith(next); return; }
+    void offeredHere(apiBaseUrl).then((offered) => {
+      if (offered.all || (offered.plates && next.test === PLATE_TEST)) { proceedWith(next); return; } // a founder's plate (ADR-0089 amendment 7)
       setActive(null);
       add({ role: "assistant", kind: "text", tone: "problem", title: "Not offered yet",
         body: <><p data-testid="chat-not-available">{hidden} Your inputs are kept.</p>
@@ -317,8 +327,11 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
-        body: <><p>Pick the held and loaded regions under Boundary conditions and loads, or click an element on the model.</p>
-          <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></> });
+        body: allTests ? <><p>Pick the held and loaded regions under Boundary conditions and loads, or click an element on the model.</p>
+          <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></>
+          : <><p>Say which edge or face is held and which is loaded, for example “fix the left edge and pull the right edge with 10 kN”, or click
+            it on the model. Each goes under Boundary conditions or Loads on the left.</p>
+          <Chips><PanelLink id="conditions">Open Boundary conditions</PanelLink><PanelLink id="loads">Open Loads</PanelLink></Chips></> });
       return;
     }
     const step = nextStep(next, simpleRef.current);
@@ -336,6 +349,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function answer(echo: string, rows: StudioForm) {
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     if (rows.filled_by) remember(RUN_BY_KEY, rows.filled_by.trim());
+    versions.attribute("you", echo);
     setForm(next);
     clearRun();
     add({ role: "user", text: echo });
@@ -359,6 +373,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function startOver() {
     setProposed(null);
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
+    versions.attribute("you", "Start over");
     setForm(fresh); runner.reset();
     setEntries([]);
     ask(simpleRef.current ? "material" : "test");
@@ -417,8 +432,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string, echoed = false) {
     const step = nextStep(formRef.current, simpleRef.current);
-    const id = panelOfStep(step);
-    const title = panel(id).title;
+    const id = allTests ? panelOfStep(step) : TAB_OF_STEP[step]; // the full form's step panel, or the model tree's tab (ADR-0111)
+    const title = allTests ? panel(panelOfStep(step)).title : tab(TAB_OF_STEP[step]).title;
     const named = toolNamed(text) === "coupon";
     add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Not sure what to change",
       body: <div data-testid="chat-redirect" data-panel={id}>
@@ -559,7 +574,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** This model's boundary conditions or loads, one line each as the list under the model says them (ADR-0110). `title` replaces the
    * heading when the message asked to add one where the setup fixes them. */
-  function answerApplied(text: string, term: AbaqusTerm, title: string | null) {
+  function answerApplied(text: string, term: FeaTerm, title: string | null) {
     const applied = appliedNow();
     const loads = term.id === "load" || ["concentrated-force", "pressure", "shell-edge-load"].includes(term.id);
     const both = title !== null; // a request to add one is answered with everything the setup holds
@@ -569,7 +584,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       : shown.past ? "A past run is shown without them. Choose “Use these inputs” to see them."
       : !applied ? "They are drawn on the model and listed under it once the setup is checked."
       : onPlate ? "Add one by naming a region, for example “fix the left edge” or “10 kN tension on the right edge”."
-      : `A coupon’s are set by its test, as in the test machine. Change the load under Boundary conditions and loads${allTests ? "; for boundary conditions of your own, choose Plate" : ""}.`;
+      : `A coupon’s are set by its test, as in the test machine. Change the load under ${allTests ? "Boundary conditions and loads" : "Loads"}${allTests ? "; for boundary conditions of your own, choose Plate" : plates ? "; for boundary conditions of your own, choose Plate under Test" : ""}.`;
     add({ role: "user", text }, { role: "assistant", kind: "text", title: title ?? (loads ? "Loads" : "Boundary conditions"), body: (
       <div data-testid="chat-applied" data-term={term.id}>
         {lines.length ? <ul className="chat-understood">{lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}
@@ -580,13 +595,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** A request to add something the setup does not take from a message (ADR-0110): a coupon's boundary conditions and loads are its test's,
    * a model comes partitioned, there is one step and no interaction. Said once; no row changes. */
-  function answerSetup(text: string, term: AbaqusTerm) {
+  function answerSetup(text: string, term: FeaTerm) {
     if (isConditionOrLoad(term)) {
       const onPlate = formRef.current.test === PLATE_TEST;
       if (onPlate) { // a plate with no model to read the message: its panel takes them
-        add({ role: "user", text }, { role: "assistant", kind: "text", title: "Add it under Boundary conditions and loads", body: (
+        add({ role: "user", text }, { role: "assistant", kind: "text", title: allTests ? "Add it under Boundary conditions and loads" : "Add it on the model tree", body: (
           <div data-testid="chat-setup" data-term={term.id}><p>Pick the region and the directions it holds, or the force or pressure on it. Each is drawn on the model as you add it.</p>
-            <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></div>
+            <Chips>{allTests ? <PanelLink id="loads">Open Boundary conditions and loads</PanelLink>
+              : <><PanelLink id="conditions">Open Boundary conditions</PanelLink><PanelLink id="loads">Open Loads</PanelLink></>}</Chips></div>
         ) });
         return;
       }
@@ -606,6 +622,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const text = value.trim();
     if (!text) return;
     setInput("");
+    lastSaid.current = text;
     if (!shown.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
     // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
     const term = termAsked(text);
@@ -688,8 +705,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     let failed: string | null = null;
     try { if (await readQuestionWithModel(text)) { setReading(false); return; } } catch { /* the setup's reading goes on */ }
     // a plate also offers its regions and the place clicked, so "hold this edge" and "10 kN in tension here" can be read (ADR-0101)
-    const onPlate = allTests && formRef.current.test === PLATE_TEST ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
-    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests), ...onPlate }); }
+    const onPlate = plateHere() ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, offersAll()), ...onPlate }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
     if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) {
@@ -725,9 +742,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const onPlate = lists.supports.length > plateRef.current.supports.length || lists.loads.length > plateRef.current.loads.length;
     if (!Object.keys(rows).length && !onPlate) return;
     const next: StudioForm = Object.keys(rows).length ? mergeRows(formRef.current, rows) : formRef.current; // a new test clears a standard it is not under (ADR-0072)
+    versions.attribute("assistant", lastSaid.current); // applied from the message, ticked by the engineer
     if (next !== formRef.current) setForm(next);
     if (onPlate) setPlate(lists);
     clearRun();
+    if (onPlate) revealTab(allTests ? "loads" : lists.supports.length > plateRef.current.supports.length ? "conditions" : "loads");
+    else reveal(Object.keys(rows));
     if (onPlate && next.test === PLATE_TEST) void check(next, lists);
     else proceed(next);
   }
@@ -750,7 +770,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function readWithPatterns(text: string, echoed = false, nothing?: () => void) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const read = applyMessage(formRef.current, text);
-    const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, allTests); // what the studio does not offer yet stays out (ADR-0089)
+    const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, offersAll()); // what the studio does not offer yet stays out (ADR-0089)
     const understood = understoodWithout(read.understood, dropped);
     const note = read.note;
     if (hiddenNotes.length) {
@@ -768,9 +788,18 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     add(...you, { role: "assistant", kind: "text", title: "Got it", body: <>
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
+    versions.attribute("assistant", text);
     setForm(next); clearRun();
+    reveal(Object.keys(rows));
     proceed(next);
   }
+
+  /** Opens, on the left, the panel or tab a message just changed and marks it (ADR-0111): the change is seen where it lives. */
+  function reveal(keys: string[]) {
+    const target = keys.map((key) => (allTests ? panelOfKey(key) : tabOfKey(key))).find((id) => id !== null);
+    if (target) revealTab(target);
+  }
+  const revealTab = (id: string) => { window.setTimeout(() => revealPanel(id), 0); };
 
   function askWidget(step: ChatStep | "reopen", isLive: boolean): ReactNode {
     if (!isLive) return null;
@@ -835,7 +864,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
-            <Chips><PanelLink id="layup">My own constants, under Layup and material</PanelLink></Chips>
+            <Chips><PanelLink id={allTests ? "layup" : "material"}>My own constants, under {allTests ? "Layup and material" : "Material"}</PanelLink></Chips>
           </>
         );
       case "shear": {
@@ -850,7 +879,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
               </button>
             ) : null}
-            <PanelLink id="layup">Measured values, under Layup and material</PanelLink>
+            <PanelLink id={allTests ? "layup" : "material"}>Measured values, under {allTests ? "Layup and material" : "Material"}</PanelLink>
           </Chips>
         );
       }
@@ -867,7 +896,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             </Chips>
             <LayupInput needThickness={needThickness} form={form} allTests={allTests} onApply={(notation, rows) => answer(notation, rows)} />
             {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length} (library).</p> : null}
-            <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips>
+            {allTests ? <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips> : null}
           </>
         );
       }
@@ -894,7 +923,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               {(LOAD_CHIPS[units] ?? []).map((chip) => (
                 <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
               ))}
-              <PanelLink id="loads">Another load, under Boundary conditions and loads</PanelLink>
+              <PanelLink id="loads">Another load, under {allTests ? "Boundary conditions and loads" : "Loads"}</PanelLink>
             </Chips>
           </>
         );
@@ -911,6 +940,13 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const warnings = items.filter((i) => i.state === "warn");
     const passed = items.filter((i) => i.state === "pass").length;
     const stepsFor = (rows: string[]) => [...new Set(rows.map((label) => stepOfKey(fieldByLabel[label]?.key ?? "")))];
+    const fixLink = (item: CheckAnswer["checklist"]["items"][number], word = "Fix under") => {
+      const target = allTests ? panelToFix(item) : tabToFix(item); // the full form's step panel, or the model tree's tab (ADR-0111)
+      const title = target ? (allTests ? panel(target as PanelId).title : tab(target as TabId).title) : "";
+      const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
+      return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>{word} {title}</button>
+        : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
+    };
     return (
       <div data-testid="chat-check" data-state={result.state}>
         <h4>{result.state === "ready" ? "Ready to run" : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
@@ -918,16 +954,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {blocking.length ? (
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
           <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} allTests={allTests} onApply={(rows, echo) => answer(echo, rows)}
-            link={(item) => {
-              const target = panelToFix(item);
-              const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
-              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
-                : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
-            }} />
+            link={(item) => fixLink(item)} />
         ) : null}
         {warnings.length ? (
           <ul className="chat-issues chat-warnings">
-            {warnings.map((item) => <li key={item.id}><CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)}</span></li>)}
+            {/* a warning says where it is dealt with, as an item to fix does (ADR-0111 amendment 2) */}
+            {warnings.map((item) => <li key={item.id}><CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)} {fixLink(item, "Open")}</span></li>)}
           </ul>
         ) : null}
         <details className="chat-details"><summary>All checks</summary>
@@ -936,7 +968,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
             <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
-            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "tension-change")}><SlidersHorizontal size={14} /> Change settings</button>
+            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "geometry")}><SlidersHorizontal size={14} /> Edit the setup</button>
           </div>
         ) : null}
       </div>
@@ -949,7 +981,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const s = fields.summary, lab = fields.labels;
     const earliest = s.earliest ? s.fpf[s.earliest] : null;
     const stat = answerStat(fields, printed); // the answer the page leads with (ADR-0085); a result written before it keeps the whole model's first failure
-    const check = job ? verificationOf(job.result, s.calculix ?? null) : null;
+    const check = job ? verificationOf(job.result, s.calculix ?? null, !allTests) : null;
     return (
       <div data-testid="chat-result">
         <h4>Results</h4>
@@ -1224,7 +1256,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
-  const onPlateNow = allTests && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
+  const onPlateNow = (allTests || plates) && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
   const hereNow = onPlateNow ? here() : [];
   return (
     <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
@@ -1264,7 +1296,7 @@ function ChatRun({ job }: { job: JobStatus }) {
   return (
     <div data-testid="chat-job" data-state={job.state}>
       <h4>Analysis: {runHeadline(job)}</h4>
-      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown above the model.</p> : null}
+      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown in the centre of the page.</p> : null}
     </div>
   );
 }

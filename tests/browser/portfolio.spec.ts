@@ -32,21 +32,21 @@ test("the chat keeps a coupon across messages and starts over on request", async
   // asks for the material and the layup, the software choosing the rest (ADR-0090).
   await page.goto("/workspace/fea");
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
-  const spec = page.getByTestId("chat-spec");
+  const size = page.getByTestId("panel-geometry").locator(".ws-panel-note"); // the tree says the setup tab by tab (ADR-0111)
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // no test to pick: the first question
   await box.fill("Open-hole tension 250 x 36 mm, 6 mm hole");
   await page.getByRole("button", { name: "Send message" }).click();
   // A test that is not offered is answered in words: its name and its hole stay out of the coupon, the size goes in.
   await expect(page.getByTestId("chat-not-available")).toContainText("Open-hole tension is not offered yet.");
-  await expect(spec).toContainText("250 × 36 mm");
+  await expect(size).toHaveText("250 × 36 mm");
   await box.fill("AS4/8552, 20 kN");
   await box.press("Enter");
-  await expect(spec).toContainText("20000 N force");
-  await expect(spec).toContainText("AS4");
+  await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("20000 N pull");
+  await expect(page.getByTestId("panel-material").locator(".ws-panel-note")).toContainText("AS4");
   // The first message's size stands beside the second's rows, on the one test offered.
-  await expect(spec).toContainText("250 × 36 mm");
-  await expect(spec).toContainText("unnotched tension");
-  await expect(spec).not.toContainText("hole");
+  await expect(size).toHaveText("250 × 36 mm");
+  await expect(page.getByTestId("panel-test").locator(".ws-panel-note")).toContainText("Unnotched tension");
+  await expect(size).not.toContainText("hole");
   await box.fill("hello");
   await box.press("Enter");
   // A message that names no value is answered with the next thing to state (ADR-0062 part 5), in the product's own words
@@ -56,7 +56,7 @@ test("the chat keeps a coupon across messages and starts over on request", async
   await expect(page.getByTestId("chat-redirect").last()).toContainText("Next: what is the layup");
   await page.getByRole("button", { name: "Start a new coupon" }).click();
   await expect(page.locator(".chat-user")).toHaveCount(0);
-  await expect(spec).not.toContainText("250");
+  await expect(size).not.toContainText("250");
 });
 
 test("example data and local CSV imports are checked before the records are downloaded", async ({

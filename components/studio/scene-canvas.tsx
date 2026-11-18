@@ -24,6 +24,8 @@ export type SceneProps = {
   held?: SceneMarker[];
   loaded?: SceneLoad | null;
   loads?: SceneLoad[]; // further loads of a plate (ADR-0054), drawn like `loaded`
+  /** The tab of the model tree open on the left: its boundary conditions or its loads are drawn bolder (ADR-0111). */
+  emphasis?: "conditions" | "loads" | null;
   /** What the assistant proposes and the engineer has not applied yet, drawn dashed (ADR-0110). */
   proposed?: { held: SceneMarker[]; loads: SceneLoad[] } | null;
   /** The model the inputs act on, in a few words: material, layup, mesh, step. Shown under the lists. */
@@ -147,10 +149,32 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, onPick 
   );
 }
 
+/** Puts the camera at its home view, or straight above the model, each time `at` changes: the view buttons and a model of a new size
+ * (ADR-0111 amendment 2). OrbitControls is the scene's default controls, so its target moves with the camera. */
+function CameraView({ at, view, centre, size }: { at: string; view: "home" | "top"; centre: readonly [number, number]; size: number }) {
+  const { camera, controls, invalidate } = useThree();
+  useEffect(() => {
+    const [x, y] = centre;
+    if (view === "top") camera.position.set(x, y, 2.6 * size);
+    else camera.position.set(x + 0.9 * size, y - 1.1 * size, 0.9 * size);
+    camera.up.set(0, 0, 1);
+    camera.lookAt(x, y, 0);
+    const orbit = controls as unknown as { target: THREE.Vector3; update(): void } | null;
+    if (orbit) { orbit.target.set(x, y, 0); orbit.update(); }
+    invalidate();
+  }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+type Layer = "mesh" | "conditions" | "loads";
+const LAYER_WORDS: Record<Layer, string> = { mesh: "Mesh", conditions: "Boundary conditions", loads: "Loads" };
+
 export function SceneCanvas(props: SceneProps) {
   const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
-    highlight = null, picked = null, wireframe = true, onPick } = props;
+    highlight = null, picked = null, wireframe = true, onPick, emphasis = null } = props;
   const [focus, setFocus] = useState<string | null>(null); // the line of the list clicked: its region is drawn bolder
+  const [hidden, setHidden] = useState<Layer[]>([]); // the layers switched off over the model
+  const [view, setView] = useState<{ view: "home" | "top"; n: number }>({ view: "home", n: 0 });
   const [webgl, setWebgl] = useState<boolean | null>(null);
   useEffect(() => { setWebgl(webglAvailable()); }, []);
   const xy = useMemo(() => (displacement && scale ? deformedPositions(nodes, displacement, scale) : nodes), [nodes, displacement, scale]);
@@ -163,36 +187,52 @@ export function SceneCanvas(props: SceneProps) {
   const arrow = 0.07 * size; // one of a load's arrows
   const allLoads = [...(loaded ? [loaded] : []), ...loads];
   const mode = field ? "results" : "presentation";
+  // a model of another size or place is framed again; a finer mesh of the same plate is not
+  const placed = [extent.min[0], extent.min[1], extent.size[0], extent.size[1]].map((v) => v.toPrecision(6)).join(",");
+  const shows = (layer: Layer) => !hidden.includes(layer);
+  const toggle = (layer: Layer) => setHidden((h) => (h.includes(layer) ? h.filter((l) => l !== layer) : [...h, layer]));
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
     <div className="studio-scene-wrap">
-      <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""}>
+      <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""} data-emphasis={emphasis ?? ""}
+        data-shown={(["mesh", "conditions", "loads"] as Layer[]).filter(shows).join(" ")} data-view={view.view}>
+      {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden */}
+      <div className="studio-view-tools" role="toolbar" aria-label="View">
+        <button type="button" onClick={() => setView((v) => ({ view: "home", n: v.n + 1 }))} data-testid="view-fit" title="Back to the whole model">Fit</button>
+        <button type="button" onClick={() => setView((v) => ({ view: "top", n: v.n + 1 }))} data-testid="view-top" title="Straight above the model">Top</button>
+        <span className="studio-view-sep" aria-hidden="true" />
+        {(["mesh", "conditions", "loads"] as Layer[]).map((layer) => (
+          <button key={layer} type="button" aria-pressed={shows(layer)} onClick={() => toggle(layer)} data-testid={`show-${layer}`}
+            title={`${shows(layer) ? "Hide" : "Show"} ${LAYER_WORDS[layer].toLowerCase()}`}>{LAYER_WORDS[layer]}</button>
+        ))}
+      </div>
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }}
         camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}
         onPointerMissed={() => onPick?.(null)}>
         <color attach="background" args={["#0d0d0d"]} />
         {field ? null : <PresentationLighting size={size} centre={centre} floor={-thickness / 2 - 0.004 * size} />}
-        <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe} onPick={onPick} />
-        {held.map((marker, i) => {
+        <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe && shows("mesh")} onPick={onPick} />
+        {(shows("conditions") ? held : []).map((marker, i) => {
           const box = setBox(xy, marker.nodes);
           if (!box) return null;
           const z = top + meanHeight(heights, marker.nodes);
           return (
             <group key={`held-${i}`}>
-              <Line points={frame(box, z)} color={HELD} lineWidth={focus === `held-${i}` ? 5 : 2} />
+              <Line points={frame(box, z)} color={HELD} lineWidth={focus === `held-${i}` ? 5 : emphasis === "conditions" ? 4 : 2} />
               {marker.dofs?.length ? <HeldSymbols xy={xy} nodes={marker.nodes} dofs={marker.dofs} z={z} height={symbol} /> : null}
             </group>
           );
         })}
-        {allLoads.map((load, i) => {
+        {(shows("loads") ? allLoads : []).map((load, i) => {
           const box = setBox(xy, load.nodes);
           if (!box) return null;
           const z = top + meanHeight(heights, load.nodes);
           return (
             <group key={`load-${i}`}>
               {/* a pressure's arrows cover its face, so its frame, which would hide the edges' own, is drawn only when its line is clicked */}
-              {load.control !== "pressure" || focus === `load-${i}` ? <Line points={frame(box, z)} color={LOADED} lineWidth={focus === `load-${i}` ? 5 : 2} /> : null}
+              {load.control !== "pressure" || focus === `load-${i}` || emphasis === "loads"
+                ? <Line points={frame(box, z)} color={LOADED} lineWidth={focus === `load-${i}` ? 5 : emphasis === "loads" ? 4 : 2} /> : null}
               <LoadArrows xy={xy} nodes={load.nodes} direction={load.direction} z={z} length={arrow} />
             </group>
           );
@@ -226,6 +266,7 @@ export function SceneCanvas(props: SceneProps) {
           <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color="#efefef" lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
+        <CameraView at={`${placed}|${view.view}|${view.n}`} view={view.view} centre={centre} size={size} />
       </Canvas>
       </div>
       <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} focus={focus} onFocus={setFocus} />

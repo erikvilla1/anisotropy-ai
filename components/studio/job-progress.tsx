@@ -8,13 +8,13 @@ import { runDetail, runHeadline, runProblem, runSteps, runTook, secondsText, ste
  * `lib/studio-copy.ts`; under each finished step the seconds it took, and once the run is done how long it took in all (ADR-0064
  * amendment 1); one line on what is happening, the verification line once the reference solver has run, and a stopped run in plain
  * words. The pipeline's stage names and console stay in the job's record. */
-export function JobProgress({ job }: { job: JobStatus }) {
+export function JobProgress({ job, brief = false }: { job: JobStatus; /** the product's view: the second solver's check without its counts */ brief?: boolean }) {
   const steps = runSteps(job);
   const seconds = stepSeconds(job);
   const problem = runProblem(job);
   const detail = runDetail(job);
   const took = runTook(job);
-  const check = job.state === "running" || job.state === "done" ? verificationOf(job.result ?? (job.state === "done" ? job.message : null)) : null;
+  const check = job.state === "running" || job.state === "done" ? verificationOf(job.result ?? (job.state === "done" ? job.message : null), null, brief) : null;
   return (
     <div className="studio-panel studio-run" data-testid="job-progress" data-state={job.state}>
       <h3>Analysis <span className={`studio-badge studio-badge-${job.state}`} data-testid="job-state">{runHeadline(job)}</span></h3>

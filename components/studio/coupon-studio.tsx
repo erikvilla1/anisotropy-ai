@@ -6,6 +6,7 @@ import { PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
+import { revealPanel } from "@/components/workspace/panels/step-panel";
 import { JobProgress } from "./job-progress";
 import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
@@ -16,14 +17,14 @@ import { SketchScene } from "./sketch";
 import { shownResults } from "./use-coupon-run";
 
 /** The package's preview: the mesh with every boundary condition and load drawn on it and listed under it, in words (ADR-0110). */
-export function PreviewScene({ preview, onPick, picked, proposed }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null;
-  proposed?: SceneProps["proposed"] }) {
+export function PreviewScene({ preview, onPick, picked, proposed, emphasis = null }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null;
+  proposed?: SceneProps["proposed"]; emphasis?: SceneProps["emphasis"] }) {
   const { held, loads, about } = sceneInputs(preview);
   return (
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
       <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
-        about={about} onPick={onPick} picked={picked ?? null} />
+        about={about} onPick={onPick} picked={picked ?? null} emphasis={emphasis} />
       {preview.shape?.length ? <p className="studio-muted" data-testid="preview-shape">{shapeWords(preview.shape)}</p> : null}
       {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
     </div>
@@ -34,13 +35,17 @@ export function PreviewScene({ preview, onPick, picked, proposed }: { preview: P
  * it, the fields after a run; a plate's regions are picked here by clicking an element (ADR-0054). Every number comes from the fea package
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setPlate, run: runner, picked, setPicked, place, proposed } = useProject();
+  const { form, plate, setPlate, run: runner, picked, setPicked, place, proposed, emphasis, allTests, view, setShownField } = useProject();
   const { checked, job, explanation, live, living, problem } = runner;
   // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
   const { fields: shown, live: showLive } = shownResults(runner);
   const shownExplanation = showLive ? live?.explanation ?? null : explanation;
   const { clearChecked } = runner;
-  const editPlate = useCallback((lists: PlateLists) => { setPlate(lists); clearChecked(); }, [setPlate, clearChecked]);
+  // a hold or a load added by a click opens where it is listed: the full form's panel, or the model tree's tab (ADR-0111)
+  const editPlate = useCallback((lists: PlateLists, where: "conditions" | "loads") => {
+    setPlate(lists); clearChecked();
+    window.setTimeout(() => revealPanel(allTests ? "loads" : where), 0);
+  }, [setPlate, clearChecked, allTests]);
   const isPlate = form.test === PLATE_TEST;
   // the element clicked on a plate's preview is the project's, as one clicked on the results is: the assistant reads "here" from it
   // (ADR-0101). A new preview is a new mesh, so the click on the last one is let go; the results view keeps its own.
@@ -51,20 +56,20 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
-      {job ? <JobProgress job={job} /> : null}
+      {job ? <JobProgress job={job} brief={!allTests} /> : null}
       {shown ? (
         <>
           {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
             live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
-            onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} />
+            onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} emphasis={emphasis} view={view} onShown={setShownField} />
         </>
       ) : (
         <>
           {checked?.preview ? (
             <>
               <PreviewScene preview={checked.preview} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
-                proposed={isPlate ? proposedInputs(checked.preview, proposed) : null} />
+                proposed={isPlate ? proposedInputs(checked.preview, proposed) : null} emphasis={emphasis} />
               {isPlate && pickedElement !== null ? (() => {
                 const preview = checked.preview;
                 const touched = regionsOfElement(pickedElement, preview.mesh.quads, preview.mesh.node_sets, preview.mesh.element_sets, regionOptions(form, plate));
@@ -73,8 +78,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
                     <span>Element {pickedElement + 1} belongs to:</span>
                     {touched.map((r) => (
                       <span key={r.name}><strong>{r.name}</strong>{" "}
-                        <button type="button" className="studio-text-button" onClick={() => editPlate(withSupport(plate, r.name))}>hold</button>{" "}
-                        <button type="button" className="studio-text-button" onClick={() => editPlate(withLoad(plate, r.name, r.kind))}>load</button></span>
+                        <button type="button" className="studio-text-button" onClick={() => editPlate(withSupport(plate, r.name), "conditions")}>hold</button>{" "}
+                        <button type="button" className="studio-text-button" onClick={() => editPlate(withLoad(plate, r.name, r.kind), "loads")}>load</button></span>
                     ))}
                     {!touched.length ? <span className="studio-muted">no named region; draw a box around it</span> : null}
                   </div>

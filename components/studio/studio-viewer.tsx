@@ -5,9 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { fetchExplanation, fetchFields, getJob, isActive, POLL_MS, StudioError, type Explanation, type Fields, type JobStatus } from "@/lib/studio-api";
 import { JobProgress } from "./job-progress";
 import { ResultsView } from "./results-view";
+import { useOffered } from "./project-context";
 
 /** The viewer window: one job by its id in the address, polled until it ends; the fields as soon as our engine has run. */
 export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
+  const offered = useOffered(apiBaseUrl); // the product's view says the second solver's check without its counts
   const params = useSearchParams();
   const jobId = params.get("job") ?? "";
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -50,7 +52,7 @@ export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
   return (
     <div className="studio-viewer">
       {message ? <p className="studio-alert" role="alert">{message}</p> : null}
-      {job ? <JobProgress job={job} /> : null}
+      {job ? <JobProgress job={job} brief={!offered.all} /> : null}
       {/* a problem replaces the loading line, so a gone job does not say it is still loading (audit fea-screens-2) */}
       {fields ? <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={null} />
         : message ? null : <p className="studio-status" role="status">Loading results…</p>}

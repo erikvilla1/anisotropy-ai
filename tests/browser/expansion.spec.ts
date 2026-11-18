@@ -6,7 +6,8 @@ test("a negative load stays negative so the setup check can refuse it (ADR-0003)
   await page.getByRole("textbox", { name: "Message the coupon assistant" }).fill("Unnotched tension, apply -20 kN");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.locator(".chat-understood").last()).toContainText("-20000 N force");
-  await expect(page.getByTestId("chat-spec")).toContainText("-20000 N force");
+  await expect(page.locator("#studio-control")).toHaveValue("force"); // on the tree's Loads tab (ADR-0111), where the strip above the model said it
+  await expect(page.locator("#studio-value")).toHaveValue("-20000");
 });
 
 test("navigation routes load directly with research-focused About", async ({

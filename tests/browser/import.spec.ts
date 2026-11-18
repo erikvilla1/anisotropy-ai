@@ -71,13 +71,36 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   await expect(stage.getByTestId("results")).toHaveAttribute("data-source", "run");
   await expect(stage.getByTestId("live-banner")).toHaveCount(0); // no "run the analysis to verify it": an imported model has no full run
   await expect(page.getByTestId("import-status")).toHaveText("coupon-2x8-grips-im7-8552.inp: read and solved.");
-  const reading = page.getByTestId("import-reading");
-  await expect(reading).toContainText("16 elements (16 S4R), 27 nodes");
-  await expect(reading).toContainText("[0/30/-30/30/0]s, 1.829 mm thick");
-  await expect(reading).toContainText("12 boundary lines, 2 couplings");
+  // what was read, on the same model tree as a coupon's (ADR-0111 amendment 1): each tab's line the reader's report, nothing to change
+  await expect(rail.locator(".ws-panel-title")).toHaveText(["File and units", "Geometry", "Material", "Layup", "Analysis step", "Boundary conditions", "Loads",
+    "Mesh", "Solve", "Results", "Left out"]);
+  await expect(page.getByTestId("panel-mesh").locator(".ws-panel-note")).toHaveText("16 elements, 27 nodes");
+  await expect(page.getByTestId("panel-layup").locator(".ws-panel-note")).toHaveText("[0/30/-30/30/0]s, 10 plies");
+  await expect(page.getByTestId("panel-conditions").locator(".ws-panel-note")).toHaveText("12 boundary lines, 2 couplings");
+  await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("by moved supports only");
+  await expect(rail.locator("input, select:not(#import-units):not([aria-label='Ply shown'])")).toHaveCount(1); // the file alone: no row of the model is changed here
+  await page.getByTestId("panel-mesh").locator("summary").click();
+  await expect(page.getByTestId("import-mesh")).toContainText("16 elements (16 S4R), 27 nodes");
+  await page.getByTestId("panel-layup").locator("summary").click();
+  await expect(page.getByTestId("import-layup")).toContainText("[0/30/-30/30/0]s, 1.829 mm thick");
   await expect(page.getByTestId("import-notes")).toContainText("reference node Assembly.2"); // the reader's own note on this file
   await page.getByTestId("panel-import-skipped").locator("summary").click();
   await expect(page.getByTestId("import-skipped").locator("li")).toHaveCount(4);
+  // a tab lights its part of the model, and the Results tab colours the model as the coupon's does; an imported model has no files
+  const scene = stage.getByTestId("studio-scene");
+  await page.getByTestId("panel-conditions").locator("summary").click();
+  await expect(scene).toHaveAttribute("data-emphasis", "conditions");
+  await expect(page.getByTestId("import-conditions").locator("li")).toHaveCount(2);
+  await page.getByTestId("panel-loads").locator("summary").click();
+  await expect(scene).toHaveAttribute("data-emphasis", "loads");
+  await expect(page.getByTestId("import-loads").locator("li")).toHaveCount(1);
+  await expect(page.getByTestId("panel-run").locator(".studio-badge")).toHaveText("solved");
+  await expect(page.getByTestId("tree-results-answer")).toContainText("Reaction");
+  await rail.locator("button[data-field=S11]").click();
+  await expect(stage.getByTestId("field-controls").getByLabel("Field", { exact: true })).toHaveValue("S11");
+  await expect(page.getByTestId("tension-files")).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: ".local/website/screenshots/model-tree-imported.png" });
 
   // the assistant says what came in, answers from this model's results, and changes nothing by talking
   await expect(page.getByTestId("chat-imported")).toHaveAttribute("data-state", "solved");
