@@ -18,8 +18,11 @@ const bar = (page: Page) =>
     return { top: Math.round(box.top), bottom: Math.round(box.bottom), position: style.position, ground: style.backgroundColor, state: (element as HTMLElement).dataset.scroll ?? "top" };
   });
 const pageY = (page: Page) => page.evaluate(() => Math.round(window.scrollY));
-/** The bar has slid into the window, or out of it. */
-const barIn = (page: Page) => expect.poll(async () => (await bar(page)).top).toBe(0);
+/** The bar has slid into the window, or out of it. In is read with its state: just after a script has scrolled the page down,
+ * a bar that showed is still sliding out from the window's top, and its edge alone reads 0 until it has moved (seen in Firefox,
+ * where a wheel's scroll can come most of a second after the event, ADR-0114). */
+const barIn = (page: Page) =>
+  expect.poll(async () => { const { top, state } = await bar(page); return { top, state }; }).toEqual({ top: 0, state: "shown" });
 const barOut = (page: Page) => expect.poll(async () => (await bar(page)).bottom).toBeLessThanOrEqual(0);
 /** Across the window's top, at the bar's middle line, what is drawn is the header and not the page under it. */
 const barOnTop = (page: Page) => page.evaluate(() => [0.05, 0.5, 0.95].every((share) => Boolean(document.elementFromPoint(window.innerWidth * share, 40)?.closest(".site-header"))));
