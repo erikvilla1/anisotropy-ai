@@ -385,12 +385,12 @@ def title_block(c: Comparison) -> str:
     lib = c.library
     facts = [
         ("Team's deck", escape(f"{c.team_deck_path.name} (sha256 {sha256(c.team_deck_path)[:16]}), {m.team.solver}, run by {m.team.run_by} on {m.team.run_date}")),
-        ("Our model", escape(f"{c.spec_path.name} built by anisotropy-fea {fea_version} (deck sha256 {sha256(c.our_text)[:16]}), solved by our engine's "
+        ("Our model", escape(f"built by Anisotropy {fea_version} (deck sha256 {sha256(c.our_text)[:16]}), solved by our engine's "
                              "finite element kernel (four-node membrane element on the engine's laminate stiffness)")),
         ("Material source", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}" if lib is not None
                                    else c.material.source)),
         ("Compared", escape(f"{len(c.paired)} values ({', '.join(c.quantities)} at layers {', '.join(map(str, c.layers()))}) from the team's field reports")),
-        ("Built", escape(f"{manual.build_date()}, commit {git_commit()}, by docs/models/team.py")),
+        ("Built", escape(f"{manual.build_date()} by Anisotropy, build {git_commit()}")),
     ]
     return "\n".join([
         r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} THE TEAM'S MODEL AND OURS}\par\medskip",
@@ -415,8 +415,8 @@ def models_section(c: Comparison, figures: Path) -> str:
         rows.append([escape(item.item), escape(item.team), escape(item.ours), mark])
     difference, largest = c.kernel_both
     return "\n\n".join([
-        rf"The team built the coupon in Abaqus/CAE ({code(c.team_deck_path.name)}). We built it from a spec ({code(c.spec_path.name)}) with our model "
-        r"generator, which writes an Abaqus deck from it. Both decks were read by the same reader and compared item by item below. Nodes and "
+        rf"The team built the coupon in Abaqus/CAE ({code(c.team_deck_path.name)}). We built it from the model's inputs (Section~\ref{{sec:model}}) "
+        r"with our model generator, which writes an Abaqus deck from them. Both decks were read by the same reader and compared item by item below. Nodes and "
         r"elements are numbered differently in the two decks, so nodes are matched by position and elements by their corner nodes. "
         r"Names read ``same'' when they match and are only ``listed'' when they differ, because names do not change the solution. A coupling "
         r"is judged on its coupled nodes and settings, so it reads ``same'' when those agree, whatever each deck names it. Strengths are always "
@@ -448,7 +448,7 @@ def spec_note(spec_path: Path, key: str) -> str | None:
 def stated_in_spec(spec_path: Path, key: str) -> str:
     """Where a value our spec states comes from: the spec, and the note its line carries."""
     note = spec_note(spec_path, key)
-    return "stated in our spec" + (f", whose note says: {note}" if note else "")
+    return "stated in the model's inputs" + (f", whose note says: {note}" if note else "")
 
 
 def team_cell(team: float | None, ours: float, shown, unit: str = "") -> str:
@@ -608,7 +608,7 @@ def results_section(c: Comparison, figures: Path) -> str:
     parts.append(table(["", "Team (Abaqus)", "Ours (kernel)", escape(f"Ours in CalculiX {solver['version']}"), "Laminate theory"], rows,
                        r">{\raggedright\arraybackslash}p{3.2cm}YYYY", r"\footnotesize"))
     parts.append(rf"CalculiX is an independent solver run on our twin of the coupon with the grips written as direct constraints on the tab nodes "
-                 rf"({escape(solver['element_type'])} elements; record {code(c.calculix_record_path.name)}). The laminate theory column is the engine's "
+                 rf"({escape(solver['element_type'])} elements; our record of its run is summarised in Appendix~\ref{{app:record}}). The laminate theory column is the engine's "
                  rf"classical laminate theory for a uniaxial test over the {number(from_si(c.clt.free_length_m, 'length', c.units), 4)} {c.length_unit} "
                  r"free length with free lateral edges; the gripped tabs stop the width from contracting at the ends, which is why the models carry a little more "
                  r"force. The team's export has no reaction force, so that cell stays open (Section~\ref{sec:open}).")
@@ -631,7 +631,7 @@ def results_section(c: Comparison, figures: Path) -> str:
 
 def reading_section(c: Comparison) -> str:
     if not c.reading_path.exists():
-        return rf"No reading has been written yet ({code(c.reading_path.name)} beside the manifest)."
+        return r"No reading of the team comparison has been written yet."
     return manual.convert(c.reading_path.read_text(encoding="utf-8"))
 
 
@@ -671,8 +671,6 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
         (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
         (f"2-our-model/calculix/{c.twin_abaqus_path.name}", "the same twin in Abaqus format: what our engine solved for the comparison with "
                                                            "CalculiX; not the deck to build from"),
-        (f"2-our-model/spec/{c.spec_path.name}", "the spec our generator builds the deck from: every dimension, the seeds, the layup, the material record"),
-        (f"2-our-model/spec/{c.twin_spec_path.name}", "the spec of the CalculiX twin"),
         (f"3-material/{material_name(c)}.csv", "the material from our library: every value, its unit, basis and source page, and the source"
          if c.library is not None else "the team's own constants as given on the coupon input form: every value with its unit, and the source"),
         *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's {q} field report: same columns, the team's element numbers, "
@@ -728,7 +726,7 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
             unit = stress_unit if v.unit == "Pa" else (length_unit if v.unit == "m" else v.unit)
             writer.writerow([v.role, f"{shown:.10g}", unit, f"{v.source_value:.10g}", v.source_unit, v.basis, v.page, v.printed_page or "", v.reference_url])
         for name, value in (("G13", material.G13), ("G23", material.G23)):
-            writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
+            writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in the model's inputs", "", "", ""])
 
 
 def write_all_plies(path: Path, solution, deck, units: str, inverse: dict | None = None) -> None:
@@ -786,15 +784,13 @@ def write_package(folder: Path, fill) -> Path:
 
 def fill_share(c: Comparison, share: Path) -> None:
     """Every file of the package except the PDF, which is compiled into the folder afterwards, and the audit form."""
-    for sub in ("1-team-model", "2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
+    for sub in ("1-team-model", "2-our-model/abaqus", "2-our-model/calculix", "3-material", "4-results"):
         (share / sub).mkdir(parents=True, exist_ok=True)
     stem = c.spec_path.stem
     shutil.copy2(c.team_deck_path, share / "1-team-model" / c.team_deck_path.name)
     (share / "2-our-model/abaqus" / f"{stem}-abaqus.inp").write_text(c.our_text, encoding="utf-8", newline="\n")
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
     shutil.copy2(c.twin_abaqus_path, share / "2-our-model/calculix" / c.twin_abaqus_path.name)
-    shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
-    shutil.copy2(c.twin_spec_path, share / "2-our-model/spec" / c.twin_spec_path.name)
 
     write_material_csv(share / "3-material" / f"{material_name(c)}.csv", c.library, c.material, c.units)
 
@@ -821,7 +817,7 @@ def fill_share(c: Comparison, share: Path) -> None:
     lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
              *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
              f"{'Attempt:':14} {getattr(c, 'attempt', None) or 'none named'} (our attempt this package delivers)",
-             f"Built {manual.build_date()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
+             f"Built {manual.build_date()} by Anisotropy (version {fea_version}, build {git_commit()}).",
              "Start with the PDF. Numbers in the files are in " + f"{c.length_unit}, {c.stress_unit} and {c.force_unit}.", ""]
     width = max(len(path) for path, _ in share_contents(c))
     lines += [f"{path.ljust(width)}  {what}" for path, what in share_contents(c)]

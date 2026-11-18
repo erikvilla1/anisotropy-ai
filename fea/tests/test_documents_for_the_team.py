@@ -123,13 +123,14 @@ def test_the_team_reads_no_decision_record_numbers_and_finds_every_theory_sectio
     out = coupon.for_the_team(tex)
     assert "ADR-0030" not in out and "ADR-0004" not in out and "# a comment of the spec (ADR-0035)" in out  # a listing stays as the file is
     assert r"Sections~\ref{sec:engine-3} and~\ref{sec:engine-4}" in out and r"Section~\ref{sec:engine-5}" in out
-    assert "the engine manual, Sections 3 and 4" in coupon.for_the_team(tex, theory=False)  # no theory printed: no label to point to
+    # a coupon whose hand calculation stops before a section points to the chapter instead: no reference without its label
+    assert r"(Chapter~\ref{ch:physics}); see Chapter~\ref{ch:physics}." in coupon.for_the_team(tex, labelled={"sec:engine-3"})
     # the finite element theory names the engine's sections by title, which every document numbers its own way
     named = coupon.for_the_team("stiffness from the engine (engine theory, laminate stiffness; Whitney Eq. 10.5), recovery (engine theory, "
                                 "response to loads, ply surface recovery) and the criteria (engine theory, failure).")
     assert r"(Section~\ref{sec:engine-3}; Whitney" in named and r"(Section~\ref{sec:engine-4}, ply surface recovery)" in named
     assert r"(Section~\ref{sec:engine-5})" in named
-    assert "the engine manual, laminate stiffness" in coupon.for_the_team("(engine theory, laminate stiffness)", theory=False)
+    assert r"(Section~\ref{sec:engine-3})" in coupon.for_the_team("(engine theory, laminate stiffness)", labelled={"sec:engine-3"})
     fea_theory = (Path(__file__).parents[2] / "fea/docs/theory.md").read_text(encoding="utf-8")
     assert not re.search(r"\[engine theory\]\([^)]*\), Sections? \d", fea_theory)  # no number of the engine theory's own in the fea theory
 
@@ -181,14 +182,14 @@ def test_the_cover_names_the_points_the_record_compares(coupon):
 
 def test_the_physics_row_says_who_judges_each_check(coupon):
     audit = sys.modules["anisotropy_models_audit"]
-    rows = audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", spec="2-our-model/spec/X.toml",
+    rows = audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp",
                                 physics=(("Equilibrium", "our tools judge"), ("Mesh convergence where the stress peaks", "not built yet")))
     physics = dict(rows)["Physics"]
     assert "equilibrium (our tools judge)" in physics and "mesh convergence where the stress peaks (not built yet)" in physics
     # the README has its steps only in a package with every output: without them the model row names the job, never "steps 1 to 4"
     job = "abaqus job=X input=2-our-model/abaqus/X-abaqus.inp interactive"
-    bare = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", spec="2-our-model/spec/X.toml", physics=(), job=job))
-    full = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", spec="2-our-model/spec/X.toml", physics=(), job=job,
+    bare = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", physics=(), job=job))
+    full = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", physics=(), job=job,
                                      every_output=True))
     assert "README" not in bare["The model"] and f"our deck ({job})" in bare["The model"] and "(README.txt, steps 1 to 4)" in full["The model"]
 

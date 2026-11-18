@@ -542,7 +542,7 @@ def transverse_text(t, units: str) -> str:
         return ("None: the material is isotropic, stated by E and nu alone, and both decks write it so "
                 "(Abaqus *Elastic, CalculiX *ELASTIC, TYPE=ISO)")
     mpa = lambda v: from_si(v, "stress", units)  # noqa: E731  the loaded spec is in SI
-    stated =f"G13 {mpa(t.G13):g} and G23 {mpa(t.G23):g} {UNIT_LABEL[units]['stress']}, stated in the spec. "
+    stated =f"G13 {mpa(t.G13):g} and G23 {mpa(t.G23):g} {UNIT_LABEL[units]['stress']}, stated in the model's inputs. "
     if t.plane_stress:
         return stated + ("CalculiX's brick also needs E3, nu13 and nu23: the deck writes E3 = E2 (transverse isotropy) and nu13 = nu23 = 0 "
                          "(plane_stress = true), so that its response in the plane is the plane-stress one of Abaqus LAMINA and of our engine")
@@ -674,12 +674,14 @@ def theory_section() -> str:
             + "\n\n" + manual.theory("anisotropy_fea"))
 
 
-def reference_section(record: dict, record_path: Path, where=rel) -> str:
+def reference_section(record: dict, record_path: Path, where=rel, listings: bool = True) -> str:
     """The reference solver, its known differences, its conventions and its deck; `where(path)` is how a file is named (the coupon
-    document names a file by its copy in the package, or by its name when it is kept with us)."""
+    document names a file by its copy in the package, or by its name when it is kept with us). Without `listings` (the coupon document,
+    ADR-0112) no file of ours is printed: the conventions are a table of their values, the deck is named by its file and digest."""
     solver = record["solver"]
     base = record_path.parent
-    shown = lambda k, v: where((base / v).resolve()) if k == "conventions" else f"read from its .{v} output file" if k == "source" else str(v)  # noqa: E731
+    shown = lambda k, v: (where((base / v).resolve()) if listings else "detected by running the solver; listed below") if k == "conventions" \
+        else f"read from its .{v} output file" if k == "source" else str(v)  # noqa: E731
     facts = [(escape(k.replace("_", " ").capitalize()), escape(shown(k, v))) for k, v in solver.items()]
     out = [kv_table(facts)]
     known = record.get("known_differences", {})
@@ -693,8 +695,13 @@ def reference_section(record: dict, record_path: Path, where=rel) -> str:
         if not named.is_file():  # said, not substituted silently (ADR-0003)
             out.append(escape(f"The record names the conventions file {conventions_name}, which is not found from the record's folder; the file "
                               f"shown is the one our tools use today, {where(fea_paths.CONVENTIONS)}."))
-        if conventions_path.is_file():
-            conventions = tomllib.loads(conventions_path.read_text(encoding="utf-8"))
+        if conventions_path.is_file() and not listings:
+            out.append(heading(1, "How the solver reports composite results (detected, not assumed)"))
+            out.append(r"The mapping from the solver's output to our per-ply quantities depends on its layer order, integration-point order, axes and "
+                       r"shear-strain convention. They were detected by running the solver on small models whose answer is known, and a run on another "
+                       r"major version is refused until the detection is repeated:")
+            out.append(kv_table(conventions_rows(conventions_path)))
+        elif conventions_path.is_file():
             out.append(heading(1, "How the solver reports composite results (detected, not assumed)"))
             out.append(rf"The mapping from the solver's output to our per-ply quantities depends on its layer order, integration-point order, axes and shear-strain "
                        rf"convention. They were detected by running the solver and are recorded in {code(where(conventions_path))}; the record tool refuses a run on another "
@@ -708,13 +715,25 @@ def reference_section(record: dict, record_path: Path, where=rel) -> str:
     else:
         comments = header_comments(reference_deck)
         out.append(kv_table([("File", code(where(reference_deck))), ("SHA-256", code(record["deck_reference_sha256"]))]))
-        out.append("Its header states what was written and why:")
-        if comments:
+        if listings:
+            out.append("Its header states what was written and why:")
+        if comments and listings:
             out.append(r"\begin{plainfile}" + "\n" + listing_text("\n".join(comments)) + "\n" + r"\end{plainfile}")
     return "\n\n".join(out)
 
 
-def method_section(record: dict) -> str:
+def conventions_rows(path: Path) -> list[tuple[str, str]]:
+    """The printed part of a solver's conventions file as the rows of a table, its values in words: what a document without listings
+    shows in place of the file."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    last = printed_part(path)
+    values = tomllib.loads("\n".join(lines[:last] if last is not None else lines))
+    return [(escape(key.replace("_", " ").capitalize()), escape(str(value))) for key, value in values.items()]
+
+
+def method_section(record: dict, listings: bool = True) -> str:
+    """How the reference solver's numbers are mapped and judged; without `listings` (the coupon document, ADR-0112) in words and
+    equations alone, no line of our code."""
     solver = record["solver"]
     out = [
         r"A record stores the reference solver's numbers in the deck's units with their provenance and both decks' digests; the kernel is run on the kernel "
@@ -722,8 +741,8 @@ def method_section(record: dict) -> str:
         r"\begin{equation*} |\,\text{kernel} - \text{reference}\,| \le \text{tolerance} \times \max\bigl(|\text{reference}|,\ \text{floor} \times \max_\text{group} |\text{reference}|\bigr), \end{equation*}"
         r"so a component that is small against its group (a roundoff-sized shear stress beside the axial stress of a 0-degree ply) is judged against the group's "
         r"largest magnitude and not against itself. A component the solver did not report is written \texttt{nan} and skipped. A changed deck is noticed by its "
-        r"digest before any number is compared. The code:",
-        listing("validate_record"), listing("compare_record"), listing("record_disagreements"),
+        r"digest before any number is compared." + (r" The code:" if listings else ""),
+        *((listing("validate_record"), listing("compare_record"), listing("record_disagreements")) if listings else ()),
     ]
     if solver["source"] == "dat":
         out.append(heading(1, "From the CalculiX .dat to our quantities"))
@@ -731,6 +750,8 @@ def method_section(record: dict) -> str:
                    r"reaction is the printed total over the grip node set; the per-ply values are the mean of each layer's integration points, grouped by their "
                    r"$z$ coordinate using the detected conventions, then rotated into the ply's material axes with the engine's transformations; the printed tensor "
                    r"shear strain is doubled into engineering shear.")
+        if not listings:
+            return "\n\n".join(out)
         out.append(listing("parse_dat"))
         out.append(listing("layer_values"))
         out.append(listing("reference_quantities"))
@@ -745,6 +766,8 @@ def method_section(record: dict) -> str:
         out.append(r"Abaqus/CAE writes one row per element and section point (Report, Field Output). The reader requires the integration point to be 1, so the "
                    r"value is the element centroid's, takes the layer from the section-point text with layer 1 at the bottom, accepts repeated header blocks, and "
                    r"refuses anything else by line. Several reports map into the record's ply tables; a component no report holds is \texttt{nan}; Mises goes to its own group.")
+        if not listings:
+            return "\n\n".join(out)
         out.append(listing("read_field_report"))
         out.append(listing("report_quantities"))
         out.append(listing("ply_mises"))
