@@ -11,6 +11,9 @@ if (!ENGINES.includes(engine)) throw new Error(`BROWSER=${engine}: one of ${ENGI
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: false,
+  // On CI, a spec that fails in Firefox or WebKit runs once more, and the report names it flaky (ADR-0114): a runner draws their
+  // pages in software at a few frames a second, and a click or a fade now and then lands between frames. Chromium never retries.
+  retries: process.env.CI && engine !== "chromium" ? 1 : 0,
   use: {
     baseURL: process.env.PREVIEW_URL || "http://localhost:3001",
     browserName: engine,
