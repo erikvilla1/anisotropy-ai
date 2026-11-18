@@ -29,7 +29,7 @@ from anisotropy_api.coupon_jobs import FEA, CouponJobs, Job
 from anisotropy_api.main import app, job_recorder
 from anisotropy_api.records import fetch_job, fetch_upload, insert_job, update_job
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, AccessSettings
-from anisotropy_api.storage import FolderStore
+from anisotropy_api.storage import FolderStore, coupons_prefix, owner_key
 
 from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
 from conftest import TEST_URL, needs_test_database
@@ -121,16 +121,26 @@ def run_on_this_disk(registry: CouponJobs, engine, made: Path, actor: str = "stu
     return job_id
 
 
-def run_in_the_bucket(registry: CouponJobs, engine, made: Path, email: str = EMAIL) -> uuid.UUID:
-    """A finished job another container ran: its row in the jobs table, its package as the zip the store keeps."""
+def folder_of(email: str | None) -> tuple[str, str]:
+    """Where a job's coupon is kept (ADR-0106): the store's prefix and the folder on the disk from the repository's root, a signed-in
+    person's own by their key, or the shared one for None. Named only, never written: the disk's folder is the repository's own."""
+    if email is None:
+        return coupons_prefix(None), ".local/fea/"
+    return coupons_prefix(owner_key(email)), f".local/fea-owners/{owner_key(email)}/"
+
+
+def run_in_the_bucket(registry: CouponJobs, engine, made: Path, email: str = EMAIL, own_folder: bool = False) -> uuid.UUID:
+    """A finished job another container ran: its row in the jobs table, its package as the zip the store keeps; with `own_folder`,
+    under its owner's own folder of coupons, as a solver stores a signed-in person's job since ADR-0106."""
     job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
     name = f"2026-11-13_{COUPON}"
+    prefix, disk = folder_of(email if own_folder else None)
     archive = shutil.make_archive(str(registry.root / f"{job_id}-package"), "zip", root_dir=made / "package", base_dir=name)
-    key = f"coupons/{COUPON}/attempt-01/package.zip"
+    key = f"{prefix}{COUPON}/attempt-01/package.zip"
     registry.store.put(key, Path(archive), "application/zip")
     insert_job(engine, job_id=job_id, actor="browser", user_email=email, inputs={"coupon": COUPON}, started_at=now, process="another-container")
     update_job(engine, job_id, state="done", coupon=COUPON, attempt="attempt-01", finished_at=now, stored={"package": key},
-               outputs={"package": f".local/fea/{COUPON}/documents/{name}"})
+               outputs={"package": f"{disk}{COUPON}/documents/{name}"})
     return job_id
 
 
@@ -290,7 +300,8 @@ def test_the_connector_is_handed_out_as_one_zip_the_same_each_time_and_only_as_r
         assert sorted(archive.namelist()) == [
             "README.txt", "SECURITY.txt", "SHA256SUMS.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_build.py",
             "anisotropy_connector.py", "anisotropy_link.py", "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # at the zip's top
-        assert archive.read("anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
+        # the zip holds the repository's line endings, whatever a checkout on Windows turned them into (`connector_members`)
+        assert archive.read("anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes().replace(b"\r\n", b"\n")
         note = client.get(CONNECTOR_ZIP + "/security-note")  # the same words before anything is downloaded
         assert note.status_code == 200 and note.headers["content-type"].startswith("text/plain") and note.content == archive.read("SECURITY.txt")
     assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / name).is_file()
@@ -609,9 +620,10 @@ def load_tool(name: str):
     return module
 
 
-def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_path: Path, text: str = BUILD_SCRIPT) -> None:
+def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_path: Path, text: str = BUILD_SCRIPT, own_folder: bool = False) -> None:
     """Give a finished job the build script the tool writes for an unnotched tension coupon: on the disk for a job of this process,
-    in the store for one that another container ran. `text` is a stand-in, or the script our writer wrote (`made / "build.py"`)."""
+    in the store for one that another container ran, under its owner's own folder of coupons with `own_folder` (ADR-0106). `text` is
+    a stand-in, or the script our writer wrote (`made / "build.py"`)."""
     job = registry.jobs.get(job_id)
     if job is not None:
         path = job.folder / f"{COUPON}_build.py"
@@ -620,10 +632,11 @@ def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_pat
         return
     source = tmp_path / f"{job_id}_build.py"
     source.write_text(text, encoding="utf-8")
-    key = f"coupons/{COUPON}/attempt-01/{COUPON}_build.py"
-    registry.store.put(key, source, "text/x-python")
     row = fetch_job(engine, job_id)
-    update_job(engine, job_id, stored={**row.stored, "abaqus_build": key}, outputs={**row.outputs, "abaqus_build": f".local/fea/{COUPON}/ours/{COUPON}_build.py"})
+    prefix, disk = folder_of(row.user_email if own_folder else None)
+    key = f"{prefix}{COUPON}/attempt-01/{COUPON}_build.py"
+    registry.store.put(key, source, "text/x-python")
+    update_job(engine, job_id, stored={**row.stored, "abaqus_build": key}, outputs={**row.outputs, "abaqus_build": f"{disk}{COUPON}/ours/{COUPON}_build.py"})
 
 
 def test_without_run_records_a_machine_is_not_connected(monkeypatch):
@@ -808,6 +821,30 @@ def test_behind_access_the_coupon_passes_on_the_owners_token_only_when_the_setti
     for answer in (client.get(f"{RUNS}/{mine}/coupon/", headers=bearer), client.post(f"{RUNS}/{mine}/coupon", headers=bearer),
                    client.get(f"{RUNS}/{mine}/coupons", headers=bearer), client.delete(f"{RUNS}/{mine}/coupon", headers=bearer)):
         assert answer.status_code == 401 and "behind Cloudflare Access" in answer.json()["detail"]
+
+
+def test_behind_access_a_run_in_its_owners_own_folder_goes_to_that_owners_pc_and_to_no_other(hosted, made, monkeypatch, tmp_path):
+    """Since ADR-0106 a signed-in person's job is stored under their own folder of coupons. The coupon route finds the run's build
+    script by the key the job stored, never by a folder, and keeps its own owner check by the key's owner (a machine carries a key and
+    no sign-in): each person's PC gets the coupon of their own run, and the other's run is 404 in the words of a run there is none of.
+    The jobs are read back from their rows, as the API's container has them under the job queue."""
+    client, registry, _store, engine = hosted
+    monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    real = (made / "build.py").read_text(encoding="utf-8")
+    runs = {email: run_in_the_bucket(registry, engine, made, email=email, own_folder=True) for email in (EMAIL, OTHER)}
+    for email, job_id in runs.items():
+        with_a_build_script(registry, engine, job_id, tmp_path, real, own_folder=True)
+        assert fetch_job(engine, job_id).stored["abaqus_build"].startswith(f"owners/{owner_key(email)}/coupons/{COUPON}/")
+    assert runs[EMAIL] not in registry.jobs and runs[OTHER] not in registry.jobs  # nothing of this process: read back from the rows
+    keys = {email: client.post(TOKENS, json={"name": "workstation"}, headers=signed(email)).json()["token"] for email in runs}
+    for email, other in ((EMAIL, OTHER), (OTHER, EMAIL)):
+        bearer = {"Authorization": f"Bearer {keys[email]}", **NOBODY}
+        answer = client.get(f"{RUNS}/{runs[email]}/coupon", headers=bearer)
+        assert answer.status_code == 200, answer.text
+        assert answer.json() == abaqus_coupon.coupon_data(real, COUPON)
+        for route in ("coupon", "build-script"):
+            refused = client.get(f"{RUNS}/{runs[other]}/{route}", headers=bearer)
+            assert refused.status_code == 404 and refused.json()["detail"] == f"No run {runs[other]} of yours"
 
 
 def test_the_connectors_routes_are_four_and_no_path_beside_them():

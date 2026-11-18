@@ -1,7 +1,7 @@
 Anisotropy connector 0.7.0 for Abaqus/CAE on Windows: security note
 ====================================================================
 
-For the person who decides whether this may be installed. Checked against the connector's code on 2026-11-14.
+For the person who decides whether this may be installed. Checked against the connector's code on 2026-11-17.
 The source is public: https://github.com/erikvilla1/anisotropy-ai  (folder fea/tools; this note is
 fea/tools/anisotropy_security.txt there).
 
@@ -141,13 +141,21 @@ Only the connector's own files: the ones in the zip, whose checksum is recorded 
 
 9. What the site keeps
 
-- The zip, in object storage (Cloudflare R2), and one database row (PostgreSQL at Neon) with the owner, the zip's
-  SHA-256 and the comparison.
+- The zip, in object storage (Cloudflare R2), and one database row (PostgreSQL at Neon, on AWS in the region
+  us-west-2, Oregon) with the owner, the zip's SHA-256 and the comparison.
 - An upload is visible to its owner. The Anisotropy founders can list, open and download uploads; they cannot
   compare them again or delete them.
 - The zip is read as data. Nothing in it is executed on the server. A journal is stored as text.
+- A person's runs, their files and their coupons are theirs alone on the site: no other user can list or open them,
+  the founders included. As the operators of the storage and the database, the founders can still read what is held
+  there.
 - Uploads are not used to train any model and are not sent to an AI provider.
-- Remove on the run's page deletes the zip and then the row.
+- When a person writes to the site's assistant, their message and the facts the answer needs from their page (the
+  setup's values, or what our engine computed for the run) go to Anthropic's API, which writes the words of the
+  answer. The model sees no file, no deck and nothing of an upload. A number it writes is shown only when our engine
+  computed it or the person wrote it.
+- Remove on the run's page deletes the zip and then the row. The database keeps its history for 6 hours: for that
+  long a deleted row can still be restored, and not after.
 
 
 10. How to remove it
@@ -168,9 +176,9 @@ folder %USERPROFILE%\Anisotropy holds the user's own models and is left in place
 - No terms of use, no data processing agreement, no SOC 2 and no ISO 27001.
 - The repository's licence allows the code to be read. It does not yet grant a company the right to use it.
 - Nobody outside the team has reviewed the connector or the site's API.
-- Uploads are private to their owner, but the runs on the site are not yet scoped per user: every signed-in user
-  of the invite list can see them.
+- That a person's runs are theirs alone (section 9) has not yet been tried with two sign-ins on the hosted site.
+- Nothing is in place for export-controlled (ITAR, EAR) or classified data. Such data should not be sent.
 - A key does not expire. It lives until its owner cancels it.
 - An administrator cannot fix the address or turn sending off for all users of a PC.
-- Not checked for this note: the region where the storage and the database are held, how long backups keep a
-  deleted upload, and what the hosting provider logs of a request.
+- Not checked for this note: the region where the storage is held, whether the storage keeps a removed file
+  anywhere, and what the hosting provider logs of a request.
