@@ -315,7 +315,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   await expect(page.getByTestId("preview")).toContainText("Click an element to hold or load");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
-  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed on a CI runner that ran every test of this file at half speed (10.2 min for the suite), as for the bending coupon above
   await expect(page.getByTestId("summary-reaction")).toContainText("holding the plate down");
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (mm)");
