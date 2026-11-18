@@ -79,6 +79,15 @@
 .ws-tree-fields button:hover { border-color: var(--muted); }
 .ws-tree-fields button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 .ws-tree-ply { margin-top: 10px; }
+/* History (ADR-0113): newest version first, who and why on one line, what changed under it, the run's answer last */
+.ws-history { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.ws-history > li { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.ws-history-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.ws-history-pick { display: inline-flex; align-items: center; gap: 6px; }
+.ws-history-meta { color: var(--muted); font-size: 12px; flex: 1 1 auto; min-width: 0; }
+.ws-history-changes { margin: 6px 0 0; padding-left: 18px; line-height: 1.45; }
+.ws-history-run { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.ws-history-compare { margin: 10px 0; }
 /* a check's warning, in the tab it is about (ADR-0111 amendment 2) */
 .ws-tree-warnings { list-style: none; margin: 10px 0 0; padding: 8px 10px; border: 1px solid #5b4a24; border-radius: 6px; background: #221d12; color: #eadcb8; font-size: 13px; line-height: 1.45; }
 .ws-tree-warnings li + li { margin-top: 6px; }

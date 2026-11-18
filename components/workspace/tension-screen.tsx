@@ -20,6 +20,7 @@ import { useProject } from "@/components/studio/project-context";
 import { shownResults } from "@/components/studio/use-coupon-run";
 import { StepPanel } from "./panels/step-panel";
 import { ResultsTab } from "./results-tab";
+import { HistoryTab } from "./history-tab";
 
 const TENSION = "unnotched tension";
 const OWN = "own";
@@ -32,7 +33,7 @@ const OWN = "own";
  * analysis, above the tree, runs the setup check and, when it is ready, the full analysis; the report and the solver input appear under
  * Results (ADR-0091 amendment 2). */
 export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, setForm, plate, setPlate, run: runner, imports, plates, offersAll, imported, emphasis, setEmphasis } = useProject();
+  const { form, setForm, plate, setPlate, run: runner, imports, plates, offersAll, imported, emphasis, setEmphasis, versions } = useProject();
   const { checking, checked, job, fields, problem } = runner;
   const [layup, setLayup] = useState(() => layupNotation(form));
   const [layupError, setLayupError] = useState("");
@@ -289,6 +290,11 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
 
       <StepPanel id="outputs" title="Results" step={10} open={available.length > 0 || Boolean(fields)} note={results ? undefined : "after the analysis"}>
         <ResultsTab apiBaseUrl={apiBaseUrl} />
+      </StepPanel>
+
+      {/* every version of the setup, who made it and why, and the run made from it (ADR-0113): after the tree, as a program's history is */}
+      <StepPanel id="history" title="History" open={false} note={`${versions.list.length} version${versions.list.length === 1 ? "" : "s"}`}>
+        <HistoryTab />
       </StepPanel>
     </div>
   );

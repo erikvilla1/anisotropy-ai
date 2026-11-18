@@ -497,7 +497,7 @@ test.describe("the model tree", () => {
     await page.goto("/workspace/fea");
     const screen = page.getByTestId("tension-screen");
     await expect(screen.locator(".ws-panel-title")).toHaveText(["Test", "Geometry", "Material", "Layup", "Analysis step", "Boundary conditions", "Loads",
-      "Mesh", "Solve", "Results"]);
+      "Mesh", "Solve", "Results", "History"]);
     const said = (await screen.innerText()).toLowerCase();
     for (const word of ["abaqus", "ansys", "calculix", "change settings", "model settings"]) expect(said).not.toContain(word);
     await expect(page.getByTestId("panel-step")).toContainText("Static, linear");
@@ -516,6 +516,11 @@ test.describe("the model tree", () => {
     await expect(page.locator("#studio-element_size")).toHaveValue("4");
     await expect(mesh.locator(".ws-panel-note")).toContainText("4 mm elements"); // and the count once the preview has meshed it
     await page.screenshot({ path: ".local/website/screenshots/model-tree-chat-change.png" });
+    // the change is kept as a version, said to come from the assistant and the message (ADR-0113)
+    const history = page.getByTestId("panel-history");
+    await history.locator("summary").click();
+    const byChat = history.locator("li[data-by=assistant]").filter({ hasText: "use 4 mm elements" });
+    await expect(byChat).toContainText("→ 4");
 
     await page.getByTestId("build-button").click();
     await expect.poll(() => calls.solves.length).toBe(1);
@@ -555,6 +560,27 @@ test.describe("the model tree", () => {
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "false");
     await tree.locator("button[data-field=S11]").click();
     await page.screenshot({ path: ".local/website/screenshots/model-tree-after-run.png" });
+    // the model's own view buttons: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
+    await expect(scene).toHaveAttribute("data-shown", "mesh conditions loads");
+    await page.getByTestId("show-conditions").click();
+    await expect(scene).toHaveAttribute("data-shown", "mesh loads");
+    await expect(page.getByTestId("show-conditions")).toHaveAttribute("aria-pressed", "false");
+    await page.getByTestId("show-conditions").click();
+    await page.getByTestId("view-top").click();
+    await expect(scene).toHaveAttribute("data-view", "top");
+    await page.getByTestId("view-fit").click();
+    await expect(scene).toHaveAttribute("data-view", "home");
+    // the run's answer is kept on the version it was made from; two versions compare; going back is a new version (ADR-0113)
+    await expect(history).toHaveAttribute("open", ""); // still open from the chat's change
+    await expect(byChat.locator("[data-testid^=version-run-]")).toContainText("Run: Holds, R =");
+    const ticks = history.locator("input[type=checkbox]");
+    await ticks.nth(0).check();
+    await ticks.nth(1).check();
+    await expect(page.getByTestId("history-compare")).toContainText("First-ply failure");
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-history.png" });
+    await page.getByTestId("history-undo").click();
+    await expect(page.locator("#studio-element_size")).toHaveValue("2"); // the blank form's own, before the message
+    await expect(history.locator("ol.ws-history > li").first()).toContainText("Back to version", { timeout: 5_000 });
     expect(browserErrors).toEqual([]);
   });
 

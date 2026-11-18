@@ -21,7 +21,7 @@ export type VersionsState = {
 
 /** The versions of the project's setup (ADR-0113), kept in this browser per project: a settled change adds one, a run marks the version it
  * was made from and its answer is kept there. Nothing here computes a number: a run's line is the package's values, printed. */
-export function useVersions(project: string, form: StudioForm, plate: PlateLists, run: Pick<CouponRun, "job" | "fields" | "loadedJob">,
+export function useVersions(project: string, form: StudioForm, plate: PlateLists, run: Pick<CouponRun, "job" | "fields" | "loadedJob" | "clearChecked" | "clearResults">,
   setForm: (next: StudioForm) => void, setPlate: (next: PlateLists) => void, storage: () => Storage | null): VersionsState {
   const [list, setList] = useState<ModelVersion[]>([]);
   const loaded = useRef<string | null>(null);
@@ -70,13 +70,17 @@ export function useVersions(project: string, form: StudioForm, plate: PlateLists
     setList((l) => withResult(l, done, result));
   }, [run.loadedJob]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const attribute = useCallback((by: ModelVersion["by"], why: string | null) => { next.current = { by, why, at: Date.now() }; }, []);
+  // a change still settling is kept as it stands first, so the engineer's typing is never put down to the assistant's message
+  const attribute = useCallback((by: ModelVersion["by"], why: string | null) => { settle(); next.current = { by, why, at: Date.now() }; }, [settle]);
   const restore = useCallback((n: number) => {
     const version = list.find((v) => v.n === n);
     if (!version || setupKey(version.form, version.plate) === setupKey(setup.current.form, setup.current.plate)) return;
+    settle();
     next.current = { by: "you", why: `Back to version ${n}`, at: Date.now() };
     setForm(version.form);
     setPlate(version.plate);
-  }, [list, setForm, setPlate]);
+    run.clearChecked(); // the check and the results shown were of another setup; the live solve answers this one again
+    run.clearResults();
+  }, [list, setForm, setPlate, settle, run]);
   return useMemo(() => ({ list, attribute, restore }), [list, attribute, restore]);
 }
