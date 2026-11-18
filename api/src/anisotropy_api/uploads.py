@@ -46,7 +46,8 @@ DOCUMENT_TIMEOUT_S = 180.0
 OURS = ("4-results", "ours-every-output.csv")
 OUR_DECKS = ("2-our-model", "abaqus")
 OUR_DECK_ENDING = "-abaqus.inp"
-CONNECTOR_NAME = "anisotropy-connector.zip"
+CONNECTOR_RELEASES = FEA / "tools" / "connector-releases.json"  # each version of the connector with the SHA-256 of its zip (ADR-0094 amendment 3)
+CONNECTOR_NOTE = FEA / "tools" / "anisotropy_security.txt"  # what the connector installs, reads and sends; SECURITY.txt in its zip
 
 
 class UploadRefused(Exception):
@@ -55,6 +56,20 @@ class UploadRefused(Exception):
     def __init__(self, problems):
         self.problems = [str(problem) for problem in problems]
         super().__init__("; ".join(self.problems))
+
+
+def connector_release(path: Path = CONNECTOR_RELEASES) -> dict:
+    """The connector's version as the repository records it and the SHA-256 of that version's zip: {"version", "sha256", "name"}.
+    Read with no tool, since it is one small file; `ToolFailed` when it is not there or not that."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        version = record["current"]
+        sha256 = record["releases"][version]["sha256"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ToolFailed(f"the connector's release record cannot be read: {exc}") from exc
+    if not isinstance(version, str) or not isinstance(sha256, str) or not version.replace(".", "").isdigit() or len(sha256) != 64:
+        raise ToolFailed("the connector's release record names no version with a checksum")
+    return {"version": version, "sha256": sha256, "name": f"anisotropy-connector-{version}.zip"}
 
 
 class ToolFailed(RuntimeError):
@@ -149,16 +164,18 @@ class Uploads:
             raise ToolFailed("the bundle's command failed: " + (" | ".join(tail) or f"exit code {done.returncode}")) from None
 
     def connector(self) -> Path:
-        """The connector's files as one zip to hand to a user of Abaqus (`abaqus_upload.py connector`), written once per process: the
-        same files give the same bytes."""
+        """The connector's files as one zip to hand to a user of Abaqus (`abaqus_upload.py connector`), written once per process and
+        named for its version. It is handed out only when its SHA-256 is the one recorded for that version: the zip is the same
+        bytes on every machine, so a zip that differs is not the recorded connector and is not given to anyone (amendment 3)."""
         if self._connector is not None and self._connector.is_file():
             return self._connector
+        release = connector_release()
         if self.command is None:
             raise ToolFailed("uv is not on PATH; the connector's zip is written by fea/tools/abaqus_upload.py through `uv run --project fea`")
-        made = self.scratch / "connector" / CONNECTOR_NAME  # written again by each process: a file left by an older one may be an older connector
+        made = self.scratch / "connector" / release["name"]  # written again by each process: a file left by an older one may be an older connector
         made.parent.mkdir(parents=True, exist_ok=True)
         with self.folder() as folder:
-            fresh = Path(folder) / CONNECTOR_NAME
+            fresh = Path(folder) / release["name"]
             env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
             try:
                 done = subprocess.run([*self.command, "connector", "--out", str(fresh)], capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -168,6 +185,8 @@ class Uploads:
             if done.returncode != 0 or not fresh.is_file():
                 tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
                 raise ToolFailed("the connector's zip was not written: " + (" | ".join(tail) or f"exit code {done.returncode}"))
+            if hashlib.sha256(fresh.read_bytes()).hexdigest() != release["sha256"]:
+                raise ToolFailed(f"the zip written here is not the one recorded for version {release['version']} (its SHA-256 differs), so it is not handed out")
             os.replace(fresh, made)  # whole or not there: two requests at once write the same bytes
         self._connector = made
         return made

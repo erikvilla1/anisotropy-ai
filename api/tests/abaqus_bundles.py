@@ -10,6 +10,7 @@ It solves the public D3039 check with our kernel and writes, under <folder>:
     differs.zip                             the same with every reaction 5 % larger: the pull force differs
     unnamed.zip                             the first again, naming no coupon of ours
     out-of-scope.zip                        a bundle of version 1 whose deck our reader does not take
+    build.py                                the script that builds that coupon in Abaqus/CAE, as a run stores it
 
 No Abaqus runs here: their side is our own run, as in fea/tests/test_abaqus_upload.py. This file is run by the fea environment and
 imported by nothing.
@@ -28,6 +29,7 @@ from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.spec import load_spec
 from anisotropy_fea.units import from_si
 from anisotropy_fea.write_abaqus import write_abaqus
+from anisotropy_fea.write_cae_script import write_cae_script
 
 SPEC = paths.CHECKS / "d3039-im7-8552" / "d3039-im7-8552.toml"
 COUPON = "D3039-CHECK"
@@ -63,6 +65,7 @@ def main(folder: Path) -> None:
     deck = package / "2-our-model" / "abaqus" / f"{COUPON}-abaqus.inp"
     deck.write_text(write_abaqus(build_model(spec)), encoding="utf-8", newline="\n")
     (package / "2-our-model" / "abaqus" / f"{COUPON}-build.py").write_text("# the build script lives beside the deck in a package\n", encoding="utf-8")
+    (folder / "build.py").write_text(write_cae_script(build_model(spec)), encoding="utf-8", newline="\n")
     solution = solve_deck(read_deck(deck, "mm-MPa"))
     write_ours(package / "4-results" / "ours-every-output.csv", package / "4-results" / "ours-every-output.json", spec, solution, "mm-MPa", COUPON,
                "S4", "test")

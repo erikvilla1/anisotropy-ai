@@ -4,6 +4,7 @@ keeps where Abaqus's command is. The registry is a stand-in that records what wa
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -64,7 +65,14 @@ def folder(connector, tmp_path):  # noqa: F811
     for name in connector.FILES:
         source = (TOOLS.parent / "src" / "anisotropy_fea" if name == "bundle.py" else TOOLS) / name
         (there / name).write_bytes(source.read_bytes())
+    list_the_files(there)
     return there
+
+
+def list_the_files(there: Path) -> None:
+    """The list of checksums the connector's zip carries, written for the files that are in the folder now."""
+    (there / "SHA256SUMS.txt").write_text("".join(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
+                                                  for path in sorted(there.iterdir()) if path.name != "SHA256SUMS.txt"), encoding="utf-8")
 
 
 def python_at(tmp_path: Path, name: str = "python.exe") -> Path:
@@ -88,12 +96,13 @@ def test_the_setup_copies_the_menu_registers_the_link_for_the_user_alone_and_kee
     target, state = tmp_path / "home" / "abaqus_plugins" / "anisotropy", tmp_path / "home" / ".anisotropy"
     run, started = runs()
     assert setup.set_up(said.append, folder, target, state, registry, str(python), run, lambda name: "C:\\SIMULIA\\Commands\\abaqus.BAT") == 0
-    assert sorted(p.name for p in target.iterdir()) == sorted(setup.FILES)
+    assert sorted(p.name for p in target.iterdir()) == sorted((*setup.FILES, "SHA256SUMS.txt"))  # the list goes with them
     assert registry.keys == {"Software\\Classes\\anisotropy": {"": "URL:Anisotropy", "URL Protocol": ""},
                              "Software\\Classes\\anisotropy\\shell\\open\\command": {"": f'"{python}" -I "{target / "anisotropy_link.py"}" "%1"'}}
     assert started == [[str(python), "-I", "-c", setup.PROBE]]  # the Python was tried on its own before it was registered
     assert json.loads((state / "machine.json").read_text()) == {"abaqus": "C:\\SIMULIA\\Commands\\abaqus.BAT"}
-    assert said[0].startswith(f"1. The menu: {len(setup.FILES)} files copied to {target}") and "for this Windows user alone" in said[1] and "Connect this PC" in said[-1]
+    assert said[0] == f"0. The files: {len(setup.FILES)} checked against SHA256SUMS.txt."  # before anything is copied or registered
+    assert said[1].startswith(f"1. The menu: {len(setup.FILES)} files copied to {target}") and "for this Windows user alone" in said[2] and "Connect this PC" in said[-1]
 
     (state / "machine.json").write_text(json.dumps({"address": "https://anisotropy.example/api", "owner": "engineer@example.com"}))
     assert setup.set_up(said.append, target, target, state, registry, str(python), run, lambda name: "D:\\abaqus.bat") == 0  # again, from the installed folder
@@ -121,7 +130,7 @@ def test_the_registered_command_names_a_program_never_a_batch_file_and_a_python_
     assert setup.set_up(said.append, folder, target, state, registry, str(beside), run, lambda name: None) == 0
     assert registry.keys["Software\\Classes\\anisotropy\\shell\\open\\command"][""] == f'"{python}" "{target / "anisotropy_link.py"}" "%1"'
     assert [c[:2] for c in started] == [[str(beside), "-I"], [str(beside), "-c"], [str(python), "-I"], [str(python), "-c"]]
-    assert "Abaqus's command was not found on PATH" in said[2]
+    assert "Abaqus's command was not found on PATH" in said[3]
 
     registry, said = Registry(), []
     assert setup.set_up(said.append, folder, target, state, registry, str(beside), runs(lambda command: False)[0], lambda name: None) == 1
@@ -134,11 +143,45 @@ def test_the_registered_command_names_a_program_never_a_batch_file_and_a_python_
 def test_without_windows_the_menu_is_installed_and_no_link_is_registered_and_a_folder_missing_a_file_is_refused(setup, folder, tmp_path):
     target, state, said = tmp_path / "home" / "abaqus_plugins" / "anisotropy", tmp_path / "home" / ".anisotropy", []
     assert setup.set_up(said.append, folder, target, state, None, "python", None, lambda name: "/opt/abaqus/Commands/abaqus") == 0
-    assert "not registered, because they are for Windows" in said[1] and (target / "anisotropy_plugin.py").is_file()
+    assert "not registered, because they are for Windows" in said[2] and (target / "anisotropy_plugin.py").is_file()
     (folder / "bundle.py").unlink()
     said = []
     assert setup.set_up(said.append, folder, tmp_path / "other", state, Registry(), "python", None, lambda name: None) == 1
-    assert said == ["not set up: bundle.py is not beside the setup: unzip the whole connector and run the setup from its folder"] and not (tmp_path / "other").exists()
+    assert said == ["not set up: bundle.py is missing from the connector's folder. " + AGAIN] and not (tmp_path / "other").exists()
+
+
+AGAIN = "Download the connector again, unzip all of it into a new folder, and run the setup from there"
+
+
+def test_the_setup_checks_its_files_against_the_list_of_checksums_before_it_installs_or_registers_anything(setup, folder, tmp_path):
+    target, state = tmp_path / "home" / "abaqus_plugins" / "anisotropy", tmp_path / "home" / ".anisotropy"
+
+    def refused(reason: str) -> None:
+        registry, said = Registry(), []
+        assert setup.set_up(said.append, folder, target, state, registry, str(python_at(tmp_path)), runs()[0], lambda name: "abaqus.bat") == 1
+        assert said == [f"not set up: {reason} {AGAIN}"]
+        assert not target.exists() and registry.keys == {} and not state.exists()  # nothing was installed, registered or written
+
+    assert setup.verify(folder) == len(setup.FILES)
+    (folder / "README.txt").write_text("the note of its commands")  # a file the list names and the setup does not install
+    list_the_files(folder)
+    assert setup.verify(folder) == len(setup.FILES) + 1
+    (folder / "README.txt").unlink()
+    assert setup.verify(folder) == len(setup.FILES)  # not installed, so not needed: the installed folder holds the Python files and the list
+
+    kept = (folder / "anisotropy_link.py").read_bytes()
+    (folder / "anisotropy_link.py").write_bytes(kept + b"\nimport os\n")  # one file changed after the list was written
+    refused("anisotropy_link.py is not the file this connector was made with (its checksum differs from SHA256SUMS.txt).")
+    (folder / "anisotropy_link.py").write_bytes(kept)
+
+    sums = (folder / "SHA256SUMS.txt").read_text()
+    (folder / "SHA256SUMS.txt").write_text("".join(line for line in sums.splitlines(True) if not line.endswith("  anisotropy_menu.py\n")))
+    refused("SHA256SUMS.txt does not name anisotropy_menu.py, so this is not a whole connector.")  # a file it would install is not on the list
+    for broken in ("not a list\n", sums + "0" * 64 + "  ..\\elsewhere.py\n", sums + sums.splitlines(True)[0]):
+        (folder / "SHA256SUMS.txt").write_text(broken)
+        refused("SHA256SUMS.txt is not a list of checksums this setup can read.")
+    (folder / "SHA256SUMS.txt").unlink()
+    refused("SHA256SUMS.txt is not beside the setup, so its files cannot be checked.")
 
 
 def test_remove_takes_the_link_the_menu_and_the_key_away_and_leaves_what_is_the_users(setup, folder, tmp_path):

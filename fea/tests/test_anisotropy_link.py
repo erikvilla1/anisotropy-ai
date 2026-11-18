@@ -1,7 +1,8 @@
 """The helper behind the site's links (ADR-0094 amendment 1): `tools/anisotropy_link.py` reads an `anisotropy://` link as hostile
 text, connects this machine only after the user's yes to a box that names the site and the account, keeps the key in the home
-directory and never says it, and opens a run by fetching its build script with the key and starting Abaqus/CAE with the same words
-every time. The site is a stand-in that records each request; Abaqus is never started and no box of Windows is drawn."""
+directory and never says it, and opens a run by fetching its coupon as data with the key (amendment 4), checking it, and starting
+Abaqus/CAE with the same words every time. Nothing the site answers is run. The site is a stand-in that records each request; Abaqus
+is never started and no box of Windows is drawn."""
 
 from __future__ import annotations
 
@@ -14,7 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from test_anisotropy_build import as_sent, builder, site as site_code  # noqa: F401  the site's own reading of a build script, and the connector's check
 from test_anisotropy_connector import TOOLS
+from test_write_cae_script import model as coupon  # noqa: F401  the public D3039 check as a model
 
 SITE = "https://anisotropy.example/api"
 CODE = "anisotropy_pair_" + "c_-" * 14 + "c"
@@ -22,6 +25,7 @@ KEY = "anisotropy_upload_" + "k" * 43
 RUN = "0123abcd-0123-4abc-8def-0123456789ab"
 OWNER = "engineer@example.com"
 SCRIPT = "# The coupon D3039-CHECK as a native Abaqus/CAE model.\n# Built by anisotropy_fea 0.1.0 from D3039-CHECK\nMODEL = 'D3039-CHECK'\n"
+DATA: dict = {}  # the public check's coupon as the site answers it, set once by `the_coupon`
 PAIR_LINK = f"anisotropy://pair?code={CODE}&site=https%3A%2F%2Fanisotropy.example%2Fapi"
 OPEN_LINK = f"anisotropy://open?run={RUN}"
 
@@ -34,11 +38,17 @@ def link():
     return module
 
 
-class Site:
-    """Anisotropy's API as the helper meets it: one code of one owner, one run with its build script, every request recorded."""
+@pytest.fixture(autouse=True)
+def the_coupon(site_code, coupon):  # noqa: F811
+    DATA.update(as_sent(site_code, coupon, "D3039-CHECK"))
 
-    def __init__(self, owner=OWNER, script=SCRIPT, coupon="D3039-CHECK"):
-        self.owner, self.script, self.coupon, self.requests, self.swapped = owner, script, coupon, [], False
+
+class Site:
+    """Anisotropy's API as the helper meets it: one code of one owner, one run with its coupon as data, every request recorded.
+    `body` replaces the coupon's JSON with any bytes; `changes` replaces fields of it."""
+
+    def __init__(self, owner=OWNER, body=None, **changes):
+        self.owner, self.body, self.changes, self.requests, self.swapped = owner, body, changes, [], False
 
     def __call__(self, request, timeout):
         body = json.loads(request.data.decode("utf-8")) if request.data else None
@@ -50,10 +60,11 @@ class Site:
                 return 200, json.dumps({"owner": self.owner, "token": None}).encode(), {}
             self.swapped = True
             return 200, json.dumps({"owner": self.owner, "token": KEY, "token_id": "t", "name": body["name"]}).encode(), {}
-        if request.full_url == f"{SITE}/v1/connector/runs/{RUN}/build-script":
+        if request.full_url == f"{SITE}/v1/connector/runs/{RUN}/coupon":
             if dict(request.header_items()).get("Authorization") != f"Bearer {KEY}":
                 return 401, b'{"detail": "no token that stands"}', {}
-            return 200, self.script.encode("utf-8"), {"X-Anisotropy-Coupon": self.coupon, "Content-Type": "text/x-python"}
+            body = self.body if self.body is not None else json.dumps({**DATA, **self.changes}).encode("utf-8")
+            return 200, body, {"Content-Type": "application/json"}
         return 404, b'{"detail": "No run of yours"}', {}
 
 
@@ -183,19 +194,22 @@ def connected(link, home: Path, abaqus: Path) -> None:
     link.write_json(home / "machine.json", {**link.machine(home), "abaqus": str(abaqus)})
 
 
-def test_open_fetches_the_owners_build_script_with_the_key_and_starts_abaqus_with_the_same_words_every_time(link, tmp_path, capsys):
+def test_open_fetches_the_owners_coupon_as_data_with_the_key_and_starts_abaqus_with_the_same_words_every_time(link, builder, tmp_path, capsys):  # noqa: F811
     home, work, site, started, texts = tmp_path / ".anisotropy", tmp_path / "Anisotropy", Site(), [], []
     connected(link, home, tmp_path / "abaqus.bat")
     assert link.main([OPEN_LINK], tell=said(texts), caller=site, folder=home, work=work, starter=lambda command, folder: started.append((command, folder))) == 0
     assert texts == [] and started == [(str(tmp_path / "abaqus.bat"), work / "D3039-CHECK")]
     method, url, headers, body = site.requests[-1]
-    assert (method, url, body) == ("GET", f"{SITE}/v1/connector/runs/{RUN}/build-script", None) and headers["Authorization"] == f"Bearer {KEY}"
+    assert (method, url, body) == ("GET", f"{SITE}/v1/connector/runs/{RUN}/coupon", None) and headers["Authorization"] == f"Bearer {KEY}"
+    assert headers["Accept"] == "application/json"
     folder = work / "D3039-CHECK"
-    assert (folder / "D3039-CHECK-build.py").read_text(encoding="utf-8") == SCRIPT
+    assert sorted(p.name for p in folder.iterdir()) == ["D3039-CHECK-coupon.json", "anisotropy-start.json", "anisotropy-start.py"]  # data and our own start file: no script of the site's
+    kept = json.loads((folder / "D3039-CHECK-coupon.json").read_text(encoding="utf-8"))
+    assert kept == DATA and builder.read(folder / "D3039-CHECK-coupon.json") == builder.check(DATA)  # what is kept is what was checked, and reads back the same
     assert (folder / "anisotropy-start.py").read_text(encoding="utf-8") == (TOOLS / "anisotropy_start.py").read_text(encoding="utf-8")
     assert json.loads((folder / "anisotropy-start.json").read_text()) == {
-        "script": str(folder / "D3039-CHECK-build.py"), "run": RUN, "coupon": "D3039-CHECK", "connector": str(TOOLS)}
-    assert KEY not in capsys.readouterr().out + (folder / "anisotropy-start.json").read_text()
+        "coupon_file": str(folder / "D3039-CHECK-coupon.json"), "run": RUN, "coupon": "D3039-CHECK", "connector": str(TOOLS)}
+    assert KEY not in capsys.readouterr().out + (folder / "anisotropy-start.json").read_text() + (folder / "D3039-CHECK-coupon.json").read_text()
 
 
 def test_the_command_that_starts_abaqus_holds_nothing_from_the_link_or_the_site(link, tmp_path, monkeypatch):
@@ -220,7 +234,7 @@ def test_the_command_that_starts_abaqus_holds_nothing_from_the_link_or_the_site(
     assert seen["env"][link.SESSION] != first  # another window, another name
 
 
-def test_open_does_nothing_on_a_machine_that_is_not_connected_and_runs_nothing_that_is_not_ours(link, tmp_path):
+def test_open_does_nothing_on_a_machine_that_is_not_connected_and_keeps_nothing_that_is_not_a_coupon(link, tmp_path, monkeypatch):
     home, work, started = tmp_path / ".anisotropy", tmp_path / "Anisotropy", []
 
     def opened(site, **more):
@@ -232,15 +246,31 @@ def test_open_does_nothing_on_a_machine_that_is_not_connected_and_runs_nothing_t
     code, text = opened(never)
     assert code == 1 and "not connected to your account yet: click Connect this PC" in text and never.requests == []  # no key, so nothing is asked
     connected(link, home, tmp_path / "abaqus.bat")
-    for site, why in ((Site(script="import os\nos.system('calc')\n"), "not a build script Anisotropy wrote"),
-                      (Site(script="x" * (link.MAX_SCRIPT_BYTES + 5)), "larger than any build script"),
-                      (lambda request, timeout: (404, b'{"detail": "No run of yours"}', {}), "did not give the run's build script (404): No run of yours"),
+    for site, why in ((Site(body=b"import os\nos.system('calc')\n"), "not a coupon this connector builds, so nothing was opened: it is not JSON"),
+                      (Site(body=SCRIPT.encode()), "it is not JSON"),  # a build script, as an older site answered: read as data, it is none
+                      (Site(body=b" " * (link.MAX_ANSWER_BYTES + 5)), "larger than any coupon"),
+                      (Site(body=b'["anisotropy-coupon/1"]'), "it is not one JSON object"),
+                      (Site(format="anisotropy-coupon/2"), "a newer site needs a newer connector"),
+                      (Site(script="import os"), "a field this connector does not know, 'script'"),
+                      (Site(model="x'); import os; ('"), "model is not a name Abaqus/CAE takes"),
+                      (Site(coupon="..\\..\\Startup\\x"), "coupon is not a plain name"),  # a coupon's name that is not a plain name is not a folder's name
+                      (Site(columns=10 ** 9), "columns is not a count of elements"),
+                      (lambda request, timeout: (404, b'{"detail": "No run of yours"}', {}), "did not give the run's coupon (404): No run of yours"),
                       (lambda request, timeout: (401, b"{}", {}), "no longer takes this PC's key"),
                       (lambda request, timeout: (302, b"", {"Location": "https://evil.example"}), "its sign-in page")):
         code, text = opened(site)
         assert code == 1 and why in text and started == [] and not work.exists(), why
-    code, text = opened(Site(coupon="..\\..\\Startup\\x"))  # a coupon's name that is not a plain name is not a folder's name
-    assert code == 0 and started == [work / "coupon"] and (work / "coupon" / "coupon-build.py").is_file()
+    for missing in ("anisotropy_build.py", "anisotropy_start.py"):  # a folder that is not whole asks the site nothing
+        never = Site()
+        monkeypatch.setattr(link, "here", lambda missing=missing: tmp_path / f"without-{missing}")
+        (tmp_path / f"without-{missing}").mkdir()
+        for name in {"anisotropy_build.py", "anisotropy_start.py"} - {missing}:
+            (tmp_path / f"without-{missing}" / name).write_text((TOOLS / name).read_text(encoding="utf-8"), encoding="utf-8")
+        code, text = opened(never)
+        assert code == 1 and f"{missing} is not beside the helper" in text and never.requests == [] and started == []
+    monkeypatch.undo()
+    code, text = opened(Site())
+    assert code == 0 and started == [work / "D3039-CHECK"]
     link.write_json(home / "machine.json", {"address": SITE, "owner": OWNER})
     code, text = opened(Site(), which=lambda name: None)
     assert code == 1 and "Abaqus's command was not found on this PC" in text

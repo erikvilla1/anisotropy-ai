@@ -3,7 +3,7 @@ rem Set this PC up for Anisotropy, once: the menu in Abaqus/CAE and the links of
 cd /d "%~dp0"
 if not exist anisotropy_setup.py (
   echo This was started from inside the zip, where its other files are not beside it.
-  echo Unzip first: right-click anisotropy-connector.zip and choose Extract All.
+  echo Unzip first: right-click the zip you downloaded and choose Extract All.
   echo Then double-click "Set up Anisotropy" in the folder that opens.
   echo.
   pause

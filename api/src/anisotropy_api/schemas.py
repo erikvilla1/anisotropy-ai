@@ -1301,6 +1301,8 @@ class AbaqusExchange(Contract):
     max_bundle_bytes: int
     max_uploads: int
     max_tokens: int
+    connector_version: str | None = None  # the connector this API hands out, and the SHA-256 recorded for that version's zip (amendment 3)
+    connector_sha256: str | None = None
 
 
 class UploadDocument(Contract):

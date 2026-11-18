@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  cardRows, cardText, connectorCommand, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, openLink, pairLink, percent, provenance,
+  cardRows, cardText, connectorCommand, connectorName, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, openLink, pairLink, percent, provenance,
   readComparison, readExchange, readUpload, readUploadKey, sendProblem, sentFileUrl, type Comparison,
 } from "../lib/abaqus-exchange";
 import { StudioError } from "../lib/studio-api";
@@ -83,6 +83,15 @@ test("an answer of another shape is not shown as a comparison", () => {
   assert.equal(readUpload(upload(null, { not_compared: "x" })).comparison, null);
   assert.throws(() => readUpload({ id: 3 }), StudioError);
   assert.deepEqual(readExchange({ uploads: true, connector_route: false, max_bundle_bytes: 1, max_uploads: 2, max_tokens: 3 }).connector_route, false);
+  // the connector's version and checksum are shown only as a version and a SHA-256, both or neither (ADR-0094 amendment 3)
+  const offered = { uploads: true, connector_route: true, max_bundle_bytes: 1, max_uploads: 2, max_tokens: 3 };
+  assert.deepEqual([readExchange(offered).connector_version, readExchange(offered).connector_sha256], [null, null]);
+  const named = readExchange({ ...offered, connector_version: "0.6.0", connector_sha256: "ab".repeat(32) });
+  assert.deepEqual([named.connector_version, named.connector_sha256, connectorName(named)], ["0.6.0", "ab".repeat(32), "anisotropy-connector-0.6.0.zip"]);
+  for (const odd of [{ connector_version: "0.6.0" }, { connector_version: "<b>", connector_sha256: "ab".repeat(32) }, { connector_version: "0.6.0", connector_sha256: "xyz" }]) {
+    const read = readExchange({ ...offered, ...odd });
+    assert.deepEqual([read.connector_version, read.connector_sha256, connectorName(read)], [null, null, "anisotropy-connector.zip"]);
+  }
   assert.throws(() => readExchange({ uploads: "yes" }), StudioError);
   assert.equal(readUploadKey({ id: "k", name: "lab", hint: "abcd", created_at: "2026-11-13T09:00:00+00:00", last_used_at: null, revoked_at: null }).hint, "abcd");
 });
