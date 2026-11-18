@@ -171,7 +171,7 @@ RF
 @needs_ccx
 def test_calculix_pushes_a_positive_shell_pressure_along_the_normal(tmp_path):
     """The detection run of 2026-10-28, repeated: a positive P on an S8R plate with counterclockwise nodes deflects it toward +z, the opposite
-    of the Abaqus P label the kernel follows (fea/checks/calculix-conventions.toml); the clamped set's printed total under-reports the load."""
+    of the kernel's own pressure and the same as Abaqus's *Dload P (fea/checks/calculix-conventions.toml); the clamped set's printed total under-reports the load."""
     deck = tmp_path / "pressure.inp"
     deck.write_text(PRESSURE_PLATE, encoding="utf-8")
     result = run_calculix(deck, workdir=tmp_path)

@@ -5,7 +5,8 @@ import { bannedInAbaqusCard } from "../../lib/studio-copy";
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio-import/${name}.json`, "utf8"));
 const API = /https?:\/\/[^/]+\/v1\//;
 const DECK = readFileSync("fea/checks/decks/coupon-2x8-grips-im7-8552.inp");
-const REFUSAL = "line 15: element type 'C3D8R' is not supported; this version reads S4, S4R, S4R5 (four-node shells)";
+const REFUSAL = "this file holds 2 things that this version does not read: solid elements (C3D8R, line 15); contact (*Contact Pair, line 212, 2 times). It reads flat four-node shells (S4, S4R, S4R5)";
+const UNREAD = [{ what: "solid elements", keyword: "C3D8R", lines: [15] }, { what: "contact", keyword: "*Contact Pair", lines: [212, 230] }];
 
 /** The API a model is brought in through (ADR-0105), played from the package's own answer for the public gripped coupon
  * (tests/fixtures/studio-import, which fea/tests/test_imported.py keeps the package's); a file that opens with *Solid is refused as the
@@ -27,7 +28,7 @@ async function mockApi(page: Page, sent: { url: string; name: string | null; byt
       sent.push({ url: url.pathname + url.search, name: await request.headerValue("x-anisotropy-model-name"), bytes: body.length });
       const head = { run_id: "run-import", solver: "kernel", warm: true, seconds: 0.4, timings: { model: 0.02 } };
       if (body.subarray(0, 6).toString() === "*Solid") {
-        return json({ ...head, state: "refused", name: "solid.inp", units: url.searchParams.get("units"), problem: { message: REFUSAL, line: 15 },
+        return json({ ...head, state: "refused", name: "solid.inp", units: url.searchParams.get("units"), problem: { message: REFUSAL, line: 15, unread: UNREAD },
           reading: null, preview: null, fields: null, explanation: null });
       }
       return json({ ...head, ...fixture("import"), preview: fixture("preview"), fields: fixture("fields"), explanation: fixture("explanation") });
@@ -99,10 +100,12 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   expect(bannedInAbaqusCard(await rail.innerText())).toEqual([]);
   expect(bannedInAbaqusCard(await page.getByTestId("import-banner").innerText())).toEqual([]);
 
-  // a file outside what is read is refused with the reader's line, and no result is left on the page to be taken for its own
+  // a file outside what is read is refused with everything in it that is not read, each with its line (ADR-0105 amendment 1), and no
+  // result is left on the page to be taken for its own
   await page.getByTestId("import-file").setInputFiles({ name: "solid.inp", mimeType: "text/plain", buffer: Buffer.from("*Solid\n") });
   await send.click();
-  await expect(page.getByTestId("import-problem")).toHaveText("Line 15: element type 'C3D8R' is not supported; this version reads S4, S4R, S4R5 (four-node shells)");
+  await expect(page.getByTestId("import-problem")).toHaveText("This file holds 2 things that are not read yet:");
+  await expect(page.getByTestId("import-unread").locator("li")).toHaveText(["Solid elements (C3D8R), line 15", "Contact (*Contact Pair), lines 212 and 230"]);
   await expect(page.getByTestId("import-empty")).toHaveAttribute("data-state", "refused");
   await expect(page.getByTestId("results")).toHaveCount(0);
   await expect(page.getByTestId("import-status")).toHaveText("solid.inp: not read.");

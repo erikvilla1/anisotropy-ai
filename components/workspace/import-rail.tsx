@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatNumber } from "@/lib/number-format";
 import { MAX_MODEL_BYTES, MODEL_UNITS, type ImportedModel, type ModelUnits } from "@/lib/studio-api";
-import { importProblemWords, importText } from "@/lib/studio-copy";
+import { importProblemWords, importText, importUnreadLines } from "@/lib/studio-copy";
 import { unitWords } from "@/lib/studio-form";
 import { useProject } from "@/components/studio/project-context";
 import { StepPanel } from "./panels/step-panel";
@@ -18,7 +18,8 @@ function Reading({ model }: { model: ImportedModel }) {
   const length = reading.unit_labels.length ?? "";
   const types = Object.entries(reading.element_types).map(([type, n]) => `${n} ${type}`).join(", ");
   const loads = [reading.concentrated_loads ? count(reading.concentrated_loads, "force line") : "", reading.pressures ? count(reading.pressures, "pressure line") : ""].filter(Boolean);
-  const notes = reading.notes.map((note) => importText(note)).filter((note): note is string => note !== null);
+  const moved = (reading.moved ?? []).map((m) => `Instance ${m.instance} is read where the assembly places it, moved by (${m.by.map(printed).join(", ")}) ${length}.`);
+  const notes = [...moved, ...reading.notes].map((note) => importText(note)).filter((note): note is string => note !== null);
   return (
     <>
       <StepPanel id="import-read" title="What was read" state="pass" word="read">
@@ -35,7 +36,7 @@ function Reading({ model }: { model: ImportedModel }) {
       <StepPanel id="import-skipped" title="Left out" note={count(reading.skipped.length, "keyword")} open={false}>
         {reading.skipped.length ? (
           <>
-            <p className="studio-hint">Output and print requests, which change no result. Anything that would change one is refused instead.</p>
+            <p className="studio-hint">Output requests, and values a linear static step never uses, such as density. None changes a result; anything that would is refused instead.</p>
             <ul className="ws-import-notes" data-testid="import-skipped">{reading.skipped.map((line) => <li key={line}>{line}</li>)}</ul>
           </>
         ) : <p className="studio-hint">Every keyword in the file was read.</p>}
@@ -53,6 +54,7 @@ export function ImportRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [units, setUnits] = useState<ModelUnits | "">("");
   const tooLarge = file !== null && file.size > MAX_MODEL_BYTES;
   const words = model ? importProblemWords(model) : null;
+  const unread = model?.problem ? importUnreadLines(model.problem.unread) : [];
   const warnings = (model?.reading?.warnings ?? []).map((line) => importText(line)).filter((line): line is string => line !== null);
   return (
     <div className="studio-form ws-rail-panels" data-testid="import-rail">
@@ -83,7 +85,13 @@ export function ImportRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         </div>
         {tooLarge ? <p className="studio-alert" role="alert">This file is larger than {MAX_MODEL_BYTES / 1e6} MB, the largest model read.</p> : null}
         {problem ? <p className="studio-alert" role="alert" data-testid="import-failed">{problem}</p> : null}
-        {model && words ? <p className="studio-alert" role="alert" data-testid="import-problem" data-state={model.state}>{words}</p> : null}
+        {model && words ? (
+          <div className="studio-alert" role="alert" data-state={model.state}>
+            <p data-testid="import-problem" data-state={model.state}>{words}</p>
+            {/* every kind of thing the file holds that is not read, at once: nobody should learn a model's limits one upload at a time */}
+            {unread.length > 1 ? <ul className="ws-import-notes" data-testid="import-unread">{unread.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+          </div>
+        ) : null}
         {warnings.length ? (
           // a value far from any material's usually means the wrong units, which would make every result wrong: said beside the choice
           <div className="studio-alert" role="alert" data-testid="import-warnings">

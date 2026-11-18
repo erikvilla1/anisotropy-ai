@@ -4,7 +4,7 @@
  * pipeline and the API keep their own names; this file is where they become the product's. `BANNED_TERMS` is the one list the page's
  * guard (`customerText`) and the browser test read.
  */
-import type { JobStatus } from "./studio-api";
+import type { JobStatus, UnreadKind } from "./studio-api";
 import { formatNumber, inProse } from "./number-format";
 
 /** What an outage says, on the calculator and in the workspaces: what happened and what to do (style guide, rule 8). */
@@ -114,10 +114,23 @@ export function importText(text: string | null | undefined): string | null {
   return customerText(text, ABAQUS_CARD_ALLOWS);
 }
 
+/** The kinds of thing a refused file holds that are not read (ADR-0105 amendment 1), one line each: the thing in an engineer's words,
+ * the keyword the file writes it with, and where; up to three lines are named and the rest counted. A line not fit to show is left out. */
+export function importUnreadLines(unread: UnreadKind[]): string[] {
+  return unread.map(({ what, keyword, lines }) => {
+    const named = lines.slice(0, 3);
+    const where = `${named.length === 1 ? "line" : "lines"} ${named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`}`
+      + (lines.length > 3 ? `, and ${lines.length - 3} more` : "");
+    return importText(`${what.charAt(0).toUpperCase()}${what.slice(1)}${what.includes(keyword) ? "" : ` (${keyword})`}, ${where}`);
+  }).filter((line): line is string => line !== null);
+}
+
 /** Why a file was refused or its model not solved (ADR-0105), fit to show: the reader's own words when they are, with the line they
  * name, else the plain thing; null when nothing went wrong. */
-export function importProblemWords(model: { state: string; problem: { message: string; line: number | null } | null }): string | null {
+export function importProblemWords(model: { state: string; problem: { message: string; line: number | null; unread?: UnreadKind[] } | null }): string | null {
   if (!model.problem) return null;
+  const kinds = importUnreadLines(model.problem.unread ?? []);
+  if (kinds.length > 1) return `This file holds ${kinds.length} things that are not read yet:`; // the list follows it
   const said = importText(model.problem.message);
   if (said) return sentence(said.replace(/^line (\d+): /, "Line $1: "));
   const line = model.problem.line === null ? "" : ` The problem is on line ${model.problem.line}.`;

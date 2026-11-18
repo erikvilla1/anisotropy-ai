@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 
 from anisotropy_fea import paths
-from anisotropy_fea.abaqus_reader import read_deck
+from anisotropy_fea.abaqus_reader import parse_deck, read_deck
 from anisotropy_fea.fields import field_data
-from anisotropy_fea.imported import BY_ELEMENT, KIND, MAX_BYTES, import_model
+from anisotropy_fea.imported import BY_ELEMENT, KIND, MAX_BYTES, import_model, unread
 from anisotropy_fea.kernel import solve_deck
 
 DECKS = paths.CHECK_DECKS
@@ -99,9 +99,9 @@ def test_a_force_is_the_whole_sets_and_a_pressure_stated_element_by_element_is_o
 
 
 @pytest.mark.parametrize(("change", "line", "words"), [
-    (lambda t: t.replace("*Step", "*Include, input=/etc/hostname\n*Step", 1), 47, "*include is not supported"),
-    (lambda t: t.replace("S4R", "C3D8R"), 15, "element type 'C3D8R' is not supported"),
-    (lambda t: t.replace("nlgeom=NO", "nlgeom=YES"), 47, "nlgeom=YES"),
+    (lambda t: t.replace("*Step", "*Include, input=/etc/hostname\n*Step", 1), 47, "does not read another file brought in by name (*Include)"),
+    (lambda t: t.replace("S4R", "C3D8R"), 15, "does not read solid elements (C3D8R). It reads flat four-node shells (S4, S4R, S4R5)"),
+    (lambda t: t.replace("nlgeom=NO", "nlgeom=YES"), 47, "does not read large displacements (*Step, nlgeom=YES)"),
     (lambda t: "a letter, not a deck\n", 1, "data before any keyword"),
     (lambda t: "", None, "no *Step"),
 ])
@@ -217,3 +217,83 @@ def test_the_pages_fixture_is_the_packages_answer_today():
         named = kept["fields"]["summary"]["fpf"][criterion]
         ratio = answer["fields"]["element"]["failure"][criterion]["ratio"][named["element"]][named["ply"] - 1]
         assert ratio == pytest.approx(found["factor"], rel=1e-8) and (named["ply"], named["mode"], named["tied_plies"]) == (found["ply"], found["mode"], found["tied_plies"])
+
+
+# What a file written by Abaqus/CAE usually holds beyond our own decks (ADR-0105 amendment 1).
+
+def test_an_instance_moved_in_the_plane_is_read_where_the_assembly_has_it_and_answers_the_same():
+    text = EDGE.read_text(encoding="utf-8")
+    assert "*Instance, name=Coupon-1, part=Coupon\n" in text
+    still, moved = brought(EDGE), brought(EDGE, text=text.replace("*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n20., 10., 0.\n"))
+    assert moved["state"] == "solved" and still["reading"]["moved"] == []
+    assert [(m["instance"], m["by"]) for m in moved["reading"]["moved"]] == [("Coupon-1", pytest.approx([20.0, 10.0]))]  # in the file's own units
+    assert np.allclose(np.array(moved["preview"]["mesh"]["nodes"]) - np.array(still["preview"]["mesh"]["nodes"]), [20.0, 10.0], atol=1e-12)
+    # a rigid move changes no strain: the same displacements and the same failure factors
+    assert np.allclose(moved["fields"]["nodal"]["displacement"], still["fields"]["nodal"]["displacement"], rtol=1e-9, atol=1e-12)
+    for criterion, found in still["fields"]["summary"]["fpf"].items():
+        assert moved["fields"]["summary"]["fpf"][criterion]["factor"] == pytest.approx(found["factor"], rel=1e-9)
+
+
+def test_two_instances_of_one_part_each_stand_where_the_assembly_puts_them():
+    text = EDGE.read_text(encoding="utf-8").replace("*End Instance\n", "*End Instance\n*Instance, name=Coupon-2, part=Coupon\n40., 0., 0.\n*End Instance\n", 1)
+    deck = parse_deck(text)
+    first, second = deck.parts[deck.instances["Coupon-1"].part], deck.parts[deck.instances["Coupon-2"].part]
+    assert deck.instances["Coupon-2"].part == "Coupon@Coupon-2" and deck.instances["Coupon-2"].translation == (40.0, 0.0, 0.0)
+    assert np.allclose(second.nodes.xyz - first.nodes.xyz, [40.0, 0.0, 0.0]) and first.nodes.xyz[:, 0].min() == 0.0
+    answer = brought(EDGE, text=text)  # the second strip is held by nothing, so the model is read and drawn, not solved
+    assert answer["state"] == "read" and answer["reading"]["instances"] == 2 and answer["reading"]["elements"] == 8
+    assert np.array(answer["preview"]["mesh"]["nodes"])[:, 0].max() == pytest.approx(65.0)
+
+
+def test_engineering_constants_give_the_answer_of_the_lamina_they_state():
+    text = EDGE.read_text(encoding="utf-8")
+    lamina = "*Elastic, type=LAMINA\n162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.\n"
+    assert lamina in text
+    # as Abaqus/CAE writes them: eight values, then G23 with a comma after it
+    constants = "*Elastic, type=ENGINEERING CONSTANTS\n162095.74, 8963.18, 8963.18, 0.316, 0.316, 0.45, 4688.43, 4688.43\n 3000.,\n"
+    stated, answer = brought(EDGE), brought(EDGE, text=text.replace(lamina, constants))
+    assert answer["state"] == "solved" and answer["reading"]["materials"] == stated["reading"]["materials"]
+    assert answer["fields"]["nodal"]["displacement"] == stated["fields"]["nodal"]["displacement"]
+    assert answer["fields"]["summary"]["fpf"] == stated["fields"]["summary"]["fpf"]
+    assert [line for line in answer["reading"]["skipped"] if "E3, nu13 and nu23 of material IM7-8552" in line]
+
+
+def test_what_a_static_step_never_uses_is_left_out_with_its_reason_and_changes_nothing():
+    text = EDGE.read_text(encoding="utf-8")
+    assert "*Fail Stress\n" in text
+    more = text.replace("*Fail Stress\n", "*Density\n1.57e-09,\n*Expansion, type=ORTHO\n-1e-07, 2.6e-05, 2.6e-05\n*Fail Stress\n", 1)
+    stated, answer = brought(EDGE), brought(EDGE, text=more)
+    assert answer["state"] == "solved" and answer["fields"]["summary"]["fpf"] == stated["fields"]["summary"]["fpf"]
+    said = lambda reading: [line.split(": ", 1)[1] for line in reading["skipped"]]  # noqa: E731  (the lines after them have moved down)
+    assert [line for line in said(answer["reading"]) if line not in said(stated["reading"])] == [
+        "*density (mass is not used by a static step)", "*expansion (no temperature change is read, so thermal expansion is not used)"]
+    # with a temperature in the file the expansion would matter, and the temperature is refused
+    hot = brought(EDGE, text=more.replace("*Boundary\nTop", "*Temperature\nTop, 120.\n*Boundary\nTop", 1))
+    assert hot["state"] == "refused" and "a temperature field (*Temperature)" in hot["problem"]["message"]
+
+
+def test_everything_a_file_holds_that_is_not_read_is_said_at_once():
+    text = EDGE.read_text(encoding="utf-8")
+    assert "*Step" in text and "nlgeom=NO" in text
+    beyond = (text.replace("S4R", "S8R").replace("nlgeom=NO", "nlgeom=YES")
+              .replace("*Step", "*Surface Interaction, name=IntProp-1\n1.,\n*Friction\n0.3,\n*Tie, name=Tie-1\ns_A, s_B\n*Tie, name=Tie-2\ns_C, s_D\n*Thing Nobody Knows\n*Step", 1))
+    answer = brought(EDGE, text=beyond)
+    assert answer["state"] == "refused" and set(answer) == {"state", "name", "units", "problem"}
+    found = answer["problem"]["unread"]
+    assert [(entry["what"], entry["keyword"], len(entry["lines"])) for entry in found] == [
+        ("second-order shell elements", "S8R", 1), ("contact", "*Surface Interaction", 2), ("a tie between surfaces", "*Tie", 2),
+        ("the keyword *Thing Nobody Knows", "*Thing Nobody Knows", 1), ("large displacements", "*Step, nlgeom=YES", 1)]
+    assert answer["problem"]["line"] == found[0]["lines"][0] == 15
+    assert answer["problem"]["message"].startswith("this file holds 5 things that this version does not read: second-order shell elements (S8R, line 15); contact (*Surface Interaction, line 47, 2 times); ")
+    # one thing is said the way the reader says a refusal, its line first; a file within what is read has nothing to say
+    alone = brought(EDGE, text=text.replace("nlgeom=NO", "nlgeom=YES"))["problem"]
+    assert alone["message"] == "line 47: this version does not read large displacements (*Step, nlgeom=YES)" and len(alone["unread"]) == 1
+    assert unread(text) == [] and brought(EDGE, text=text.replace("Top, 2, 2, 0.8", "Topp, 2, 2, 0.8"))["problem"]["unread"] == []
+
+
+def test_a_rotated_instance_and_strain_limits_are_named_not_guessed():
+    text = EDGE.read_text(encoding="utf-8")
+    rotated = brought(EDGE, text=text.replace("*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n0., 0., 0.\n0., 0., 0., 0., 0., 1., 90.\n"))
+    assert rotated["state"] == "refused" and rotated["problem"]["message"] == "line 33: this version does not read a rotated instance (*Instance)"
+    limits = brought(EDGE, text=text.replace("*Fail Stress\n", "*Fail Strain\n0.0158, -0.0107, 0.0071, -0.0319, 0.0194\n*Fail Stress\n", 1))
+    assert limits["state"] == "refused" and "strain limits (failure is judged from the stress limits)" in limits["problem"]["message"]
