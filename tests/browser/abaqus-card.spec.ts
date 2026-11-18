@@ -27,11 +27,11 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   await expect(build).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_build.py"); // plies parted by commas (audit fea-run-39)
   expect(await build.getAttribute("href")).toContain(`/v1/coupon-jobs/${JOB}/files/abaqus_build?name=`);
   expect(await card(page).getByTestId("abaqus-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
-  await expect(card(page).getByTestId("abaqus-connector-more")).toHaveText("Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes."); // step 8
+  await expect(card(page).getByTestId("abaqus-by-hand")).toHaveCount(0); // the steps by hand are the only way here, so they are not folded
   await expect(card(page).getByTestId("abaqus-connector")).toHaveAttribute("download", "anisotropy-connector.zip"); // an API that names no version: no version is shown
   await expect(card(page).getByTestId("abaqus-connector-facts")).toHaveText("What it installs, reads and sends, for your IT.");
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");
-  await expect(card(page)).toContainText("only you and the Anisotropy team can see it");
+  await expect(card(page)).toContainText("Only you and the Anisotropy team can see the files you send");
   await expect(card(page).getByTestId("abaqus-keys")).toHaveCount(0); // the connector's own route is closed here, so no upload key is offered
   await expect(card(page).getByTestId("abaqus-quick")).toHaveCount(0); // and no click that would need it (amendment 1)
   expect(await cardWords(page)).not.toMatch(/\b(bundle|ODB|equivalence)\b/); // the product's own words on the first screen
@@ -131,7 +131,7 @@ test("a file the connector did not write is refused in plain words, and one too 
   await page.goto(VIEW);
   await expect(card(page)).toHaveAttribute("data-verdict", "none", { timeout: 20_000 });
   await expect(card(page).getByTestId("abaqus-build")).toHaveCount(0); // a run without the build script: the solver input is imported instead
-  await expect(card(page)).toContainText("choose File, Import, Model");
+  await expect(card(page)).toContainText("choose File > Import > Model");
   await card(page).getByTestId("abaqus-file").setInputFiles(file(8192));
   await expect(card(page).getByTestId("abaqus-problem")).toContainText("This file is 8 kB, larger than 0 MB, the most that can be sent."); // this stand-in's limit is 4 kB
   expect(state.sent).toEqual([]);
@@ -208,9 +208,13 @@ test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code t
   const quick = card(page).getByTestId("abaqus-quick");
   await expect(quick).toBeVisible({ timeout: 20_000 });
   await expect(quick.getByTestId("abaqus-send-to-abaqus")).toHaveText("Send to Abaqus"); // the first thing on the card, in the user's own words
-  await expect(quick).toContainText("When the job completes, the comparison appears here by itself.");
-  await expect(card(page).getByTestId("abaqus-build")).toBeVisible(); // the way by hand stays, under it
-  await expect(quick.getByTestId("abaqus-pcs")).toHaveText("No PC is connected to your account yet. Do the two steps below, once.");
+  await expect(quick).toContainText("Opens this coupon in Abaqus/CAE on this PC. Submit the job there, and the comparison appears here.");
+  await expect(card(page).getByTestId("abaqus-build")).toBeHidden(); // the way by hand stays, folded under it (amendment 5)
+  await card(page).getByTestId("abaqus-by-hand").locator("summary").click();
+  await expect(card(page).getByTestId("abaqus-build")).toBeVisible();
+  await expect(card(page).getByTestId("abaqus-drop")).toBeVisible();
+  await card(page).getByTestId("abaqus-by-hand").locator("summary").click();
+  await expect(quick.getByTestId("abaqus-pcs")).toHaveText("No PC is connected yet. Set this one up below, once.");
   await expect(quick.getByTestId("abaqus-connect")).toBeVisible(); // with no PC connected the two steps are open
   // which connector the download is, how to check it, and the note for whoever decides whether it may be installed (amendment 3)
   await expect(quick.getByTestId("abaqus-setup-connector")).toHaveAttribute("download", "anisotropy-connector-0.6.0.zip");
@@ -220,7 +224,7 @@ test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code t
   expect(await quick.getByTestId("abaqus-setup-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
   const api = ((await quick.getByTestId("abaqus-setup-connector").getAttribute("href")) ?? "").replace(/\/v1\/abaqus-connector$/, "");
   await quick.getByTestId("abaqus-connect").click();
-  await expect(quick.getByTestId("abaqus-connecting")).toHaveText("Answer the box on your PC. This page says when it is connected. If no box appeared, do the setup first.");
+  await expect(quick.getByTestId("abaqus-connecting")).toHaveText("Click Yes in the box on your PC. No box? Do step 1 first.");
   expect(state.codes).toBe(1);
   expect(await handed()).toEqual([`anisotropy://pair?code=${PAIR_CODE}&site=${encodeURIComponent(api)}`]); // the code goes to the PC, with the address it will show
   expect(await page.content()).not.toContain("anisotropy_pair_"); // and is nowhere on the page
@@ -228,22 +232,24 @@ test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code t
 
   const key = { id: "7d0c7b0a-55aa-4f0e-9a3c-0000000000aa", name: "LAB-PC", hint: "kkkk", created_at: "2026-11-14T20:00:00+00:00", last_used_at: null as string | null, revoked_at: null };
   state.keys.unshift(key); // the yes on the PC swapped the code for a key: the page sees it and says so
-  await expect(quick.getByTestId("abaqus-connected")).toHaveText("LAB-PC is connected to your account. Now click Send to Abaqus.", { timeout: 15_000 });
+  await expect(quick.getByTestId("abaqus-connected")).toHaveText("LAB-PC is connected. Now click Send to Abaqus.", { timeout: 15_000 });
   await expect(quick.getByTestId("abaqus-connecting")).toHaveCount(0);
   await expect(quick.getByTestId("abaqus-connect")).toBeHidden(); // and the steps fold away, since they are done once
+  await expect(quick.getByTestId("abaqus-pcs")).toHaveCount(0); // one line at a time under the button
 
   await quick.getByTestId("abaqus-send-to-abaqus").click();
   expect((await handed())[1]).toBe(`anisotropy://open?run=${JOB}`); // the run and nothing else: no address, no key
-  await expect(quick.getByTestId("abaqus-expecting")).toHaveText("Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.");
-  await expect(quick.getByTestId("abaqus-pcs")).toContainText("Connected to your account: LAB-PC (since ");
+  await expect(quick.getByTestId("abaqus-expecting")).toHaveText("Waiting for your results… Abaqus did not open? Set up this PC");
+  await expect(quick.getByTestId("abaqus-connected")).toHaveCount(0);
+  await quick.getByTestId("abaqus-open-setup").click(); // the way out of a wait for an Abaqus that did not open: the two steps, unfolded
+  await expect(quick.getByTestId("abaqus-connect")).toBeVisible();
   await page.waitForTimeout(3000); // one look at the keys with nothing changed: the page claims nothing
   await expect(quick.getByTestId("abaqus-answered")).toHaveCount(0);
   key.last_used_at = "2026-11-14T20:01:00+00:00"; // the PC fetched the build script with its key
-  await expect(quick.getByTestId("abaqus-answered")).toContainText(/^LAB-PC took this coupon at .+, and Abaqus is starting there\. Submit its job in Abaqus\. The comparison appears here when the job completes\.$/, { timeout: 15_000 });
+  await expect(quick.getByTestId("abaqus-answered")).toHaveText("Abaqus is opening on LAB-PC. Submit the job there; the comparison appears here when it completes.", { timeout: 15_000 });
   await expect(quick.getByTestId("abaqus-expecting")).toHaveCount(0);
   expect(bannedInAbaqusCard(await cardWords(page))).toEqual([]);
 
-  await quick.getByTestId("abaqus-setup").locator("summary").click();
   state.onCode = () => ({ status: 401, body: { detail: "signed out" } });
   await quick.getByTestId("abaqus-connect").click();
   await expect(quick.getByRole("alert")).toHaveText("Your sign-in has ended. Reload the page, sign in, and connect again.");
