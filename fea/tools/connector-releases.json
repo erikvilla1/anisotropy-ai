@@ -1,0 +1,14 @@
+{
+ "current": "0.7.0",
+ "releases": {
+  "0.6.0": {
+   "date": "2026-11-14",
+   "sha256": "bd9612deadd4db0aec44740d9824facde9e48a1cb4121d7c099f4b372dd12a39",
+   "note": "never handed out or released: replaced by 0.7.0 in the pull request that added it"
+  },
+  "0.7.0": {
+   "date": "2026-11-17",
+   "sha256": "13b29997b8612fa264cf6cc62c5d7f5df0536234bf1ef72afd7b6f5b946a721a"
+  }
+ }
+}

@@ -12,7 +12,10 @@ import { bannedInAbaqusCard, sentence } from "./studio-copy";
 // --------------------------------------------------------------------------------------------------------------------- the shapes
 
 /** What the card may offer here: whether uploads are kept at all, whether a file sent straight from Abaqus arrives, and the limits. */
-export type Exchange = { uploads: boolean; connector_route: boolean; max_bundle_bytes: number; max_uploads: number; max_tokens: number };
+/** What the card may offer. `connector_version` and `connector_sha256` name the connector's zip the API hands out: its version and the
+ * SHA-256 recorded for that version (ADR-0094 amendment 3); both null from an API that does not say, or says something else. */
+export type Exchange = { uploads: boolean; connector_route: boolean; max_bundle_bytes: number; max_uploads: number; max_tokens: number;
+  connector_version: string | null; connector_sha256: string | null };
 export type ModelItem = { item: string; yours: string; ours: string; same: boolean | null };
 export type Criterion = { criterion: string; met: boolean | null; judged: boolean; evidence: string };
 /** One zone of the coupon as the comparison summed it up: its count of values, and the quantity furthest from ours with where it is. */
@@ -51,7 +54,8 @@ const flag = (v: unknown): v is boolean | null => v === null || typeof v === "bo
 export function readExchange(payload: unknown): Exchange {
   if (!isObject(payload) || typeof payload.uploads !== "boolean" || typeof payload.connector_route !== "boolean" || !finite(payload.max_bundle_bytes)
     || !finite(payload.max_uploads) || !finite(payload.max_tokens)) throw new StudioError("The exchange settings have an unexpected shape.");
-  return payload as unknown as Exchange;
+  const named = isText(payload.connector_version) && /^\d+\.\d+\.\d+$/.test(payload.connector_version) && isText(payload.connector_sha256) && /^[0-9a-f]{64}$/.test(payload.connector_sha256);
+  return { ...(payload as unknown as Exchange), connector_version: named ? (payload.connector_version as string) : null, connector_sha256: named ? (payload.connector_sha256 as string) : null };
 }
 
 /** A comparison as the command wrote it, or null for one this page does not read: one written before the summary, or of another shape. */
@@ -167,6 +171,10 @@ export function documentProblem(error: unknown): { words: string; reasons: strin
 
 /** Where the connector's files are handed out as one zip. */
 export const connectorUrl = (apiBase: string): string => `${base(apiBase)}/v1/abaqus-connector`;
+/** What the connector installs, reads and sends, as plain text: the same words as SECURITY.txt in its zip. */
+export const connectorNoteUrl = (apiBase: string): string => `${base(apiBase)}/v1/abaqus-connector/security-note`;
+/** The name the connector's zip is saved under: named for its version when the API says which it is. */
+export const connectorName = (exchange: Pick<Exchange, "connector_version">): string => (exchange.connector_version ? `anisotropy-connector-${exchange.connector_version}.zip` : "anisotropy-connector.zip");
 
 export type SendStage = "sending" | "comparing";
 /** Send the connector's file as the request's body, to stand beside one run. `onStage` hears "sending" with the fraction that has left

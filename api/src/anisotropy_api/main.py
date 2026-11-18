@@ -29,6 +29,7 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 
+from .abaqus_coupon import NotABuildScript, coupon_data
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for, model_view_of_facts
@@ -48,7 +49,8 @@ from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, che
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
 from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, restore_owners, sync, upload_document_key, upload_key,
                       upload_prefix)
-from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_pairing_code, new_token, ours_of,
+from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, connector_release,
+                      new_pairing_code, new_token, ours_of,
                       token_digest)
 from .uploads import tool_command as upload_command
 from .schemas import (
@@ -768,9 +770,14 @@ def abaqus_exchange(request: Request) -> AbaqusExchange:
     application must let the path through as well, which this API cannot see). Not a run: nothing is computed or recorded."""
     state = request.app.state
     behind_access = getattr(state, "access_verifier", None) is not None
+    try:
+        release = connector_release()
+    except ToolFailed:
+        release = {"version": None, "sha256": None}  # the card then shows the download without them
     return AbaqusExchange(uploads=getattr(state, "records", None) is not None and getattr(state, "uploads", None) is not None,
                           connector_route=not behind_access or bool(getattr(state, "connector_uploads", False)),
-                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS)
+                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS,
+                          connector_version=release["version"], connector_sha256=release["sha256"])
 
 
 @app.get(ABAQUS_CONNECTOR)
@@ -782,6 +789,17 @@ def abaqus_connector(request: Request) -> Response:
     except ToolFailed as exc:
         raise HTTPException(status_code=503, detail=f"The connector could not be handed out: {exc}") from exc
     return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
+@app.get(ABAQUS_CONNECTOR + "/security-note")
+def abaqus_connector_note() -> Response:
+    """What the connector installs, reads and sends, as plain text (ADR-0094 amendment 3): the same words as SECURITY.txt in its zip,
+    for whoever decides whether it may be installed, before anything is downloaded. The same for every requester."""
+    try:
+        text = CONNECTOR_NOTE.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="The connector's security note could not be read.") from exc
+    return Response(text, media_type="text/plain; charset=utf-8", headers={"Content-Disposition": 'inline; filename="anisotropy-connector-SECURITY.txt"'})
 
 
 @app.post(UPLOAD_TOKENS, status_code=201, response_model=UploadTokenCreated)
@@ -917,19 +935,16 @@ async def _connector_bundle(request: Request, owner=Depends(_token_owner)):
     return owner, await _read_bundle(request)
 
 
-@app.get(CONNECTOR_RUNS + "/{job_id}/build-script")
-def connector_build_script(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> Response:
-    """The script that builds a run's coupon in Abaqus/CAE, for the machine of the run's owner (ADR-0094 amendment 1): asked with an
-    upload token, answered only for a finished run of the token's owner. 404 for any other run, in the same words as for none, so no
-    run is confirmed to a stranger. Nothing is changed. Behind Cloudflare Access this route is reachable only when
-    ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path through."""
+def _connector_run_script(job_id: uuid.UUID, request: Request, owner) -> tuple[str, str]:
+    """(the build script of a finished run of the token's owner, the coupon's name as a plain name). 404 for any other run, in the
+    same words as for none, so no run is confirmed to a stranger. Nothing is changed."""
     jobs = _coupon_jobs(request)
     job = jobs.get(job_id)
     mine = job is not None and (job.user_email == owner.user_email if owner.user_email is not None else job.user_email is None and job.actor == owner.actor)
     if not mine:
         raise HTTPException(status_code=404, detail=f"No run {job_id} of yours")
     if job.state != "done":
-        raise HTTPException(status_code=409, detail=f"Run {job_id} is {job.state}; its build script is there once it is done")
+        raise HTTPException(status_code=409, detail=f"Run {job_id} is {job.state}; its coupon for Abaqus is there once it is done")
     try:
         path = jobs.output_file(job, "abaqus_build")
     except KeyError as exc:
@@ -938,7 +953,36 @@ def connector_build_script(job_id: uuid.UUID, request: Request, owner=Depends(_t
         print(f"coupon job {job_id}: no build script: {exc}", flush=True)
         raise HTTPException(status_code=404, detail="This run's files are no longer available. Run the analysis again from your project.") from exc
     coupon = "".join(c for c in str((job.outcome or {}).get("coupon") or "coupon") if c.isalnum() or c in "-_.") or "coupon"
-    return Response(path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8",
+    return path.read_text(encoding="utf-8"), coupon
+
+
+@app.get(CONNECTOR_RUNS + "/{job_id}/coupon")
+def connector_coupon(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> JSONResponse:
+    """A run's coupon as data for the machine of the run's owner (ADR-0094 amendment 4): the numbers and names its build script
+    states, read from the script and never run (`abaqus_coupon.coupon_data`), as one JSON object of the format `anisotropy-coupon/1`.
+    The connector checks it and builds the model with code of its own, so a click on Send to Abaqus moves no code to the PC. Asked
+    with an upload token and answered only for a finished run of the token's owner, as the build script is. Behind Cloudflare Access
+    this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path through."""
+    script, coupon = _connector_run_script(job_id, request, owner)
+    plain = "".join(c for c in coupon if c.isascii())[:80]  # the name of a folder on the PC, which the connector checks again
+    try:
+        data = coupon_data(script, plain if plain[:1].isalnum() else "coupon")
+    except NotABuildScript as exc:
+        print(f"coupon job {job_id}: its build script is not read as data: {exc}", flush=True)
+        raise HTTPException(status_code=409, detail="This run's files do not state its coupon for Abaqus. Run the analysis again from your project.") from exc
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+@app.get(CONNECTOR_RUNS + "/{job_id}/build-script")
+def connector_build_script(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> Response:
+    """The script that builds a run's coupon in Abaqus/CAE, for the machine of the run's owner (ADR-0094 amendment 1): asked with an
+    upload token, answered only for a finished run of the token's owner. 404 for any other run, in the same words as for none, so no
+    run is confirmed to a stranger. Nothing is changed. Connectors before 0.7.0 ask for it and run it; since amendment 4 the
+    connector asks for the coupon as data instead (`connector_coupon`), and this route stays for the PCs that are not yet set up
+    again. Behind Cloudflare Access this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application
+    lets the path through."""
+    script, coupon = _connector_run_script(job_id, request, owner)
+    return Response(script, media_type="text/x-python; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{coupon}-build.py"', "X-Anisotropy-Coupon": coupon})
 
 

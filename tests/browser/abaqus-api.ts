@@ -21,7 +21,7 @@ export function uploadOf(name: string | null, more: Record<string, unknown> = {}
 export type Answer = { status: number; body: unknown };
 export type ExchangeState = {
   /** what GET /v1/abaqus-exchange answers; null for an API that has no such route */
-  exchange: ({ uploads: boolean; connector_route: boolean } & typeof LIMITS) | null;
+  exchange: ({ uploads: boolean; connector_route: boolean; connector_version?: string | null; connector_sha256?: string | null } & typeof LIMITS) | null;
   uploads: ReturnType<typeof uploadOf>[]; // newest first, as the API lists them
   keys: { id: string; name: string; hint: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[];
   sent: { query: Record<string, string>; contentType: string | null; actor: string | null; bytes: number }[];
