@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { devices, expect, test, type Browser, type BrowserContext, type TestInfo } from "@playwright/test";
+import { pageErrors } from "./page-errors";
 
 // Every page on a phone as a phone is, not only a narrow window (ADR-0114): its screen, pixel density, touch and user agent. In
 // WebKit it is an iPhone, as Safari on one is; in Chromium an Android phone. Firefox has no phone mode (isMobile), so it gets the
@@ -37,7 +38,7 @@ test("every page fits a phone's screen with no sideways scroll and no script err
   const context = await phone(browser, browserName, info);
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(`${page.url()}: ${error.message}`));
+  page.on("pageerror", pageErrors(errors, () => page.url()));
   for (const path of all) {
     await page.goto(path);
     await expect(page.locator("main").first(), path).toBeVisible();

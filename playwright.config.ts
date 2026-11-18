@@ -15,9 +15,9 @@ export default defineConfig({
     baseURL: process.env.PREVIEW_URL || "http://localhost:3001",
     browserName: engine,
     channel: engine === "chromium" ? process.env.BROWSER_CHANNEL || "msedge" : undefined,
-    // Firefox refuses WebGL drawn in software, which is all a CI runner has, and the 3D views then say so instead of drawing;
-    // a visitor's Firefox has a GPU. Chromium and WebKit draw in software as they are.
-    launchOptions: engine === "firefox" ? { firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.forbid-software": false } } : {},
+    // Firefox gives no WebGL at all without a window (Mozilla bug 1375585), and the 3D views then say so instead of drawing, so it
+    // runs with its window; on Linux that needs a display, which CI gives it with `xvfb-run`. Chromium and WebKit draw without one.
+    headless: engine !== "firefox",
     viewport: { width: 1440, height: 1000 },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

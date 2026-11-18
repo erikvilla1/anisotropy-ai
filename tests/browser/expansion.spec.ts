@@ -1,8 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { SERVICES_PANEL_IN_HEADER } from "../../lib/site-nav";
+import { hydrated } from "./hydrated";
+import { pageErrors } from "./page-errors";
 
 test("a negative load stays negative so the setup check can refuse it (ADR-0003)", async ({ page }) => {
   await page.goto("/workspace/fea");
+  await hydrated(page.getByRole("textbox", { name: "Message the coupon assistant" }));
   await page.getByRole("textbox", { name: "Message the coupon assistant" }).fill("Unnotched tension, apply -20 kN");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.locator(".chat-understood").last()).toContainText("-20000 N force");
@@ -14,7 +17,7 @@ test("navigation routes load directly with research-focused About", async ({
   page,
 }) => {
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", pageErrors(errors));
   await page.goto("/");
   // The footer repeats the header's links (ADR-0077 amendment 13), so the header's are found inside its navigation.
   const nav = page.getByRole("navigation", { name: "Main navigation" });
@@ -80,7 +83,8 @@ test("material filters, empty state, references and scope handoff", async ({
   await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
   await page.getByRole("link", { name: /Analyse in Workspace/ }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
-  await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
+  // the assistant names the material it was handed; the strip above the model that said it is gone (ADR-0111), as workspace.spec.ts reads it
+  await expect(page.getByTestId("ws-assistant")).toContainText("IM7 / 8552");
 });
 
 test("the Services disclosure lists the five service pages (ADR-0058)", async ({ page }) => {
@@ -199,7 +203,7 @@ test("expanded pages fit phones and tablets with local-only visual assets", asyn
   page,
 }) => {
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", pageErrors(errors));
   for (const width of [390, 768]) {
     await page.setViewportSize({ width, height: 844 });
     for (const path of [

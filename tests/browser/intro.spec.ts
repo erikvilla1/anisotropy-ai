@@ -494,8 +494,9 @@ test("the veil hides no focus: the skip link lies over the black, and it takes n
   await expect(veil).toHaveCSS("opacity", "1");
   await expect(veil).toHaveCSS("pointer-events", "none");
   await expect(veil).toHaveAttribute("aria-hidden", "true");
-  // The window's top left corner is as black as its middle: the veil covers the header.
-  const corner = { x: 0, y: 0, width: 260, height: 70 };
+  // The window's top left corner is as black as its middle: the veil covers the header. From a pixel in: WebKit's screenshot draws
+  // the window's very first pixel grey whatever the page (ADR-0114).
+  const corner = { x: 1, y: 1, width: 260, height: 70 };
   const black = await page.screenshot({ clip: corner });
   expect(black.equals(await page.screenshot({ clip: { ...corner, x: 600, y: 400 } }))).toBe(true);
   // Tab: the skip link takes the focus and is drawn in that corner, over the black, which has not moved.

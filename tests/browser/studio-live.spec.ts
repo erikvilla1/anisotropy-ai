@@ -60,7 +60,9 @@ test("the example coupon solves end to end from the studio", async ({ page }) =>
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 300_000 });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 300_000 });
-  await expect(page.getByTestId("job-message")).toHaveText(/^(Verified against reference solver|Reference solver check): \d+ of \d+ values/); // CalculiX ran beside our engine
+  // CalculiX ran beside our engine: said briefly on the product's screen, with the counts where every test is offered (lib/studio-copy.ts)
+  await expect(page.getByTestId("job-message")).toHaveText(
+    /^(Checked by a second solver|A second solver differs on some values|Verified against reference solver: \d+ of \d+|Reference solver check: \d+ of \d+)/);
   if (process.env.PREVIEW_URL && process.env.CF_ACCESS_CLIENT_ID) { // behind Access, the bucket let a browser from the site's origin read every file the page asked for
     expect(bucketAnswers.length).toBeGreaterThan(0);
     expect(new Set(bucketAnswers)).toEqual(new Set([new URL(process.env.PREVIEW_URL).origin]));

@@ -126,7 +126,7 @@ test.describe("on a phone", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 
-  test("the bar stays while its menu is open, with the menu hanging from it; closed, it goes on the way down", async ({ page }) => {
+  test("the bar stays while its menu is open, with the menu hanging from it; closed, it goes on the way down", async ({ page, browserName }) => {
     await page.goto("/about");
     await page.mouse.move(195, 700);
     await wheel(page, 1500);
@@ -145,13 +145,16 @@ test.describe("on a phone", () => {
     const hang = await nav.evaluate((element) => Math.round(element.getBoundingClientRect().top));
     expect(Math.abs(hang - (await bar(page)).bottom)).toBeLessThanOrEqual(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    // Closed by Escape, the keyboard's focus is on the menu's button: the bar stays for it.
+    // Closed by Escape, the keyboard's focus is on the menu's button: the bar stays for it. Firefox keeps to the letter of
+    // :focus-visible's rule, where focus a script moves on from an element without the ring has none either: the menu was opened
+    // by a click, so its first link had none, and nor has the button after Escape. There nothing shows the focus, and the bar goes
+    // (ADR-0114).
     await page.keyboard.press("Escape");
     await expect(nav).toBeHidden();
     await wheel(page, 200);
     await expect.poll(() => pageY(page)).toBe(1950);
     await page.waitForTimeout(400);
-    expect((await bar(page)).state).toBe("shown");
+    expect((await bar(page)).state).toBe(browserName === "firefox" ? "hidden" : "shown");
     // The focus gone, the next scroll down sends it away.
     await dropFocus(page);
     await wheel(page, 200);

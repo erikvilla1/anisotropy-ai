@@ -12,7 +12,7 @@ const card = (page: Page) => page.getByTestId("abaqus-card");
 const cardWords = (page: Page) => card(page).evaluate((el) => [el.textContent ?? "", ...[...el.querySelectorAll("a[download], [aria-label], [placeholder]")]
   .flatMap((a) => ["download", "aria-label", "placeholder"].map((name) => a.getAttribute(name) ?? ""))].join("\n"));
 
-test("a finished run offers the way to Abaqus and back; a file sent is compared and the answer comes first", async ({ page }) => {
+test("a finished run offers the way to Abaqus and back; a file sent is compared and the answer comes first", async ({ page, browserName }) => {
   // the comparison is the D3039 check's, on 1488 elements; the run this window shows is the studio fixture's, on 250. So that the card's
   // Show has an element of this run to frame, the gauge's largest difference is placed at our element 120 here, and nothing else is changed
   const agrees = comparisonOf("agrees");
@@ -38,7 +38,8 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
 
   await card(page).getByTestId("abaqus-file").setInputFiles(file());
   await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Agrees with ours");
-  expect(state.sent).toEqual([{ query: { job_id: JOB }, contentType: "application/zip", actor: "studio", bytes: 2048 }]); // the file as it is, beside this run
+  // the file as it is, beside this run; WebKit hands a route no body of a File, so there the size is not seen (Playwright)
+  expect(state.sent).toEqual([{ query: { job_id: JOB }, contentType: "application/zip", actor: "studio", bytes: browserName === "webkit" ? 0 : 2048 }]);
   await expect(card(page)).toHaveAttribute("data-verdict", "agrees");
   await expect(card(page).getByTestId("abaqus-provenance")).toHaveText("Job-1, solved by Abaqus/Standard 2025: 1,488 of its elements beside ours.");
   const rows = card(page).getByTestId("abaqus-rows").locator("tr");
@@ -68,7 +69,7 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   expect(state.removed).toEqual([sent]);
 });
 
-test("a model that differs says in how many places and shows each where it is; an earlier file can be opened and compared again", async ({ page }) => {
+test("a model that differs says in how many places and shows each where it is; an earlier file can be opened and compared again", async ({ page, browserName }) => {
   const first = comparisonOf("agrees");
   first.bundle.job = "Job-0"; // an earlier job of the same model, told from the later one by its name
   const earlier = uploadOf(null, { job: "Job-0", verdict: "agrees", compared_at: "2026-11-13T09:12:00+00:00", comparison: first }), differs = uploadOf("differs");
@@ -91,13 +92,16 @@ test("a model that differs says in how many places and shows each where it is; a
   await expect(what.nth(1)).toHaveText(/The pull force\s*17020 N\s*16210 N\s*the top grip/);
   await expect(card(page).getByTestId("abaqus-build")).toHaveCount(0); // the steps are for a run without a file yet
 
-  // the comparison as a PDF (step 7): the card has it written first and says so, then the browser saves it from the link, the actor in the address
-  const saved = page.waitForEvent("download");
+  // the comparison as a PDF (step 7): the card has it written first and says so, then the browser saves it from the link, the actor in the address.
+  // Playwright's WebKit gives no download event for a file its route handler answers (a real server's attachment does come down there, as a
+  // probe found), so in WebKit the address the page went to is checked and the file name is left to the other two engines (ADR-0114)
+  const fetched = page.waitForRequest((request) => request.method() === "GET" && request.url().includes(`/v1/abaqus-uploads/${differs.id}/document`));
+  const saved = browserName === "webkit" ? null : page.waitForEvent("download");
   await card(page).getByTestId("abaqus-document").click();
-  const download = await saved;
-  expect(download.suggestedFilename()).toBe("Job-1-compared-with-anisotropy.pdf");
-  expect(new URL(download.url()).pathname + new URL(download.url()).search).toBe(`/v1/abaqus-uploads/${differs.id}/document?actor=studio`);
-  expect(state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`]);
+  const address = new URL((await fetched).url());
+  expect(address.pathname + address.search).toBe(`/v1/abaqus-uploads/${differs.id}/document?actor=studio`);
+  if (saved) expect((await saved).suggestedFilename()).toBe("Job-1-compared-with-anisotropy.pdf");
+  await expect.poll(() => state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`]); // the request is seen before the route answers it
   await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places"); // the page stays where it was
   state.onDocument = () => ({ status: 503, body: { detail: "The document could not be written: the document was not compiled: Tectonic stopped with exit code 1" } });
   await card(page).getByTestId("abaqus-document").click();

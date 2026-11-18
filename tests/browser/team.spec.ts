@@ -100,6 +100,9 @@ test("the team's cards show the five portraits in the lead's order, and under th
   await expect(cards.locator(".team-face-frame > span:not(.team-face-in)")).toHaveCount(0);
   // The mark is drawn in the frame's bottom right corner only for the card under the pointer, where the portrait also lifts.
   const badge = (index: number) => cards.nth(index).locator(".team-face-in");
+  // The pointer starts off the cards: a browser run with its window (Firefox, playwright.config.ts) otherwise has its screen's
+  // pointer wherever the screen left it, which can be over a card.
+  await page.mouse.move(0, 0);
   await expect(badge(2)).toHaveCSS("opacity", "0");
   await cards.nth(2).hover();
   await expect(badge(2)).toHaveCSS("opacity", "1");

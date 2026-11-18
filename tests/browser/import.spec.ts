@@ -9,8 +9,9 @@ const REFUSAL = "this file holds 2 things that this version does not read: solid
 const UNREAD = [{ what: "solid elements", keyword: "C3D8R", lines: [15] }, { what: "contact", keyword: "*Contact Pair", lines: [212, 230] }];
 
 /** The API a model is brought in through (ADR-0105), played from the package's own answer for the public gripped coupon
- * (tests/fixtures/studio-import, which fea/tests/test_imported.py keeps the package's); a file that opens with *Solid is refused as the
- * reader refuses one. `sent` keeps each import as it was asked, and `others` every other request that would compute something. */
+ * (tests/fixtures/studio-import, which fea/tests/test_imported.py keeps the package's); a file named solid.inp (its first line
+ * *Solid) is refused as the reader refuses one. `sent` keeps each import as it was asked, and `others` every other request that
+ * would compute something. */
 async function mockApi(page: Page, sent: { url: string; name: string | null; bytes: number }[], others: string[], allTests = true, imports = allTests) {
   await page.route(API, async (route) => {
     const request = route.request();
@@ -24,10 +25,11 @@ async function mockApi(page: Page, sent: { url: string; name: string | null; byt
         body: JSON.stringify({ detail: "Records are switched off on this server, so there is nothing to read" }) });
     }
     if (url.pathname === "/v1/imported-models" && request.method() === "POST") {
-      const body = request.postDataBuffer() ?? Buffer.alloc(0);
-      sent.push({ url: url.pathname + url.search, name: await request.headerValue("x-anisotropy-model-name"), bytes: body.length });
+      const body = request.postDataBuffer() ?? Buffer.alloc(0); // empty in WebKit, which hands a route no body of a File (Playwright)
+      const name = await request.headerValue("x-anisotropy-model-name");
+      sent.push({ url: url.pathname + url.search, name, bytes: body.length });
       const head = { run_id: "run-import", solver: "kernel", warm: true, seconds: 0.4, timings: { model: 0.02 } };
-      if (body.subarray(0, 6).toString() === "*Solid") {
+      if (name === "solid.inp") {
         return json({ ...head, state: "refused", name: "solid.inp", units: url.searchParams.get("units"), problem: { message: REFUSAL, line: 15, unread: UNREAD },
           reading: null, preview: null, fields: null, explanation: null });
       }
@@ -44,7 +46,7 @@ const say = async (page: Page, text: string) => {
   await box.press("Enter");
 };
 
-test("a model brought in as a file is read, solved as it stands and asked about, and the coupon behind it is left alone (ADR-0105)", async ({ page }) => {
+test("a model brought in as a file is read, solved as it stands and asked about, and the coupon behind it is left alone (ADR-0105)", async ({ page, browserName }) => {
   const sent: { url: string; name: string | null; bytes: number }[] = [];
   const others: string[] = [];
   await mockApi(page, sent, others);
@@ -66,7 +68,8 @@ test("a model brought in as a file is read, solved as it stands and asked about,
 
   const stage = page.getByTestId("import-stage");
   await expect(stage).toHaveAttribute("data-state", "solved", { timeout: 20_000 });
-  expect(sent).toEqual([{ url: "/v1/imported-models?units=mm-MPa", name: "coupon%202x8%20grips.inp", bytes: DECK.length }]); // the name in a header, the file as it is
+  // the name in a header, the file as it is; WebKit hands a route no body of a File, so there only the name is checked (Playwright)
+  expect(sent).toEqual([{ url: "/v1/imported-models?units=mm-MPa", name: "coupon%202x8%20grips.inp", bytes: browserName === "webkit" ? 0 : DECK.length }]);
   await expect(page.getByTestId("import-banner")).toContainText("Solved as the file states it: no mesh study, and not checked against a second solver.");
   await expect(stage.getByTestId("results")).toHaveAttribute("data-source", "run");
   await expect(stage.getByTestId("live-banner")).toHaveCount(0); // no "run the analysis to verify it": an imported model has no full run
