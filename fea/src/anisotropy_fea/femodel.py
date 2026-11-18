@@ -134,7 +134,13 @@ class FEModel:
             return tuple(name for name in node_lines(self.spec))
         if self.plate:
             return tuple(dict.fromkeys(s.region for s in self.spec.supports))
-        return ("RF-Top", "RF-Bottom") if self.couplings else ("Grip-Top", "Grip-Bottom")
+        driven = {coupling.node_set: coupling.reference_set for coupling in self.couplings}  # a coupled grip answers at its reference point
+        return tuple(driven.get(name, name) for name in ("Grip-Top", "Grip-Bottom"))
+
+    @property
+    def reaction_set(self) -> str:
+        """The grip of an in-plane coupon that carries the reaction: the moving one under displacement control, the held one under a force."""
+        return self.support_sets[0 if self.spec.loading.control == "displacement" else 1]
 
     @property
     def nose_sets(self) -> tuple[str, ...]:
@@ -247,6 +253,14 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
             boundaries.append(BoundaryDefinition("RF-Top", 2, 2, loading.value))
         else:
             loads.append(LoadDefinition("RF-Top", 2, loading.value))
+    elif loading.control == "force" and loading.rigid_grip:
+        # a gripped tab under a force (ADR-0030 amendment 7): the bottom grip held node by node, the top grip's nodes moving together, driven by
+        # one reference point that carries the force; the same model as coupled grips under a force, with a reaction a CalculiX deck can print
+        reference_points = (ReferencePoint("RF-Top", 1, (g.width / 2, g.length)),)
+        couplings = (CouplingDefinition("Grip-Top", "RF-Top", "Grip-Top"),)
+        boundaries.append(BoundaryDefinition("Grip-Bottom", 1, 6))
+        boundaries += [BoundaryDefinition("RF-Top", 1, 1), BoundaryDefinition("RF-Top", 3, 6)]
+        loads.append(LoadDefinition("RF-Top", 2, loading.value))
     else:
         boundaries.append(BoundaryDefinition("Grip-Bottom", 1, 6))
         boundaries += [BoundaryDefinition("Grip-Top", 1, 1), BoundaryDefinition("Grip-Top", 3, 6)]
@@ -280,7 +294,8 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
          + ", ".join(f"{y:g}" for name, y in node_lines(spec).items() if name.startswith("Nose")) + f" m moved {loading.value:g} m along z"
          if spec.kind in BENDING_KINDS else
          f"grips {spec.grips.kind} on the {'end node rows' if spec.grips.region == 'line' else 'whole tab regions'}; "
-         f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N")),
+         f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N")
+         + ("; the top grip moves as one, its reference point carrying the force" if loading.rigid_grip else "")),
         f"units of this deck: {deck_units_of(spec.units)}" + (f" (the coupon is stated in {spec.units})" if deck_units_of(spec.units) != spec.units else ""),
     )
     return FEModel(spec=spec, mesh=mesh, material=material, section=section, orientation_angles=orientation_angles, orientation_fibres=orientation_fibres,

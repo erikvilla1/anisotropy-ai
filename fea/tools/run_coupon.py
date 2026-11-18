@@ -45,7 +45,7 @@ from anisotropy_fea.test_quantities import STRAIN_PROBES
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
 from anisotropy_fea.calculix_summary import calculix_summary, extensometer_of
-from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
+from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, reaction_difference, record_summary, rel
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.fields import run_answer
@@ -446,6 +446,8 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     nodes, elements = gauge_probes(kind)
     nodes = (*nodes, *(name for name in STRAIN_PROBES if name in twin_spec.probes.nodes))  # the strain measurement's ends (ADR-0072)
     notes = f"written by fea/tools/run_coupon.py, attempt {number:02d}; {LEFT_OUT.get(kind, LEFT_OUT[None])}"
+    if twin_spec.loading is not None and twin_spec.loading.rigid_grip:  # ADR-0030 amendment 7
+        notes += "; the coupon states a force: CalculiX's top grip is moved by the travel our kernel finds for it, and its reaction is what it carries there"
     steps = [
         ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel"), "--drawings", "without"],
          {"kernel_summary": out / "kernel" / "summary.txt", "fields": out / "kernel" / f"{name}-fields.json",
@@ -553,9 +555,9 @@ def answer_of_run(fields: Path) -> dict | None:
 def outcome_line(folder: Path) -> str:
     """The result's one line, from the CalculiX record: how many recorded values agree, and our reaction against CalculiX's."""
     rows, _ = record_summary(folder)
-    reaction = [signed(r.reference, r.kernel) for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
-    return f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + "".join(
-        f"; our reaction {value} from CalculiX's" for value in reaction)
+    reaction = reaction_difference(rows)  # the moving grip's, or under a force the held grip's (ADR-0030 amendment 7)
+    return f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + (
+        f"; our reaction {reaction} from CalculiX's" if reaction else "")
 
 
 def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, progress: Progress,

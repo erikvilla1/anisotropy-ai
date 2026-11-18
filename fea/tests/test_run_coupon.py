@@ -18,7 +18,7 @@ from test_intake import PUBLIC_FILL
 
 from anisotropy_fea import checks, paths
 from anisotropy_fea.calculix import find_ccx
-from anisotropy_fea.case_pages import NO_RECORD_YET, read_case
+from anisotropy_fea.case_pages import NO_RECORD_YET, read_case, record_rows
 from anisotropy_fea.intake import convert, fill_form, next_commands, write_blank_form
 
 TOOLS = Path(__file__).parents[1] / "tools"
@@ -367,3 +367,47 @@ def test_any_failure_of_the_document_is_a_failed_package_step_that_names_the_err
     monkeypatch.setitem(sys.modules, tool.COUPON_DOCUMENT, Document)
     with pytest.raises(tool.StepFailed, match=r"^the package: ValueError: max\(\) iterable argument is empty$"):
         tool.package("IM7-UNT-L1", pdf=False, theory=False, attempt="02")
+
+
+def forced(kind: str) -> dict:
+    """A coupon of each gripped test, pulled or pushed by a force (ADR-0030 amendment 7)."""
+    from test_dogbone import PLASTIC
+    from test_intake import OHT_FILL
+
+    return {"unnotched tension": {**PUBLIC_FILL, "control": "force", "value": 10000.0},
+            "unnotched tension, nodal grips": {**PUBLIC_FILL, "grips": "nodal", "control": "force", "value": 10000.0},
+            "unnotched compression": {**PUBLIC_FILL, "test": "unnotched compression", "control": "force", "value": 8000.0},
+            "open-hole tension": {**OHT_FILL, "control": "force", "value": 10000.0},
+            "dog-bone": {**PLASTIC, "control": "force", "value": 500.0}}[kind]
+
+
+@needs_ccx
+@pytest.mark.parametrize("kind", ["unnotched tension", "unnotched tension, nodal grips", "unnotched compression", "open-hole tension", "dog-bone"])
+def test_every_gripped_coupon_runs_under_a_force(tool, tmp_path, kind):
+    """The founder, 2026-11-17: a user's run under 10 kN stopped, because no deck was written for CalculiX under a force. Every gripped
+    test runs to its result under one (ADR-0030 amendment 7): the twin's top grip is moved by the travel our engine finds for the force,
+    and CalculiX carries that force there within the record's tolerance."""
+    if kind == "open-hole tension":
+        pytest.importorskip("gmsh")
+    values = {"form_version": "0.9", **forced(kind)}
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps(values), encoding="utf-8")
+    outcome = tool.run(str(path), "A. Engineer", pdf=False, theory=False)
+    count = re.search(r"(\d+) of (\d+) recorded values agree with CalculiX; our reaction ([+-]\d+\.\d+) % from CalculiX's", outcome.result)
+    assert count and abs(float(count[3])) < 3.0, outcome.result
+    name, out = outcome.coupon, outcome.attempt / "run"
+    _, rows, _ = record_rows(paths.verification(name) / f"{name}-calculix.toml")
+    apart = [row for row in rows if not row.agrees]
+    # the open hole's Gmsh mesh leaves CalculiX a sideways drift of a tenth of a micron at one probe, under a displacement as under a force
+    assert all(kind == "open-hole tension" and row.group == "u" and row.component == 0 and abs(row.reference) < 1e-3 for row in apart), apart
+    force = (-1.0 if "compression" in kind else 1.0) * values["value"]
+    twin_spec = tool.load_spec(paths.ours(name) / f"{name}-nodal.toml")
+    assert twin_spec.loading.control == "force" and twin_spec.loading.rigid_grip and twin_spec.grips.kind == "nodal"
+    summary = json.loads((out / "kernel" / f"{name}-fields.json").read_text(encoding="utf-8"))["summary"]
+    assert summary["applied"]["control"] == "force" and summary["applied"]["value"] == pytest.approx(force)
+    twin = (out / "calculix" / f"{name}-nodal-ccx.inp").read_text(encoding="utf-8")
+    moved = re.search(r"\*\* The coupon states a force of (\S+) on Grip-Top, which moves as one\..*\n\*BOUNDARY\nGrip-Top, 2, 2, (\S+)\n", twin)
+    assert moved and float(moved[1]) == pytest.approx(force) and float(moved[2]) * force > 0 and "*CLOAD" not in twin and "*EQUATION" not in twin
+    reaction = summary["calculix"]["reaction"]  # the force the coupon carries, in the load's sense: ours is the force stated, CalculiX's what it carries there
+    assert reaction["agrees"] and reaction["ours"] == pytest.approx(force, rel=1e-6) and reaction["calculix"] == pytest.approx(force, rel=0.03)
+    assert all(all(ply["agrees"]) for ply in summary["calculix"]["gauge"])

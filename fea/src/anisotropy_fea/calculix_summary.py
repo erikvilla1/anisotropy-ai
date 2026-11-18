@@ -14,13 +14,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .case_pages import record_rows, signed
+from .case_pages import reaction_row, record_rows, signed
 from .femodel import build_model
 from .test_quantities import STRAIN_PROBES, chord_modulus, engineering_stress, extensometer_strain, gross_area, method_inputs
 from .units import from_si, to_si
 
 GAUGE_GROUP = "ply_stress_local"
-REACTION_SET = "Grip-Top"
 FRD_STRESSES = ("mises_max", "sxx_max", "sxx_min", "syy_max", "syy_min", "sxy_max_abs", "gauge_mises_max", "gauge_syy_max", "gauge_sxx_max_abs")
 FRD_LENGTHS = ("gauge_from", "gauge_to")
 PLY_STRESSES = ("s1_max", "s2_max", "t12_max_abs", "s1_max_abs", "s2_max_abs", "gauge_s1_max")
@@ -48,13 +47,13 @@ def calculix_test_method(rows, record_units: str, units: str, nodes: tuple[str, 
     """CalculiX's strain at the strain measurement and its chord modulus (ADR-0072), from the record's reaction at the moving grip and its
     displacements along the coupon at the two probe nodes (`nodes`, the twin's labels; `positions`, their y in SI); `area` in SI. None when
     the record does not hold them."""
-    reaction = [r for r in rows if r.group == "rf" and r.name == REACTION_SET and r.component == 1]
+    reaction = reaction_row(rows)
     moved = {r.name: r for r in rows if r.group == "u" and r.name in nodes and r.component == 1}
     if not reaction or len(moved) != 2:
         return None
     out = {}
     for who, pick in (("calculix", lambda r: r.reference), ("ours", lambda r: r.kernel)):
-        force = to_si(pick(reaction[0]), "force", record_units)
+        force = to_si(reaction[1] * pick(reaction[0]), "force", record_units)
         v_bottom, v_top = (to_si(pick(moved[name]), "length", record_units) for name in nodes)
         strain = extensometer_strain(v_bottom, v_top, *positions)
         modulus = chord_modulus(engineering_stress(force, area), strain)[2]
@@ -72,11 +71,11 @@ def calculix_summary(record_path: Path, units: str, extensometer: tuple[tuple[st
     record_units = record["units"]
     out: dict = {"record": record_path.name, "units": units, "tolerance": float(record["expected"]["tolerance"]),
                  "agree": f"{sum(r.agrees for r in rows)} of {len(rows)}", "reaction": None, "gauge_element": None, "gauge": [], "frd": None}
-    reaction = [r for r in rows if r.group == "rf" and r.name == REACTION_SET and r.component == 1]
+    reaction = reaction_row(rows)
     if reaction:
-        r = reaction[0]
-        out["reaction"] = {"calculix": convert(r.reference, "force", record_units, units), "ours": convert(r.kernel, "force", record_units, units),
-                           "difference": signed(r.reference, r.kernel), "agrees": r.agrees}
+        r, sign = reaction  # the force the coupon carries, in the load's sense: under a force the held grip answers against it
+        out["reaction"] = {"calculix": convert(sign * r.reference, "force", record_units, units), "ours": convert(sign * r.kernel, "force", record_units, units),
+                           "difference": signed(sign * r.reference, sign * r.kernel), "agrees": r.agrees}
     gauge = [r for r in rows if r.group == GAUGE_GROUP]
     if gauge:
         element = gauge[0].name
