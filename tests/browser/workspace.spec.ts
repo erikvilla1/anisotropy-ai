@@ -142,6 +142,11 @@ test("your analyses lists the finished runs with their answers, and one opens ag
   await expect(rail.getByTestId("past-files").locator("a[data-key=document]")).toHaveAttribute("href", new RegExp(`/v1/coupon-jobs/${done.job_id}/files/document`));
   await expect(page.getByTestId("ws-stage").getByTestId("results")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("chat-past")).toContainText("IM7-UNT-L1");
+  // while it is open the chat holds the talk about this run alone: the project's questions, checks and run buttons wait behind it
+  const chat = page.getByTestId("coupon-chat");
+  await expect(chat.locator("[data-step]")).toHaveCount(0);
+  await expect(chat.getByTestId("chat-check")).toHaveCount(0);
+  await expect(chat.getByRole("button", { name: "Start a new coupon" })).toHaveCount(0);
 
   // the assistant answers from that run's results, with no model asked and nothing solved again
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
@@ -157,6 +162,8 @@ test("your analyses lists the finished runs with their answers, and one opens ag
   await expect(page.getByTestId("past-rail")).toHaveCount(0);
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("240");
   await expect(page.getByTestId("past-banner")).toHaveCount(0);
+  await expect(chat.getByRole("button", { name: "Start a new coupon" })).toBeVisible(); // the project's chat is back, with what was said of the run
+  await expect(chat.getByTestId("chat-past")).toBeVisible();
 
   // a reload opens the project, not the past run again: the id was taken once
   await page.reload();
