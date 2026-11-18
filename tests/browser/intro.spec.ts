@@ -238,7 +238,7 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   });
   expect(placed.offMiddle).toBeLessThanOrEqual(0.5);
   expect(placed.clearOfMark).toBeGreaterThanOrEqual(24);
-  expect(placed.fromFoot).toBe(placed.markFromFoot);
+  expect(placed.fromFoot).toBeCloseTo(placed.markFromFoot, 2); // Firefox lays out in 1/60 px and can be 0.00002 px off
   expect(placed.square).toEqual([34, 34]);
   expect(placed.squareLast).toBeLessThanOrEqual(0.5);
   expect([placed.border, placed.radius]).toEqual(["1px", "5px"]);

@@ -37,16 +37,30 @@ test.afterEach(async ({ page }) => {
 
 test("the example coupon solves end to end from the studio", async ({ page }) => {
   await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
-  await page.getByRole("button", { name: "Load example" }).click();
-  // the coupon's codes are derived or reused (ADR-0038 amendment 1); "Filled in by" sits under Advanced and takes the Run by name when blank
-  await page.getByLabel("Run by", { exact: true }).fill("Studio live test"); // names who fills and who runs the coupon
-  await page.getByTestId("check-button").click();
-  await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready", { timeout: 120_000 });
-  await page.getByTestId("solve-button").click();
+  // With every test offered (ANISOTROPY_ALL_TESTS=on, ADR-0089) the left column is the form and its example; with the switch off,
+  // as on the hosted tier and in the API started here, it is the tension screen (ADR-0090): a visitor gives the material and the
+  // layup, and the software the rest.
+  const screen = page.getByTestId("tension-screen");
+  const example = page.getByRole("button", { name: "Load example" });
+  await expect(screen.or(example)).toBeVisible({ timeout: 60_000 });
+  if (await screen.isVisible()) {
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+    await expect(page.getByTestId("build-button")).toBeEnabled({ timeout: 60_000 });
+    await page.getByTestId("build-button").click(); // the check, then the run once it is ready
+  } else {
+    await example.click();
+    // the coupon's codes are derived or reused (ADR-0038 amendment 1); "Filled in by" sits under Advanced and takes the Run by name when blank
+    await page.getByLabel("Run by", { exact: true }).fill("Studio live test"); // names who fills and who runs the coupon
+    await page.getByTestId("check-button").click();
+    await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready", { timeout: 120_000 });
+    await page.getByTestId("solve-button").click();
+  }
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 300_000 });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 300_000 });
-  await expect(page.getByTestId("job-message")).toContainText("recorded values agree with CalculiX");
+  await expect(page.getByTestId("job-message")).toHaveText(/^(Verified against reference solver|Reference solver check): \d+ of \d+ values/); // CalculiX ran beside our engine
   if (process.env.PREVIEW_URL && process.env.CF_ACCESS_CLIENT_ID) { // behind Access, the bucket let a browser from the site's origin read every file the page asked for
     expect(bucketAnswers.length).toBeGreaterThan(0);
     expect(new Set(bucketAnswers)).toEqual(new Set([new URL(process.env.PREVIEW_URL).origin]));

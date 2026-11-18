@@ -158,6 +158,7 @@ jobs:
       matrix:
         browser: [firefox, webkit]
     runs-on: ubuntu-latest
+    timeout-minutes: 40 # an install that hangs on the runner's package mirror stops here, not at GitHub's six hours
     env:
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
       BROWSER: ${{ matrix.browser }}
@@ -169,6 +170,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Mesa, for Firefox's WebGL in software (the runner has no GPU; playwright.config.ts lets Firefox use it)
+        if: matrix.browser == 'firefox'
+        run: sudo apt-get install -y --no-install-recommends libegl1 libgl1-mesa-dri
       - run: npm run build
       - name: The site's specs
         run: npm run test:site

@@ -10,5 +10,8 @@ export default defineConfig({
   testIgnore: ["calculator.spec.ts", "studio.spec.ts", "workspace.spec.ts", "abaqus-card.spec.ts", "import.spec.ts", "studio-live.spec.ts"],
   // Twice Playwright's 30 s: Firefox and WebKit draw the 3D views in software on a CI runner, more slowly than Chromium.
   timeout: 60_000,
+  // One browser at a time: the intro, shell and demo specs time the page's fades and slides frame by frame, and a second
+  // browser on a CI runner's four cores drops frames (intro.spec.ts saw 4 frames of a fade for its 5 when two ran at once).
+  workers: 1,
   webServer: [{ command: "npm run preview", url: "http://localhost:3001/", reuseExistingServer: !process.env.CI }],
 });
