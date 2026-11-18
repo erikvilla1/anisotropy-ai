@@ -59,7 +59,7 @@ const CODES: [string, RegExp][] = [
   ["S11", /\bs11\b|\bsigma[\s_-]?11?(?!\s?2)\b|σ\s?11?(?!\s?2)/],
   ["S22", /\bs22\b|\bsigma[\s_-]?22?\b|σ\s?22?/],
   ["S12", /\bs12\b|\bsigma[\s_-]?12\b|σ\s?12|\btau(?:[\s_-]?12)?\b|τ/],
-  ["Mises", /\b(?:von\s+)?mises\b/],
+  ["Mises", /\b(?:von\s+)?mis+es\b/], // "von misses" is typed often
   ["Tresca", /\btresca\b/],
   ["E11", /\be11\b|\bepsilon[\s_-]?11?(?!\s?2)\b|ε\s?11?(?!\s?2)/],
   ["E22", /\be22\b|\bepsilon[\s_-]?22?\b|ε\s?22?/],
@@ -83,18 +83,11 @@ const UNSIGNED = new Set(["S12", "E12", "Mises", "Tresca"]);
 // a message that opens by setting something ("make ply 5 ...", "apply a stress of ...") states the setup, whatever it goes on to name
 const SETTING = /^\s*(?:make|set|change|use|apply|add|put|pull|push|load|hold|fix)\b/;
 
-/** The message as a question about a result, or null when it is not one. It must name a quantity (a stress or a strain) and either a
- * place (an element, a ply, or "here") or an extreme ("highest", "largest", "minimum"). Anything else is the setup's to read. */
-export function readResultQuestion(message: string): ResultQuestion | null {
-  const text = message.toLowerCase().replace(/[₁₂]/g, (c) => SUBSCRIPTS[c]);
-  if (SETTING.test(text) || CRITERION.test(text)) return null;
-  const named = ELEMENT.exec(text);
-  const element = named ? Number(named[1]) : PICKED.test(text) ? "picked" : null;
-  const plyNamed = PLY.exec(text);
-  const plies = plyNamed ? [Number(plyNamed[1])] : null;
-  const sense = EXTREME_WORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
-  if (element === null && plies === null && sense === null) return null;
+const lowered = (message: string) => message.toLowerCase().replace(/[₁₂]/g, (c) => SUBSCRIPTS[c]);
 
+/** The quantities a message names, in the probe table's order: a component by its code or symbol, a direction beside "stress" or
+ * "strain", or the plain word, which is the ply's own three components. Empty when it names none. */
+function columnsOf(text: string): string[] {
   const columns = new Set(CODES.filter(([, pattern]) => pattern.test(text)).map(([name]) => name));
   if (/\bprincipal\b/.test(text)) for (const name of ["Max. Principal", "Mid. Principal", "Min. Principal"]) columns.add(name);
   const directions = [ALONG.test(text), ACROSS.test(text), SHEAR.test(text)];
@@ -103,14 +96,101 @@ export function readResultQuestion(message: string): ResultQuestion | null {
     else if (!codes.some((code) => columns.has(code))) codes.forEach((code) => columns.add(code)); // "the stress": the three in the fibre axes
   };
   // "Mises stress" names Mises alone; a plain "stress" is the ply's own three components
-  if (STRESS_WORD.test(text.replace(/\b(?:mises|tresca|principal)\s+stress(?:es)?\b/g, " "))) inWords(["S11", "S22", "S12"]);
+  if (STRESS_WORD.test(text.replace(/\b(?:mis+es|tresca|principal)\s+stress(?:es)?\b/g, " "))) inWords(["S11", "S22", "S12"]);
   if (STRAIN_WORD.test(text)) inWords(["E11", "E22", "E12"]);
-  const ordered = PROBE_COLUMNS.filter((c) => columns.has(c));
+  return PROBE_COLUMNS.filter((c) => columns.has(c));
+}
+
+/** The message as a question about a result, or null when it is not one. It must name a quantity (a stress or a strain) and either a
+ * place (an element, a ply, or "here") or an extreme ("highest", "largest", "minimum"). Anything else is the setup's to read. */
+export function readResultQuestion(message: string): ResultQuestion | null {
+  const text = lowered(message);
+  if (SETTING.test(text) || CRITERION.test(text)) return null;
+  const named = ELEMENT.exec(text);
+  const element = named ? Number(named[1]) : PICKED.test(text) ? "picked" : null;
+  const plyNamed = PLY.exec(text);
+  const plies = plyNamed ? [Number(plyNamed[1])] : null;
+  const sense = EXTREME_WORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
+  if (element === null && plies === null && sense === null) return null;
+
+  const ordered = columnsOf(text);
   if (!ordered.length) return null;
   // an element named, or "here", is a place to read every value at; with none, an extreme word asks where the quantity is largest
   if (element !== null || sense === null) return { kind: "values", element, plies, columns: ordered };
   const region: Region = GAUGE.test(text.replace(/\bstrain\s+gau?ge\b/g, " ")) ? "gauge" : WHOLE.test(text) ? "whole" : "default";
   return { kind: "extreme", sense, plies, region, columns: ordered };
+}
+
+// the small words of a follow-up: with the place and the quantity taken out, nothing else may be left of one
+const FILLER = /\b(?:now|and|then|also|ok|okay|so|what|whats|how|about|show|give|tell|me|us|the|a|an|same|for|in|at|on|of|is|are|it|its|there|too|again|instead|please|value|values|one|to|with|but|that)\b/g;
+const CHANGING = /^\s*(?:remove|drop|delete|rotate|swap|replace|flip|turn|move|insert|double|halve|increase|decrease|reduce|raise|lower|run|check|solve)\b/;
+const DEFAULT_COLUMNS = ["S11", "S22", "S12"];
+
+/** A follow-up (ADR-0099 amendment 3): a few words that name a ply, an element or a quantity and nothing else ("now in ply 5", "sigma 1",
+ * "and at element 400"). What it leaves unsaid is the question's before it, `last`; with none before it, the place is the page's own
+ * default and the quantity the ply's three stresses. Null for anything else: a whole question is `readResultQuestion`'s, and a message
+ * with any other word or number in it is not a follow-up, so a row of the setup is never read as one. */
+export function readFollowUp(message: string, last: ResultQuestion | null): ResultQuestion | null {
+  const text = lowered(message);
+  if (SETTING.test(text) || CHANGING.test(text) || CRITERION.test(text)) return null;
+  const named = ELEMENT.exec(text);
+  const element = named ? Number(named[1]) : PICKED.test(text) ? "picked" : null;
+  const plyNamed = PLY.exec(text);
+  const plies = plyNamed ? [Number(plyNamed[1])] : null;
+  const columns = columnsOf(text);
+  if (element === null && plies === null && !columns.length) return null;
+  const said = [ELEMENT, PICKED, PLY, ...CODES.map(([, pattern]) => pattern), ALONG, ACROSS, SHEAR, STRESS_WORD, STRAIN_WORD, /\bprincipal\b/, FILLER]
+    .reduce((rest, pattern) => rest.replace(new RegExp(pattern.source, "g"), " "), text);
+  if (/[a-z0-9]/.test(said)) return null;
+  const asked = columns.length ? columns : last?.columns ?? DEFAULT_COLUMNS;
+  if (last?.kind === "extreme" && element === null) return { kind: "extreme", sense: last.sense, plies: plies ?? last.plies, region: last.region, columns: asked };
+  return { kind: "values", element: element ?? (last?.kind === "values" ? last.element : null), plies: plies ?? last?.plies ?? null, columns: asked };
+}
+
+const WHAT_IS = /^\s*(?:(?:no|but|ok|okay|so|and)[,.!]?\s+)*(?:what|where|which|whats|wheres)\b/;
+const OF_IT = /\b(?:does|do|did) (?:it|that|this) (?:represent|mean|stand for|refer to|show)\b|\bwhat is (?:it|that)\b/;
+const AN_ELEMENT = /\b(?:an?|the|each|every) (?:element|elem)\b|\b(?:elements|elems)\b/;
+const THIS_ELEMENT = /\b(?:this|that|the (?:picked|selected|clicked|highlighted)) (?:element|elem)\b/;
+// the words a question of what an element is may be made of; any other word and it asks something else ("which is worse here, tension
+// or compression?")
+const ELEMENT_WORDS = /\b(?:no|but|ok|okay|so|and|what|where|which|whats|wheres|is|are|was|does|do|did|it|that|this|the|an?|each|every|one|elements?|elems?|el|number|no|picked|selected|clicked|highlighted|represent(?:s|ing)?|mean(?:s|ing)?|stands?|for|refers?|to|show(?:s|ing)?|located|sits?|lies?|exactly|on|in|of|model|mesh|i|me|tell|about|please|here)\b/g;
+
+/** A question of what an element is, or where it sits ("what does element 376 represent", "where is this element"): the element by its
+ * number, "picked" for the one clicked, "last" for "it" (the element spoken of before), null for elements in general. Null when the
+ * message is not such a question: one that names a quantity or a ply asks for a value, and one with any word beyond those of such a
+ * question asks something else. */
+export function asksElement(message: string): { element: number | "picked" | "last" | null } | null {
+  const text = lowered(message);
+  if (!WHAT_IS.test(text) || columnsOf(text).length || PLY.test(text)) return null;
+  if (/[a-z0-9]/.test(text.replace(new RegExp(ELEMENT.source, "g"), " ").replace(ELEMENT_WORDS, " "))) return null;
+  const named = ELEMENT.exec(text);
+  if (named) return { element: Number(named[1]) };
+  if (THIS_ELEMENT.test(text)) return { element: "picked" };
+  if (AN_ELEMENT.test(text)) return { element: null };
+  return OF_IT.test(text) ? { element: "last" } : null;
+}
+
+/** What the fields say of one element, or of elements in general (`element` null): how many the model has, the element's number and
+ * centre, and where it lies: in the gauge section as the package reads it, at a grip's clamped edge, or neither. Nothing is computed. */
+export type ElementFacts = { kind: "element"; count: number; element: number | null; label: string | null; centroid: [number, number] | null;
+  where: "gauge" | "grip" | null; sets: string[] };
+
+export function describeElement(fields: Fields, asked: number | "picked" | null, picked: number | null): ElementFacts | { kind: "refused"; text: string } {
+  const count = fields.mesh.element_labels.length;
+  const general: ElementFacts = { kind: "element", count, element: null, label: null, centroid: null, where: null, sets: [] };
+  if (asked === null) return general;
+  let element: number;
+  if (asked === "picked") {
+    if (picked === null || picked < 0 || picked >= count) return general;
+    element = picked;
+  } else {
+    const found = elementNumbered(fields, asked);
+    if (typeof found !== "number") return found;
+    element = found;
+  }
+  const table = probeTable(fields, element);
+  const where = gaugeSection(fields)?.includes(element) ? "gauge" : atGrips(fields).has(element) ? "grip" : null;
+  return { kind: "element", count, element, label: table.label, centroid: table.centroid, where, sets: setsOf(fields, element) };
 }
 
 /** What a message may name of these results, for a model to read a loose question against (ADR-0100): the quantities, the plies and
@@ -146,6 +226,9 @@ export type ResultValues = {
   rows: ResultRow[];
   /** How the values are taken (the probe table's own note): the centroid, no averaging, the fibre axes. */
   note: string;
+  /** How the place was chosen: named in the question, the element clicked on the model, or, with neither, the gauge centre the package
+   * names (`summary.gauge_centre`, ADR-0099 amendment 3). */
+  place: "named" | "picked" | "gauge centre";
 };
 /** One ply's extreme of a quantity: a stored value, the element it is at, and the plies it is tied with at that very value. */
 export type ExtremeRow = { ply: number; angle: number; face: string | null; value: number; element: number; label: string; sets: string[] };
@@ -177,24 +260,43 @@ export function answerResultQuestion(fields: Fields, question: ResultQuestion, p
   const asked = question.plies ? [...new Set(question.plies)].sort((a, b) => a - b) : null;
   if (question.kind === "extreme") return extremesOf(fields, question, asked);
   let element: number;
+  let place: ResultValues["place"] = "named";
+  const centre = fields.summary.gauge_centre;
   if (typeof question.element === "number") {
-    const found = labels.flatMap((label, i) => (numberOf(label) === String(question.element) ? [i] : []));
-    if (!found.length) {
-      const numbers = labels.map((l) => Number(numberOf(l))).filter(Number.isFinite);
-      const range = numbers.length ? ` Its elements are numbered ${Math.min(...numbers)} to ${Math.max(...numbers)}.` : "";
-      return { kind: "refused", text: `This model has no element ${question.element}.${range}` };
-    }
-    if (found.length > 1) return { kind: "refused", text: `More than one part has an element ${question.element}: ${found.map((i) => labels[i]).join(", ")}. Click the one you mean on the model and ask again.` };
-    element = found[0];
-  } else if (picked !== null && picked >= 0 && picked < labels.length) element = picked;
+    const found = elementNumbered(fields, question.element);
+    if (typeof found !== "number") return found;
+    element = found;
+  } else if (picked !== null && picked >= 0 && picked < labels.length) [element, place] = [picked, "picked"];
+  // no element named and none clicked: the gauge centre, which the page already shows, never a question back (ADR-0099 amendment 3);
+  // "here" with nothing clicked still asks, and so does a model without a gauge section
+  else if (question.element === null && centre && centre.element >= 0 && centre.element < labels.length) [element, place] = [centre.element, "gauge centre"];
   else return { kind: "ask", text: "Which element? Click one on the model, or name its number, e.g. “element 120”." };
 
   const table = probeTable(fields, element);
   const at = question.columns.map((c) => PROBE_COLUMNS.indexOf(c));
   const rows = table.rows.filter((r) => asked === null || asked.includes(r.ply))
     .map((r) => ({ ply: r.ply, angle: r.angle, face: r.face, values: at.map((i) => r.values[i] ?? null) }));
-  return { kind: "values", element, label: table.label, instance: table.instance, centroid: table.centroid, sets: setsOf(fields, element), columns: question.columns, rows, note: table.note };
+  return { kind: "values", element, label: table.label, instance: table.instance, centroid: table.centroid, sets: setsOf(fields, element), columns: question.columns, rows, note: table.note, place };
 }
+
+/** The mesh index of the element with this number, as the model labels it; a number the model does not hold, or holds in two parts, is
+ * refused with what it does hold. */
+function elementNumbered(fields: Fields, number: number): number | { kind: "refused"; text: string } {
+  const labels = fields.mesh.element_labels;
+  const found = labels.flatMap((label, i) => (numberOf(label) === String(number) ? [i] : []));
+  if (!found.length) {
+    const numbers = labels.map((l) => Number(numberOf(l))).filter(Number.isFinite);
+    const range = numbers.length ? ` Its elements are numbered ${Math.min(...numbers)} to ${Math.max(...numbers)}.` : "";
+    return { kind: "refused", text: `This model has no element ${number}.${range}` };
+  }
+  if (found.length > 1) return { kind: "refused", text: `More than one part has an element ${number}: ${found.map((i) => labels[i]).join(", ")}. Click the one you mean on the model and ask again.` };
+  return found[0];
+}
+
+/** The columns that are no failure measure of a composite ply, and the page's one sentence on them (the probe table's own words). */
+const COMPARISON_ONLY = new Set(["Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal"]);
+export const comparisonNote = (columns: string[]): string | null => columns.some((c) => COMPARISON_ONLY.has(c))
+  ? "Mises, Tresca and the principal stresses are for comparison, not composite failure criteria. Ask “which ply fails first?” for that." : null;
 
 const setsOf = (fields: Fields, element: number) => Object.entries(fields.mesh.element_sets).filter(([, members]) => members.includes(element)).map(([name]) => name);
 
@@ -294,5 +396,6 @@ export function valueLines(answer: ResultValues, unit: string, print: (value: nu
   const row = answer.rows[0];
   const symbol = RESULT_COLUMNS[answer.columns[0]].symbol;
   const value = row.values[0];
-  return { headline: value === null ? `No ${symbol} written here` : `${symbol} = ${print(value)}${unit ? ` ${unit}` : ""}`, facts: [plyLabel(row), `element ${answer.label}`] };
+  return { headline: value === null ? `No ${symbol} written here` : `${symbol} = ${print(value)}${unit ? ` ${unit}` : ""}`,
+    facts: [plyLabel(row), `element ${answer.label}`, ...(answer.place === "gauge centre" ? ["gauge centre"] : [])] };
 }

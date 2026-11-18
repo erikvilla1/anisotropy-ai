@@ -108,6 +108,9 @@ export type Fields = {
     /** The same over the gauge section alone, read past the stand-off from each tab line (`gauge_reading`, ADR-0108; before it, the Gauge elements
      * that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null; gauge_reading?: GaugeReading | null;
+    /** The gauge-centre element (ADR-0099 amendment 3): the one the hand check and the Verification table read, which a question that names
+     * no place is answered at. Null for a model without a gauge section or with a hole at its centre; absent on a result solved before it. */
+    gauge_centre?: { element: number; label: string; xy: number[]; basis: string } | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
     /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */
