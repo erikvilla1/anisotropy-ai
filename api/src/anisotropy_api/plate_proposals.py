@@ -37,6 +37,33 @@ SENSES = ("tension", "compression", "as_signed")
 # y = 0, Edge-Top at y = length): the direction's number and the sign of a pull along it.
 EDGE_NORMAL: dict[str, tuple[int, int]] = {"Edge-Left": (1, -1), "Edge-Right": (1, 1), "Edge-Bottom": (2, -1), "Edge-Top": (2, 1)}
 MAX_ENTRIES = 12
+# Abaqus's words for a boundary condition and a force, as an engineer writes them (ADR-0110). Each has one meaning, so the quoted words fix
+# the directions whatever the model wrote: a named condition holds its set, a code holds its direction, CF1 to CF3 point a force along x,
+# y or z. A roller alone names no direction, so it needs one written beside it.
+NAMED_SUPPORTS: dict[str, tuple[int, ...]] = {
+    "encastre": (1, 2, 3, 4, 5, 6), "encastré": (1, 2, 3, 4, 5, 6), "pinned": (1, 2, 3),
+    "xsymm": (1, 5, 6), "ysymm": (2, 4, 6), "zsymm": (3, 4, 5),
+}
+DIRECTION_CODES: dict[str, int] = {"u1": 1, "u2": 2, "u3": 3, "ur1": 4, "ur2": 5, "ur3": 6}
+FORCE_CODES: dict[str, str] = {"cf1": "x", "cf2": "y", "cf3": "z"}
+
+
+def _word(word: str, text: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", text) is not None
+
+
+def written_directions(quote: str) -> list[int] | None:
+    """The directions the quoted words fix by Abaqus's names and codes ("encastre", "XSYMM", "U1 and UR3"), or None when they fix none."""
+    q = _plain(quote)
+    found = {d for word, dofs in NAMED_SUPPORTS.items() if _word(word, q) for d in dofs} | {d for code, d in DIRECTION_CODES.items() if _word(code, q)}
+    return sorted(found) or None
+
+
+def written_force_direction(quote: str) -> str | None:
+    """The direction a force's quoted words fix by CF1, CF2 or CF3, or None; two codes fix none."""
+    q = _plain(quote)
+    found = {axis for code, axis in FORCE_CODES.items() if _word(code, q)}
+    return found.pop() if len(found) == 1 else None
 
 PLATE_SYSTEM = (
     " This problem is a plate, held and loaded over named regions. Besides rows you may propose supports and loads. plate.regions lists "
@@ -50,7 +77,10 @@ PLATE_SYSTEM = (
     "direction x, y or z, with a minus sign on the value when the words say it acts against that axis (downward is against z). A pressure "
     "has direction null and sense as_signed, and is positive when it presses down on the plate; give a minus sign for suction or a "
     "pressure from below. Value, unit and quote follow the same rules as for rows. plate.held and plate.loaded name the regions already "
-    "held and loaded."
+    "held and loaded. The engineer may use Abaqus's words: a boundary condition (BC) is a support; U1, U2, U3 are x, y, z and UR1, UR2, "
+    "UR3 are tilt_x, tilt_y, turn_z; encastre is all six; pinned is x, y and z; XSYMM is x, tilt_y and turn_z; YSYMM is y, tilt_x and "
+    "turn_z; ZSYMM is z, tilt_x and tilt_y; CF1, CF2 and CF3 are a force along x, y and z. A roller with no direction written: propose "
+    "nothing for it and ask which direction it holds. Quote the words that hold these names."
 )
 
 
@@ -140,15 +170,19 @@ def plate_guard(raw: dict[str, Any], message: str, offer: dict[str, Any]) -> Kep
         region, quote = str(item.get("region", "")), str(item.get("quote", ""))
         names = item.get("directions")
         reason = placed(region, quote)
+        written = written_directions(quote)
         if reason is None and region in held:
             reason = "held twice; the first stands"
-        if reason is None and (not isinstance(names, list) or not names or any(n not in DIRECTIONS for n in names)):
+        if reason is None and written is None and _word("roller", _plain(quote)) and not re.search(r"(?<![a-z0-9])[xyz](?![a-z0-9])", _plain(quote)):
+            reason = "a roller holds one direction: say which, x, y or z"
+        if reason is None and written is None and (not isinstance(names, list) or not names or any(n not in DIRECTIONS for n in names)):
             reason = "it names no direction a plate holds"
         if reason is not None:
             kept.dropped.append({"key": f"support on {region}" if region in kinds else "support", "reason": reason})
             continue
         held.add(region)
-        kept.supports.append({"region": region, "dofs": sorted({DIRECTIONS[n] for n in names}), "quote": quote.strip()})
+        dofs = written if written is not None else sorted({DIRECTIONS[n] for n in names})
+        kept.supports.append({"region": region, "dofs": dofs, "quote": quote.strip()})
 
     for item in list(raw.get("loads") or [])[:MAX_ENTRIES]:
         if not isinstance(item, dict):
@@ -184,13 +218,16 @@ def plate_guard(raw: dict[str, Any], message: str, offer: dict[str, Any]) -> Kep
                 drop(f"a pressure acts on an area, and {region} is an edge")
                 continue
             sense = "as_signed"
-        elif sense in ("tension", "compression"):
+        elif sense in ("tension", "compression") and written_force_direction(quote) is None:
             if region not in EDGE_NORMAL:
                 drop(f"{sense} has no one direction on {region}: name the direction, x, y or z")
                 continue
             dof, outward = EDGE_NORMAL[region]
             amount = abs(amount) * (outward if sense == "tension" else -outward)
         else:
+            coded = written_force_direction(quote)  # "CF2 = 500 N" is along y and signed as written, whatever the model wrote
+            if coded is not None:
+                direction, sense = coded, "as_signed"
             if direction not in FORCE_DIRECTIONS:
                 drop("a force needs a direction: x, y or z")
                 continue

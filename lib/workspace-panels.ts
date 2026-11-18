@@ -25,7 +25,7 @@ export const PANELS: readonly Panel[] = [
     keys: ["material_kind", ...ISOTROPIC_KEYS, ...PLY_KEYS, "symmetric", "ply_thickness", "library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t",
       "own_F1c", "own_F2t", "own_F2c", "own_F6", "own_source", "G13", "G23", "criteria", "f12_star"],
   },
-  { id: "loads", title: "Loads and supports", keys: ["control", "value", "grips", "region"], items: ["constraints", "load"] },
+  { id: "loads", title: "Boundary conditions and loads", keys: ["control", "value", "grips", "region"], items: ["constraints", "load"] },
   { id: "mesh", title: "Mesh", keys: ["element_size", "mesh_nx", "mesh_partitions", "mesh_seeds", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"], items: ["mesh", "probes"] },
   { id: "validate", title: "Validate", keys: [], items: [] },
   { id: "run", title: "Run", keys: [], items: ["solver", "document"] },

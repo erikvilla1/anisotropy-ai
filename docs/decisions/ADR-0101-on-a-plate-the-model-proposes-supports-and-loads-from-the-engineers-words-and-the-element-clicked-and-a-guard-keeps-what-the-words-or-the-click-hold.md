@@ -1,6 +1,6 @@
 # ADR-0101: On a plate the model proposes supports and loads from the engineer's words and the element clicked, and a guard keeps what the words or the click hold
 
-- Status: Proposed; since amendment 1 a plate that states no support or no load yet shows its shape, so its first hold can be the edge clicked
+- Status: Proposed; since amendment 1 a plate that states no support or no load yet shows its shape, so its first hold can be the edge clicked; since amendment 2 Abaqus's names for a boundary condition and a force (encastre, pinned, XSYMM, U1, CF2) fix their directions
 - Date: 2026-11-16
 - Decided by: Founder, 2026-11-16 ("right now i can't edit the model click on an edge and tell the AI to make edits, or change boundary conditions or change load really fast", on what the assistant lacks; the same day, on the card asking where "hold this, add a 10 kN load here" should work first, he chose "The plate, only you see it live") | Drafted by: Claude Code
 - Related: [ADR-0054](ADR-0054-a-plate-kind-states-supports-and-loads-as-lists-over-named-regions-and-the-studio-lets-the-user-click-a-region.md) (the plate, its regions and the click); [ADR-0088](ADR-0088-the-model-proposes-rows-from-the-engineers-words-a-source-guard-keeps-what-the-message-writes-and-the-engineer-ticks-what-enters.md), which this extends from rows to a plate's lists; [ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) (the clicked element as "here"); [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) (the plate is hidden on the hosted tier); [ADR-0001](ADR-0001-deterministic-engine.md); `api/src/anisotropy_api/plate_proposals.py`, `lib/proposals.ts`, `lib/studio-plate.ts`, `components/studio/coupon-chat.tsx`
@@ -101,3 +101,22 @@
 - By hand on 2026-11-16, the real tool: `studio_tool.py check` and `live` on a 100 × 100 mm plate with no support and no load wrote `preview.json` with 256 elements, `shape: ["supports", "loads"]`, nothing held and no load, the checklist blocked on "Supports: required for a plate"; with the switch off, no preview.
 - UNVERIFIED: not deployed, so not tried on the live site; no real model has read "hold this edge" with a click.
 
+
+## Amendment 2, 2026-11-18 (Abaqus's names for a boundary condition and a force fix their directions; not yet confirmed by the founder)
+
+**Context.**
+- An engineer who sets models up in Abaqus says "YSYMM on the bottom edge", "encastre the left edge", "hold U1 and UR3" or "CF2 = 500 N on the right edge" (ADR-0110). The guard knew "fixed", "clamped" and "simply supported" only, so the directions of a named boundary condition were the model's guess, and a guess on a symmetry is easy to get wrong.
+
+**Options.**
+1. **The guard reads the names and codes in the quoted words and fixes the directions from them, whatever the model wrote; the model is told the names (chosen).** Each name has one meaning, so nothing is guessed.
+2. Tell the model the names and leave the guard as it was. Rejected: a model's directions are what the guard exists to check, and a quoted "XSYMM" would still be held in the model's directions.
+3. Read the names on the page and send the directions to the model. Rejected: the page does not read a plate's message into regions; the model does (this record).
+
+**Decision.**
+- `written_directions(quote)`: encastre holds all six; pinned x, y and z; XSYMM x, the tilt about y and the turn about z; YSYMM y, the tilt about x and the turn about z; ZSYMM z and the two tilts; U1 to U3 the moves along x, y and z, UR1 to UR3 the turns about them. A support whose quote names any of them is held in those directions, and one with no directions from the model is kept.
+- A roller with no direction written (no x, y, z or code) is dropped with "a roller holds one direction: say which, x, y or z".
+- `written_force_direction(quote)`: CF1, CF2 or CF3 points a force along x, y or z, signed as written ("CF2 = -500 N" acts against y), in place of a tension's or a compression's sign from the edge. Two codes in one quote fix nothing.
+- `PLATE_SYSTEM` tells the model the same names, to ask which way a roller holds, and to quote the words that hold a name.
+
+**Evidence.**
+- `cd api && uv run pytest -q tests/test_plate_proposals.py`: see ADR-0110, Why (evidence). Not yet read by a real model.
