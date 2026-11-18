@@ -4,7 +4,7 @@
  * pipeline and the API keep their own names; this file is where they become the product's. `BANNED_TERMS` is the one list the page's
  * guard (`customerText`) and the browser test read.
  */
-import type { JobStatus } from "./studio-api";
+import type { JobStatus, UnreadKind } from "./studio-api";
 import { formatNumber, inProse } from "./number-format";
 
 /** What an outage says, on the calculator and in the workspaces: what happened and what to do (style guide, rule 8). */
@@ -28,11 +28,15 @@ export const FAILED_WORDS: Record<string, string> = {
   "the project": "This project could not be opened",
   "renaming the project": "The project could not be renamed",
   "the coupons": "The coupons could not be loaded",
+  "the import": "The model could not be imported",
   "the coupon's values": "The coupon could not be opened",
   "the results": "The results could not be loaded",
+  "the run's inputs": "The run's inputs could not be loaded",
   "the explanation": "The explanation could not be loaded",
   "the laminate solve": "The laminate could not be solved",
   "the proposals": "The message could not be read",
+  "the reading of the question": "The question could not be read",
+  "the answer": "The question could not be answered",
   "the tests offered": "The tests offered could not be loaded",
   "the assistant": "The assistant could not be reached",
 };
@@ -96,12 +100,41 @@ const ID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 
 /** A message from the API or the pipeline, shown as it is only when it holds no banned term, no file or folder path, no id and no exit
  * code; null otherwise, so the page says the plain thing instead. */
-export function customerText(text: string | null | undefined): string | null {
+export function customerText(text: string | null | undefined, allows: readonly string[] = []): string | null {
   if (!text) return null;
   const trimmed = text.trim();
-  if (!trimmed || bannedIn(trimmed).length) return null;
+  if (!trimmed || bannedIn(trimmed).some((label) => !allows.includes(label))) return null;
   if (/[A-Za-z]:\\|exited with code|Traceback|\bat line \d+/i.test(trimmed) || PATH.test(trimmed) || ID.test(trimmed)) return null;
   return trimmed;
+}
+
+/** A line about the engineer's own file brought in from Abaqus (ADR-0105), fit to show: it may name Abaqus as the card of their own
+ * Abaqus does, since there it is their program and not a tool of ours; null when it holds anything else that is banned. */
+export function importText(text: string | null | undefined): string | null {
+  return customerText(text, ABAQUS_CARD_ALLOWS);
+}
+
+/** The kinds of thing a refused file holds that are not read (ADR-0105 amendment 1), one line each: the thing in an engineer's words,
+ * the keyword the file writes it with, and where; up to three lines are named and the rest counted. A line not fit to show is left out. */
+export function importUnreadLines(unread: UnreadKind[]): string[] {
+  return unread.map(({ what, keyword, lines }) => {
+    const named = lines.slice(0, 3);
+    const where = `${named.length === 1 ? "line" : "lines"} ${named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`}`
+      + (lines.length > 3 ? `, and ${lines.length - 3} more` : "");
+    return importText(`${what.charAt(0).toUpperCase()}${what.slice(1)}${what.includes(keyword) ? "" : ` (${keyword})`}, ${where}`);
+  }).filter((line): line is string => line !== null);
+}
+
+/** Why a file was refused or its model not solved (ADR-0105), fit to show: the reader's own words when they are, with the line they
+ * name, else the plain thing; null when nothing went wrong. */
+export function importProblemWords(model: { state: string; problem: { message: string; line: number | null; unread?: UnreadKind[] } | null }): string | null {
+  if (!model.problem) return null;
+  const kinds = importUnreadLines(model.problem.unread ?? []);
+  if (kinds.length > 1) return `This file holds ${kinds.length} things that are not read yet:`; // the list follows it
+  const said = importText(model.problem.message);
+  if (said) return sentence(said.replace(/^line (\d+): /, "Line $1: "));
+  const line = model.problem.line === null ? "" : ` The problem is on line ${model.problem.line}.`;
+  return model.state === "refused" ? `This file holds something that is not read yet.${line}` : "This model could not be solved as it stands.";
 }
 
 /** A coupon's record name at the head of a sentence ("IM7-UNT-L1, unnotched tension, ..."), which jobs solved before ADR-0091 amendment 2

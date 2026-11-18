@@ -11,6 +11,7 @@ The guard, per proposal:
   row's dimension, kept as written (the engine converts, ADR-0060);
 - a choice is one of the row's choices; a notation is written in the quote.
 A condition must be offered and asked for in the quote; a question may hold only numbers the message holds.
+What the model could not use (amendment 1) is kept as the engineer's own words and a reason by name, nothing the model phrased.
 """
 
 from __future__ import annotations
@@ -28,6 +29,9 @@ HIDDEN_KEYS = frozenset({"filled_by", "date", "notes", "size_from", "team_model"
 HIDDEN_ENDINGS = ("_name", "_source", "_notes")
 MAX_PROPOSALS = 60
 MAX_QUOTE = 400
+# Why the model proposed nothing for a part of the message (ADR-0088 amendment 1), by name; the page writes the sentence for each.
+UNREAD_REASONS = ("not_offered", "no_value", "refers_back")
+MAX_UNREAD = 5
 
 # The units a coupon row may be proposed in (ADR-0061): name -> (dimension, system, factor to the system's base unit). A value is converted
 # only within its system, by an exact power of ten; a value in the other system is refused, as the chat refuses it.
@@ -138,6 +142,7 @@ class Kept:
     conditions: list[dict[str, Any]] = field(default_factory=list)
     question: str | None = None
     dropped: list[dict[str, str]] = field(default_factory=list)
+    unread: list[dict[str, str]] = field(default_factory=list)
 
 
 def _row_value(row: dict[str, Any], value: str, unit_text: str | None, quote: str) -> tuple[str, str | None] | str:
@@ -238,4 +243,20 @@ def source_guard(raw: dict[str, Any], message: str, rows: list[dict[str, Any]], 
             kept.dropped.append({"key": "question", "reason": "it holds numbers the message does not: " + ", ".join(_written(n) for n in stray)})
         else:
             kept.question = question.strip()
+    # what the model could not use: the engineer's own words, once each, with a reason by name; anything else is left out, since the
+    # page has nothing to say about words the message does not hold
+    quoted = {_plain(p["quote"]) for p in kept.proposals} | {_plain(c["quote"]) for c in kept.conditions}
+    for item in list(raw.get("unread") or []):
+        if len(kept.unread) >= MAX_UNREAD:
+            break
+        if not isinstance(item, dict):
+            continue
+        quote, reason = str(item.get("quote", "")).strip(), str(item.get("reason", ""))
+        plain = _plain(quote)
+        if not plain or len(quote) > MAX_QUOTE or plain not in plain_message or reason not in UNREAD_REASONS:
+            continue
+        if plain in quoted:  # words a kept proposal already took, or listed twice
+            continue
+        quoted.add(plain)
+        kept.unread.append({"quote": quote, "reason": reason})
     return kept

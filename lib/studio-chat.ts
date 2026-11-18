@@ -85,12 +85,12 @@ export function missingIn(step: ChatStep, form: StudioForm, simple = false): str
     case "geometry": {
       const keys = ["length", "width", "size_from"];
       if (isBending(form)) keys.push("span", "overhang", ...(form.test === FOUR_POINT_TEST ? ["load_span"] : []));
-      else keys.push("tab_length");
+      else if (form.test !== PLATE_TEST) keys.push("tab_length"); // a plate may have no tabs: its regions are its edges and its face (ADR-0054)
       if (form.test === OPEN_HOLE_TEST) keys.push("hole_diameter");
       keys.push(...(standardOf(form)?.needs ?? []).filter((key) => STRAIN_KEYS.includes(key))); // D3039 counts the gauge length (ADR-0072)
       return need(keys);
     }
-    case "loading": return need(["control", "value"]);
+    case "loading": return form.test === PLATE_TEST ? [] : need(["control", "value"]); // a plate lists its loads over regions, with no loading rows
     case "name": return need(["filled_by"]);
     case "review": return [];
   }
@@ -283,13 +283,50 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
   return { rows, understood };
 }
 
+/** How much "finer" and "coarser" change the element size (ADR-0088 amendment 2): half and twice. The engineer sees the size before and
+ * after, and the setup check judges the mesh that follows. */
+export const FINER = 0.5;
+export const COARSER = 2;
+
+/** The mesh as a message states it (ADR-0088 amendment 2): an element size written with its number ("2 mm elements", "element size 1.5",
+ * "mesh of 3 mm"), or a step from the size the form holds, "finer" for half and "coarser" for twice. A written size wins over a step. With
+ * no size on the form a step has nothing to start from, and `note` says so. Null when the message says nothing about the mesh. */
+export function readMesh(text: string, form: StudioForm): { rows: StudioForm; understood: string[]; note: string | null } | null {
+  const units = unitsOf(form);
+  const u = unitLabels(units);
+  const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
+  const t = ` ${text.toLowerCase()} `;
+  // a question about the mesh is not an edit of it ("would a finer mesh change this?"); "can you make it finer?" is a request
+  if (/^\s*(?:why|what|where|which|how|would|should|does|do|did|is|are|will)\b/i.test(text) || (/\?\s*$/.test(text) && !/^\s*(?:can|could|please)\b/i.test(text))) return null;
+  const written = new RegExp(`\\belement\\s*(?:size|length)s?\\s*(?:of|=|:|is|to|at)?\\s*${NUM}`).exec(t)
+    ?? new RegExp(`\\bmesh(?:\\s*size)?\\s*(?:of|=|:|is|to|at)?\\s*${NUM}`).exec(t)
+    ?? new RegExp(`${NUM}\\s*${L}\\s*(?:elements?|mesh)\\b`).exec(t);
+  if (written && Number(written[1]) > 0) {
+    const size = String(Number(written[1]));
+    return { rows: { element_size: size }, understood: [`element size ${size} ${u.length}`], note: null };
+  }
+  const finer = /\b(?:finer|refine[sd]?|refining|denser|smaller elements|more elements|twice as fine|hal(?:f|ve) the (?:mesh|element)(?: size)?)\b/.test(t);
+  const coarser = /\b(?:coarser|coarsen(?:s|ed)?|coarsening|bigger elements|larger elements|fewer elements|twice as coarse|double the (?:mesh|element)(?: size)?)\b/.test(t);
+  if (finer === coarser) return null; // neither, or both: nothing is guessed
+  const now = Number((form.element_size ?? "").trim());
+  if (!(form.element_size ?? "").trim() || !Number.isFinite(now) || now <= 0) {
+    return { rows: {}, understood: [], note: `No element size is stated yet, so there is nothing to make ${finer ? "finer" : "coarser"}. State one, for example “2 ${u.length} elements”.` };
+  }
+  const size = String(Number((now * (finer ? FINER : COARSER)).toPrecision(4)));
+  return { rows: { element_size: size }, understood: [`element size ${size} ${u.length} (${finer ? "half of" : "twice"} ${now} ${u.length})`], note: null };
+}
+
 /** A message applied to the form: read in the coupon's system, or in the one it names when nothing dimensioned is stated yet or the
  * message asks to switch (which clears the dimensioned rows, named in `note`); a message in another system while rows are filled
  * changes nothing and says why, so no number is read in the wrong units (ADR-0003). */
 export function applyMessage(form: StudioForm, text: string): { rows: StudioForm; understood: string[]; note: string | null } {
   const current = unitsOf(form);
   const named = unitsNamed(text);
-  if (named === null || named === current) return { ...readMessage(text, current), note: null };
+  if (named === null || named === current) {
+    const read = readMessage(text, current);
+    const mesh = readMesh(text, form); // the mesh is read against the form: "finer" starts from the size it holds (ADR-0088 amendment 2)
+    return { rows: { ...read.rows, ...mesh?.rows }, understood: [...read.understood, ...(mesh?.understood ?? [])], note: mesh?.note ?? null };
+  }
   const stated = statedDimensioned(form);
   if (stated.length && !isSwitchRequest(text)) {
     return { rows: {}, understood: [], note: `That names ${unitWords(named)}, but this coupon is stated in ${unitWords(current)}. Say “switch to ${unitWords(named)}” `

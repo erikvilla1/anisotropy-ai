@@ -27,6 +27,9 @@ from .model import (
     Deck,
     DeckError,
     DistributedLoad,
+    EDGE_CORNERS,
+    EDGE_LABELS,
+    EdgeLoad,
     Elastic,
     ElementKey,
     Elements,
@@ -50,8 +53,17 @@ from .model import (
 # Output requests and job controls: they cannot change the solution, so they are skipped and recorded.
 IGNORED_KEYWORDS = frozenset({
     "preprint", "restart", "output", "node output", "element output", "contact output",
-    "node print", "el print", "energy output", "node file", "el file",
+    "node print", "el print", "energy output", "node file", "el file", "monitor", "print", "file format",
 })
+
+# Material properties and limits a linear static step without a temperature change never uses: skipped, each with its reason, and
+# recorded with the output requests. A keyword that could change the answer is never here.
+UNUSED_KEYWORDS = {
+    "density": "mass is not used by a static step",
+    "expansion": "no temperature change is read, so thermal expansion is not used",
+    "conductivity": "heat conduction is not used by a static step",
+    "specific heat": "heat capacity is not used by a static step",
+}
 
 # Named boundary types and the dofs they hold (Abaqus definitions).
 NAMED_BOUNDARIES = {
@@ -59,6 +71,7 @@ NAMED_BOUNDARIES = {
     "XSYMM": (1, 5, 6), "YSYMM": (2, 4, 6), "ZSYMM": (3, 4, 5),
 }
 REFUSED_NAMED_BOUNDARIES = ("XASYMM", "YASYMM", "ZASYMM")
+MAX_GENERATED = 5_000_000  # labels all the `generate` lines of one deck may name: far above any mesh the kernel solves, far below memory
 AXES_TOLERANCE = 1e-9
 
 
@@ -175,12 +188,14 @@ class _StepBuilder:
     boundaries: list[Boundary] = field(default_factory=list)
     cloads: list[ConcentratedLoad] = field(default_factory=list)
     dloads: list[DistributedLoad] = field(default_factory=list)
+    edge_loads: list[EdgeLoad] = field(default_factory=list)
 
 
 class _Parser:
     def __init__(self, blocks: list[KeywordBlock], source_sha256: str, source_path: str | None) -> None:
         self.blocks = blocks
         self.source_sha256 = source_sha256
+        self.generated = 0  # labels named by `generate` lines so far
         self.source_path = source_path
         self.heading = ""
         self.parts: dict[str, Part] = {}
@@ -212,6 +227,9 @@ class _Parser:
                 if block.name in IGNORED_KEYWORDS:
                     self.ignored.append(f"line {block.line}: *{block.name}")
                     continue
+                if block.name in UNUSED_KEYWORDS:
+                    self.ignored.append(f"line {block.line}: *{block.name} ({UNUSED_KEYWORDS[block.name]})")
+                    continue
                 raise DeckError(f"line {block.line}: *{block.name} is not supported by anisotropy_fea 0.1; "
                                 "see fea/README.md for the supported subset")
             handler(self, block)
@@ -221,6 +239,8 @@ class _Parser:
             raise DeckError("the *Assembly has no *End Assembly")
         if self.step is not None:
             raise DeckError(f"line {self.step.line}: *Step {self.step.name!r} has no *End Step")
+        self._placed_parts()
+        self._edge_forces()
         return Deck(
             heading=self.heading,
             parts=self.parts,
@@ -292,6 +312,9 @@ class _Parser:
                 step = self._int(tokens[2], line, "step") if len(tokens) == 3 else 1
                 if step <= 0:
                     raise DeckError(f"line {line}: generate step must be positive")
+                self.generated += max(0, (last - first) // step + 1)
+                if self.generated > MAX_GENERATED:  # a deck from outside (ADR-0105): a range is counted before it is built
+                    raise DeckError(f"line {line}: the generate lines of this deck name more than {MAX_GENERATED} labels; no mesh read here is that large")
                 labels.extend(range(first, last + 1, step))
             return labels
         for tokens, line in zip(block.data, block.data_lines):
@@ -526,16 +549,77 @@ class _Parser:
         self._params(block, ("name", "part"), required=("name", "part"))
         if not self.in_assembly:
             raise DeckError(f"line {block.line}: *Instance outside the *Assembly")
-        if block.data:
-            raise DeckError(f"line {block.line}: a translated or rotated instance is not supported yet; "
-                            "anisotropy_fea 0.1 reads instances placed at the origin without rotation")
         name, part = block.params["name"] or "", block.params["part"] or ""
         if part not in self.parts:
             raise DeckError(f"line {block.line}: *Instance names part {part!r}, which is not defined")
         if name in self.instances:
             raise DeckError(f"line {block.line}: instance {name!r} is defined twice")
-        self.instances[name] = Instance(name=name, part=part)
+        translation, turn, about = self._placement(block, name)
+        self.instances[name] = Instance(name=name, part=part, translation=translation, rotation_deg=turn, rotation_about=about)
         self.instance_open = name
+
+    def _placement(self, block: KeywordBlock, name: str) -> tuple[tuple[float, float, float], float, tuple[float, float]]:
+        """An instance's first data line is its translation (x, y[, z]); a second line turns the translated part by an angle about the
+        axis from point a to point b, both in the assembly's frame. Read: a translation in the plate's plane, and a turn about an axis
+        along z, which keeps the plate in its plane; `run` then moves the part's nodes. Refused: a move along z, and a turn about any
+        other axis. Returns the translation, the turn in degrees counterclockwise seen from +z, and the point it turns about."""
+        if not block.data:
+            return (0.0, 0.0, 0.0), 0.0, (0.0, 0.0)
+        if len(block.data) > 2:
+            raise DeckError(f"line {block.data_lines[2]}: *Instance takes a translation line and at most one rotation line")
+        tokens, line = block.data[0], block.data_lines[0]
+        if len(tokens) not in (2, 3):
+            raise DeckError(f"line {line}: an instance's translation line is `x, y[, z]`")
+        moved = [self._float(token, line, "a translation") for token in tokens] + [0.0] * (3 - len(tokens))
+        turn, about = 0.0, (0.0, 0.0)
+        if len(block.data) == 2:
+            rotation, rotation_line = block.data[1], block.data_lines[1]
+            if len(rotation) != 7:
+                raise DeckError(f"line {rotation_line}: an instance's rotation line is `ax, ay, az, bx, by, bz, angle`")
+            ax, ay, az, bx, by, bz, angle = (self._float(token, rotation_line, "an instance's rotation") for token in rotation)
+            if angle != 0.0:
+                if (ax, ay) != (bx, by) or az == bz:
+                    raise DeckError(f"line {rotation_line}: instance {name!r} is turned about an axis that is not along z, which takes the "
+                                    "plate out of the plane z = 0; the kernels solve a flat plate in the x-y plane")
+                turn, about = (angle if bz > az else -angle), (ax, ay)
+        if moved[2] != 0.0:
+            raise DeckError(f"line {line}: instance {name!r} is moved by {moved[2]:g} along z, out of the plane z = 0; "
+                            "the kernels solve a flat plate in the x-y plane")
+        return (moved[0], moved[1], moved[2]), turn, about
+
+    def _placed_parts(self) -> None:
+        """Put each placed instance's nodes where the assembly has them: moved by the translation, then turned about the rotation's
+        point (the order Abaqus applies them in). A turned part's stated material orientation turns with it, so the rotation of each section
+        that names an orientation grows by the turn. The part itself is placed when the instance is its only one; an instance that shares its part gets a placed
+        copy of the part under the name `part@instance`, so every reader of a part's nodes sees assembly coordinates and none applies
+        the placement again."""
+        uses: dict[str, int] = {}
+        for instance in self.instances.values():
+            uses[instance.part] = uses.get(instance.part, 0) + 1
+        for name, instance in list(self.instances.items()):
+            if instance.translation == (0.0, 0.0, 0.0) and instance.rotation_deg == 0.0:
+                continue
+            part = self.parts[instance.part]
+            xyz = part.nodes.xyz + np.asarray(instance.translation, dtype=float)
+            sections = part.sections
+            if instance.rotation_deg != 0.0:
+                c, s = math.cos(math.radians(instance.rotation_deg)), math.sin(math.radians(instance.rotation_deg))
+                x, y = xyz[:, 0] - instance.rotation_about[0], xyz[:, 1] - instance.rotation_about[1]
+                xyz = np.column_stack([instance.rotation_about[0] + c * x - s * y, instance.rotation_about[1] + s * x + c * y, xyz[:, 2]])
+                # A section's orientation is stated in the part's frame and turns with the instance. A section with none takes its fibre
+                # reference from the assembly's x axis, wherever the instance is turned to (both seen on Abaqus 2025, ADR-0105 amendment 1).
+                sections = tuple(section if section.orientation is None else section.model_copy(update={"rotation_deg": section.rotation_deg + instance.rotation_deg})
+                                 for section in sections)
+            moved = dataclasses.replace(part, nodes=Nodes(labels=part.nodes.labels, xyz=xyz), sections=sections)
+            if uses[instance.part] == 1:
+                self.parts[part.name] = moved
+            else:
+                copy = f"{part.name}@{name}"
+                self.parts[copy] = dataclasses.replace(moved, name=copy)
+                self.instances[name] = instance.model_copy(update={"part": copy})
+        for part_name in uses:  # a part whose every instance now has its own moved copy is no longer anybody's
+            if uses[part_name] > 1 and all(instance.part != part_name for instance in self.instances.values()):
+                del self.parts[part_name]
 
     def end_instance_(self, block: KeywordBlock) -> None:
         if self.instance_open is None:
@@ -556,10 +640,13 @@ class _Parser:
                 raise DeckError(f"line {line}: node surface weights other than 1 are not supported")
             self.surfaces[name] = NodeSurface(name=name, nset=tokens[0], internal=self._flag(block, "internal"))
         elif kind == "ELEMENT":
-            if len(block.data) != 1 or len(block.data[0]) != 2:
-                raise DeckError(f"line {block.line}: an element-based *Surface takes one line `element set, side`")
-            tokens = block.data[0]
-            self.surfaces[name] = ElementSurface(name=name, elset=tokens[0], side=tokens[1].upper())
+            if not block.data:
+                raise DeckError(f"line {block.line}: an element-based *Surface takes lines `element set, side`")
+            for tokens, line in zip(block.data, block.data_lines):
+                if len(tokens) != 2:
+                    raise DeckError(f"line {line}: an element-based *Surface line is `element set, side`")
+            faces = [(tokens[0], tokens[1].upper()) for tokens in block.data]
+            self.surfaces[name] = ElementSurface(name=name, elset=faces[0][0], side=faces[0][1], more=tuple(faces[1:]))
         else:
             raise DeckError(f"line {block.line}: *Surface type {kind!r} is not supported")
 
@@ -618,10 +705,13 @@ class _Parser:
         material = self._open_material(block)
         if material.elastic is not None:
             raise DeckError(f"line {block.line}: material {material.name!r} has two *Elastic definitions")
+        kind = (block.params.get("type") or "ISOTROPIC").upper()
+        if kind == "ENGINEERING CONSTANTS":
+            self.materials[material.name] = material.model_copy(update={"elastic": self._engineering_constants(block, material.name)})
+            return
         if len(block.data) != 1:
             raise DeckError(f"line {block.line}: *Elastic with {len(block.data)} data lines; temperature-dependent elasticity is not supported")
         tokens, line = block.data[0], block.data_lines[0]
-        kind = (block.params.get("type") or "ISOTROPIC").upper()
         if kind == "LAMINA":
             if len(tokens) != 6:
                 raise DeckError(f"line {line}: *Elastic, type=LAMINA takes exactly `E1, E2, nu12, G12, G13, G23` "
@@ -634,8 +724,21 @@ class _Parser:
             E, nu = (self._float(token, line, "an elastic constant") for token in tokens)
             elastic = Elastic(kind="ISOTROPIC", E1=E, E2=E, nu12=nu, G12=E / (2.0 * (1.0 + nu)))
         else:
-            raise DeckError(f"line {block.line}: *Elastic type {kind!r} is not supported; LAMINA and isotropic are")
+            raise DeckError(f"line {block.line}: *Elastic type {kind!r} is not supported; LAMINA, ENGINEERING CONSTANTS and isotropic are")
         self.materials[material.name] = material.model_copy(update={"elastic": elastic})
+
+    def _engineering_constants(self, block: KeywordBlock, material: str) -> Elastic:
+        """`*Elastic, type=ENGINEERING CONSTANTS`: nine constants over two data lines, `E1, E2, E3, nu12, nu13, nu23, G12, G13` and
+        `G23`. A shell uses the in-plane four and the two transverse shear moduli, the same six a LAMINA states; E3, nu13 and nu23
+        belong to the thickness direction, which a shell's plane stress leaves out, and are recorded as not used."""
+        tokens = [token for row in block.data for token in row]
+        last = block.data_lines[-1] if block.data_lines else block.line
+        if len(block.data) != 2 or len(block.data[0]) != 8 or len(tokens) != 9:
+            raise DeckError(f"line {last}: *Elastic, type=ENGINEERING CONSTANTS takes `E1, E2, E3, nu12, nu13, nu23, G12, G13` and then `G23` "
+                            "(a further value would be a temperature, which is not supported)")
+        values = [self._float(token, block.data_lines[0] if k < 8 else block.data_lines[1], "an elastic constant") for k, token in enumerate(tokens)]
+        self.ignored.append(f"line {block.line}: E3, nu13 and nu23 of material {material} (a shell's plane stress does not use the thickness direction)")
+        return Elastic(kind="LAMINA", E1=values[0], E2=values[1], nu12=values[3], G12=values[6], G13=values[7], G23=values[8])
 
     def fail_stress_(self, block: KeywordBlock) -> None:
         self._params(block, ())
@@ -683,7 +786,8 @@ class _Parser:
         if self.step.procedure is None:
             raise DeckError(f"line {self.step.line}: *Step {self.step.name!r} has no *Static procedure")
         self.steps.append(Step(name=self.step.name, nlgeom=self.step.nlgeom, boundaries=tuple(self.step.boundaries),
-                               cloads=tuple(self.step.cloads), dloads=tuple(self.step.dloads), line=self.step.line))
+                               cloads=tuple(self.step.cloads), dloads=tuple(self.step.dloads), edge_loads=tuple(self.step.edge_loads),
+                               line=self.step.line))
         self.step = None
 
     def boundary_(self, block: KeywordBlock) -> None:
@@ -731,7 +835,9 @@ class _Parser:
                                                      value=self._float(tokens[2], line, "load value"), line=line))
 
     def dload_(self, block: KeywordBlock) -> None:
-        """`*Dload` with the P label only: `element set or Instance.label, P, pressure` (ADR-0053)."""
+        """`*Dload` with the P label only: `element set or Instance.label, P, pressure` (ADR-0053). On a shell element Abaqus applies
+        a positive P along the element normal; a `DistributedLoad` is positive against it, so the value changes sign here (ADR-0053
+        amendment 1)."""
         self._params(block, ())
         if self.step is None:
             raise DeckError(f"line {block.line}: *Dload outside a *Step is not supported")
@@ -742,7 +848,77 @@ class _Parser:
             if label != "P":
                 raise DeckError(f"line {line}: distributed load label {tokens[1]!r} is not supported; P (a uniform pressure on the shell) is")
             self.step.dloads.append(DistributedLoad(target=self._element_target(tokens[0], line), label=label,
-                                                    value=self._float(tokens[2], line, "pressure"), line=line))
+                                                    value=-self._float(tokens[2], line, "pressure"), line=line))
+
+    def dsload_(self, block: KeywordBlock) -> None:
+        """`*Dsload`: a load on a surface of shell elements, `surface, label, value`. P on a face is a pressure: positive, it pushes
+        onto the face, so on SPOS it is a `DistributedLoad` of the same value and on SNEG of the opposite one. EDNOR, EDSHR and EDTRA
+        on an edge (E1 to E4) are forces per length of edge, kept as `EdgeLoad` and turned into nodal forces once the parts stand
+        where the assembly puts them (`_edge_forces`). `op` and `follower` are read and change nothing here: there is one step, and
+        with small displacements a load that follows the surface is the same load."""
+        self._params(block, ("op", "follower"))
+        if self.step is None:
+            raise DeckError(f"line {block.line}: *Dsload outside a *Step is not supported")
+        for tokens, line in zip(block.data, block.data_lines):
+            if len(tokens) != 3:
+                raise DeckError(f"line {line}: a surface load line is `surface, label, value`")
+            surface, label = self.surfaces.get(tokens[0]), tokens[1].upper()
+            if not isinstance(surface, ElementSurface):
+                raise DeckError(f"line {line}: *Dsload names surface {tokens[0]!r}, which is "
+                                f"{'not defined' if surface is None else 'a node surface; a load acts on an element surface'}")
+            value = self._float(tokens[2], line, "a surface load")
+            sides = {side for _, side in surface.faces}
+            if label == "P":
+                if not sides <= {"SPOS", "SNEG"}:
+                    raise DeckError(f"line {line}: a pressure (P) acts on a shell's face, SPOS or SNEG; surface {surface.name!r} lies on "
+                                    f"{', '.join(sorted(sides))}. On an edge the labels are {', '.join(EDGE_LABELS)}")
+                for elset, side in surface.faces:
+                    self.step.dloads.append(DistributedLoad(target=elset, label="P", value=value if side == "SPOS" else -value, line=line))
+            elif label in EDGE_LABELS:
+                if not sides <= set(EDGE_CORNERS):
+                    raise DeckError(f"line {line}: {label} acts on a shell's edge, E1 to E4; surface {surface.name!r} lies on "
+                                    f"{', '.join(sorted(sides))}")
+                self.step.edge_loads.append(EdgeLoad(surface=surface.name, label=label, value=value, line=line))
+            else:
+                raise DeckError(f"line {line}: surface load label {tokens[1]!r} is not supported; P on a shell's face and "
+                                f"{', '.join(EDGE_LABELS)} on its edges are")
+
+    def _edge_forces(self) -> None:
+        """Each edge load as nodal forces, added to its step's concentrated loads with the load's tag: on every element edge of the
+        surface, half the edge's force at each of its two nodes. Directions as Abaqus 2025 applies them (ADR-0105 amendment 1): EDNOR
+        into the element, EDSHR from the edge's first node to its second as the element lists them, EDTRA along the element normal."""
+        for k, step in enumerate(self.steps):
+            made: list[ConcentratedLoad] = []
+            for load in step.edge_loads:
+                surface = self.surfaces[load.surface]
+                forces: dict[tuple[str, int, int], float] = {}
+                for elset, side in surface.faces:  # type: ignore[union-attr]
+                    if elset not in self.elsets:
+                        raise DeckError(f"line {load.line}: surface {load.surface!r} names element set {elset!r}, which is not defined")
+                    first, second = EDGE_CORNERS[side]
+                    for instance, label in self.elsets[elset]:
+                        part = self.parts[self.instances[instance].part]
+                        rows = np.flatnonzero(part.elements.labels == label) if part.elements is not None else np.empty(0, dtype=int)
+                        if rows.size != 1:
+                            raise DeckError(f"line {load.line}: surface {load.surface!r} names element {instance}.{label}, which does not exist")
+                        corners = [int(n) for n in part.elements.connectivity[rows[0]]]  # type: ignore[union-attr]
+                        xy = np.array([part.nodes.xyz[part.nodes.index_of(n)][:2] for n in corners])
+                        area = 0.5 * float(np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]))
+                        normal = 1.0 if area > 0 else -1.0  # the element normal along z: +z for counterclockwise nodes
+                        along = xy[second] - xy[first]
+                        length = float(np.hypot(*along))
+                        if length == 0.0:
+                            raise DeckError(f"line {load.line}: element {instance}.{label} has an edge of no length")
+                        tx, ty = along / length
+                        direction = {"EDNOR": (-normal * ty, normal * tx, 0.0), "EDSHR": (tx, ty, 0.0), "EDTRA": (0.0, 0.0, normal)}[load.label]
+                        for node in (corners[first], corners[second]):
+                            for dof, component in enumerate(direction, start=1):
+                                forces[(instance, node, dof)] = forces.get((instance, node, dof), 0.0) + 0.5 * load.value * length * component
+                largest = max((abs(f) for f in forces.values()), default=0.0)
+                made += [ConcentratedLoad(target=(instance, node), dof=dof, value=f, line=load.line, edge=load.tag)
+                         for (instance, node, dof), f in sorted(forces.items()) if abs(f) > 1e-12 * largest]
+            if made:
+                self.steps[k] = step.model_copy(update={"cloads": step.cloads + tuple(made)})
 
     def _element_target(self, token: str, line: int) -> str | ElementKey:
         """A distributed load target: an assembly element set name or `Instance.label`."""
@@ -782,6 +958,7 @@ HANDLERS = {
     "boundary": _Parser.boundary_,
     "cload": _Parser.cload_,
     "dload": _Parser.dload_,
+    "dsload": _Parser.dsload_,
 }
 
 SUPPORTED_KEYWORDS = tuple(sorted(HANDLERS))

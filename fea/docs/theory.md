@@ -8,7 +8,7 @@ This file states every equation the finite element layer uses and names the func
 - In the membrane kernel (the sections from what the membrane model represents to first-ply failure) each node has two degrees of freedom, $`u`$ along x and $`v`$ along y, Abaqus dofs 1 and 2; there are no out-of-plane or rotational degrees of freedom. The flat shell kernel (the flat shell section below) adds $`w`$ along z and the rotations $`\theta_x`$, $`\theta_y`$ about the x and y axes, Abaqus dofs 3 to 5; the drilling rotation, dof 6, is never carried.
 - Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear; the shell adds the curvature $`\boldsymbol{\kappa}`$ and the transverse shear strain $`\boldsymbol{\gamma} = [\gamma_{xz}, \gamma_{yz}]^T`$, engineering too.
 - Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF; the shell adds the moments $`\mathbf{M}`$ in N (Abaqus SM) and the transverse shear forces $`\mathbf{Q}`$ in N/m.
-- A uniform pressure (`*Dload`, label P) is positive against the element normal, which is $`+z`$ for counterclockwise nodes: a positive pressure pushes the plate toward $`-z`$.
+- A uniform pressure is positive against the element normal, which is $`+z`$ for counterclockwise nodes: a positive pressure presses on the top face and pushes the plate toward $`-z`$. A deck states it in its solver's own sign (Section 8).
 - Element nodes are listed counterclockwise, as Abaqus S4-family elements list them.
 
 ## 1. What the membrane model represents, and when it refuses
@@ -171,9 +171,13 @@ The answer a result gives is read from these factors (ADR-0085). By each criteri
 u_{\mathrm{FPF}} = \lambda_{\mathrm{FPF}}\,u_{\mathrm{applied}}, \qquad F_{\mathrm{FPF}} = \lambda_{\mathrm{FPF}}\,F_{\mathrm{reaction}} ,
 ```
 
-computed by `answer_of`. The answer is read over the gauge section when the coupon has one, the elements of its `Gauge` set that touch no gripped node, since a test coupon is accepted when it breaks there; a failure that comes earlier at the clamped edge of a grip, where the stress grows as the mesh is refined, is reported beside it, never as the answer. A coupon without a gauge section, a plate or a bending coupon, is answered over the whole model. The basis and its earliest criterion, and the largest ply stresses on the same basis, each ply's in its fibre axes with tension and compression apart, are computed by `verdict_of` and `ply_extremes`.
+computed by `answer_of`. The answer is read over the gauge section when the coupon has one, since a test coupon is accepted when it breaks there. The gauge section is read where the mesh does not set the value (ADR-0108): the elements of the `Gauge` set whose centroid is at least a stand-off $s = \tfrac{1}{4}\min(W, L_g)$ from each tab line, with $W$ the coupon's width and $L_g$ the length between the tab lines, computed by `gauge_reading`. The corner where a tab line meets a free edge is a point where the model's stress has no finite value, so an element beside it reads higher on every finer mesh; a quarter width is past the zone where that corner sets the smallest strength ratio, and the convergence study of Section 6.4 reports on every run whether the gauge factor has settled. A failure that comes earlier at the clamped edge of a grip or inside the stand-off, where the stress grows as the mesh is refined, is reported beside the answer, never as the answer. A coupon without a gauge section, a plate or a bending coupon, is answered over the whole model. The basis and its earliest criterion, and the largest ply stresses on the same basis, each ply's in its fibre axes with tension and compression apart, are computed by `verdict_of` and `ply_extremes`.
 
-<!-- code: answer_of, verdict_of, ply_extremes -->
+<!-- code: gauge_reading, answer_of, verdict_of, ply_extremes -->
+
+The working behind the answer (ADR-0103) is this chain written out for the first ply to fail by maximum stress and by Tsai-Hill, on the answer's basis: the ply's strain in its fibre axes, its stress as $`\boldsymbol{\sigma} = \mathbf{Q}\,\boldsymbol{\varepsilon}`$ with the engine's reduced stiffness, the criterion's ratio, and the loading at first-ply failure. Each step holds its formula, the formula with the values in place and the result; values are put in to six significant figures and results are written to four, so a step repeated by hand meets its result. It is no second calculation of the answer. A chain is written only when the stiffness times the stored strain gives the stored stress and the engine's criterion, called again on that stress, gives the stored factor, each to a relative $`10^{-9}`$; this is checked by `working_of`. A stress that is zero to roundoff is written as zero and sets no limit.
+
+<!-- code: working_of -->
 
 ## 8. The flat shell: bending, transverse shear and pressure (`shell.py`)
 
@@ -262,7 +266,7 @@ A uniform pressure $`p`$ on an element (`*Dload` with the P label) becomes the c
 f_{w,i} = -\,p \sum_g w_g\, \det \mathbf{J}_g\, N_i(\xi_g, \eta_g) ,
 ```
 
-the sign being that of the Abaqus label, positive against the element normal, which is $`+z`$ for counterclockwise nodes. CalculiX applies P along the element normal, the opposite of Abaqus; this was detected by a run on 2026-10-28 and is recorded in `fea/checks/calculix-conventions.toml` (`pressure_direction`), so a CalculiX deck writes P with the opposite sign.
+the sign being positive against the element normal, which is $`+z`$ for counterclockwise nodes: the pressure presses on the top face, as Abaqus's `*Dsload` P on a shell's SPOS face does. The P label of `*Dload` on a shell element is positive along the normal in Abaqus and in CalculiX alike (Abaqus 2025, run on 2026-11-17, ADR-0053 amendment 1; CalculiX, run on 2026-10-28, `fea/checks/calculix-conventions.toml`, `pressure_direction`), so both decks write $`-p`$ and the deck reader takes a `*Dload` P as $`-p`$.
 
 <!-- code: pressure_loads -->
 

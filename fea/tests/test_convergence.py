@@ -60,10 +60,39 @@ def test_the_gauge_values_settle_and_the_clamped_edge_peaks_grow(study):
     assert coarse["peaks"][1]["touches_grip"] and fine["peaks"][1]["touches_grip"]  # the 0° ply peaks at the clamped edge
     assert study["changes"]["peaks"][1]["s1"][1] > 0.1  # and its corner value grows by more than a tenth per refinement
     assert abs(study["changes"]["peaks"][3]["s1"][1]) < SETTLED  # the 90° ply's (compression along its fibres, across the width) does not: not every peak is singular
-    assert study["settled"] == {"reaction": True, "gauge_strain": True, "plies": True, "peaks": False, "fpf": False, "fpf_gauge": False}
+    # the gauge section is read a quarter width from each tab line (ADR-0108), so its factor settles while the whole model's keeps falling
+    assert study["settled"] == {"reaction": True, "gauge_strain": True, "plies": True, "peaks": False, "fpf": False, "fpf_gauge": True}
+    for criterion, series in study["changes"]["fpf_gauge"].items():
+        assert abs(series[1]) < 1e-3, criterion
+    assert study["changes"]["fpf"]["tsai_hill"][1] < -0.05
     assert set(coarse["fpf"]) == {"max_stress", "tsai_hill", "tsai_wu"} and fine["fpf"]["tsai_wu"] < coarse["fpf"]["tsai_wu"]
     assert coarse["solve_s"] > 0  # a timing is recorded
     assert "ADR-0066" in study["note"] and study["settled_below"] == SETTLED and study["cap"] == CAP
+
+
+def test_the_gauge_answer_does_not_move_with_the_mesh(spec):
+    """ADR-0108: before it the gauge section was every `Gauge` element past the row at the grips, and its Tsai-Hill factor on this coupon
+    went 1.02, 0.93, 0.81 as each element was split in two and in four (holds, then fails). Read a quarter width from each tab line it
+    is the same number on the three meshes, while the whole model's factor, at the corner of a grip, keeps falling."""
+    study = convergence_study(spec, factors=(1, 2, 4))
+    for criterion in ("max_stress", "tsai_hill"):
+        gauge = [m["fpf_gauge"][criterion] for m in study["meshes"]]
+        assert max(gauge) - min(gauge) < 2e-3 * min(gauge), (criterion, gauge)
+        assert all(g > 1.0 for g in gauge)  # holds on every mesh
+        whole = [m["fpf"][criterion] for m in study["meshes"]]
+        assert whole[0] > whole[1] > whole[2] and whole[2] < 0.9 * whole[0]
+    assert study["settled"]["fpf_gauge"] is True and study["settled"]["fpf"] is False
+
+
+@pytest.mark.parametrize("angles", [[45, -45, 45, -45], [30, -30, 30, -30], [0, 0, 0, 0]])
+def test_the_stand_off_holds_for_other_layups(spec, angles):
+    """ADR-0108's table: the quarter width was chosen on more than one laminate. An angle-ply laminate has the strongest corner (its
+    factor over the old gauge section fell by a quarter or more per refinement) and a unidirectional one the widest gradient; read past
+    the stand-off each one's factor moves by less than SETTLED from the mesh split in two to the mesh split in four."""
+    laminate = spec.model_copy(update={"layup": spec.layup.model_copy(update={"angles": [float(a) for a in angles]})})
+    study = convergence_study(laminate, factors=(2, 4))
+    assert study["studied"] and abs(study["changes"]["fpf_gauge"]["tsai_hill"][1]) < SETTLED
+    assert study["changes"]["fpf"]["tsai_hill"][1] < -0.05  # the whole model's, at the corner, still falls
 
 
 def test_a_change_is_read_against_the_triples_largest_component():

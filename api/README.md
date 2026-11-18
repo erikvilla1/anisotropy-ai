@@ -43,13 +43,14 @@ GET  /v1/coupon-jobs/{job_id}          state (running, done, stopped, refused), 
 GET  /v1/coupon-jobs/{job_id}/package  the package as a zip, once done
 POST /v1/coupon-jobs                   {"values": {...the form's rows by key...}, "run_by": "Erik Villa"}  -> 202 (the studio's input, ADR-0051)
 POST /v1/coupon-jobs/check             {"values": {...}}  -> the setup checklist and the preview, without a run
-GET  /v1/coupon-jobs                   this process's jobs, newest first
+POST /v1/imported-models?units=mm-MPa  <the .inp file>   -> a model brought in as a file: refused, read or solved (ADR-0105); nothing kept
+GET  /v1/coupon-jobs                   the jobs, newest first (behind the sign-in, the requester's own: ADR-0104)
 GET  /v1/coupon-jobs/{job_id}/files/{key}  one file by key (fields, explanation, checklist, preview while it runs; every key once done)
 GET  /v1/projects                      the requester's workspace projects, last changed first (ADR-0062 part 6; 503 with run records off)
 PUT  /v1/projects/{id}                 {"kind": "fea", "name": "...", "content": {...}, "form_version": "0.6", "units": "mm-MPa"}  -> 201 created, 200 replaced
 GET  /v1/projects/{id}                 the project with the jobs started for it
 PATCH /v1/projects/{id}                {"name": "..."}
-GET  /v1/coupons                       every coupon on this machine, from its spec and case page
+GET  /v1/coupons                       every coupon on this machine, from its spec and case page (behind the sign-in, those the requester's jobs alone have run)
 GET  /v1/coupons/{name}/values         a coupon's rows as the values object the studio edits
 POST /v1/coupon-jobs/{job_id}/explain  {"kind": "result" | "setup"}  -> the explanation and who wrote it (ADR-0052)
 ```
@@ -134,7 +135,7 @@ Or in the solver image, which carries the API with CalculiX, Gmsh and Tectonic a
 
 Behind Cloudflare Access (ADR-0056): with `ANISOTROPY_ACCESS_TEAM_DOMAIN` (the team's domain, `<team>.cloudflareaccess.com`) and `ANISOTROPY_ACCESS_AUD` (the Access application's audience tag) set, every request but `GET /healthz` and a CORS preflight must carry the `Cf-Access-Jwt-Assertion` token Access adds, checked against the team's published keys; a request without a valid one is refused with 401, and the signed-in email is recorded as `user_email` on every run (ADR-0026 amendment 1, migration 0005). `ANISOTROPY_ALLOWED_ORIGINS` (comma-separated origins) replaces the local CORS origins. Unset, nothing changes.
 
-Durable outputs (ADR-0050 amendment 2): with `ANISOTROPY_R2_BUCKET`, `ANISOTROPY_R2_ENDPOINT`, `ANISOTROPY_R2_ACCESS_KEY_ID` and `ANISOTROPY_R2_SECRET_ACCESS_KEY` set (all four or none), every done job's files, its package zip and the coupon's whole folder go to the bucket under `coupons/<coupon>/`, the coupons come back from the bucket into `.local/fea/` when the API starts, and `GET /v1/coupon-jobs/{id}/files/{key}` and `/package` answer with a redirect to a ten-minute link there. With run records on, the `jobs` table (migration 0006) keeps every job's status, so a job is still listed after the API restarts, and one that was running when the API stopped shows as `stopped` with the reason. Without the store, the files stay on the disk as before.
+Durable outputs (ADR-0050 amendment 2): with `ANISOTROPY_R2_BUCKET`, `ANISOTROPY_R2_ENDPOINT`, `ANISOTROPY_R2_ACCESS_KEY_ID` and `ANISOTROPY_R2_SECRET_ACCESS_KEY` set (all four or none), every done job's files, its package zip and the coupon's whole folder go to the bucket under `coupons/<coupon>/`, the coupons come back from the bucket into `.local/fea/` when the API starts, and `GET /v1/coupon-jobs/{id}/files/{key}` and `/package` answer with a redirect to a ten-minute link there. Behind Cloudflare Access a signed-in person's coupons go under `owners/<key>/coupons/<coupon>/` and `.local/fea-owners/<key>/` in their place, `<key>` a digest of their email (ADR-0106); the tools are started with that folder in `ANISOTROPY_COUPONS_ROOT`, which the API sets itself and no deployment needs to. With run records on, the `jobs` table (migration 0006) keeps every job's status, so a job is still listed after the API restarts, and one that was running when the API stopped shows as `stopped` with the reason. Without the store, the files stay on the disk as before.
 
 Per-user limits (ADR-0056, stage 5): with `ANISOTROPY_JOBS_PER_USER_PER_DAY` set to a whole number, a person (the signed-in email, or the actor when there is none) may have one coupon job running at a time and start at most that many a day, UTC, counted in the `jobs` table; a request past either is refused with 429 and the reason, which the studio's chat shows. It needs run records on, and is refused at startup otherwise. Unset, there is no per-user limit; the one-job-at-a-time 409 stays.
 

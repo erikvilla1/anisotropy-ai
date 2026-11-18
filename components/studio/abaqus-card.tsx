@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Upload as UploadIcon } from "lucide-react";
 import {
-  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
+  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorName, connectorNoteUrl, connectorUrl, createPairingCode, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
   headline, KEY_FILE,
-  listUploadKeys, listUploads, megabytes, notComparedWords, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
+  listUploadKeys, listUploads, megabytes, notComparedWords, openLink, openOnThisPc, pairLink, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
   type Comparison, type Exchange, type NewUploadKey, type Refusal, type SendStage, type Upload, type UploadKey,
 } from "@/lib/abaqus-exchange";
 import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
@@ -14,6 +14,10 @@ import { downloadName } from "@/lib/studio-copy";
 import { namingOf } from "./job-files";
 
 const WAIT_MS = 5000; // how often the card looks for a file sent straight from Abaqus, while its instructions are open
+const EXPECT_MS = 30 * 60 * 1000; // how long the card looks for the results after Send to Abaqus; after that a reload shows them
+const PC_MS = 2500; // how often the card looks at the account's upload keys after a click that a PC answers
+const CONNECT_MS = 10 * 60 * 1000; // how long it looks for a PC's new key after Connect this PC: as long as the one-time code lasts
+const ANSWER_MS = 2 * 60 * 1000; // how long it looks for a PC that took the coupon after Send to Abaqus
 const ZONE_WORDS: Record<string, string> = { gauge: "Gauge section", "free length": "Between gauge and tabs", band: "Within one width of a tab", "tab line": "At a tab line",
   gripped: "Under the grips" };
 const when = (iso: string | null): string => {
@@ -40,6 +44,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<Problem>(null);
   const [waiting, setWaiting] = useState(false);
+  const [expecting, setExpecting] = useState(0); // when Send to Abaqus was clicked: the results come back by themselves, so the card looks for them
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const jobId = job.job_id;
@@ -54,7 +59,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
 
   useEffect(() => {
     const controller = new AbortController();
-    setExchange(null); setUpload(null); setEarlier([]); setProblem(null);
+    setExchange(null); setUpload(null); setEarlier([]); setProblem(null); setExpecting(0);
     (async () => {
       const offered = await getExchange(apiBase, controller.signal);
       if (controller.signal.aborted || !offered?.uploads) return;
@@ -66,12 +71,13 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
 
   const newest = upload?.id ?? null;
   useEffect(() => {
-    if (!waiting || !exchange) return;
+    if (!(waiting || expecting) || !exchange) return;
     const timer = window.setInterval(() => {
-      listUploads(apiBase, jobId).then((all) => { if (all.length && all[0].id !== newest) { setWaiting(false); setProblem(null); void load(); } }).catch(() => undefined);
+      if (!waiting && Date.now() - expecting > EXPECT_MS) { setExpecting(0); return; }
+      listUploads(apiBase, jobId).then((all) => { if (all.length && all[0].id !== newest) { setWaiting(false); setExpecting(0); setProblem(null); void load(); } }).catch(() => undefined);
     }, WAIT_MS);
     return () => window.clearInterval(timer);
-  }, [waiting, exchange, apiBase, jobId, newest, load]);
+  }, [waiting, expecting, exchange, apiBase, jobId, newest, load]);
 
   if (!exchange) return null;
 
@@ -175,6 +181,10 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
         <>
           <h3>Compare with your Abaqus model</h3>
           <p>Solve this coupon in your own Abaqus and send the result here. The model, the pull force and every ply&apos;s stresses and strains are compared with this run.</p>
+          {exchange.connector_route && "abaqus_build" in job.outputs ? (
+            <ThisPc apiBase={apiBase} jobId={jobId} exchange={exchange} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
+          ) : null}
+          {exchange.connector_route && "abaqus_build" in job.outputs ? <h4 className="studio-abaqus-by-hand">Or by hand</h4> : null}
           <ol className="studio-abaqus-steps">
             <li>
               <strong>Open in Abaqus/CAE.</strong>{" "}
@@ -185,10 +195,11 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
             </li>
             <li>
               <strong>Run the job, then the connector.</strong>{" "}
-              <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
+              <a href={connectorUrl(apiBase)} download={connectorName(exchange)} target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
               {" "}Unzip it beside your job and run <code>abaqus python anisotropy_connector.py &lt;your job&gt;.odb --units {fields.units === "m-Pa" ? "m-Pa" : "mm-MPa"}</code>.
               {" "}It writes one file, &lt;your job&gt;-anisotropy.zip, and sends nothing.
               {" "}<span data-testid="abaqus-connector-more">Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes.</span>
+              <ConnectorFacts apiBase={apiBase} exchange={exchange} testId="abaqus-connector-facts" />
             </li>
             <li>
               <strong>Send to Anisotropy.</strong>
@@ -304,6 +315,111 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
           {upload.compared_at ? ` Compared ${when(upload.compared_at)}.` : ""}</p>
       </details>
     </>
+  );
+}
+
+/** The two-click way (ADR-0094 amendment 1): Send to Abaqus starts Abaqus/CAE on the user's PC with this run's coupon built, and the
+ * results of its job come back to this card by themselves. A PC is set up and connected once: the connector's setup, then Connect this
+ * PC, which asks for a one-time code and hands it to the PC in a link; the PC shows this site and the account and asks before it
+ * connects. The page never shows the code, and no key is copied by hand. A PC without the setup does nothing on a click, and the page
+ * cannot see the PC. What it can see is the account's upload keys, so it says what they show: which PCs are connected, that one
+ * connected a moment ago (a key that was not there before the click), and that one took this coupon (a key used since the click). */
+function ThisPc({ apiBase, jobId, exchange, expecting, onSent }: { apiBase: string; jobId: string; exchange: Exchange; expecting: boolean; onSent: () => void }) {
+  const [connecting, setConnecting] = useState(0); // when Connect this PC was clicked, while the page looks for the PC's key
+  const [sent, setSent] = useState(0); // when Send to Abaqus was clicked, while the page looks for a PC that took the coupon
+  const [message, setMessage] = useState("");
+  const [pcs, setPcs] = useState<UploadKey[] | null>(null); // the keys that are not cancelled; null until the list is read
+  const [connected, setConnected] = useState<UploadKey | null>(null);
+  const [answered, setAnswered] = useState<UploadKey | null>(null);
+  const before = useRef<UploadKey[] | null>(null); // the keys as they were at the click the page is looking after
+  const link = openLink(jobId);
+  const live = useCallback(async (signal?: AbortSignal) => (await listUploadKeys(apiBase, signal)).filter((k) => !k.revoked_at), [apiBase]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    live(controller.signal).then(setPcs).catch(() => undefined); // without the list the card says nothing about PCs; its buttons work all the same
+    return () => controller.abort("replaced");
+  }, [live]);
+
+  useEffect(() => {
+    if (!connecting && !sent) return;
+    const timer = window.setInterval(() => {
+      if (connecting && Date.now() - connecting > CONNECT_MS) setConnecting(0);
+      if (sent && Date.now() - sent > ANSWER_MS) setSent(0);
+      live().then((now) => {
+        const was = before.current;
+        before.current = now;
+        setPcs(now);
+        if (was === null) return; // the first list since the click: nothing to tell a change by yet
+        const fresh = connecting ? now.find((k) => !was.some((w) => w.id === k.id)) : undefined;
+        if (fresh) { setConnected(fresh); setConnecting(0); }
+        const used = sent ? now.find((k) => k.last_used_at !== null && k.last_used_at !== (was.find((w) => w.id === k.id)?.last_used_at ?? null) && !(fresh && fresh.id === k.id)) : undefined;
+        if (used) { setAnswered(used); setSent(0); }
+      }).catch(() => undefined);
+    }, PC_MS);
+    return () => window.clearInterval(timer);
+  }, [connecting, sent, live]);
+
+  if (!link) return null;
+  const pcName = (k: UploadKey) => k.name || "A PC";
+
+  function send() {
+    setMessage(""); setAnswered(null); setConnected(null);
+    before.current = pcs; setSent(Date.now());
+    onSent(); openOnThisPc(link!);
+  }
+
+  async function connect() {
+    setMessage(""); setConnecting(0); setConnected(null);
+    try {
+      const { code } = await createPairingCode(apiBase);
+      before.current = pcs; setConnecting(Date.now());
+      openOnThisPc(pairLink(code, new URL(apiBase, window.location.href).href));
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      setMessage(status === 401 || status === 403 ? "Your sign-in has ended. Reload the page, sign in, and connect again." : "This PC was not connected. Try again.");
+    }
+  }
+
+  return (
+    <div className="studio-abaqus-quick" data-testid="abaqus-quick">
+      <p className="studio-abaqus-actions">
+        <button type="button" className="studio-button" onClick={send} data-testid="abaqus-send-to-abaqus">Send to Abaqus</button>
+      </p>
+      <p>Abaqus/CAE starts on this PC with this coupon built as a model you can edit. Change what you want to study and submit its job there. When the job completes, the comparison appears here by itself.</p>
+      {connected ? <p className="studio-status" role="status" data-testid="abaqus-connected">{pcName(connected)} is connected to your account. Now click Send to Abaqus.</p>
+        : expecting && answered ? <p className="studio-status" role="status" data-testid="abaqus-answered">{pcName(answered)} took this coupon at {when(answered.last_used_at)}, and Abaqus is starting there. Submit its job in Abaqus. The comparison appears here when the job completes.</p>
+          : expecting ? <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.</p> : null}
+      {pcs === null || connected || (expecting && answered) ? null : pcs.length
+        ? <p className="studio-muted" data-testid="abaqus-pcs">Connected to your account: {pcs.map((k) => `${pcName(k)} (since ${when(k.created_at)})`).join(", ")}.</p>
+        : <p className="studio-muted" data-testid="abaqus-pcs">No PC is connected to your account yet. Do the two steps below, once.</p>}
+      <details className="studio-details" data-testid="abaqus-setup" open={pcs !== null && pcs.length === 0 ? true : undefined}>
+        <summary>First time on this PC</summary>
+        <ol className="studio-abaqus-steps">
+          <li><strong>Set up, once.</strong>{" "}
+            <a href={connectorUrl(apiBase)} download={connectorName(exchange)} target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
+            {" "}Unzip it first: right-click the downloaded file and choose Extract All. In the folder that opens, double-click Set up Anisotropy. A box says when it is done. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.
+            <ConnectorFacts apiBase={apiBase} exchange={exchange} testId="abaqus-setup-connector-facts" /></li>
+          <li><strong>Connect, once.</strong>{" "}
+            <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
+            {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>
+        </ol>
+        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Answer the box on your PC. This page says when it is connected. If no box appeared, do the setup first.</p> : null}
+        {message ? <p className="studio-alert" role="alert">{message}</p> : null}
+      </details>
+    </div>
+  );
+}
+
+/** Which connector the download is and how to check it (ADR-0094 amendment 3): its version, the SHA-256 recorded for that version's
+ * zip, and a link to the note that says what it installs, reads and sends, for whoever decides whether it may be installed. The API
+ * hands the zip out only when it has that checksum. */
+function ConnectorFacts({ apiBase, exchange, testId }: { apiBase: string; exchange: Exchange; testId: string }) {
+  return (
+    <span className="studio-muted studio-abaqus-connector-facts" data-testid={testId}>
+      {exchange.connector_version && exchange.connector_sha256 ? <>Version {exchange.connector_version}. The downloaded file has the SHA-256 <code>{exchange.connector_sha256}</code>.{" "}</> : null}
+      <a href={connectorNoteUrl(apiBase)} target="_blank" rel="noreferrer" data-testid={`${testId}-note`}>What it installs, reads and sends</a>, for your IT.
+    </span>
   );
 }
 

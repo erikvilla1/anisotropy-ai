@@ -58,7 +58,7 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     out = attempt / "run"
     assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "abaqus_build", "prepomax_deck", "prepomax_results", "kernel_summary",
                                                                       "convergence", "kernel_vtu", "fields", "explanation", "record", "checklist",
-                                                                      "preview"}  # no document without the PDF; the build script of ADR-0094 with the deck
+                                                                      "preview", "values"}  # no document without the PDF; the build script of ADR-0094 with the deck
     assert outcome.outputs["abaqus_build"].name == f"{DESIGNATION}-build.py"
     assert all(path.exists() for path in outcome.outputs.values())
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
@@ -67,6 +67,9 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     assert progress["result"] == outcome.result and outcome.documents == "written"  # the result was reported before the documents (ADR-0064)
     assert all((out / "kernel" / f"{DESIGNATION}{suffix}").is_file() for suffix in ("-model.png", "-solved.png", ".vtu"))  # drawn after it
     fields = json.loads((out / "kernel" / f"{DESIGNATION}-fields.json").read_text(encoding="utf-8"))
+    verdict = fields["summary"]["verdict"]  # what a list of past runs shows and reopens (ADR-0109): the answer, and this attempt's rows
+    assert outcome.answer["factor"] == verdict["factor"] and outcome.answer["fails"] is verdict["fails"] and outcome.answer["criterion"] == verdict["earliest"]
+    assert json.loads(outcome.outputs["values"].read_text(encoding="utf-8")) == tool.values_of_spec(tool.load_spec(paths.ours(DESIGNATION) / f"{DESIGNATION}.toml"))
     assert fields["summary"]["reaction"]["value"] > 0 and json.loads((out / "studio" / "checklist.json").read_text(encoding="utf-8"))["state"] == "ready"
     assert attempt.parent == paths.runs(DESIGNATION) and attempt.name.startswith("attempt-02_")  # row 01 is the form's reading
     decks = paths.ours(DESIGNATION) / "decks"
@@ -180,7 +183,7 @@ def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     assert "stopped at CalculiX: run_calculix.py exited with code 1" in row
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
     assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study"]
-    assert set(progress["outputs"]) == {"checklist", "preview"}  # the stand-in steps wrote nothing; the studio files are there
+    assert set(progress["outputs"]) == {"checklist", "preview", "values"}  # the stand-in steps wrote nothing; the studio files are there, the run's rows among them (ADR-0109)
     assert (folder / "team" / progress["attempt"].rsplit("_", 1)[-1] / "values.json").is_file()  # the values file is filed with the coupon
 
 
@@ -331,6 +334,22 @@ def test_the_outcome_file_keeps_the_result_apart_from_a_missing_document(tool, t
     outcome = json.loads(result.read_text(encoding="utf-8"))
     assert outcome["status"] == "done" and outcome["result"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome["documents"].startswith("the package not written") and outcome["message"] == f"{outcome['result']}; {outcome['documents']}"
+    # ADR-0109: the rows of this attempt are kept beside its result, by key; the stand-in fields hold no summary, so no answer, and the run stands
+    rows = json.loads((paths.ROOT / outcome["outputs"]["values"]).read_text(encoding="utf-8"))  # an absolute path stays itself under `/`
+    assert rows["test"] == "unnotched tension" and rows["units"] == "mm-MPa" and outcome["answer"] is None
+
+
+def test_a_done_run_carries_its_answer_in_a_few_values(tool, tmp_path, monkeypatch):
+    """ADR-0109: the outcome's `answer` is picked from the summary our engine wrote into the fields; nothing is computed for it."""
+    fields = tmp_path / "fields.json"
+    summary = {"verdict": {"basis": "gauge", "earliest": "tsai_hill", "factor": 1.0334, "fails": False, "outside_earlier": None},
+               "fpf": {}, "fpf_gauge": {"tsai_hill": {"factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}}}
+    fields.write_text(json.dumps({"summary": summary}), encoding="utf-8")
+    assert tool.answer_of_run(fields) == {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}
+    result = tmp_path / "outcome.json"
+    tool.write_result(result, "done", "ok", answer=tool.answer_of_run(fields))
+    assert json.loads(result.read_text(encoding="utf-8"))["answer"]["ply"] == 4
+    assert tool.answer_of_run(tmp_path / "none.json") is None
 
 
 def test_any_failure_of_the_document_is_a_failed_package_step_that_names_the_error(tool, monkeypatch):

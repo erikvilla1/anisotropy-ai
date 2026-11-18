@@ -12,12 +12,23 @@ import {
 import { expandLayup } from "./layup";
 import { layupNotation, layupRows, parseLayup, TEST_CHOICES } from "./studio-chat";
 import { fieldByKey, fields, libraryOptions, unitLabels, unitsOf, type StudioForm } from "./studio-form";
-import type { OfferedRow, Proposal, ProposalRequest } from "./studio-api";
+import type { OfferedRow, PlateOffer, Proposal, ProposalAnswer, ProposalRequest, UnreadPart } from "./studio-api";
+import { DOF_WORDS, ownRegions, type PlateLists, type PlateLoad } from "./studio-plate";
 
 /** Rows the model never sees: who filled the form in, notes, sources and names, the team's own model and data (R-11). */
 const HIDDEN = new Set(["filled_by", "date", "notes", "size_from", "team_model", "test_data", "material_code", "layup_code", "tab_material", "own_name",
   "own_source"]);
 const hidden = (key: string) => HIDDEN.has(key) || key.startsWith("name_") || key.startsWith("mesh_") || /^ply_\d+$/.test(key);
+
+/** Why nothing was proposed for a part of the message, in the page's words (ADR-0088 amendment 1). The model names the reason and
+ * quotes the engineer; it phrases nothing here. */
+const UNREAD_WORDS: Record<UnreadPart["reason"], string> = {
+  not_offered: "not something you can set here yet",
+  no_value: "names no value to enter; state the value itself, for example a layup as [0/90]2s",
+  refers_back: "each message is read on its own, so say the whole change",
+};
+export type UnreadLine = { quote: string; words: string };
+export const unreadLines = (parts: UnreadPart[]): UnreadLine[] => parts.map((p) => ({ quote: p.quote, words: UNREAD_WORDS[p.reason] }));
 
 // ----------------------------------------------------------------------------------------------- the coupon
 
@@ -73,6 +84,44 @@ export function couponRowsFrom(accepted: Proposal[]): { rows: StudioForm; notes:
     } else rows[p.key] = p.value;
   }
   return { rows, notes };
+}
+
+// ----------------------------------------------------------------------------------------------- the plate
+
+/** What a plate offers a message besides its rows (ADR-0101): its own regions, those of the clicked element (`here`), the units a force
+ * and a pressure are stated in, and which regions are already held and loaded. A box the engineer drew and named is not offered. */
+export function plateOffer(form: StudioForm, lists: PlateLists, here: string[]): PlateOffer {
+  const labels = unitLabels(unitsOf(form));
+  const regions = ownRegions(form);
+  const own = (names: string[]) => [...new Set(names)].filter((name) => regions.some((r) => r.name === name));
+  return { regions, here: own(here), force_unit: labels.force, stress_unit: labels.stress,
+    held: own(lists.supports.map((s) => s.region)), loaded: own(lists.loads.map((l) => l.region)) };
+}
+
+/** One line of the card per support and load kept (the card's own shape): what it does in the plate's words, and the words it came from. */
+export type PlateLine = { id: string; label: string; value: string; unit: string; note?: string; quote: string };
+export function plateLines(answer: Pick<ProposalAnswer, "supports" | "loads">): PlateLine[] {
+  const dof = (d: number) => DOF_WORDS[d] ?? `direction ${d}`;
+  const written = (value: string, unit: string | null, taken: string, takenUnit: string) =>
+    (unit && (unit !== takenUnit || value.replace(/^[-+]/, "") !== taken.replace(/^-/, "")) ? `written ${value} ${unit}` : null);
+  return [
+    ...answer.supports.map((s, i) => ({ id: `support:${i}`, label: `Hold ${s.region}`, value: s.dofs.map(dof).join(", "), unit: "", quote: s.quote })),
+    ...answer.loads.map((l, i) => {
+      const notes = [written(l.written_value, l.written_unit, l.value, l.unit),
+        l.kind === "pressure" ? "positive presses down on the plate" : l.sense === "tension" ? "tension: pulling outward from the edge"
+          : l.sense === "compression" ? "compression: pushing in at the edge" : null].filter((n): n is string => n !== null);
+      return { id: `load:${i}`, label: l.kind === "pressure" ? `Pressure on ${l.region}` : `Force on ${l.region}`, value: l.value,
+        unit: l.kind === "pressure" ? l.unit : `${l.unit} along ${dof(l.dof ?? 3)}`, quote: l.quote, ...(notes.length ? { note: notes.join("; ") } : {}) };
+    }),
+  ];
+}
+
+/** The plate's lists with the ticked supports and loads added, each as a row of the Loads and supports panel. */
+export function plateWith(lists: PlateLists, answer: Pick<ProposalAnswer, "supports" | "loads">, ticked: Set<string>): PlateLists {
+  const supports = answer.supports.filter((_, i) => ticked.has(`support:${i}`)).map((s) => ({ region: s.region, dofs: [...s.dofs], value: "" }));
+  const loads = answer.loads.filter((_, i) => ticked.has(`load:${i}`)).map((l): PlateLoad => (l.kind === "pressure"
+    ? { region: l.region, kind: "pressure", pressure: l.value } : { region: l.region, kind: "force", dof: l.dof ?? 3, total: l.value }));
+  return { ...lists, supports: [...lists.supports, ...supports], loads: [...lists.loads, ...loads] };
 }
 
 // ----------------------------------------------------------------------------------------------- the laminate

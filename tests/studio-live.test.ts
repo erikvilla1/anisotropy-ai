@@ -24,6 +24,10 @@ test("the setup is complete once every step but the engineer's name is filled", 
   assert.equal(setupComplete(blankForm()), false);
   assert.equal(setupComplete({ ...example, length: "" }), false);
   assert.equal(setupComplete({ ...example, value: "" }), false);
+  // a plate has no loading rows and may have no tabs: its size, material and layup are enough for its shape to be asked for (ADR-0101 amendment 1)
+  assert.equal(setupComplete({ ...example, test: "plate", tab_length: "", control: "", value: "" }), true);
+  assert.equal(setupComplete({ ...example, test: "plate", width: "" }), false);
+  assert.equal(setupComplete({ ...example, tab_length: "" }), false, "a strip still states its tab length");
 });
 
 test("the rows' key changes with any row and only with the rows", () => {

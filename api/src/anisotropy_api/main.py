@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, TypeVar
+from urllib.parse import unquote
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -28,31 +29,37 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 
-from .access import CONNECTOR_UPLOADS, AccessMiddleware
+from .abaqus_coupon import NotABuildScript, coupon_data
+from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
-from .assistant import TemplateAssistant, assistant_for
+from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for, model_view_of_facts
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
+from .plate_proposals import PLATE_SYSTEM, KeptPlate, plate_guard, plate_schema, plate_view
 from .proposals import model_view_of_form, source_guard
+from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
+from .result_questions import model_view, question_guard, question_schema
+from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
+from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
-from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, count_uploads, delete_upload, fetch_project, fetch_run, fetch_upload,
-                      git_commit, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
-                      live_upload_tokens, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
+from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+                      fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
+                      live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
-from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
+from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, restore_owners, sync, upload_document_key, upload_key,
                       upload_prefix)
-from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_token, ours_of,
+from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, connector_release,
+                      new_pairing_code, new_token, ours_of,
                       token_digest)
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    LiveSolveResponse, TowTestRequest, TowTestResponse,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
-    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
+    ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -65,8 +72,13 @@ ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
+IMPORTED_MODELS = "/v1/imported-models"  # a model brought in as an Abaqus deck, answered and not kept (ADR-0105)
+MODEL_NAME_HEADER = "X-Anisotropy-Model-Name"  # the file's name, percent-encoded: a header, so it stays out of the address
+MAX_MODEL_BYTES = 20_000_000  # the deck as sent; the fea package's own limit (`imported.MAX_BYTES`)
 UPLOADS = "/v1/abaqus-uploads"  # the uploads from Abaqus, each its owner's alone (ADR-0094 part 6)
 UPLOAD_TOKENS = "/v1/upload-tokens"  # what the connector sends with
+PAIRING_CODES = "/v1/pairing-codes"  # a one-time code that a signed-in page hands to the user's machine (ADR-0094 amendment 1)
+PAIRING_MINUTES = 10
 ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
 ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
 
@@ -102,11 +114,16 @@ async def lifespan(app: FastAPI):
     # never saw end are marked so.
     # With the job queue (ADR-0056 amendment 3) the jobs run in solver containers: the API's container keeps its coupons level
     # with the store (`sync`) and leaves the running rows to their solvers' heartbeats; a solver fetches the coupons per job.
+    # Each signed-in person's own coupons (ADR-0106) come back at startup where this container runs the jobs itself; with the queue
+    # they are brought level when that person asks (`CouponJobs.refresh`), so a start does not grow with the number of people.
     store = R2Store(settings.storage) if settings.storage.on else None
     role = settings.job_role
     if store is not None and role != "solver":
         files, coupons = (sync if role == "queue" else restore)(store, LOCAL_FEA)
         print(f"restored {files} file(s) of {coupons} coupon(s) from the bucket {settings.storage.bucket}", flush=True)
+        if role is None:
+            files, people = restore_owners(store, OWNERS_FEA)
+            print(f"restored {files} file(s) of the coupons of {people} signed-in owner(s)", flush=True)
     if app.state.records is not None and role is None:
         orphans = stop_orphans(app.state.records, "the API stopped while this job ran, so it did not finish; start it again")
         if orphans:
@@ -151,7 +168,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-Anisotropy-Actor"],
+    allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
     expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, "Location"],
     allow_credentials=False,
 )
@@ -300,6 +317,24 @@ def solve_case_endpoint(problem: CaseRequest, actor: Actor, request: Request, re
     return _deliver(request, response, actor, problem, compute)
 
 
+def _email(request: Request) -> str | None:
+    return getattr(request.state, "user_email", None)
+
+
+def _owner(request: Request) -> str | None:
+    """Whose runs, jobs, files and coupons a request may see (ADR-0104). Behind Cloudflare Access: the signed-in email, or None for a
+    service token, which has no email and sees what was made with none. With no sign-in in front of the API (the local one,
+    ADR-0011) there is one user and nothing is narrowed: EVERYONE."""
+    if getattr(request.app.state, "access_verifier", None) is None:
+        return EVERYONE
+    return _email(request)
+
+
+def _theirs(owner: str | None, user_email: str | None) -> bool:
+    """Whether a record made under `user_email` is that owner's to see."""
+    return owner == EVERYONE or owner == user_email
+
+
 def _records_engine(request: Request):
     """The connection pool, or 503 when recording is switched off: there is nothing to read."""
     engine = getattr(request.app.state, "records", None)
@@ -323,7 +358,7 @@ def list_runs_endpoint(
     since: dt.datetime | None = None, until: dt.datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> list[RunSummary]:
-    """The newest runs first, narrowed by actor, endpoint, status and time (ADR-0026).
+    """The requester's runs, newest first, narrowed by actor, endpoint, status and time (ADR-0026, ADR-0104).
 
     `since` is inclusive and `until` exclusive, both with a timezone offset. An unknown actor or
     status is refused rather than answered with an empty list.
@@ -335,7 +370,7 @@ def list_runs_endpoint(
         raise HTTPException(status_code=422, detail=f"status must be one of {', '.join(STATUSES)}; got {status!r}")
     try:
         runs = list_runs(engine, actor=actor, endpoint=endpoint, status=status,
-                         since=_aware("since", since), until=_aware("until", until), limit=limit)
+                         since=_aware("since", since), until=_aware("until", until), limit=limit, user_email=_owner(request))
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}") from exc
     return [RunSummary.of(run) for run in runs]
@@ -343,13 +378,13 @@ def list_runs_endpoint(
 
 @app.get("/v1/runs/{run_id}", response_model=RunOutput)
 def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
-    """One run record as stored (ADR-0026)."""
+    """One run record as stored (ADR-0026). 404 for a run that is not the requester's, in the same words as for none (ADR-0104)."""
     engine = _records_engine(request)
     try:
         run = fetch_run(engine, run_id)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}") from exc
-    if run is None:
+    if run is None or not _theirs(_owner(request), run.user_email):
         raise HTTPException(status_code=404, detail=f"No run {run_id}")
     return RunOutput.of(run)
 
@@ -361,9 +396,34 @@ def _coupon_jobs(request: Request) -> CouponJobs:
     return jobs
 
 
-def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+def _coupons_unread(exc: SQLAlchemyError) -> HTTPException:
+    print(f"the jobs table did not answer: {str(exc).splitlines()[0]}", flush=True)  # the cause stays in the log, not in the answer
+    return HTTPException(status_code=503, detail="Your coupons could not be read right now. Try again in a minute.")
+
+
+def _their_coupon(request: Request, jobs: CouponJobs, name: str) -> None:
+    """Passes when the coupon of that name is the requester's: in a signed-in person's own folder of coupons (ADR-0106); in the
+    shared folder, for a request with no email behind the sign-in (a service token), one that jobs with no email alone have run
+    (ADR-0104). 404 otherwise, in the same words as for a name there is no coupon of."""
+    owner = _owner(request)
+    try:
+        if owner == EVERYONE:
+            known = True
+        elif owner is not None:
+            known = jobs.has_coupon(name, owner)
+        else:
+            known = name in jobs.coupons_of(owner)
+    except SQLAlchemyError as exc:
+        raise _coupons_unread(exc) from exc
+    if not known:
+        raise HTTPException(status_code=404, detail=f"no coupon of that name: {name}")
+
+
+def _known_job(request: Request, jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    """The job by its id when it is the requester's (ADR-0104). 404 otherwise, in the same words as for none, so no job is confirmed
+    to a stranger."""
     job = jobs.get(job_id)
-    if job is None:
+    if job is None or not _theirs(_owner(request), job.user_email):
         # not in this process, nor in the jobs table (none without records); a job that ended has its receipt among the runs
         raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
     return job
@@ -383,8 +443,12 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
     values = job_request.values_bytes() if job_request.values is not None else None
     project_id = _own_project_id(request, actor, job_request.project_id)
+    if job_request.coupon is not None:
+        _their_coupon(request, jobs, job_request.coupon)
     try:
-        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values,
+        # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
+        options = [*job_request.options(), *EVERY_TEST[_every_test(request)]]
+        job = jobs.start(actor, job_request.recorded_inputs(), options, form=form, coupon=job_request.coupon, values=values,
                          user_email=getattr(request.state, "user_email", None), project_id=project_id)
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -461,10 +525,11 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
     its actor (ADR-0026); the studio tool answers within two minutes or the check is refused with 504.
     """
     jobs = _coupon_jobs(request)
+    every = _every_test(request)
 
     def compute() -> CouponCheckResponse:
         try:
-            found = jobs.check(problem.values_bytes())
+            found = jobs.check(problem.values_bytes(), every=every, user_email=_email(request))
         except CheckTimedOut as exc:
             raise HTTPException(status_code=504, detail=str(exc)) from exc
         except JobRefused as exc:
@@ -488,7 +553,8 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     them. 429 when every live solver stays busy, 504 when one does not answer in time, 503 when none can run."""
     live: LiveSolver = request.app.state.live
     try:
-        found = live.solve(problem.values_bytes())
+        email = _email(request)  # the preview names the coupon among the coupons of whoever asked (ADR-0106)
+        found = live.solve(problem.values_bytes(), every=_every_test(request), root=None if email is None else _coupon_jobs(request).root_of(email))
     except LiveBusy as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except LiveTimedOut as exc:
@@ -509,6 +575,62 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
 
 
+async def _read_model(request: Request) -> bytes:
+    """The request's body, an Abaqus input deck as it is, refused past the size a model may have before more of it is read."""
+    too_large = HTTPException(status_code=413, detail=f"A model is at most {MAX_MODEL_BYTES} bytes as sent")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_MODEL_BYTES:
+        raise too_large
+    received = bytearray()
+    async for chunk in request.stream():
+        received += chunk
+        if len(received) > MAX_MODEL_BYTES:
+            raise too_large
+    if not received:
+        raise HTTPException(status_code=422, detail="The request has no body: send the Abaqus input deck (.inp) as the body")
+    return bytes(received)
+
+
+@app.post(IMPORTED_MODELS, response_model=None, responses={200: {"model": ImportedModelResponse}})
+def import_model(actor: Actor, request: Request, data: Annotated[bytes, Depends(_read_model)], units: ModelUnits,
+                 x_anisotropy_model_name: Annotated[str | None, Header(max_length=800)] = None) -> Response:
+    """A model brought in as an Abaqus input deck (ADR-0105): the request's body is the .inp file, `units` the system it is written
+    in (a deck carries none, and nothing is inferred from its numbers) and the header `X-Anisotropy-Model-Name` the file's name,
+    percent-encoded, which so stays out of the address and its logs. The fea package reads it, or
+    refuses it with the line, draws it and solves it with our kernel as it stands: nothing is repaired or filled in. The answer is
+    the requester's alone and nothing of the deck is kept: the run record holds its name, size and digest, the state, the counts of
+    what was read and the answer's summary. Offered where every test is offered (ADR-0089): 403 otherwise. 413 past the size a
+    model may have, 429 when every solver stays busy, 422 when one does not answer in time, 503 when none can run."""
+    if not _every_test(request):
+        raise HTTPException(status_code=403, detail="Importing a model is not offered yet.")
+    name = unquote(x_anisotropy_model_name or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:200] or "model.inp"
+    live: LiveSolver = request.app.state.live
+    try:
+        found = live.read_model(data, name, units)
+    except LiveBusy as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except LiveTimedOut as exc:
+        print(f"an imported model was not answered: {exc}", flush=True)  # the cause stays in the log
+        raise HTTPException(status_code=422, detail="This model took too long to solve here. Try a coarser mesh.") from exc  # the engineer's to act on
+    except LiveRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    fields = found.raw.get("fields")
+    head = found.head
+    receipt = ImportedModelReceipt(name=name, units=units, bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+    refused = found.state == "refused"  # recorded as a rejection, with the reader's reason
+    run_id = _record(request, actor, receipt, error=str((head.get("problem") or {}).get("message", "refused")) if refused else None, response=None if refused else {
+        "state": found.state, "solver": "kernel", "warm": found.warm, "seconds": round(found.seconds, 3), "timings": found.timings,
+        "problem": head.get("problem"), "reading": head.get("reading"), "summary": found.summary,
+        "fields_sha256": hashlib.sha256(fields).hexdigest() if fields is not None else None})
+    first = {"run_id": None if run_id is None else str(run_id), "state": found.state, "name": name, "units": units, "solver": "kernel",
+             "warm": found.warm, "seconds": round(found.seconds, 3), "timings": found.timings, "problem": head.get("problem"),
+             "reading": head.get("reading")}
+    parts = [json.dumps(first)[1:-1].encode("utf-8")]
+    for part in ("preview", "fields", "explanation"):
+        parts.append(f'"{part}":'.encode("utf-8") + (found.raw[part].strip() if part in found.raw else b"null"))
+    return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
+
+
 @app.post("/v1/tow-tests", response_model=TowTestResponse)
 def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, response: Response) -> TowTestResponse:
     """A fibre tow record under ASTM D4018 (ADR-0074): its rows and specimens read and refused by row, judged clause by clause against the
@@ -518,9 +640,11 @@ def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, 
     """
     jobs = _coupon_jobs(request)
 
+    every = _every_test(request)
+
     def compute() -> TowTestResponse:
         try:
-            found = jobs.tow(problem.values_bytes())
+            found = jobs.tow(problem.values_bytes(), every=every)
         except CheckTimedOut as exc:
             raise HTTPException(status_code=504, detail=str(exc)) from exc
         except JobRefused as exc:
@@ -631,10 +755,6 @@ def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, r
 
 # ----------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)
 
-def _email(request: Request) -> str | None:
-    return getattr(request.state, "user_email", None)
-
-
 def _uploads(request: Request) -> Uploads:
     uploads = getattr(request.app.state, "uploads", None)
     if uploads is None:
@@ -650,9 +770,14 @@ def abaqus_exchange(request: Request) -> AbaqusExchange:
     application must let the path through as well, which this API cannot see). Not a run: nothing is computed or recorded."""
     state = request.app.state
     behind_access = getattr(state, "access_verifier", None) is not None
+    try:
+        release = connector_release()
+    except ToolFailed:
+        release = {"version": None, "sha256": None}  # the card then shows the download without them
     return AbaqusExchange(uploads=getattr(state, "records", None) is not None and getattr(state, "uploads", None) is not None,
                           connector_route=not behind_access or bool(getattr(state, "connector_uploads", False)),
-                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS)
+                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS,
+                          connector_version=release["version"], connector_sha256=release["sha256"])
 
 
 @app.get(ABAQUS_CONNECTOR)
@@ -664,6 +789,17 @@ def abaqus_connector(request: Request) -> Response:
     except ToolFailed as exc:
         raise HTTPException(status_code=503, detail=f"The connector could not be handed out: {exc}") from exc
     return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
+@app.get(ABAQUS_CONNECTOR + "/security-note")
+def abaqus_connector_note() -> Response:
+    """What the connector installs, reads and sends, as plain text (ADR-0094 amendment 3): the same words as SECURITY.txt in its zip,
+    for whoever decides whether it may be installed, before anything is downloaded. The same for every requester."""
+    try:
+        text = CONNECTOR_NOTE.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="The connector's security note could not be read.") from exc
+    return Response(text, media_type="text/plain; charset=utf-8", headers={"Content-Disposition": 'inline; filename="anisotropy-connector-SECURITY.txt"'})
 
 
 @app.post(UPLOAD_TOKENS, status_code=201, response_model=UploadTokenCreated)
@@ -708,6 +844,61 @@ def cancel_upload_token(token_id: uuid.UUID, actor: Actor, request: Request) -> 
     return UploadTokenOutput.of(row)
 
 
+def _owner_words(actor: str, user_email: str | None) -> str:
+    """Whose account a token or a code is for, as a machine shows it to its user before it connects."""
+    return user_email if user_email is not None else f"the local user {actor}"
+
+
+@app.post(PAIRING_CODES, status_code=201, response_model=PairingCode)
+def create_pairing_code(actor: Actor, request: Request) -> PairingCode:
+    """A one-time code that connects the requester's machine to their account (ADR-0094 amendment 1). The page puts it in a link
+    that the machine's helper opens; the helper swaps it at `POST /v1/connector/pair` for an upload token of its own, so no token is
+    copied by hand. The code is in this answer and nowhere else, lasts a few minutes and is good for one swap; asking again ends
+    the earlier one."""
+    engine = _records_engine(request)
+    code, digest = new_pairing_code()
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        row = insert_pairing_code(engine, code_id=uuid.uuid4(), actor=actor, user_email=_email(request), code_sha256=digest, now=now,
+                                  expires_at=now + dt.timedelta(minutes=PAIRING_MINUTES))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return PairingCode(code=code, expires_at=row.expires_at.isoformat(), minutes=PAIRING_MINUTES)
+
+
+@app.post(CONNECTOR_PAIR, response_model=Paired)
+def pair_machine(wanted: PairInput, request: Request) -> Paired:
+    """A machine swaps its one-time code for an upload token (ADR-0094 amendment 1). No sign-in and no token: the code is the proof,
+    made minutes ago by a signed-in page. With `look` nothing is swapped and the answer only says whose account the code is for, so
+    the machine asks its user before it connects. 401 for a code that is unknown, used or ended, in the same words. Behind
+    Cloudflare Access this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path
+    through."""
+    engine = _records_engine(request)
+    now = dt.datetime.now(dt.timezone.utc)
+    refused = HTTPException(status_code=401, detail=f"This code is not one of ours, was used already, or is older than {PAIRING_MINUTES} minutes. "
+                                                    "Click Connect this PC on the site again")
+    digest = token_digest(wanted.code)
+    try:
+        if wanted.look:
+            with_code = fetch_pairing_code(engine, digest, now)
+            if with_code is None:
+                raise refused
+            return Paired(owner=_owner_words(with_code.actor, with_code.user_email))
+        code = claim_pairing_code(engine, digest, now)
+        if code is None:
+            raise refused
+        if live_upload_tokens(engine, actor=code.actor, user_email=code.user_email) >= MAX_TOKENS:
+            raise HTTPException(status_code=429, detail=f"This account has {MAX_TOKENS} upload keys that are not cancelled. Cancel one on the site, then "
+                                                        "click Connect this PC again")
+        token, token_sha, hint = new_token()
+        name = wanted.name.strip() or "a connected PC"
+        row = insert_upload_token(engine, token_id=uuid.uuid4(), actor=code.actor, user_email=code.user_email, name=name, token_sha256=token_sha, hint=hint, now=now)
+        name_pairing_token(engine, code.id, row.id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return Paired(owner=_owner_words(code.actor, code.user_email), token=token, token_id=str(row.id), name=row.name)
+
+
 async def _read_bundle(request: Request) -> bytes:
     """The request's body, a bundle's zip as it is, refused past the size a bundle may have before more of it is read."""
     too_large = HTTPException(status_code=413, detail=f"A bundle is at most {MAX_BUNDLE_BYTES} bytes as sent")
@@ -744,6 +935,57 @@ async def _connector_bundle(request: Request, owner=Depends(_token_owner)):
     return owner, await _read_bundle(request)
 
 
+def _connector_run_script(job_id: uuid.UUID, request: Request, owner) -> tuple[str, str]:
+    """(the build script of a finished run of the token's owner, the coupon's name as a plain name). 404 for any other run, in the
+    same words as for none, so no run is confirmed to a stranger. Nothing is changed."""
+    jobs = _coupon_jobs(request)
+    job = jobs.get(job_id)
+    mine = job is not None and (job.user_email == owner.user_email if owner.user_email is not None else job.user_email is None and job.actor == owner.actor)
+    if not mine:
+        raise HTTPException(status_code=404, detail=f"No run {job_id} of yours")
+    if job.state != "done":
+        raise HTTPException(status_code=409, detail=f"Run {job_id} is {job.state}; its coupon for Abaqus is there once it is done")
+    try:
+        path = jobs.output_file(job, "abaqus_build")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Run {job_id} has no build script for Abaqus: only an unnotched tension run has one") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        print(f"coupon job {job_id}: no build script: {exc}", flush=True)
+        raise HTTPException(status_code=404, detail="This run's files are no longer available. Run the analysis again from your project.") from exc
+    coupon = "".join(c for c in str((job.outcome or {}).get("coupon") or "coupon") if c.isalnum() or c in "-_.") or "coupon"
+    return path.read_text(encoding="utf-8"), coupon
+
+
+@app.get(CONNECTOR_RUNS + "/{job_id}/coupon")
+def connector_coupon(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> JSONResponse:
+    """A run's coupon as data for the machine of the run's owner (ADR-0094 amendment 4): the numbers and names its build script
+    states, read from the script and never run (`abaqus_coupon.coupon_data`), as one JSON object of the format `anisotropy-coupon/1`.
+    The connector checks it and builds the model with code of its own, so a click on Send to Abaqus moves no code to the PC. Asked
+    with an upload token and answered only for a finished run of the token's owner, as the build script is. Behind Cloudflare Access
+    this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path through."""
+    script, coupon = _connector_run_script(job_id, request, owner)
+    plain = "".join(c for c in coupon if c.isascii())[:80]  # the name of a folder on the PC, which the connector checks again
+    try:
+        data = coupon_data(script, plain if plain[:1].isalnum() else "coupon")
+    except NotABuildScript as exc:
+        print(f"coupon job {job_id}: its build script is not read as data: {exc}", flush=True)
+        raise HTTPException(status_code=409, detail="This run's files do not state its coupon for Abaqus. Run the analysis again from your project.") from exc
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+@app.get(CONNECTOR_RUNS + "/{job_id}/build-script")
+def connector_build_script(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> Response:
+    """The script that builds a run's coupon in Abaqus/CAE, for the machine of the run's owner (ADR-0094 amendment 1): asked with an
+    upload token, answered only for a finished run of the token's owner. 404 for any other run, in the same words as for none, so no
+    run is confirmed to a stranger. Nothing is changed. Connectors before 0.7.0 ask for it and run it; since amendment 4 the
+    connector asks for the coupon as data instead (`connector_coupon`), and this route stays for the PCs that are not yet set up
+    again. Behind Cloudflare Access this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application
+    lets the path through."""
+    script, coupon = _connector_run_script(job_id, request, owner)
+    return Response(script, media_type="text/x-python; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{coupon}-build.py"', "X-Anisotropy-Coupon": coupon})
+
+
 def _requesters_upload(request: Request, actor: str, upload_id: uuid.UUID, *, reading: bool):
     """The upload by its id when it is the requester's; when only reading, also when the requester is a founder (ADR-0094 part 6). 404
     otherwise, so no upload is confirmed to a stranger."""
@@ -770,7 +1012,9 @@ def _our_run(request: Request, row, job_id: uuid.UUID | None) -> Job:
             raise NotCompared(f"you have no finished run of {row.coupon} here to stand beside it: run the coupon, or name a run with job_id")
         job_id = found.id
     job = jobs.get(job_id)
-    if job is None:
+    # a run named by its id must be the upload's owner's own (ADR-0104); locally, with no sign-in and no email, any run is
+    owner = row.user_email if row.user_email is not None or getattr(request.app.state, "access_verifier", None) is not None else EVERYONE
+    if job is None or not _theirs(owner, job.user_email):
         raise NotCompared(f"there is no coupon job {job_id}")
     if job.state != "done":
         raise NotCompared(f"coupon job {job_id} is {job.state}; an upload stands beside a run that is done")
@@ -1007,9 +1251,9 @@ def delete_upload_endpoint(upload_id: uuid.UUID, actor: Actor, request: Request)
 
 @app.get(COUPON_JOBS, response_model=list[CouponJobOutput])
 def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
-    """Every coupon job of this API process, newest first (ADR-0051); jobs of earlier processes are in GET /v1/runs?endpoint=/v1/coupon-jobs."""
+    """The requester's coupon jobs, newest first (ADR-0051, ADR-0104): this process's and, from the jobs table, those of earlier ones."""
     jobs = _coupon_jobs(request)
-    listed = jobs.listed()
+    listed = jobs.listed(_owner(request))
     with jobs.lock:
         return [CouponJobOutput.of(job) for job in listed]
 
@@ -1018,7 +1262,7 @@ def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
 def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
     """A coupon job as it stands: its state, the end of its console, and once it is done the files it made (ADR-0050)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     with jobs.lock:
         return CouponJobOutput.of(job)
 
@@ -1039,7 +1283,7 @@ def coupon_job_package(job_id: uuid.UUID, request: Request, name: DownloadName =
     """The package of a job that is done, as a zip: the document, the decks, the material, the results and the audit form."""
     filename = _download_name(name, ".zip")
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     with jobs.lock:
         state, outcome = job.state, job.outcome
     if state != "done":
@@ -1063,7 +1307,7 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: Downloa
     customer downloads by their neutral names (`solver_input`, `reference_input`, `reference_results`); the solver inputs are then served
     from here with a neutral header, never as a link to the team's copy (ADR-0091 amendment 2)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     alias, key = key, FILE_ALIASES.get(key, key)
     if alias in NEUTRAL_DECKS:
         try:
@@ -1112,7 +1356,7 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
     named in the settings, the model's rephrasing of them from the same fact sheet, kept only when every number in it is a fact.
     Recorded with its actor and, when a model wrote it, the model's name (ADR-0026)."""
     jobs = _coupon_jobs(request)
-    job = _known_job(jobs, job_id)
+    job = _known_job(request, jobs, job_id)
     explanation = _job_json(jobs, job, "explanation", "no explanation")
     facts, sentences = explanation.get("facts", {}), list(explanation.get("sentences", []))
     checklist = _job_json(jobs, job, "checklist", "no setup check") if problem.kind == "setup" else None
@@ -1132,10 +1376,18 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
 
 @app.get("/v1/coupons", response_model=list[CouponSummary])
 def list_coupons(request: Request) -> list[CouponSummary]:
-    """Every coupon on this machine, from its spec and its case page (ADR-0051): what the studio offers to reopen."""
+    """The requester's coupons, from their specs and case pages (ADR-0051): what the studio offers to reopen. A signed-in person's
+    are those in their own folder (ADR-0106). With no sign-in in front of the API, every coupon on this machine; for a request with
+    no email behind the sign-in (a service token), the shared folder's coupons that jobs with no email alone have run (ADR-0104)."""
     jobs = _coupon_jobs(request)
+    owner = _owner(request)
     try:
-        return [CouponSummary(**entry) for entry in jobs.list_coupons()]
+        if owner != EVERYONE and owner is not None:
+            return [CouponSummary(**entry) for entry in jobs.list_coupons(user_email=owner)]
+        mine = None if owner == EVERYONE else jobs.coupons_of(owner)
+        return [CouponSummary(**entry) for entry in jobs.list_coupons() if mine is None or entry.get("name") in mine]
+    except SQLAlchemyError as exc:
+        raise _coupons_unread(exc) from exc
     except CheckTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except JobRefused as exc:
@@ -1144,10 +1396,12 @@ def list_coupons(request: Request) -> list[CouponSummary]:
 
 @app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
 def coupon_values(name: str, request: Request) -> CouponValuesOutput:
-    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading. 404 for a coupon that
+    is not the requester's (ADR-0104, ADR-0106)."""
     jobs = _coupon_jobs(request)
+    _their_coupon(request, jobs, name)
     try:
-        return CouponValuesOutput(name=name, values=jobs.coupon_values(name))
+        return CouponValuesOutput(name=name, values=jobs.coupon_values(name, every=_every_test(request), user_email=_email(request)))
     except UnknownCoupon as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
     except NotOffered as exc:
@@ -1254,10 +1508,20 @@ def workspace_assistant(request: Request) -> AssistantInfo:
 
 @app.get("/v1/coupon-tests", response_model=CouponTests)
 def coupon_tests(request: Request) -> CouponTests:
-    """Whether every coupon test is offered here (ADR-0089); the page asks once and offers the unnotched tension coupon only unless this
-    says all. Not a run: nothing is computed or recorded. Without the startup's settings (a test client), the environment is read."""
+    """Whether every coupon test is offered to the requester (ADR-0089); the page asks once and offers the unnotched tension coupon only
+    unless this says all: the machine's switch, or a founder's sign-in (amendment 5). Not a run: nothing is computed or recorded."""
+    return CouponTests(all=_every_test(request))
+
+
+def _every_test(request: Request) -> bool:
+    """Whether every test is offered to this request (ADR-0089 amendment 5): the machine's switch is on, or the signed-in email
+    Cloudflare Access verified is one of the founders'. Nothing the request itself says can turn it on. Without the startup's
+    settings (a test client), the environment is read."""
     settings = getattr(request.app.state, "settings", None)
-    return CouponTests(all=settings.all_tests if settings is not None else all_tests(environment()))
+    if settings is None:
+        return all_tests(environment())
+    email = getattr(request.state, "user_email", None)
+    return settings.all_tests or (email is not None and email.strip().lower() in settings.founder_emails)
 
 
 @app.post("/v1/workspace/proposals", response_model=ProposalResponse)
@@ -1273,15 +1537,87 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
         conditions = [c.model_dump(mode="json") for c in proposal.conditions]
         view = {"product": proposal.product, "message": proposal.message, "rows": rows, "conditions": conditions,
                 "form": model_view_of_form(proposal.form)}
-        reading = assistant.propose(view)
+        plate = proposal.plate.model_dump(mode="json") if proposal.plate is not None else None
+        if plate is None:
+            reading = assistant.propose(view)
+        else:  # a plate's regions and the place clicked: the same reading, with supports and loads in its schema (ADR-0101)
+            view["plate"] = plate_view(plate)
+            reading = assistant.propose(view, plate_schema(PROPOSAL_SCHEMA, [r["name"] for r in plate["regions"]]), PLATE_SYSTEM)
         if reading.raw is None:
             return ProposalResponse(run_id=None, writer=reading.writer, model=None, proposals=[], conditions=[], question=None, dropped=[],
                                     reason=reading.reason)
         kept = source_guard(reading.raw, proposal.message, rows, conditions)
+        on_plate = plate_guard(reading.raw, proposal.message, plate) if plate is not None else KeptPlate()
         return ProposalResponse(run_id=None, writer=reading.writer, model=reading.model, proposals=kept.proposals, conditions=kept.conditions,
-                                question=kept.question, dropped=kept.dropped, reason=None)
+                                question=kept.question, dropped=[*kept.dropped, *on_plate.dropped], reason=None,
+                                unread=on_plate.not_taken(kept.unread), supports=on_plate.supports, loads=on_plate.loads)
 
     return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/result-questions", response_model=ResultQuestionResponse)
+def read_result_question(asked: ResultQuestionRequest, actor: Actor, request: Request, response: Response) -> ResultQuestionResponse:
+    """The model reads a loose question about a result into a fixed request, and the guard keeps it only inside what the page offered
+    (ADR-0100): quantities and a region by name, plies the laminate holds, an element the message writes. No result is sent here, shown to
+    the model or returned: the page runs the request on the results it shows. With no model, or one that does not answer, nothing is read
+    and the page's own patterns stand (ADR-0099). Recorded with the model's name when one read it (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> ResultQuestionResponse:
+        view = model_view(asked.message, list(asked.quantities), [p.model_dump(mode="json") for p in asked.plies], asked.gauge, asked.picked)
+        reading = assistant.read_question(view, question_schema([q["key"] for q in view["quantities"]], [r["key"] for r in view["regions"]]))
+        if reading.raw is None:
+            return ResultQuestionResponse(run_id=None, writer=reading.writer, model=None, request=None, question=None, dropped=[], reason=reading.reason)
+        kept = question_guard(reading.raw, asked.message, view)
+        return ResultQuestionResponse(run_id=None, writer=reading.writer, model=reading.model, request=kept.request, question=kept.question,
+                                      dropped=kept.dropped, reason=None)
+
+    return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/result-answers", response_model=ResultAnswerResponse)
+def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Request, response: Response) -> ResultAnswerResponse:
+    """A question about a result answered in words (ADR-0102): from the fact sheet of the result the page shows and the sections of our
+    theory pages the question's words find. The model's answer is kept only when every number in it is the sheet's or the question's
+    (the explanation's guard, ADR-0052), and the sections it rests on come back by name. With no model, or an answer set aside, no prose
+    comes back and the sections found do, so the page says where to read. Recorded with the question, the digest of the facts, the
+    sections found and the model's name when one wrote (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    facts = model_view_of_facts(asked.facts)
+    found = [section for section, _ in find_theory(asked.question, limit=SECTIONS_SHOWN)]
+    receipt = ResultAnswerReceipt(question=asked.question, sections=[s.id for s in found],
+                                  facts_sha256=hashlib.sha256(json.dumps(facts, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
+
+    def named(sections) -> list[TheorySource]:
+        return [TheorySource(id=s.id, document=s.document, title=s.title) for s in sections]
+
+    def compute() -> ResultAnswerResponse:
+        reading = assistant.answer_question(answer_view(asked.question, facts, found), answer_schema([s.id for s in found]))
+        if reading.raw is None:
+            return ResultAnswerResponse(run_id=None, writer=reading.writer, model=None, prose=[], sources=named(found), covered=False, withheld=False,
+                                        reason=reading.reason)
+        kept = answer_guard(reading.raw, asked.question, facts, found)
+        if not kept.prose:  # set aside by the guard: no prose of the model's is shown, and the page says where to read
+            return ResultAnswerResponse(run_id=None, writer="template", model=None, prose=[], sources=named(found), covered=False,
+                                        withheld=kept.withheld, reason=kept.reason)
+        return ResultAnswerResponse(run_id=None, writer=reading.writer, model=reading.model, prose=list(kept.prose), sources=named(kept.sources),
+                                    covered=kept.covered, withheld=False, reason=None)
+
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/theory-sections", response_model=TheorySectionsResponse)
+def find_theory_sections(asked: TheorySectionsRequest, actor: Actor, request: Request, response: Response) -> TheorySectionsResponse:
+    """The sections of our theory pages a question's words find, with their text (ADR-0107): what `result-answers` hands the API's own
+    model, handed to a reader whose own model writes, such as an MCP client. No result is sent here, no model is called and nothing is
+    computed: the sections are the documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
+    the ids of the sections found, never their text, so the questions that find nothing can be read back."""
+    found = [section for section, _ in find_theory(asked.question, limit=asked.limit)]
+    run_id = _record(request, actor, asked, response={"sections": [section.id for section in found]})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return TheorySectionsResponse(run_id=None if run_id is None else str(run_id),
+                                  sections=[TheorySection(id=s.id, document=s.document, title=s.title, text=s.shown) for s in found])
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)

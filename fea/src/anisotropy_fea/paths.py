@@ -20,15 +20,34 @@ manifest and `<coupon>-team-summary.toml`, its figures (ADR-0039); neither is a 
 there are no coupons, only the checks. Tools and tests take every location from here, so a later move changes this module
 and nothing else. The paths are those of the source tree: the package is used from the repository, never from an installed
 copy.
+
+The coupons' folder is .local/fea/ unless the environment names another (`ANISOTROPY_COUPONS_ROOT`, an absolute path): behind the
+sign-in the API gives each person a folder of coupons of their own and starts every tool with it (ADR-0106), so a run, its scripts and
+every function here read and write that person's coupons and nobody else's. The variable is read once, when this module is imported.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 FEA = Path(__file__).resolve().parents[2]  # fea/
 ROOT = FEA.parent  # the repository
-LOCAL = ROOT / ".local" / "fea"
+COUPONS_ROOT = "ANISOTROPY_COUPONS_ROOT"  # the environment's name for the coupons' folder (ADR-0106)
+
+
+def coupons_root(environ: dict[str, str] | None = None) -> Path:
+    """The folder holding one folder per coupon: the environment's when it names one, .local/fea/ otherwise. A path that is not
+    absolute is refused: a tool started from another folder would keep the coupons somewhere else."""
+    given = (os.environ if environ is None else environ).get(COUPONS_ROOT, "")
+    if not given:
+        return ROOT / ".local" / "fea"
+    if not Path(given).is_absolute():
+        raise ValueError(f"{COUPONS_ROOT} must be an absolute path; got {given!r}")
+    return Path(given)
+
+
+LOCAL = coupons_root()
 MODELS = LOCAL  # the coupon models live in the coupons' local folders (ADR-0042)
 CHECKS = FEA / "checks"
 CASES = CHECKS / "cases"

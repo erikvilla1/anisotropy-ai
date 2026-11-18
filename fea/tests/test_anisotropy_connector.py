@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import ast
 import csv
+import hashlib
 import importlib.util
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -343,7 +345,8 @@ def test_under_abaqus_cae_nothing_ends_unsaid_because_its_exit_code_and_its_wind
 # --- what is handed over -----------------------------------------------------------------------------------------------------------
 
 def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_abaqus(connector):
-    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "abaqus_extract_fields"}
+    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "jobMessage", "mesh", "regionToolset",
+                                              "abaqus_extract_fields", "anisotropy_menu"}
     folders = {"bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
     for name in connector.FILES:
         tree = ast.parse((folders.get(name, TOOLS) / name).read_text(encoding="utf-8"))
@@ -352,12 +355,46 @@ def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_aba
         assert imported <= allowed, (name, imported - allowed)
 
 
+def test_the_connector_has_one_version_and_its_zip_is_the_one_recorded_for_it(connector, upload, tmp_path, capsys):
+    """A file of the connector cannot change without a new version: the zip's SHA-256 is recorded per version (amendment 3)."""
+    release = upload.connector_release()
+    version = release["version"]
+    assert release["name"] == f"anisotropy-connector-{version}.zip" and re.fullmatch(r"\d+\.\d+\.\d+", version)
+    assert connector.CONNECTOR == f"anisotropy-connector {version}" and load("anisotropy_link").HELPER == f"anisotropy-link {version}"
+    assert f'VERSION = "{version}"' in (TOOLS / "anisotropy_plugin.py").read_text(encoding="utf-8")  # it imports the window's toolkit, so it is read here
+    note = (TOOLS / "anisotropy_security.txt").read_text(encoding="utf-8")
+    assert note.startswith(f"Anisotropy connector {version} for Abaqus/CAE on Windows: security note\n")  # the note is read again at each version
+    assert note.isascii() and max(len(line) for line in note.splitlines()) <= 118  # plain text any editor of Windows shows as written
+    handed = tmp_path / release["name"]
+    assert upload.main(["connector", "--out", str(handed)]) == 0
+    said = capsys.readouterr().out
+    sha256 = hashlib.sha256(handed.read_bytes()).hexdigest()
+    assert f"version {version}, SHA-256 {sha256}" in said
+    assert sha256 == release["sha256"] and "NOT the checksum recorded" not in said, (
+        f"the connector's files changed: raise its version in anisotropy_connector.py, anisotropy_link.py, anisotropy_plugin.py, the note and "
+        f"connector-releases.json, and record {sha256} for the new version; a recorded version is never changed")
+    record = json.loads((TOOLS / "connector-releases.json").read_text(encoding="utf-8"))
+    assert all(re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) and re.fullmatch(r"\d{4}-\d\d-\d\d", entry["date"]) for entry in record["releases"].values())
+
+
 def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_folder_alone(connector, upload, job, tmp_path):
     handed = tmp_path / "anisotropy-connector.zip"
     assert upload.main(["connector", "--out", str(handed)]) == 0
     with zipfile.ZipFile(handed) as archive:
-        assert sorted(archive.namelist()) == sorted(f"anisotropy-connector/{name}" for name in (*connector.FILES, "README.txt"))
-        archive.extractall(tmp_path)
+        # the files at the zip's top: Extract All makes the folder, and the setup is in the folder that opens, not one further down
+        assert sorted(archive.namelist()) == sorted((*connector.FILES, "Set up Anisotropy.bat", "README.txt", "SECURITY.txt", "SHA256SUMS.txt"))
+        setup = archive.read("Set up Anisotropy.bat")
+        assert b"abaqus python anisotropy_setup.py" in setup and setup.count(b"\r\n") == setup.count(b"\n") > 5  # Windows's line endings, whatever the checkout has
+        assert b"where abaqus >nul 2>nul\r\n" in setup and b"/dev/" not in setup  # Windows's own nowhere: the eleventh trial found a path of another system here
+        lines = setup.decode("ascii").split("\r\n")  # started from inside the zip it says to unzip, before anything else; it ends by saying that it ended
+        assert lines.index("if not exist anisotropy_setup.py (") < lines.index("where abaqus >nul 2>nul") < lines.index("call abaqus python anisotropy_setup.py --box")
+        assert "Extract All" in setup.decode("ascii") and lines[-3:] == ["echo The setup has ended. Press any key to close this window.", "pause >nul", ""]
+        assert {info.date_time[0] for info in archive.infolist()} == {2026}  # a day Windows shows as a day, not the zip format's first, which it showed as 1899
+        # nothing compressed and every entry alike, so the same files are the same bytes on every machine and one checksum names the zip
+        assert {(info.compress_type, info.create_system, info.external_attr) for info in archive.infolist()} == {(zipfile.ZIP_STORED, 3, 0o644 << 16)}
+        sums = archive.read("SHA256SUMS.txt").decode("ascii").splitlines()  # every other file with its SHA-256, as `sha256sum` writes and reads it
+        assert sums == [f"{hashlib.sha256(archive.read(name)).hexdigest()}  {name}" for name in sorted(archive.namelist()) if name != "SHA256SUMS.txt"]
+        archive.extractall(tmp_path / "anisotropy-connector")  # as Extract All does: a folder named for the zip
     first = handed.read_bytes()
     upload.main(["connector", "--out", str(handed)])
     assert handed.read_bytes() == first  # the same files give the same zip
@@ -365,6 +402,9 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
     notes = (folder / "README.txt").read_text(encoding="utf-8")
     assert "abaqus python anisotropy_connector.py" in notes and "--watch <the folder your jobs run in>" in notes
     assert "abaqus_plugins in your home" in notes and "Plug-ins > Anisotropy" in notes  # the menu is this same folder, copied there
+    assert 'double-click "Set up Anisotropy" in the folder that opens' in notes and "Extract All" in notes and "Connect this PC" in notes and "anisotropy_setup.py --remove" in notes  # amendment 1
+    assert "SECURITY.txt in this folder says what it installs, reads and sends" in notes
+    assert load("anisotropy_setup").verify(folder) == len(connector.FILES) + 3  # the folder as unzipped passes the setup's own check, every file of it
     before = list(sys.path)
     try:
         alone = load("anisotropy_connector", folder)

@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .proposals import UNREAD_REASONS
+
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
@@ -61,7 +63,11 @@ PROPOSE_SYSTEM = (
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
     "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
-    "row that is not on offer and never state a value the message does not write." + VOICE
+    "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
+    "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
+    "not_offered, no row or choice on offer covers it; no_value, it names a row on offer but writes no value that row takes (a count of "
+    "plies is not a layup's notation); refers_back, it leans on an earlier message, which you were not given. With nothing of the kind, "
+    "unread is an empty list." + VOICE
 )
 # The model's answer: a fixed schema, so the API compiles it once (structured outputs, `output_config.format`).
 PROPOSAL_SCHEMA: dict[str, Any] = {
@@ -76,8 +82,12 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
             "type": "object", "properties": {"id": {"type": "string"}, "quote": {"type": "string"}},
             "required": ["id", "quote"], "additionalProperties": False}},
         "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        # what the message asks for and the model proposes nothing for (ADR-0088 amendment 1): the engineer's own words and a reason by name
+        "unread": {"type": "array", "items": {
+            "type": "object", "properties": {"quote": {"type": "string"}, "reason": {"type": "string", "enum": list(UNREAD_REASONS)}},
+            "required": ["quote", "reason"], "additionalProperties": False}},
     },
-    "required": ["proposals", "conditions", "question"],
+    "required": ["proposals", "conditions", "question", "unread"],
     "additionalProperties": False,
 }
 
@@ -98,6 +108,49 @@ def tool_choice_schema(names: list[str]) -> dict[str, Any]:
     """The model's answer when it chooses tools: a list of names from those on offer, and no other field."""
     return {"type": "object", "properties": {"tools": {"type": "array", "items": {"type": "string", "enum": list(names)}}},
             "required": ["tools"], "additionalProperties": False}
+
+
+# A loose question about a result, read into a fixed request (ADR-0100): the model names what is asked for from what the page offers and
+# writes no number of a result, which it is never shown; the page runs the request on the solver's values.
+QUESTION_MAX_TOKENS = 1000
+QUESTION_SYSTEM = (
+    "You read an engineer's message in a composite analysis workspace, where a solved finite element model of a laminate coupon is on "
+    "screen, and say which values of the results the message asks for, so the software can look them up. You never answer the question "
+    "yourself and you never write a value of a result: you are shown none. You are given the message, the quantities on offer (each with "
+    "its key and what it is), the plies numbered from the bottom face with their fibre angles, the regions on offer, and whether an element "
+    "is clicked on the model. Answer with: kind, 'values' to read quantities at one element, 'extreme' to find where a quantity is largest "
+    "or smallest over a region, 'failure' when the message asks which ply or layer fails, breaks or goes first, whether or when the coupon "
+    "fails or holds, or the load, factor or strength ratio at first-ply failure (the software then shows its own failure answer; leave "
+    "quantities and plies empty, element null, here false, sense null and region 'default'), or 'none' when the message states or changes "
+    "the setup, asks to run or check, or is not about the results; "
+    "quantities, the keys asked for (a plain 'stress' is the three ply stresses S11, S22 and S12, a plain 'strain' the three ply strains; "
+    "how much load a ply carries is its stress along the fibres); plies, the ply numbers asked about, read from a number, an angle or a "
+    "position such as the outer plies, and empty for every ply; element, the element's number only when the message writes it, else null; "
+    "here, true when the message points at the clicked element ('here', 'this element') and no number is written; sense, for an extreme, "
+    "'largest' for the most tensile value, 'smallest' for the most compressive, 'magnitude' for the largest regardless of sign, else null; "
+    "region, 'default' unless the message names the gauge section or the whole model. Use 'values' only when an element is named or "
+    "clicked; a question about plies in general, a comparison of plies with no element, or a question of why a ply is loaded as it is, is "
+    "an 'extreme' over the plies and quantities it concerns, so the engineer sees the values; a question of which ply fails is never "
+    "an 'extreme'. When the message is about the results but "
+    "too unclear to read, use 'none' and ask one short question; otherwise the question is null. Read through typing mistakes." + VOICE
+)
+
+
+# A question about a result answered in words (ADR-0102): the model is shown the result's fact sheet and the sections of our theory pages
+# the question found, and answers in a schema; the number guard then reads the answer, and the page names the sections.
+ANSWER_MAX_TOKENS = 1500
+ANSWER_SYSTEM = (
+    "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
+    "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
+    "with an id. Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the fact sheet and the sections alone: the sheet says "
+    "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
+    "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
+    "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "
+    "answer; list in 'sections' the ids of those your answer rests on, and the page names them. Set 'covered' to true only when those "
+    "sections hold the reason or the meaning asked for. When they do not, set it to false, say what the fact sheet shows about the "
+    "matter and that the theory pages do not explain it yet, and give no reason of your own. When the question is not about this "
+    "result or its theory, set 'covered' to false and say in one sentence what can be asked here. Do not use markdown." + VOICE
+)
 
 
 @dataclass(frozen=True)
@@ -140,9 +193,13 @@ class Assistant(Protocol):
 
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
-    def propose(self, view: dict[str, Any]) -> Reading: ...
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading: ...
 
     def choose_tools(self, view: dict[str, Any]) -> Reading: ...
+
+    def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -220,12 +277,20 @@ class TemplateAssistant:
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
         return Draft(tuple(template), "template", None)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The template reads nothing: the page's own patterns read the message (ADR-0055)."""
         return Reading(None, "template", None)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The template reads no message, so it chooses nothing: the caller takes the tools' own order."""
+        return Reading(None, "template", None)
+
+    def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template reads nothing: the page's own patterns read a question about a result (ADR-0099)."""
+        return Reading(None, "template", None)
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template writes no answer to a question: the page names the theory sections found (ADR-0102)."""
         return Reading(None, "template", None)
 
 
@@ -311,10 +376,9 @@ class ClaudeAssistant:
         user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
         return self._draft(LAMINATE_SYSTEM, user, view, template)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
-        """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
-        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11)."""
-        text, reason = self._ask(PROPOSE_SYSTEM, json.dumps(view, ensure_ascii=False, indent=1), schema=PROPOSAL_SCHEMA, max_tokens=PROPOSE_MAX_TOKENS)
+    def _read(self, system: str, view: dict[str, Any], schema: dict[str, Any], max_tokens: int) -> Reading:
+        """The model's answer to a view, as JSON in the schema asked for and not yet judged; none, with the reason, when it gave none."""
+        text, reason = self._ask(system, json.dumps(view, ensure_ascii=False, indent=1), schema=schema, max_tokens=max_tokens)
         if text is None:
             return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
         try:
@@ -325,21 +389,27 @@ class ClaudeAssistant:
             return Reading(None, "template", None, "the model's answer was not the JSON asked for")
         return Reading(raw, self.name, self.model)
 
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
+        """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
+        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11). A plate
+        passes its own schema and instructions, the rows' with its supports and loads added (ADR-0101)."""
+        return self._read(PROPOSE_SYSTEM + system, view, schema or PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
+
+    def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's reading of a question about a result (ADR-0100), in a schema of names on offer and whole numbers, which the guard
+        then reads. `view` is what the model may see: the message, the quantities, plies and regions on offer; never a result."""
+        return self._read(QUESTION_SYSTEM, view, schema, QUESTION_MAX_TOKENS)
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's answer to a question about a result (ADR-0102), as JSON in the schema asked for and not yet judged: the number guard
+        reads its text. `view` is what the model may see: the question, the result's fact sheet and the theory sections found."""
+        return self._read(ANSWER_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
+
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is
         what the model may see: the message, each tool's name and description, and the names of those already done."""
         names = [str(tool["name"]) for tool in view.get("tools", [])]
-        text, reason = self._ask(TOOL_CHOICE_SYSTEM, json.dumps(view, ensure_ascii=False, indent=1), schema=tool_choice_schema(names),
-                                 max_tokens=TOOL_CHOICE_MAX_TOKENS)
-        if text is None:
-            return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
-        try:
-            raw = json.loads(text)
-        except json.JSONDecodeError:
-            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
-        if not isinstance(raw, dict):
-            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
-        return Reading(raw, self.name, self.model)
+        return self._read(TOOL_CHOICE_SYSTEM, view, tool_choice_schema(names), TOOL_CHOICE_MAX_TOKENS)
 
 
 def assistant_for(provider: str | None, model: str | None) -> Assistant:

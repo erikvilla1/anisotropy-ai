@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  cardRows, cardText, connectorCommand, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, percent, provenance,
+  cardRows, cardText, connectorCommand, connectorName, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, openLink, pairLink, percent, provenance,
   readComparison, readExchange, readUpload, readUploadKey, sendProblem, sentFileUrl, type Comparison,
 } from "../lib/abaqus-exchange";
 import { StudioError } from "../lib/studio-api";
@@ -83,6 +83,15 @@ test("an answer of another shape is not shown as a comparison", () => {
   assert.equal(readUpload(upload(null, { not_compared: "x" })).comparison, null);
   assert.throws(() => readUpload({ id: 3 }), StudioError);
   assert.deepEqual(readExchange({ uploads: true, connector_route: false, max_bundle_bytes: 1, max_uploads: 2, max_tokens: 3 }).connector_route, false);
+  // the connector's version and checksum are shown only as a version and a SHA-256, both or neither (ADR-0094 amendment 3)
+  const offered = { uploads: true, connector_route: true, max_bundle_bytes: 1, max_uploads: 2, max_tokens: 3 };
+  assert.deepEqual([readExchange(offered).connector_version, readExchange(offered).connector_sha256], [null, null]);
+  const named = readExchange({ ...offered, connector_version: "0.6.0", connector_sha256: "ab".repeat(32) });
+  assert.deepEqual([named.connector_version, named.connector_sha256, connectorName(named)], ["0.6.0", "ab".repeat(32), "anisotropy-connector-0.6.0.zip"]);
+  for (const odd of [{ connector_version: "0.6.0" }, { connector_version: "<b>", connector_sha256: "ab".repeat(32) }, { connector_version: "0.6.0", connector_sha256: "xyz" }]) {
+    const read = readExchange({ ...offered, ...odd });
+    assert.deepEqual([read.connector_version, read.connector_sha256, connectorName(read)], [null, null, "anisotropy-connector.zip"]);
+  }
   assert.throws(() => readExchange({ uploads: "yes" }), StudioError);
   assert.equal(readUploadKey({ id: "k", name: "lab", hint: "abcd", created_at: "2026-11-13T09:00:00+00:00", last_used_at: null, revoked_at: null }).hint, "abcd");
 });
@@ -149,4 +158,13 @@ test("the command that sends from Abaqus names the key's file and never the key"
   const odd = connectorCommand({ apiAddress: "http://localhost:8000", jobId: "j", coupon: "a coupon; rm -rf", units: "in-psi" });
   assert.equal(odd, "abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa --send http://localhost:8000 --token-file anisotropy-key.txt --our-run j"); // a name that is not plain is left out; a deck of ours is in mm-MPa or m-Pa
   assert.equal(downloadName("abaqus_build", { standard: "ASTM D3039/D3039M-17", layup: "[45/0/-45/90]s" }), "D3039_[45,0,-45,90]s_build.py"); // plies parted by commas (audit fea-run-39)
+});
+
+test("the links the page hands to a PC are the two the PC's helper reads, to the character", () => {
+  // the same two links are the fixtures of fea/tests/test_anisotropy_link.py, which the helper reads as written here
+  const code = `anisotropy_pair_${"c_-".repeat(14)}c`;
+  assert.equal(pairLink(code, "https://anisotropy.example/api/"), `anisotropy://pair?code=${code}&site=https%3A%2F%2Fanisotropy.example%2Fapi`);
+  assert.equal(pairLink(code, "http://localhost:8000"), `anisotropy://pair?code=${code}&site=http%3A%2F%2Flocalhost%3A8000`);
+  assert.equal(openLink("0123abcd-0123-4abc-8def-0123456789ab"), "anisotropy://open?run=0123abcd-0123-4abc-8def-0123456789ab"); // the run and nothing else
+  for (const id of ["", "j", "0123ABCD-0123-4ABC-8DEF-0123456789AB", "0123abcd-0123-4abc-8def-0123456789ab&x=1", "../x"]) assert.equal(openLink(id), null);
 });

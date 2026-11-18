@@ -32,10 +32,13 @@ folder, so no ODB is sent twice; an ODB that changes (the job run again) is a ne
 and the watch goes on. It ends with Ctrl+C. The watch reads ODBs only, so it runs under `abaqus python` and takes no seat of
 Abaqus/CAE.
 
-The connector is six files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`, and
-for the menu in Abaqus/CAE `anisotropy_menu.py` and `anisotropy_plugin.py` (step 8).
-`uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
-they are found where they live.
+The connector is ten Python files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`;
+for the menu in Abaqus/CAE `anisotropy_menu.py` and `anisotropy_plugin.py` (step 8); for the site's links `anisotropy_setup.py`,
+`anisotropy_link.py` and `anisotropy_start.py` (amendment 1); and `anisotropy_build.py`, which builds a coupon in Abaqus/CAE from the
+data the site answers, so that no script from the site is run (amendment 4). `uv run python tools/abaqus_upload.py connector --out
+anisotropy-connector.zip` writes them as one zip to hand over, with a README, the security note and a list of checksums; the zip of
+a version is the same bytes wherever it is written, and its SHA-256 is recorded in `connector-releases.json` (amendment 3). In the
+repository the files are found where they live.
 
 The user's `.cae` is never opened: a copy in a temporary folder is. Opening a `.cae` changes the file even when nothing is saved
 (Abaqus 2025, the first trial: another SHA-256 after `openMdb` alone). Under Abaqus/CAE the ODB comes first among our arguments,
@@ -69,11 +72,13 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.4.0"
+CONNECTOR = "anisotropy-connector 0.7.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py",  # what is handed over, together
-         "anisotropy_menu.py", "anisotropy_plugin.py")  # the last two are the menu in Abaqus/CAE (step 8)
+         "anisotropy_menu.py", "anisotropy_plugin.py",  # the menu in Abaqus/CAE (step 8)
+         "anisotropy_link.py", "anisotropy_start.py", "anisotropy_setup.py",  # a click on the site reaching this machine (amendment 1)
+         "anisotropy_build.py")  # the code that builds a coupon from the site's data (amendment 4)
 TEXT_LIMIT = 400  # an Abaqus object printed as text is cut here: a region's repr can run to thousands of characters
 SEND_ROUTE = "/v1/connector/uploads"  # the one route of the API an upload token opens (ADR-0094 step 5)
 TOKEN_VARIABLE = "ANISOTROPY_UPLOAD_TOKEN"

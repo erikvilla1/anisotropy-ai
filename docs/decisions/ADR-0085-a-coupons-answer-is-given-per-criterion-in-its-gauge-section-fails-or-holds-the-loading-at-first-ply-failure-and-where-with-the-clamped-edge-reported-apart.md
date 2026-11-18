@@ -1,6 +1,6 @@
 # ADR-0085: A coupon's answer is given per criterion in its gauge section: fails or holds, the loading at first-ply failure and where, with the clamped edge reported apart
 
-- Status: Proposed
+- Status: Proposed; where the gauge section is read, at least a quarter of the coupon's width from each tab line in place of every element past the row at a grip, is set by [ADR-0108](ADR-0108-the-gauge-section-is-read-at-least-a-quarter-of-the-coupons-width-from-each-tab-line-the-same-distance-on-every-mesh-so-a-finer-mesh-does-not-move-the-answer.md); the chat's results card leads with this answer since amendment 1
 - Date: 2026-11-10
 - Decided by: Founder, 2026-11-10 ("the analysis of the specimen is given everything important such as max stress, where it will fail if it will fail ... if it doesn't fail how what is the load factor that causes the failure and where"; the plan of that day, PR 1, approved) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/fields.py` (`answer_of`, `verdict_of`, `ply_extremes`), `fea/src/anisotropy_fea/explain.py`, `fea/docs/theory.md` (section 7), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md), [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md), [ADR-0068](ADR-0068-every-coupon-result-carries-a-mesh-convergence-study-by-the-kernel-on-two-refinements-of-its-mesh.md)
@@ -55,3 +55,13 @@ The loading at failure:
 
 - A test coupon breaks first at the grip while the answer, read in the gauge section, said it holds there at that load: the basis would then need the grip region too.
 - An engineer reads `at_failure` as an ultimate strength. It is the onset of damage in one ply of a linear model.
+
+## Amendment 1, 2026-11-17 (the chat's results card leads with this answer too; not yet confirmed by the founder)
+
+**Context.** After a full run on the hosted site on 2026-11-17 the chat's "Results" card said "First-ply failure R = 0.8948" in the colour of a failure, with "The first failure is at a grip edge", while the answer card on the same page, and the list of past analyses (ADR-0109), said "Holds at 1.085 × the applied load" for the gauge section. The chat card was written before this record and still read the whole model's first failure (`summary.fpf[summary.earliest]`), which is the clamped edge this record reports apart.
+
+**Options.** Leave it: one run then has two headline answers, and the first one an engineer reads says the coupon fails. Remove the stat from the chat card: the card then says the reaction and nothing of the answer. Lead with this record's answer and say the earlier failure outside it in one short line: chosen.
+
+**Decision.** The chat's results card shows "Holds" or "Fails" with the factor, the criterion, the ply and the basis of this record's answer (`answerOf`), and one line for an earlier failure outside it ("At a grip edge R = 0.8948, reported apart: stress there grows with a finer mesh."). A result written before the package's answer keeps the whole model's first failure, as before. The page still computes nothing (ADR-0051). Drafted by Claude Code; the founder has not confirmed it.
+
+**Evidence.** `lib/studio-answer.ts` (`answerStat`), `components/studio/coupon-chat.tsx` (`resultMessage`). `npx tsx --test tests/studio-answer.test.ts`: the stat carries the gauge section's factor, not the whole model's lower one, and none for a result without a verdict. The browser scenario that runs a coupon from the chat (`tests/browser/studio.spec.ts`) reads "Holds" and "R = 1.032, Tsai-Hill, ply 4 · 90°, the gauge section" on the chat card beside "Holds at the applied loading" on the answer card. Not yet seen on the hosted site (UNVERIFIED).

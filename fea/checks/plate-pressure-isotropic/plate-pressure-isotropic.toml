@@ -59,7 +59,8 @@ dofs = [1, 2]
 region = "Corner-X"
 dofs = [2]
 
-# The Abaqus P label is positive against the normal, so a negative pressure pushes the plate toward +z; the CalculiX deck flips the sign.
+# A pressure is positive against the normal (pressing on the top face), so a negative pressure pushes the plate toward +z; both decks
+# write it with the opposite sign, the P label of *Dload being positive along the normal in Abaqus and in CalculiX.
 [[loads]]
 region = "Face"
 pressure = -0.01

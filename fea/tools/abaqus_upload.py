@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
+import hashlib
 import json
 import sys
 import tempfile
@@ -46,7 +47,7 @@ import compare_every_output as team  # noqa: E402  the comparison the team's eng
 
 from anisotropy_fea import __version__  # noqa: E402
 from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
-from anisotropy_fea.bundle import EPOCH, BundleRefused, open_bundle, write_bundle  # noqa: E402
+from anisotropy_fea.bundle import BundleRefused, open_bundle, write_bundle  # noqa: E402
 from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence, equivalence_without_mesh, outline  # noqa: E402
 from anisotropy_fea.model import DeckError, expanded_layers  # noqa: E402
 from anisotropy_fea.units import DECK_UNIT_SYSTEMS, UNIT_LABEL, from_si, to_si  # noqa: E402
@@ -429,10 +430,32 @@ def pack(args) -> int:
 
 
 CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
-                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS}
+                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS,
+                   "anisotropy_link.py": TOOLS, "anisotropy_start.py": TOOLS, "anisotropy_setup.py": TOOLS, "anisotropy_build.py": TOOLS}
+CONNECTOR_DATE = (2026, 11, 14, 12, 0, 0)  # every file's time in the connector's zip: the zip format's first day showed in Windows as a day in 1899
+CONNECTOR_SETUP = ("Set up Anisotropy.bat", TOOLS / "anisotropy_setup.bat")  # what a user double-clicks; handed over with Windows's line endings
+CONNECTOR_SECURITY = ("SECURITY.txt", TOOLS / "anisotropy_security.txt")  # what it installs, reads and sends, for whoever decides whether it may be installed
+CONNECTOR_SUMS = "SHA256SUMS.txt"  # the SHA-256 of every other file in the zip; the setup checks its files against it (`anisotropy_setup.verify`)
+CONNECTOR_RELEASES = TOOLS / "connector-releases.json"  # each version of the connector with the SHA-256 of its zip (amendment 3)
 CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
 
+SECURITY.txt in this folder says what it installs, reads and sends, and how to check your download.
+
 Keep these files together in one folder. Nothing is sent anywhere unless you ask: the command writes <job>-anisotropy.zip beside your ODB.
+
+The quick way, on Windows with Abaqus 2024 or later. Once per PC:
+
+    1. Unzip first (right-click the zip, Extract All), then double-click "Set up Anisotropy" in the folder that opens
+       (it runs  abaqus python anisotropy_setup.py ). It checks its files against SHA256SUMS.txt first. A box says when it is done. It copies these files to
+       abaqus_plugins/anisotropy in your home directory, which gives Abaqus/CAE the menu Plug-ins > Anisotropy, and it registers
+       the link type anisotropy:// for your Windows user, so the site can start Abaqus on this PC. No administrator is needed.
+    2. On a run's page on the site, open "First time on this PC" and click Connect this PC. A box on this PC names the site and
+       your account; say yes only if both are yours. This PC then holds an upload key of its own, in .anisotropy in your home
+       directory. Nothing is typed and no key is copied.
+
+From then on, Send to Abaqus on a run's page starts Abaqus/CAE with that run's coupon built as a model you can edit. Submit its
+job there. When the job completes, its results go back to the run by themselves and the comparison appears on the run's page.
+Only a model opened this way is sent by itself. To undo the setup:  abaqus python anisotropy_setup.py --remove
 
 The results and the input file Abaqus solved (no seat of Abaqus/CAE is used):
 
@@ -464,24 +487,58 @@ closing the terminal: the record is written whole each time.
 A menu in Abaqus/CAE (Abaqus 2024 or later): copy this whole folder into a folder named abaqus_plugins in your home
 directory (create it if it is not there) and start Abaqus/CAE again. Under Plug-ins > Anisotropy you then have
 
-    Open from Anisotropy...   builds the coupon from the build script you downloaded from a run's page
+    Open from Anisotropy...   builds a coupon again from the coupon file that Send to Abaqus left on this PC
     Send to Anisotropy...     writes the file from a finished job, with the model open in the session, and sends it
 
-A model that Open from Anisotropy built knows which coupon it is, so a file sent from the menu is compared beside your
-newest finished run of that coupon with nothing more to type.
+A model built from Anisotropy knows which coupon it is, so a file sent from the menu is compared beside your newest
+finished run of that coupon with nothing more to type. A build script downloaded from a run's page is run with
+Abaqus's own File > Run Script: the connector itself runs no script, from the site or from a file.
 
 Each asks in a small box and answers in the message area under the viewport. Your .cae and your ODB are not changed.
 """
 
 
+def connector_release(path: Path | None = None) -> dict:
+    """The connector's version as the repository records it, and the SHA-256 of that version's zip: {"version", "sha256", "name"}."""
+    record = json.loads((path or CONNECTOR_RELEASES).read_text(encoding="utf-8"))
+    version = record["current"]
+    return {"version": version, "sha256": record["releases"][version]["sha256"], "name": f"anisotropy-connector-{version}.zip"}
+
+
+def connector_members() -> list[tuple[str, bytes]]:
+    """Every file of the connector's zip, by name, as the bytes that go in: the Python files and the notes with the repository's
+    line endings, the batch file with Windows's. The list of checksums comes last and names all the others."""
+    def unix(path: Path) -> bytes:  # the line endings of the repository, whatever a checkout on Windows turned them into
+        return path.read_bytes().replace(b"\r\n", b"\n")
+    members = [(name, unix(folder / name)) for name, folder in CONNECTOR_FILES.items()]
+    members += [(CONNECTOR_SETUP[0], unix(CONNECTOR_SETUP[1]).replace(b"\n", b"\r\n")), ("README.txt", CONNECTOR_README.encode()),
+                (CONNECTOR_SECURITY[0], unix(CONNECTOR_SECURITY[1]))]
+    sums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(members))
+    return members + [(CONNECTOR_SUMS, sums.encode())]
+
+
 def connector_zip(out: Path) -> list[str]:
-    """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files."""
+    """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files on every
+    machine: nothing is compressed, since a compressor's output differs between its versions, and every entry carries the same date,
+    system and permissions. So one SHA-256 names a version's zip (`connector-releases.json`). The files are at the zip's top, with no
+    folder around them: Windows's Extract All makes a folder named for the zip, so a folder inside the zip showed the same name twice
+    and the setup one level further down than the page said (the founder's first use, 2026-11-14)."""
     names = []
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [("README.txt", CONNECTOR_README.encode())]:
-            archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", EPOCH), data, zipfile.ZIP_DEFLATED)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as archive:
+        for name, data in connector_members():
+            info = zipfile.ZipInfo(name, CONNECTOR_DATE)
+            info.compress_type, info.create_system, info.external_attr = zipfile.ZIP_STORED, 3, 0o644 << 16
+            archive.writestr(info, data)
             names.append(name)
     return names
+
+
+def write_connector(out: Path) -> dict:
+    """Write the zip and say which version it is and whether it is the one recorded: {"names", "version", "sha256", "recorded"}."""
+    names = connector_zip(out)
+    release = connector_release()
+    sha256 = hashlib.sha256(out.read_bytes()).hexdigest()
+    return {"names": names, "version": release["version"], "sha256": sha256, "recorded": sha256 == release["sha256"]}
 
 
 def plain(value):
@@ -528,7 +585,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "connector":
-            print(f"{args.out}: {', '.join(connector_zip(args.out))}")
+            written = write_connector(args.out)
+            print(f"{args.out}: {', '.join(written['names'])}")
+            print(f"version {written['version']}, SHA-256 {written['sha256']}" + ("" if written["recorded"] else
+                  f": NOT the checksum recorded for {written['version']} in {CONNECTOR_RELEASES.name}. A file of the connector changed: raise "
+                  "the version in its three files and in that record, and record this checksum for it"))
             return 0
         if args.command == "pack":
             return pack(args)

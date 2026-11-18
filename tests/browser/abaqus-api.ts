@@ -21,11 +21,13 @@ export function uploadOf(name: string | null, more: Record<string, unknown> = {}
 export type Answer = { status: number; body: unknown };
 export type ExchangeState = {
   /** what GET /v1/abaqus-exchange answers; null for an API that has no such route */
-  exchange: ({ uploads: boolean; connector_route: boolean } & typeof LIMITS) | null;
+  exchange: ({ uploads: boolean; connector_route: boolean; connector_version?: string | null; connector_sha256?: string | null } & typeof LIMITS) | null;
   uploads: ReturnType<typeof uploadOf>[]; // newest first, as the API lists them
   keys: { id: string; name: string; hint: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[];
   sent: { query: Record<string, string>; contentType: string | null; actor: string | null; bytes: number }[];
   compared: string[]; removed: string[]; cancelled: string[]; named: string[]; connector: number; lists: number;
+  /** how many one-time codes to connect a PC were asked for, and what asking answers */
+  codes: number; onCode: () => Answer;
   /** each request for an upload's document: "POST <id>" to have it written, "GET <id>" for the file */
   documents: string[];
   onSend: () => Answer; onCompare: (id: string) => Answer;
@@ -34,18 +36,21 @@ export type ExchangeState = {
 };
 
 export function exchangeState(more: Partial<ExchangeState> = {}): ExchangeState {
-  return { exchange: { uploads: true, connector_route: false, ...LIMITS }, uploads: [], keys: [], sent: [], compared: [], removed: [], cancelled: [], named: [], connector: 0, lists: 0, documents: [],
+  return { exchange: { uploads: true, connector_route: false, ...LIMITS }, uploads: [], keys: [], sent: [], compared: [], removed: [], cancelled: [], named: [], connector: 0, lists: 0, documents: [], codes: 0,
+    onCode: () => ({ status: 201, body: { code: PAIR_CODE, expires_at: "2026-11-14T20:10:00+00:00", minutes: 10 } }),
     onSend: () => ({ status: 201, body: uploadOf("agrees") }), onCompare: () => ({ status: 200, body: uploadOf("agrees") }),
     onDocument: (id) => ({ status: 200, body: { upload_id: id, compared_at: "2026-11-13T09:30:04+00:00", filename: "Job-1-compared-with-anisotropy.pdf" } }), ...more };
 }
 
 export const TOKEN = `anisotropy_upload_${"k".repeat(43)}`;
+export const PAIR_CODE = `anisotropy_pair_${"c_-".repeat(14)}c`; // a one-time code as the API makes it (ADR-0094 amendment 1)
 
 export async function mockExchange(page: Page, state: ExchangeState) {
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-  await page.route(/https?:\/\/[^/]+\/v1\/(abaqus-exchange|abaqus-uploads|abaqus-connector|upload-tokens)/, async (route) => {
+  await page.route(/https?:\/\/[^/]+\/v1\/(abaqus-exchange|abaqus-uploads|abaqus-connector|upload-tokens|pairing-codes)/, async (route) => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (path === "/v1/abaqus-exchange") return state.exchange ? json(route, state.exchange) : json(route, { detail: "Not Found" }, 404);
+    if (path === "/v1/pairing-codes" && method === "POST") { state.codes += 1; const answer = state.onCode(); return json(route, answer.body, answer.status); }
     if (path === "/v1/abaqus-connector") { state.connector += 1; return route.fulfill({ status: 200, contentType: "application/zip", body: "PK" }); }
     if (path === "/v1/abaqus-uploads" && method === "GET") {
       state.lists += 1;

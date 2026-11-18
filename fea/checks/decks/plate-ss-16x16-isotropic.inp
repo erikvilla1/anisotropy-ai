@@ -2,7 +2,7 @@
 ** Fixture: a 100 mm square plate 1 mm thick, simply supported on all four edges, uniform pressure 0.01 MPa toward +z.
 ** Units: mm-MPa. E = 70000 MPa and nu = 0.3 are nominal values chosen for the test, not a cited material.
 ** Simple support: w and the rotation about the edge normal held on every edge (Whitney 10.25); the in-plane rigid motions held at two corners.
-** The Abaqus P label is positive against the shell normal (+z for counterclockwise nodes), so the pressure is written negative.
+** The P label of *Dload on a shell element is positive along the shell normal (+z for counterclockwise nodes), so the pressure is written positive.
 *Part, name=Plate
 *Node
 1, 0, 0, 0.
@@ -603,5 +603,5 @@ Top, 5, 5
 Origin, 1, 2
 Corner-X, 2, 2
 *Dload
-All, P, -0.01
+All, P, 0.01
 *End Step

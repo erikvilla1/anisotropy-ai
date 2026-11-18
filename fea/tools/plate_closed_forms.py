@@ -193,7 +193,7 @@ def deck_text(heading: list[str], part: str, nodes: list[str], elements: list[st
 
 def plate_deck(nx: int, ny: int, a: float, b: float, section: str, material: str, heading: list[str], pressure, part: str = "Plate"):
     """A simply supported rectangular plate: w and the rotation about the edge's normal held on every edge (Whitney 10.25), the in-plane
-    rigid motions held at two corners. `pressure` is a number (one *Dload on the whole plate) or a function of an element's box
+    rigid motions held at two corners. `pressure` is the Abaqus P, positive along the normal: a number (one *Dload on the whole plate) or a function of an element's box
     (x0, x1, y0, y1) giving its pressure (one line per element). Returns the deck text and the labels of the centre node, the quarter node
     and the element whose lower-left corner is the centre node."""
     label, nodes, elements = grid(nx, ny, a, b)
@@ -241,7 +241,7 @@ def strip_deck(nx: int, ny: int, L: float, b: float, h: float, E: float, P: floa
 
 def isotropic_plate_case(name: str, h: float, nx: int, tolerance: float, title: str, note: str) -> tuple[str, str, dict]:
     a = 100.0
-    q0 = 0.01  # MPa toward +z: the deck writes the Abaqus pressure P = -q0
+    q0 = 0.01  # MPa toward +z: the deck writes the Abaqus pressure P = +q0, positive along the shell normal
     E, nu = E_NOMINAL, NU_NOMINAL
     D, H = isotropic_section(E, nu, h)
     section = f"*Shell Section, elset=All, material=Nominal-Alloy\n{h:g}, 5\n"
@@ -249,8 +249,8 @@ def isotropic_plate_case(name: str, h: float, nx: int, tolerance: float, title: 
     heading = [f"Fixture: a {a:g} mm square plate {h:g} mm thick, simply supported on all four edges, uniform pressure {q0:g} MPa toward +z.",
                f"Units: mm-MPa. E = {E:g} MPa and nu = {nu:g} are nominal values chosen for the test, not a cited material.",
                "Simple support: w and the rotation about the edge normal held on every edge (Whitney 10.25); the in-plane rigid motions held at two corners.",
-               "The Abaqus P label is positive against the shell normal (+z for counterclockwise nodes), so the pressure is written negative."]
-    text, centre, quarter, centre_element = plate_deck(nx, nx, a, a, section, material, heading, -q0)
+               "The P label of *Dload on a shell element is positive along the shell normal (+z for counterclockwise nodes), so the pressure is written positive."]
+    text, centre, quarter, centre_element = plate_deck(nx, nx, a, a, section, material, heading, q0)
     xc = a / 2.0 + a / (2.0 * nx)
     at_centre = navier_fields(D, H, a, a, ("uniform", q0), a / 2.0, a / 2.0)
     at_quarter = navier_fields(D, H, a, a, ("uniform", q0), a / 4.0, a / 2.0)
@@ -289,11 +289,11 @@ def cross_ply_case(name: str, nx: int, tolerance: float) -> tuple[str, str, dict
                "Units: mm-MPa. Material values from the public library dataset ncamp-im7-8552-2019-rtd-measured-v1 converted to MPa, as the other fixture decks;",
                "G13 is set equal to G12 and G23 is a nominal 3000 MPa (the shell reads both for the transverse shear stiffness).",
                "Simple support: w and the rotation about the edge normal held on every edge (Whitney 10.25); the in-plane rigid motions held at two corners.",
-               "The Abaqus P label is positive against the shell normal (+z for counterclockwise nodes), so the pressure is written negative."]
+               "The P label of *Dload on a shell element is positive along the shell normal (+z for counterclockwise nodes), so the pressure is written positive."]
     alpha = math.pi / a
 
     def pressure(x0, x1, y0, y1):  # the element average of q, so the total load is exact on every mesh
-        return -q0 * (math.cos(alpha * x0) - math.cos(alpha * x1)) / (alpha * (x1 - x0)) * (math.cos(alpha * y0) - math.cos(alpha * y1)) / (alpha * (y1 - y0))
+        return q0 * (math.cos(alpha * x0) - math.cos(alpha * x1)) / (alpha * (x1 - x0)) * (math.cos(alpha * y0) - math.cos(alpha * y1)) / (alpha * (y1 - y0))
     text, centre, quarter, centre_element = plate_deck(nx, nx, a, a, section, material, heading, pressure, part="Plate")
     xc = a / 2.0 + a / (2.0 * nx)
     at_centre = navier_fields(D, H, a, a, ("sinusoidal", q0), a / 2.0, a / 2.0)
@@ -423,7 +423,7 @@ def convergence() -> None:
         D, H = isotropic_section(E_NOMINAL, NU_NOMINAL, h)
         section = f"*Shell Section, elset=All, material=Nominal-Alloy\n{h:g}, 5\n"
         material = f"*Material, name=Nominal-Alloy\n*Elastic\n{E_NOMINAL:g}, {NU_NOMINAL:g}\n"
-        plates.append((f"isotropic h/a = {h / a:g}, uniform", D, H, ("uniform", q0), section, material, -q0))
+        plates.append((f"isotropic h/a = {h / a:g}, uniform", D, H, ("uniform", q0), section, material, q0))
     D, H, _ = laminate_section([0.0, 90.0, 90.0, 0.0], IM7["ply"], IM7)
     section = ("*Orientation, name=Ori-1\n1., 0., 0., 0., 1., 0.\n3, 0.\n*Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric\n"
                + "".join(f"{IM7['ply']}, 3, IM7-8552, {angle:g}., Ply-{k}\n" for k, angle in enumerate((0.0, 90.0), start=1)))
@@ -431,7 +431,7 @@ def convergence() -> None:
     alpha = math.pi / a
 
     def sinusoidal(x0, x1, y0, y1):
-        return -q0 * (math.cos(alpha * x0) - math.cos(alpha * x1)) / (alpha * (x1 - x0)) * (math.cos(alpha * y0) - math.cos(alpha * y1)) / (alpha * (y1 - y0))
+        return q0 * (math.cos(alpha * x0) - math.cos(alpha * x1)) / (alpha * (x1 - x0)) * (math.cos(alpha * y0) - math.cos(alpha * y1)) / (alpha * (y1 - y0))
 
     plates.append(("IM7/8552 [0/90]s, sinusoidal", D, H, ("sinusoidal", q0), section, material, sinusoidal))
     print("mesh      w centre: kernel, closed form, error      Mx at the centre element: kernel, closed form, error")

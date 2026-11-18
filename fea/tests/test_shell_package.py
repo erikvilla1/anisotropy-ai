@@ -102,7 +102,7 @@ def test_a_displaced_nose_applies_no_load_and_the_supports_carry_the_nose(shells
 
 
 def test_a_pressure_and_a_concentrated_load_out_of_the_plane_are_counted_as_applied(shells):
-    # the plate's pressure of -0.01 MPa on 100 mm by 100 mm pushes 100 N toward +z (a positive P pushes against the normal, ADR-0053)
+    # the plate's pressure of -0.01 MPa on 100 mm by 100 mm pushes 100 N toward +z (a positive pressure pushes against the normal, ADR-0053)
     for name in ("plate, pressure", "plate, force"):
         d2 = row(shells[name], "D2")
         assert d2.found.ours[1] == "Applied loads (0, 0, 100) N", (name, d2.found.text)

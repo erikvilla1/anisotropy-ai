@@ -12,7 +12,10 @@ import { bannedInAbaqusCard, sentence } from "./studio-copy";
 // --------------------------------------------------------------------------------------------------------------------- the shapes
 
 /** What the card may offer here: whether uploads are kept at all, whether a file sent straight from Abaqus arrives, and the limits. */
-export type Exchange = { uploads: boolean; connector_route: boolean; max_bundle_bytes: number; max_uploads: number; max_tokens: number };
+/** What the card may offer. `connector_version` and `connector_sha256` name the connector's zip the API hands out: its version and the
+ * SHA-256 recorded for that version (ADR-0094 amendment 3); both null from an API that does not say, or says something else. */
+export type Exchange = { uploads: boolean; connector_route: boolean; max_bundle_bytes: number; max_uploads: number; max_tokens: number;
+  connector_version: string | null; connector_sha256: string | null };
 export type ModelItem = { item: string; yours: string; ours: string; same: boolean | null };
 export type Criterion = { criterion: string; met: boolean | null; judged: boolean; evidence: string };
 /** One zone of the coupon as the comparison summed it up: its count of values, and the quantity furthest from ours with where it is. */
@@ -51,7 +54,8 @@ const flag = (v: unknown): v is boolean | null => v === null || typeof v === "bo
 export function readExchange(payload: unknown): Exchange {
   if (!isObject(payload) || typeof payload.uploads !== "boolean" || typeof payload.connector_route !== "boolean" || !finite(payload.max_bundle_bytes)
     || !finite(payload.max_uploads) || !finite(payload.max_tokens)) throw new StudioError("The exchange settings have an unexpected shape.");
-  return payload as unknown as Exchange;
+  const named = isText(payload.connector_version) && /^\d+\.\d+\.\d+$/.test(payload.connector_version) && isText(payload.connector_sha256) && /^[0-9a-f]{64}$/.test(payload.connector_sha256);
+  return { ...(payload as unknown as Exchange), connector_version: named ? (payload.connector_version as string) : null, connector_sha256: named ? (payload.connector_sha256 as string) : null };
 }
 
 /** A comparison as the command wrote it, or null for one this page does not read: one written before the summary, or of another shape. */
@@ -167,6 +171,10 @@ export function documentProblem(error: unknown): { words: string; reasons: strin
 
 /** Where the connector's files are handed out as one zip. */
 export const connectorUrl = (apiBase: string): string => `${base(apiBase)}/v1/abaqus-connector`;
+/** What the connector installs, reads and sends, as plain text: the same words as SECURITY.txt in its zip. */
+export const connectorNoteUrl = (apiBase: string): string => `${base(apiBase)}/v1/abaqus-connector/security-note`;
+/** The name the connector's zip is saved under: named for its version when the API says which it is. */
+export const connectorName = (exchange: Pick<Exchange, "connector_version">): string => (exchange.connector_version ? `anisotropy-connector-${exchange.connector_version}.zip` : "anisotropy-connector.zip");
 
 export type SendStage = "sending" | "comparing";
 /** Send the connector's file as the request's body, to stand beside one run. `onStage` hears "sending" with the fraction that has left
@@ -210,6 +218,31 @@ export async function createUploadKey(apiBase: string, name: string): Promise<Ne
 
 export async function cancelUploadKey(apiBase: string, id: string): Promise<UploadKey> {
   return readUploadKey(await ask(`${base(apiBase)}${KEYS}/${encodeURIComponent(id)}`, { method: "DELETE", headers: actor }, "cancelling the upload key"));
+}
+
+// ----------------------------------------------------------------------------------------------------------------------- this PC
+
+const PAIR_CODE = /^anisotropy_pair_[A-Za-z0-9_-]{43}$/;
+const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A one-time code that connects the user's PC to their account (ADR-0094 amendment 1): good for a few minutes and one use. The page
+ * never shows it: it goes into the link the PC's helper opens. */
+export async function createPairingCode(apiBase: string): Promise<{ code: string; minutes: number }> {
+  const payload = await ask(`${base(apiBase)}/v1/pairing-codes`, { method: "POST", headers: actor }, "connecting this PC");
+  if (!isObject(payload) || !isText(payload.code) || !PAIR_CODE.test(payload.code) || !finite(payload.minutes)) throw new StudioError("The code to connect this PC has an unexpected shape.");
+  return { code: payload.code, minutes: payload.minutes };
+}
+
+/** The link that connects this PC: the code and the address the PC will send to, which its helper shows before anything is connected. */
+export const pairLink = (code: string, apiAddress: string): string => `anisotropy://pair?code=${code}&site=${encodeURIComponent(base(apiAddress))}`;
+
+/** The link that opens a run in Abaqus/CAE on this PC; null for an id that is not a run's. The link carries the run and nothing else. */
+export const openLink = (jobId: string): string | null => (RUN_ID.test(jobId) ? `anisotropy://open?run=${jobId}` : null);
+
+/** Hand a link of ours to the PC: the browser asks its user, then starts the helper the setup registered. A PC without the setup does
+ * nothing, and the page cannot tell, so the card says what to do when nothing starts. */
+export function openOnThisPc(link: string): void {
+  if (link.startsWith("anisotropy://")) window.open(link, "_self");
 }
 
 // ----------------------------------------------------------------------------------------------------------------------- the words

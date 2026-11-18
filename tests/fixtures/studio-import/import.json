@@ -1,0 +1,70 @@
+{
+ "state": "solved",
+ "name": "coupon-2x8-grips-im7-8552.inp",
+ "units": "mm-MPa",
+ "problem": null,
+ "reading": {
+  "heading": "",
+  "sha256": "a327725284f61af0ca32f9c214dcdf1e4e83827c610fc88160e6033f29734e99",
+  "units": "mm-MPa",
+  "unit_labels": {
+   "area": "mm²",
+   "force": "N",
+   "length": "mm",
+   "stress": "MPa",
+   "force_per_length": "N/mm",
+   "modulus": "GPa",
+   "stiffness": "N/mm",
+   "per_length": "1/mm",
+   "moment": "N·mm/mm",
+   "rotation": "rad"
+  },
+  "parts": 1,
+  "instances": 1,
+  "moved": [],
+  "nodes": 27,
+  "reference_nodes": 2,
+  "elements": 16,
+  "element_types": {
+   "S4R": 16
+  },
+  "node_sets": 7,
+  "element_sets": 3,
+  "couplings": 2,
+  "sections": [
+   {
+    "element_set": "Layup-A-1",
+    "plies": 10,
+    "symmetric": true,
+    "thickness": 1.8287999999999998,
+    "materials": [
+     "IM7-8552"
+    ],
+    "rotation_deg": 0.0
+   }
+  ],
+  "layup": "[0/30/-30/30/0]s",
+  "materials": [
+   {
+    "name": "IM7-8552",
+    "kind": "lamina",
+    "strengths": true
+   }
+  ],
+  "step": "Step-1",
+  "boundaries": 12,
+  "concentrated_loads": 0,
+  "pressures": 0,
+  "edge_loads": 0,
+  "skipped": [
+   "line 8: *preprint",
+   "line 127: *restart",
+   "line 128: *output",
+   "line 129: *output"
+  ],
+  "notes": [
+   "line 106: reference node Assembly.2 is listed inside its own coupled set 's_Bottom'; it is dropped from the coupled nodes (Abaqus runs the deck as written)"
+  ],
+  "warnings": []
+ }
+}

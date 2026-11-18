@@ -119,6 +119,9 @@ class JobRow(Base):
     # stages and of the solver's own phases (restore_s, lock_wait_s, gate_s, upload_s).
     claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     timings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    # The answer in a few values, as the run's tool picked it from the summary our engine wrote (ADR-0109, migration 0012): what the list
+    # of past analyses shows. None for a job that did not end done, one before the migration, or a result without a criterion.
+    answer: Mapped[dict | None] = mapped_column(JSONB)
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
@@ -169,6 +172,23 @@ class UploadTokenRow(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PairingCodeRow(Base):
+    """A one-time code that connects a user's machine to their account (ADR-0094 amendment 1, migration 0011). The signed-in page
+    asks for one and hands it to the machine in a link; the machine swaps it, once and within minutes, for an upload token of its
+    own. Only the code's SHA-256 is kept. `used_at` is when it was swapped and `token_id` the token it became."""
+
+    __tablename__ = "pairing_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    code_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("upload_tokens.id"))
 
 
 class UploadRow(Base):
@@ -284,15 +304,26 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
         return run.id
 
 
+EVERYONE = "*"  # in place of an owner's email: no narrowing by owner (the local API, which has no sign-in; ADR-0104)
+
+
+def _owned(statement, column, user_email: str | None):
+    """The statement narrowed to the rows of one owner (ADR-0104): the signed-in email that made them, None for the rows made with no
+    one signed in, EVERYONE for no narrowing."""
+    if user_email == EVERYONE:
+        return statement
+    return statement.where(column.is_(None) if user_email is None else column == user_email)
+
+
 def fetch_run(engine: Engine, run_id: uuid.UUID) -> Run | None:
     with Session(engine) as session:
         return session.get(Run, run_id)
 
 
 def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None = None, status: str | None = None,
-              since: dt.datetime | None = None, until: dt.datetime | None = None, limit: int = 50) -> list[Run]:
-    """The newest runs first, narrowed by the given filters; `since` is inclusive, `until` exclusive."""
-    statement = select(Run).order_by(Run.created_at.desc(), Run.id).limit(limit)
+              since: dt.datetime | None = None, until: dt.datetime | None = None, limit: int = 50, user_email: str | None = EVERYONE) -> list[Run]:
+    """The newest runs first, narrowed by the given filters; `since` is inclusive, `until` exclusive; `user_email` keeps one owner's."""
+    statement = _owned(select(Run).order_by(Run.created_at.desc(), Run.id).limit(limit), Run.user_email, user_email)
     if actor is not None:
         statement = statement.where(Run.actor == actor)
     if endpoint is not None:
@@ -335,10 +366,26 @@ def fetch_job(engine: Engine, job_id: uuid.UUID) -> JobRow | None:
         return session.get(JobRow, job_id)
 
 
-def list_jobs(engine: Engine, limit: int = 50) -> list[JobRow]:
-    """The newest jobs first."""
+def list_jobs(engine: Engine, limit: int = 50, user_email: str | None = EVERYONE) -> list[JobRow]:
+    """The newest jobs first; `user_email` keeps one owner's (ADR-0104)."""
     with Session(engine) as session:
-        return list(session.scalars(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+        return list(session.scalars(_owned(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit), JobRow.user_email, user_email)))
+
+
+def coupon_owners(engine: Engine) -> set[tuple[str, str | None]]:
+    """Each coupon a job has named, with each owner whose job named it (the signed-in email, None for none)."""
+    with Session(engine) as session:
+        return {(coupon, email) for coupon, email in session.execute(select(JobRow.coupon, JobRow.user_email).where(JobRow.coupon.is_not(None)).distinct())}
+
+
+def coupons_of(owners: set[tuple[str, str | None]], user_email: str | None) -> set[str]:
+    """The names of the coupons that owner's jobs have run and no one else's have (ADR-0104): what the list of coupons shows them
+    and what they may reopen. A coupon's folder holds the rows of whoever ran it last, so a name two people have run is offered to
+    neither."""
+    by_coupon: dict[str, set[str | None]] = {}
+    for coupon, email in owners:
+        by_coupon.setdefault(coupon, set()).add(email)
+    return {coupon for coupon, emails in by_coupon.items() if emails == {user_email}}
 
 
 # ------------------------------------------------------------------------------------------- the projects table (ADR-0062 part 6)
@@ -462,6 +509,42 @@ def list_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) ->
     statement = _by_owner(select(UploadTokenRow).order_by(UploadTokenRow.created_at.desc(), UploadTokenRow.id), UploadTokenRow, user_email, actor)
     with Session(engine, expire_on_commit=False) as session:
         return list(session.scalars(statement))
+
+
+def insert_pairing_code(engine: Engine, *, code_id: uuid.UUID, actor: str, user_email: str | None, code_sha256: str, now: dt.datetime,
+                        expires_at: dt.datetime) -> PairingCodeRow:
+    """A new code for the requester. Their earlier codes that were never swapped end now, so one code stands at a time."""
+    with Session(engine, expire_on_commit=False) as session:
+        session.execute(_by_owner(update(PairingCodeRow).where(PairingCodeRow.used_at.is_(None), PairingCodeRow.expires_at > now), PairingCodeRow,
+                                  user_email, actor).values(expires_at=now))
+        row = PairingCodeRow(id=code_id, actor=actor, user_email=user_email, code_sha256=code_sha256, created_at=now, expires_at=expires_at)
+        session.add(row)
+        session.commit()
+        return row
+
+
+def fetch_pairing_code(engine: Engine, code_sha256: str, now: dt.datetime) -> PairingCodeRow | None:
+    """The code with that digest when it could still be swapped, unchanged; None otherwise."""
+    with Session(engine, expire_on_commit=False) as session:
+        return session.scalars(select(PairingCodeRow).where(PairingCodeRow.code_sha256 == code_sha256, PairingCodeRow.used_at.is_(None),
+                                                            PairingCodeRow.expires_at > now)).first()
+
+
+def claim_pairing_code(engine: Engine, code_sha256: str, now: dt.datetime) -> PairingCodeRow | None:
+    """The code with that digest when it was never swapped and has not ended, marked as swapped now; None otherwise. The update names
+    the unused row, so of two requests with one code one gets it."""
+    with Session(engine, expire_on_commit=False) as session:
+        claimed = session.execute(update(PairingCodeRow).where(PairingCodeRow.code_sha256 == code_sha256, PairingCodeRow.used_at.is_(None),
+                                                               PairingCodeRow.expires_at > now).values(used_at=now).returning(PairingCodeRow.id)).first()
+        session.commit()
+        return None if claimed is None else session.get(PairingCodeRow, claimed[0])
+
+
+def name_pairing_token(engine: Engine, code_id: uuid.UUID, token_id: uuid.UUID) -> None:
+    """Write down which token a swapped code became."""
+    with Session(engine) as session:
+        session.execute(update(PairingCodeRow).where(PairingCodeRow.id == code_id).values(token_id=token_id))
+        session.commit()
 
 
 def live_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) -> int:
