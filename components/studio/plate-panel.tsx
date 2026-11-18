@@ -10,11 +10,14 @@ type Props = { form: StudioForm; lists: PlateLists; errors: Record<string, strin
 const DOFS = [1, 2, 3, 4, 5, 6];
 /** Each direction as Abaqus names it (ADR-0110): U1 to U3 the moves along x, y, z, UR1 to UR3 the turns about them. Its words are the title. */
 const DOF_CODES: Record<number, string> = { 1: "U1", 2: "U2", 3: "U3", 4: "UR1", 5: "UR2", 6: "UR3" };
+/** The same on the model tree, in no program's notation (ADR-0111 amendment 1): moves along x, y, z and turns about them. */
+const TREE_CODES: Record<number, string> = { 1: "x", 2: "y", 3: "z", 4: "θx", 5: "θy", 6: "θz" };
 
 /** The supports, loads and regions of a plate (ADR-0054): one row per entry, each region picked from what the plate offers; a click on
  * the model adds a row too (the studio page wires it). The API's check judges the rows and names the list that is wrong. */
 export function PlatePanel({ form, lists, errors, disabled, onChange, part }: Props) {
   const options = regionOptions(form, lists);
+  const codes = part ? TREE_CODES : DOF_CODES;
   const regionSelect = (value: string, onPick: (region: string) => void, label: string) => (
     <select value={value} disabled={disabled} aria-label={label} onChange={(e) => onPick(e.target.value)}>
       {options.map((o) => <option key={o.name} value={o.name}>{o.name} ({o.kind})</option>)}
@@ -33,7 +36,7 @@ export function PlatePanel({ form, lists, errors, disabled, onChange, part }: Pr
           <span className="studio-plate-dofs" role="group" aria-label={`Support ${i + 1} directions`}>
             {DOFS.map((d) => (
               <label key={d} title={DOF_WORDS[d]}><input type="checkbox" checked={s.dofs.includes(d)} aria-label={`Support ${i + 1} holds ${DOF_WORDS[d] ?? d}`}
-                onChange={(e) => setSupport(i, { ...s, dofs: e.target.checked ? [...s.dofs, d].sort((a, b) => a - b) : s.dofs.filter((x) => x !== d) })} />{DOF_CODES[d]}</label>
+                onChange={(e) => setSupport(i, { ...s, dofs: e.target.checked ? [...s.dofs, d].sort((a, b) => a - b) : s.dofs.filter((x) => x !== d) })} />{codes[d]}</label>
             ))}
           </span>
           <input type="text" inputMode="decimal" value={s.value} placeholder="travel (mm, rad)" aria-label={`Support ${i + 1} travel`} className="studio-plate-value"

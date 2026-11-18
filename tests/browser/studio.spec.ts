@@ -599,6 +599,8 @@ test.describe("the model tree", () => {
     await expect(conditions).toHaveAttribute("open", "");
     await expect(conditions).toHaveClass(/ws-panel-changed/);
     await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Left holds x, y, z, tilt about x, tilt about y, rotation about z");
+    await expect(page.getByTestId("plate-supports")).toContainText("θx"); // the directions in no program's notation on the tree
+    await expect(page.getByTestId("plate-supports")).not.toContainText("UR1");
     await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("1 on Edge-Right");
     await expect(page.getByTestId("tension-missing")).toHaveCount(0);
     await expect.poll(() => calls.checks.length).toBe(1); // applied, the setup is checked with the lists and the model appears
