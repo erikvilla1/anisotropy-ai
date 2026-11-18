@@ -85,7 +85,7 @@ def read_frd(path: Path | str) -> Frd:
                     elif line.startswith(" -2"):
                         text = line.rstrip("\n")
                         elements[element] += tuple(int(text[3 + 10 * i:13 + 10 * i]) for i in range((len(text) - 3) // 10))
-                except (ValueError, NameError) as exc:
+                except (ValueError, NameError):
                     raise FrdError(f"{Path(path).name}: cannot read the element line {line.rstrip()!r}") from None
                 continue
             if not line.startswith(" -1") or block is None:
@@ -98,7 +98,7 @@ def read_frd(path: Path | str) -> Frd:
                     stress[node] = tuple(float(line[13 + 12 * i:25 + 12 * i]) for i in range(6))
                 elif block == "DISP":
                     displacement[node] = tuple(float(line[13 + 12 * i:25 + 12 * i]) for i in range(3))
-            except ValueError as exc:
+            except ValueError:
                 raise FrdError(f"{Path(path).name}: cannot read the {block} line {line.rstrip()!r}") from None
     if not nodes:
         raise FrdError(f"{Path(path).name}: no node block (`    2C`); is this a CalculiX .frd?")
@@ -203,8 +203,8 @@ def frd_ply_peaks(frd: Frd, plies: Sequence[FrdPly], gauge: tuple[float, float] 
         if not local:
             out.append(entry)
             continue
-        for name, pick in (("s1_max", lambda n: local[n][0]), ("s2_max", lambda n: local[n][1]), ("t12_max_abs", lambda n: abs(local[n][2])),
-                           ("s1_max_abs", lambda n: abs(local[n][0])), ("s2_max_abs", lambda n: abs(local[n][1]))):
+        for name, pick in (("s1_max", lambda n: local[n][0]), ("s2_max", lambda n: local[n][1]), ("t12_max_abs", lambda n: abs(local[n][2])),  # noqa: B023  used in this pass only
+                           ("s1_max_abs", lambda n: abs(local[n][0])), ("s2_max_abs", lambda n: abs(local[n][1]))):  # noqa: B023
             node = max(local, key=pick)
             index = {"s1_max": 0, "s2_max": 1, "t12_max_abs": 2, "s1_max_abs": 0, "s2_max_abs": 1}[name]
             entry[name], entry[f"{name}_node"], entry[f"{name}_xyz"] = rounded(local[node][index]), node, _place(frd, node)

@@ -1,0 +1,24 @@
+# The Python lint every pull request runs (ADR-0114): one set of rules for the engine, fea, api, mcp-server, docs and scripts.
+# The rules are named here, not left to ruff's defaults, so a new ruff release cannot change what passes; CI pins ruff's version too.
+target-version = "py312"
+line-length = 140
+
+[lint]
+# Pyflakes (F: unused imports and variables, undefined names, a name defined twice), pycodestyle's statement and syntax errors (E4, E7,
+# E9) and flake8-bugbear (B: mistakes that run but do the wrong thing). Style is not linted.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+  "E402",  # scripts and tests put the package on sys.path before importing it, on purpose
+  "E731",  # a one-line lambda given a name is kept where it reads as a formula
+  "E741",  # I and l are the theory's own symbols (second moment of area, length)
+  "B905",  # zip() without strict=: adding it changes behaviour, so it is a change of its own, not a lint fix
+]
+
+[lint.flake8-bugbear]
+# FastAPI's way of declaring what a route needs is a call in the argument's default.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.File", "fastapi.Form", "fastapi.Body"]
+
+[lint.per-file-ignores]
+# These two import shared pytest fixtures by name from other test modules, and a test asks for a fixture by naming it as an argument.
+"fea/tests/test_abaqus_tools.py" = ["F811"]
+"fea/tests/test_anisotropy_menu.py" = ["F811"]

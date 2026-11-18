@@ -35,7 +35,6 @@ def preview_data(model: FEModel, quality: QualityField | None = None) -> dict[st
     corners = mesh.corners
     thickness_m = sum(ply.thickness_m for ply in model.section.plies)
     sets = model.node_sets
-    element_sets = model.element_sets
     held = []
     for boundary in model.boundaries:
         if boundary.value != 0.0:

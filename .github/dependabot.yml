@@ -1,0 +1,42 @@
+# Dependabot (ADR-0114): one pull request a month per kind of dependency, every update of that kind grouped in it, so updates arrive
+# as a few reviewable pull requests and not a stream. Each waits for the founder's approval like any other (.github/CODEOWNERS).
+# Security fixes are separate: with Dependabot's alerts and security updates on (Settings, Advanced Security), they come when published.
+version: 2
+updates:
+  # The workflows' actions, pinned to commits because the deploy's hold the Cloudflare and database secrets; Dependabot moves the pin
+  # and the version comment beside it together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Dependencies"
+
+  # The website, the Worker and the browser tests.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "Dependencies"
+
+  # The engine, the finite element package, the API and the MCP server, each with its uv.lock.
+  - package-ecosystem: uv
+    directories: ["/engine", "/fea", "/api", "/mcp-server"]
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "Dependencies"

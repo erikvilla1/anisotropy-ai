@@ -11,7 +11,7 @@ from anisotropy_engine.failure import (
     first_ply_failure, first_ply_failure_combined, max_strain_ratio, max_strain_ratio_combined,
     max_stress_ratio, tsai_hill_index, tsai_hill_ratio, tsai_hill_ratio_combined,
 )
-from anisotropy_engine.lamina import Lamina, StrainLimits, Strengths, ThermalExpansion, reduced_compliance, strain_limits_from_strengths
+from anisotropy_engine.lamina import Lamina, Strengths, ThermalExpansion, reduced_compliance, strain_limits_from_strengths
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.response import Loads
 

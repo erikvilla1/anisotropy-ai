@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .femodel import FEModel, build_model
 from .units import deck_units_of, from_si
-from .write_abaqus import PER_LINE, _rows, number
+from .write_abaqus import _rows, number
 
 REFERENCE_TEMPERATURE = 293.0  # K, the temperature the constants are stated at; CalculiX needs a value on the second line
 

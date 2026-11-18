@@ -4,6 +4,7 @@ import { printed } from "../../lib/studio-colors";
 import { probeTable } from "../../lib/studio-fields";
 import { ANALYSIS_UNAVAILABLE, bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
 import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
+import { hydrated } from "./hydrated";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
@@ -650,7 +651,9 @@ test.describe("the model tree", () => {
     expect([first.test, first.supports, first.loads]).toEqual(["plate", [{ region: "Edge-Left", dofs: [1, 2, 3, 4, 5, 6] }], [{ region: "Edge-Right", dof: 1, total: 10000 }]]);
     // a warning is said in the tab it is about, naming what is missing, and the chat's warning opens that tab (ADR-0111 amendment 2)
     await expect(page.getByTestId("warnings-material")).toContainText("it needs F1t, F1c, F2t, F2c and F6");
-    await page.getByTestId("panel-material").locator("summary").click();
+    // folded first, by the page's own property: a click on its summary was lost once in Firefox on CI, and folding is not what
+    // this checks (ADR-0114)
+    await page.getByTestId("panel-material").evaluate((panel) => { (panel as HTMLDetailsElement).open = false; });
     await expect(page.getByTestId("panel-material")).not.toHaveAttribute("open", "");
     await page.getByTestId("chat-check").last().getByRole("button", { name: "Open Material" }).click();
     await expect(page.getByTestId("panel-material")).toHaveAttribute("open", "");
@@ -689,7 +692,7 @@ test.describe("the model tree", () => {
   });
 });
 
-test("a run ends without its PDF; Report (PDF) writes it when asked, says so, and downloads it when it is ready (ADR-0064 amendment 3)", async ({ page }) => {
+test("a run ends without its PDF; Report (PDF) writes it when asked, says so, and downloads it when it is ready (ADR-0064 amendment 3)", async ({ page, browserName }) => {
   const calls: Parameters<typeof mockApi>[1] = { checks: [], solves: [] };
   // the run as the hosted tier now ends it: no PDF among its files, and what the report is typeset from kept in its place
   const { document: _pdf, ...kept } = fixture("job-done").outputs as Record<string, string>;
@@ -736,7 +739,8 @@ test("a run ends without its PDF; Report (PDF) writes it when asked, says so, an
   expect(calls.reportReads ?? []).toEqual([]);
 
   fails = false;
-  const download = page.waitForEvent("download");
+  // Playwright's WebKit gives no download event for a file its route handler answers, so there the read of the file below stands for it (ADR-0114)
+  const download = browserName === "webkit" ? null : page.waitForEvent("download");
   await ask.click();
   await expect(files.locator("a[data-key=document]")).toHaveText("Report (PDF)", { timeout: 20_000 }); // written: a file like the others
   await expect(files.locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45,0,-45,90]s_report.pdf");
@@ -744,7 +748,7 @@ test("a run ends without its PDF; Report (PDF) writes it when asked, says so, an
   await expect(files.getByTestId("report-note")).toHaveCount(0);
   await download; // and it came down by itself, under the page's name for it
   expect(calls.reports).toBe(2);
-  expect(calls.reportReads).toEqual(["?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_report.pdf"]);
+  await expect.poll(() => calls.reportReads).toEqual(["?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_report.pdf"]);
   expect(bannedIn(await files.innerText())).toEqual([]);
 });
 
@@ -1355,6 +1359,7 @@ test("a word that names no value sends the engineer to the panel that asks for t
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
   await message.fill("coupon");
   await message.press("Enter");
   const redirect = page.getByTestId("chat-redirect").last();
@@ -1380,6 +1385,7 @@ test("one typed line fills the coupon and the chat asks only for what is missing
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
+  await hydrated(page.getByLabel("Message the coupon assistant", { exact: true }));
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByText("Got it").last()).toBeVisible();
@@ -1414,6 +1420,7 @@ test("with a model on, a message is read into a card the engineer ticks: what is
   });
   await page.goto("/workspace/fea");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
   await message.fill("an open hole tension coupon in AS4/8552, [45/0/-45/90]s, 36 mm wide and 250 mm long with a 6 mm hole, pulled to 10 kN");
   await message.press("Enter");
   const card = page.getByTestId("proposal-card");
@@ -1460,6 +1467,7 @@ test("a model that does not answer leaves the message to the page's patterns, an
   });
   await page.goto("/workspace/fea");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
   await message.fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await message.press("Enter");
   await expect(page.getByText("Reading simple phrases only")).toBeVisible();
@@ -1496,6 +1504,7 @@ test("the assistant says which words it could not use and why, in place of “No
   await page.goto("/workspace/fea");
   const chat = page.getByTestId("coupon-chat");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
   // the founder's message of 2026-11-16 on the live site: nothing in it can become a row, and the page now says why, part by part
   await message.fill("same thing but make it compresion and 16 plys");
   await message.press("Enter");
@@ -2268,6 +2277,7 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("1 mm pull"); // the load the package will apply, before any check, on its tab
+  await hydrated(page.getByLabel("Message the coupon assistant", { exact: true }));
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-not-available").last()).toContainText("not offered yet");

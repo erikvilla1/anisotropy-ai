@@ -356,9 +356,9 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert "IM7-UNT-L9" in tex and "What the team built" in tex and "Step by step in Abaqus/CAE" in tex
     validation = tex[tex.index(r"\label{sec:validation}"):tex.index(r"\label{sec:peaks}")]
     ply_1 = [line for line in validation.splitlines() if line.startswith(r"Ply 1 (")]
-    ends = [line.rstrip(r" \\").rsplit("& ", 1)[-1] for line in ply_1]  # the Abaqus cells of ply 1: the team's S11 and S22 fill them, the fixture has no S12
+    ends = [line.rstrip(r" \\").rsplit("& ", 1)[-1] for line in ply_1]  # noqa: B005 (spaces and backslashes of the row's end) the Abaqus cells of ply 1: the team's S11 and S22 fill them, the fixture has no S12
     assert len(ends) == 3 and ends[0] != "--" and ends[1] != "--" and ends[2] == "--"
-    assert all(line.rstrip(r" \\").endswith("--") for line in validation.splitlines() if line.startswith(r"Ply 2 ("))  # layers the team did not export stay empty
+    assert all(line.rstrip(r" \\").endswith("--") for line in validation.splitlines() if line.startswith(r"Ply 2 ("))  # noqa: B005  layers the team did not export stay empty
     assert "PrePoMax 2.6}" not in tex  # the Abaqus chapter writes the Abaqus/CAE steps only
     assert package == tmp_path / "documents" / f"{TODAY}_grips"
     expected = ["README.txt", f"{package.name}-audit.xlsx", "1-team-model/coupon-2x8-grips-im7-8552.inp", "2-our-model/abaqus/grips-coupon-abaqus.inp",

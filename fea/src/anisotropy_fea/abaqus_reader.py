@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 
 from .model import (
-    GLOBAL_AXES,
     SUPPORTED_ELEMENT_TYPES,
     Boundary,
     ConcentratedLoad,

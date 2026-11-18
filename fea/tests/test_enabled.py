@@ -97,7 +97,7 @@ from anisotropy_fea.enabled import NotOffered, offered_words, refuse_hidden_kind
 from anisotropy_fea.intake import FORM_VERSION, read_values
 from anisotropy_fea.tow_test import tow_answer
 
-from test_checks import TOOLS, by_id
+from test_checks import TOOLS
 from test_intake import OHT_FILL, PUBLIC_FILL
 
 NOT_AVAILABLE = "is not offered yet. This workspace runs the unnotched tension coupon"

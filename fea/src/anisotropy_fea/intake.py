@@ -20,7 +20,6 @@ that system and the decks in `units.deck_units_of` it (ADR-0061). The library sh
 from __future__ import annotations
 
 import json
-import math
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime

@@ -138,7 +138,7 @@ Browser tests run against the production preview. Build and start it (`npm run b
 npm run test:e2e
 ```
 
-`npm run test:calculator` runs the calculator cases against the real API and starts missing local servers itself; the website must be built with `NEXT_PUBLIC_ANISOTROPY_API_URL=http://127.0.0.1:8000`. `npm run test:studio` runs the workspace cases with the API played from `tests/fixtures/studio`; the website must be built with `NEXT_PUBLIC_ANISOTROPY_API_URL` set to any address. Browser checks use an installed Microsoft Edge; set `BROWSER_CHANNEL=chrome` to use Chrome, or `PREVIEW_URL` to test another address.
+`npm run test:calculator` runs the calculator cases against the real API and starts missing local servers itself; the website must be built with `NEXT_PUBLIC_ANISOTROPY_API_URL=http://127.0.0.1:8000`. `npm run test:studio` runs the workspace cases with the API played from `tests/fixtures/studio`; the website must be built with `NEXT_PUBLIC_ANISOTROPY_API_URL` set to any address. `npm run test:site` runs every other spec (the public pages, the home page's demo, the shell, the libraries and every page on a phone) and starts the preview itself. Browser checks use an installed Microsoft Edge; set `BROWSER_CHANNEL=chrome` to use Chrome, `BROWSER=firefox` or `BROWSER=webkit` (Safari's engine) to use those after `npx playwright install firefox webkit` (Firefox opens its windows, as it has no WebGL without one; on Linux without a display, run it under `xvfb-run -a`), or `PREVIEW_URL` to test another address. CI runs them all in Chromium, and the site's and the workspace's in Firefox and WebKit too (ADR-0114). `uvx ruff check .` is the Python lint CI runs, with the rules in `ruff.toml`.
 
 ## Deployment
 

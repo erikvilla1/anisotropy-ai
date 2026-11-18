@@ -238,7 +238,7 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   });
   expect(placed.offMiddle).toBeLessThanOrEqual(0.5);
   expect(placed.clearOfMark).toBeGreaterThanOrEqual(24);
-  expect(placed.fromFoot).toBe(placed.markFromFoot);
+  expect(placed.fromFoot).toBeCloseTo(placed.markFromFoot, 2); // Firefox lays out in 1/60 px and can be 0.00002 px off
   expect(placed.square).toEqual([34, 34]);
   expect(placed.squareLast).toBeLessThanOrEqual(0.5);
   expect([placed.border, placed.radius]).toEqual(["1px", "5px"]);
@@ -349,7 +349,10 @@ function expectLanding(seen: Frame[], path: string, title: string, by: "link" | 
 const ABOUT = "Engineering built";
 const SERVICES = "From an engineering question";
 
-test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page }) => {
+test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page, browserName }) => {
+  // WebKit on a CI runner draws the home page's WebGL in software, at about 4 frames a second on two cores in Playwright's image, so
+  // a timing read frame by frame measures the runner, not the page (ADR-0114). The site-browser job runs it in Chromium.
+  test.skip(browserName === "webkit" && Boolean(process.env.CI), "WebKit on a CI runner draws too few frames for this timing");
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
@@ -494,8 +497,9 @@ test("the veil hides no focus: the skip link lies over the black, and it takes n
   await expect(veil).toHaveCSS("opacity", "1");
   await expect(veil).toHaveCSS("pointer-events", "none");
   await expect(veil).toHaveAttribute("aria-hidden", "true");
-  // The window's top left corner is as black as its middle: the veil covers the header.
-  const corner = { x: 0, y: 0, width: 260, height: 70 };
+  // The window's top left corner is as black as its middle: the veil covers the header. From a pixel in: WebKit's screenshot draws
+  // the window's very first pixel grey whatever the page (ADR-0114).
+  const corner = { x: 1, y: 1, width: 260, height: 70 };
   const black = await page.screenshot({ clip: corner });
   expect(black.equals(await page.screenshot({ clip: { ...corner, x: 600, y: 400 } }))).toBe(true);
   // Tab: the skip link takes the focus and is drawn in that corner, over the black, which has not moved.

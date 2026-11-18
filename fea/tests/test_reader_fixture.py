@@ -1,7 +1,6 @@
 """The committed fixture decks parse to the model the kernel will consume (ADR-0029)."""
 
 import hashlib
-from pathlib import Path
 
 import numpy as np
 import pytest

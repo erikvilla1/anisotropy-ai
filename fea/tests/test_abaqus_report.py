@@ -3,7 +3,6 @@
 import math
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from anisotropy_fea.abaqus_reader import read_deck

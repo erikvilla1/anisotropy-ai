@@ -48,7 +48,7 @@ manual = load_module("anisotropy_manual_build", ROOT / "docs/manual/build.py")
 # The manual lists the engine's physics modules; a problem document also lists the case runner that produced its numbers.
 manual.PACKAGES["anisotropy_engine"] = (manual.PACKAGES["anisotropy_engine"][0], manual.ENGINE_MODULES + ("cases",))
 
-from anisotropy_engine.cases import (APPLIED_KINDS, LOAD_NAMES, buckling_result, compare, first_ply_failures, load_case,  # noqa: E402
+from anisotropy_engine.cases import (LOAD_NAMES, buckling_result, compare, first_ply_failures, load_case,  # noqa: E402
                                      solve_case)
 from anisotropy_engine.engineering import engineering_constants  # noqa: E402
 from anisotropy_engine.lamina import reduced_compliance, reduced_stiffness  # noqa: E402
@@ -455,7 +455,6 @@ def steps_section(case: dict, solution, units: Units, theory: bool) -> str:
         body = []
         for name, derived in solution.constituents.items():
             tag = "" if len(materials) == 1 else rf" ({escape(name)})"
-            m = units.text("modulus")
             body.append(rf"\textbf{{Rule of mixtures{tag}.}} $E_1 = V_f E_{{1f}} + V_m E_m = {mnumber(derived.Vf)} \times {mnumber(float(units.shown(derived.fiber.E1, 'modulus')))} + "
                         rf"{mnumber(derived.Vm)} \times {mnumber(float(units.shown(derived.matrix.E, 'modulus')))} = {mnumber(float(units.shown(derived.E1, 'modulus')))}${units.math('modulus')}; "
                         rf"$\nu_{{12}} = {mnumber(derived.Vf)} \times {mnumber(derived.fiber.nu12)} + {mnumber(derived.Vm)} \times {mnumber(derived.matrix.nu)} = {mnumber(derived.nu12)}$.")

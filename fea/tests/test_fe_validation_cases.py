@@ -1,6 +1,5 @@
 """Every finite element validation case is reproduced, and the runner itself reports what it should (ADR-0007, ADR-0029)."""
 
-from pathlib import Path
 
 import pytest
 

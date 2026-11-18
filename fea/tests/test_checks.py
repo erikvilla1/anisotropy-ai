@@ -14,7 +14,6 @@ from anisotropy_fea.intake import FIELDS, FORM_VERSION, convert, form_rows_of, r
 from anisotropy_fea.mesher import structured_rectangle
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.quality import THRESHOLDS, element_quality, quality_summary, quality_words
-from anisotropy_fea.spec import load_spec
 
 from public_coupon import DESIGNATION
 from test_intake import OHT_FILL, PUBLIC_FILL, own_constants
@@ -324,7 +323,6 @@ def test_the_preview_says_what_is_drawn_held_and_loaded(tmp_path):
 
 
 def test_the_preview_of_a_force_controlled_nodal_coupon(tmp_path):
-    spec = load_spec(paths.spec_path("patch-1x1-cload-im7-engine-equality")) if False else None  # no such spec; the nodal check with force control instead
     _, model, _ = checklist(tmp_path, PUBLIC_FILL, grips="nodal", control="force", value=10000.0)
     data = preview_data(model, None)
     assert data["held"][0] == {"set": "Grip-Bottom", "through": None, "dofs": [1, 2, 3, 4, 5, 6],

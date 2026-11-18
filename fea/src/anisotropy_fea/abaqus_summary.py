@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .abaqus_dat import AbaqusDat, AbaqusDatError, parse_abaqus_dat
+from .abaqus_dat import AbaqusDatError, parse_abaqus_dat
 from .abaqus_reader import parse_deck
 from .kernel import solve_deck
 from .model import to_si

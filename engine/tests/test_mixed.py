@@ -11,7 +11,7 @@ import sys
 import numpy as np
 import pytest
 
-from anisotropy_engine.cases import engine_results, load_case, validate_case_inputs
+from anisotropy_engine.cases import engine_results, validate_case_inputs
 from anisotropy_engine.lamina import Lamina, ThermalExpansion
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.mixed import mixed_response

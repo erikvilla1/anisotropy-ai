@@ -588,7 +588,7 @@ def risk_blocks(header: list[str], rows: list[list[str]]) -> str:
     col = {name: header.index(name) for name in ("ID", "Risk", "Likelihood", "Impact", "Mitigation", "Status")}
     out = []
     for row in rows:
-        cell = lambda name: row[col[name]]  # noqa: E731
+        cell = lambda name: row[col[name]]  # noqa: E731, B023  used in this pass of the loop only
         out.append(r"\needspace{5\baselineskip}" + rf"\paragraph{{{escape(cell('ID'))}: {inline(cell('Risk'))}}}" + "\n"
                    + rf"{{\small\color{{muted}}Likelihood: {inline(cell('Likelihood'))}; impact: {inline(cell('Impact'))}; status: {inline(cell('Status'))}.}}\par" + "\n"
                    + inline(cell("Mitigation")))

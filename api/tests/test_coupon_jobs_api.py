@@ -554,7 +554,6 @@ def test_a_store_that_fails_stops_the_job_and_withholds_its_result(tmp_path, mon
 
 # ------------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)
 
-from anisotropy_api.coupon_jobs import JobLimited
 
 
 def test_a_per_user_limit_needs_the_jobs_table(tmp_path):

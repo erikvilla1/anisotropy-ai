@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { wheel } from "./wheel";
 import { demoWing } from "../../lib/demo-wing";
 import { bannedIn } from "../../lib/studio-copy";
 
@@ -26,14 +27,14 @@ async function expectStop(page: Page, stop: number) {
   await expect(box(page)).toHaveAttribute("data-stop", String(stop), { timeout: 15_000 });
   await expect(box(page)).not.toHaveAttribute("data-moving", "true");
 }
-const notch = (page: Page, direction: 1 | -1 = 1) => page.mouse.wheel(0, 100 * direction);
+const notch = (page: Page, direction: 1 | -1 = 1) => wheel(page, 100 * direction);
 /** The scroll a beat takes: half the stage's height (ZONE in components/home/product-demo.tsx). */
 const zone = (page: Page) => box(page).evaluate((element) => Math.round(element.getBoundingClientRect().height / 2));
 /** Where the page stands when the stage's top edge first lies on the window's: the start of the first beat's zone. */
 const stageAt = (page: Page) => demo(page).evaluate((section) => Math.round(window.scrollY + section.getBoundingClientRect().top));
 /** Wheels the page to a place and checks it went exactly there: nothing holds it, nothing carries it on. */
 async function wheelTo(page: Page, y: number) {
-  await page.mouse.wheel(0, y - (await scrollY(page)));
+  await wheel(page, y - (await scrollY(page)));
   await expect.poll(() => scrollY(page)).toBe(y);
 }
 /** Wheels the page onto the stage's line with the one wheel event that asks for all that is left, and waits for the first beat. */
@@ -196,7 +197,7 @@ test("on the way to the stage the hero stays in the window, its whole-window cli
   expect(way).toBe(page.viewportSize()!.height / 2);
   let before = await read();
   for (let step = 1; step <= 9; step++) {
-    await page.mouse.wheel(0, way / 10);
+    await wheel(page, way / 10);
     await expect.poll(() => scrollY(page)).toBe(Math.round((way * step) / 10));
     await expect(opening).toHaveAttribute("data-handover", "going");
     await page.waitForTimeout(80);
@@ -252,14 +253,14 @@ test("if the hero's words still stand when the page scrolls, they go before the 
   expect(await read()).toEqual({ statement: 1, backed: 1, demo: 0 });
   const way = await offLine(page);
   // A fifth of the way: the words are half gone. Nothing of the demo is up.
-  await page.mouse.wheel(0, way / 5);
+  await wheel(page, way / 5);
   await expect.poll(() => scrollY(page)).toBe(Math.round(way / 5));
   await expect.poll(async () => (await read()).statement).toBeCloseTo(0.5, 1);
   expect((await read()).demo).toBe(0);
   // From two fifths on the hero's words are gone, before the clip dims and the demo's first words begin.
   let seen = { statement: 1, backed: 1, demo: 0 };
   for (let step = 4; step <= 9; step++) {
-    await page.mouse.wheel(0, step === 4 ? way / 5 : way / 10);
+    await wheel(page, step === 4 ? way / 5 : way / 10);
     await expect.poll(() => scrollY(page)).toBe(Math.round((way * step) / 10));
     await page.waitForTimeout(80);
     seen = await read();
@@ -267,7 +268,7 @@ test("if the hero's words still stand when the page scrolls, they go before the 
   }
   expect(seen.demo).toBeGreaterThan(0.8);
   // Back at the top they stand again, whole.
-  await page.mouse.wheel(0, -way);
+  await wheel(page, -way);
   await expect.poll(() => scrollY(page)).toBe(0);
   await expect.poll(async () => (await read()).statement).toBe(1);
 });
@@ -400,7 +401,10 @@ test("a beat takes its own time: the second about 3.6 s, measured in the page", 
   expect(marks.end - marks.start).toBeLessThan(4800);
 });
 
-test("a fast scroll goes straight through the stage: the page is not held, what follows is there at once, and the demo stands finished", async ({ page }) => {
+test("a fast scroll goes straight through the stage: the page is not held, what follows is there at once, and the demo stands finished", async ({ page, browserName }) => {
+  // WebKit on a CI runner draws the home page's WebGL in software, at about 4 frames a second on two cores in Playwright's image, so
+  // a timing read frame by frame measures the runner, not the page (ADR-0114). The site-browser job runs it in Chromium.
+  test.skip(browserName === "webkit" && Boolean(process.env.CI), "WebKit on a CI runner draws too few frames for this timing");
   await openPinned(page);
   const start = await stageAt(page);
   const step = await zone(page);
@@ -482,6 +486,9 @@ test("the hero's \"Scroll to explore\" brings the stage to fill the window, and 
 
 test.describe("on a touch screen", () => {
   test.use({ hasTouch: true });
+  // The finger is sent through Chromium's DevTools protocol; Playwright has no drag by touch, and Firefox and WebKit no such
+  // protocol (ADR-0114). phone.spec.ts taps in every engine.
+  test.skip(({ browserName }) => browserName !== "chromium", "a touch drag needs Chromium's DevTools protocol");
 
   test("a finger scrolls the page through the stage as it scrolls any page, and the beats play as it goes", async ({ page }) => {
     await openPinned(page);
@@ -525,7 +532,7 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   const seam = await page.evaluate(() => [document.getElementById("overview")!.getBoundingClientRect().bottom, document.getElementById("demo")!.getBoundingClientRect().top]);
   expect(seam[1]).toBe(seam[0]);
   await page.mouse.move(700, 500);
-  await page.mouse.wheel(0, 240);
+  await wheel(page, 240);
   await expect.poll(() => scrollY(page)).toBe(240);
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A wing, analysed part by part.");

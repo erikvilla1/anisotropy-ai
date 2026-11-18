@@ -1,6 +1,5 @@
 """Everything outside the supported subset is refused with the line number, never skipped (ADR-0003)."""
 
-from pathlib import Path
 
 import pytest
 

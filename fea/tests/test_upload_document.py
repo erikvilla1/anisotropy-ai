@@ -57,7 +57,7 @@ def test_each_comparison_becomes_one_document_with_its_six_sections_and_the_answ
     for item in result["model"]["items"]:  # every item of the model, yours beside ours
         assert " & ".join(upload.text(item[key]) for key in ("item", "yours", "ours")) in tex
     assert tex.count(r"\textcolor{accent}{\textbf{differs}}") == result["summary"]["model"]["different"]
-    for role, entry in result["bundle"]["files"].items():
+    for entry in result["bundle"]["files"].values():
         assert upload.digest(entry["sha256"]) in tex and str(entry["bytes"]) in tex
     assert "0b6f" in tex and "our run 0f3a" in tex and "2026-11-13 09:30 UTC" in tex and result["bundle"]["sha256"] in tex
     # one model beside another is compared and verified; "validated" stays for a coupon test (ADR-0089), and the document says so

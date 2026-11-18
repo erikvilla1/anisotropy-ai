@@ -29,7 +29,7 @@ def kernel_reports(deck_path: Path, out: Path, quantities=("S11", "S22", "Mises"
     paths = []
     for q in quantities:
         rows = []
-        for index, (instance, label) in enumerate(solution.mesh.element_keys):
+        for index, (_instance, label) in enumerate(solution.mesh.element_keys):
             x, y = solution.mesh.xy[solution.mesh.connectivity[index]].mean(axis=0) * 1e3
             rows += [(label, layer, face, float(x), float(y), float(values[q][index, layer - 1])) for layer, face in layers]
         path = out / f"Test_{q}.csv"

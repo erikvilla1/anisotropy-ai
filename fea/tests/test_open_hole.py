@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 
 from anisotropy_fea.abaqus_reader import read_deck
-from anisotropy_fea.femodel import build_model, mesh_for_spec
-from anisotropy_fea.spec import SpecError, load_spec, parse_spec, to_si
+from anisotropy_fea.femodel import build_model
+from anisotropy_fea.spec import SpecError, load_spec, parse_spec
 from anisotropy_fea.write_abaqus import write_abaqus
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 

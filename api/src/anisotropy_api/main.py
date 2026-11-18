@@ -184,6 +184,15 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/version")
+async def running_version(request: Request) -> dict[str, str | None]:
+    """The commit this container runs and its packages' versions: what the check after a deploy reads to know the deployed code
+    answers, not a container left from before it (ADR-0114, ADR-0056 amendment 10). Not a run; behind Access like every route but
+    /healthz."""
+    return {"git_commit": getattr(request.app.state, "git_commit", None), "api_version": version("anisotropy-api"),
+            "engine_version": version("anisotropy-engine")}
+
+
 @app.exception_handler(RequestValidationError)
 async def invalid_request(_request: Request, exc: RequestValidationError) -> JSONResponse:
     """Return field locations and reasons without echoing malformed/non-finite input."""
