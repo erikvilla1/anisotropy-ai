@@ -32,7 +32,8 @@ type Problem = { words: string; reasons: string[] } | null;
 /** The card of the user's own Abaqus on a finished run (ADR-0094 part 7, step 6): the answer first ("Agrees with ours", or in how many
  * places it differs), then the model, the pull force, the gauge section and between gauge and tabs; a difference where it is; the detail on
  * request. Without a file yet, the three steps to one: the build script to open in Abaqus/CAE, the connector, and a place to drop the file
- * it writes; where the API takes it, an upload key so the connector sends the file itself. The file is its owner's alone. Every number is
+ * it writes; where the two-click way is offered, those steps fold under its button (amendment 5); where the API takes it, an upload key so
+ * the connector sends the file itself. The file is its owner's alone. Every number is
  * the fea package's, read from the upload's row (ADR-0001). This card and its downloads may name Abaqus (`ABAQUS_CARD_ALLOWS`); the rest of
  * the page still does not. */
 export function AbaqusCard({ apiBase, job, fields, onShow }: {
@@ -149,6 +150,33 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
       {primary ? <UploadIcon size={13} aria-hidden="true" /> : null} {label}
     </button>
   );
+  const quick = exchange.connector_route && "abaqus_build" in job.outputs; // the two-click way can be offered (amendment 1); the steps by hand then fold under it
+  /** The way by hand, in three steps of one or two short sentences: build the model, export its results with the connector, send the file. */
+  const byHand = (
+    <ol className="studio-abaqus-steps">
+      <li>
+        <strong>Build.</strong>{" "}
+        {"abaqus_build" in job.outputs ? (
+          <><a href={fileUrl(apiBase, jobId, "abaqus_build", buildName)} download={buildName} target="_blank" rel="noreferrer" data-testid="abaqus-build"><Download size={12} aria-hidden="true" /> Build script</a>,
+            then in Abaqus/CAE choose {"File > Run Script"}. Submit the job it makes.</>
+        ) : <>In Abaqus/CAE choose {"File > Import > Model"} and pick this run&apos;s Abaqus input file. Submit a job.</>}
+      </li>
+      <li>
+        <strong>Export.</strong>{" "}
+        <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>:
+        {" "}unzip it beside the finished job and run <code>abaqus python anisotropy_connector.py &lt;your job&gt;.odb --units {fields.units === "m-Pa" ? "m-Pa" : "mm-MPa"}</code>.
+        {" "}It writes &lt;your job&gt;-anisotropy.zip.
+      </li>
+      <li>
+        <strong>Send.</strong>
+        <div className="studio-abaqus-drop" data-over={over} data-testid="abaqus-drop"
+          onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+          onDrop={(e) => { e.preventDefault(); setOver(false); void send(e.dataTransfer.files?.[0]); }}>
+          <span>Drop &lt;your job&gt;-anisotropy.zip here, or</span> {chooser("Choose the file", true)}
+        </div>
+      </li>
+    </ol>
+  );
 
   return (
     <div className="studio-panel studio-abaqus" data-testid="abaqus-card" data-names-abaqus="true" data-verdict={upload?.verdict ?? (upload ? "not-compared" : "none")}>
@@ -180,43 +208,27 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
       ) : (
         <>
           <h3>Compare with your Abaqus model</h3>
-          <p>Solve this coupon in your own Abaqus and send the result here. The model, the pull force and every ply&apos;s stresses and strains are compared with this run.</p>
-          {exchange.connector_route && "abaqus_build" in job.outputs ? (
-            <ThisPc apiBase={apiBase} jobId={jobId} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
-          ) : null}
-          {exchange.connector_route && "abaqus_build" in job.outputs ? <h4 className="studio-abaqus-by-hand">Or by hand</h4> : null}
-          <ol className="studio-abaqus-steps">
-            <li>
-              <strong>Open in Abaqus/CAE.</strong>{" "}
-              {"abaqus_build" in job.outputs ? (
-                <><a href={fileUrl(apiBase, jobId, "abaqus_build", buildName)} download={buildName} target="_blank" rel="noreferrer" data-testid="abaqus-build"><Download size={12} aria-hidden="true" /> Build script</a>.
-                  {" "}In Abaqus/CAE choose File, Run Script. It builds this coupon as a model you can edit, with a job ready to submit.</>
-              ) : <>In Abaqus/CAE choose File, Import, Model and pick the solver input from this run&apos;s files.</>}
-            </li>
-            <li>
-              <strong>Run the job, then the connector.</strong>{" "}
-              <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
-              {" "}Unzip it beside your job and run <code>abaqus python anisotropy_connector.py &lt;your job&gt;.odb --units {fields.units === "m-Pa" ? "m-Pa" : "mm-MPa"}</code>.
-              {" "}It writes one file, &lt;your job&gt;-anisotropy.zip, and sends nothing.
-              {" "}<span data-testid="abaqus-connector-more">Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes.</span>
-            </li>
-            <li>
-              <strong>Send to Anisotropy.</strong>
-              <div className="studio-abaqus-drop" data-over={over} data-testid="abaqus-drop"
-                onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-                onDrop={(e) => { e.preventDefault(); setOver(false); void send(e.dataTransfer.files?.[0]); }}>
-                <span>Drop &lt;your job&gt;-anisotropy.zip here, or</span> {chooser("Choose the file", true)}
-              </div>
-            </li>
-          </ol>
+          <p>Solve this coupon in your own Abaqus to compare the model, the pull force and every ply&apos;s stresses and strains with this run.</p>
+          {quick ? (
+            <>
+              <ThisPc apiBase={apiBase} jobId={jobId} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
+              <details className="studio-details studio-abaqus-by-hand" data-testid="abaqus-by-hand">
+                <summary><h4>Or do it by hand</h4></summary>
+                {byHand}
+              </details>
+            </>
+          ) : byHand}
           {busyWords ? <p className="studio-status" role="status" data-testid="abaqus-progress">{busyWords}</p> : null}
           {problem ? <Trouble problem={problem} /> : null}
-          <p className="studio-muted">The file is yours: only you and the Anisotropy team can see it, and you can remove it at any time. At most {megabytes(exchange.max_bundle_bytes)}.</p>
         </>
       )}
+      {/* one place in the tree for both states, so an open fold and a key just created stay when a file arrives */}
       {exchange.connector_route ? (
         <UploadKeys apiBase={apiBase} job={job} units={fields.units} limit={exchange.max_tokens} waiting={waiting} onOpen={setWaiting} />
       ) : null}
+      {upload ? null : (
+        <p className="studio-muted">Only you and the Anisotropy team can see the files you send, and you can remove them. Up to {megabytes(exchange.max_bundle_bytes)} each.</p>
+      )}
     </div>
   );
 }
@@ -330,13 +342,15 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
   const [pcs, setPcs] = useState<UploadKey[] | null>(null); // the keys that are not cancelled; null until the list is read
   const [connected, setConnected] = useState<UploadKey | null>(null);
   const [answered, setAnswered] = useState<UploadKey | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false); // the two steps done once: open where no PC is connected, folded when one connects
   const before = useRef<UploadKey[] | null>(null); // the keys as they were at the click the page is looking after
   const link = openLink(jobId);
   const live = useCallback(async (signal?: AbortSignal) => (await listUploadKeys(apiBase, signal)).filter((k) => !k.revoked_at), [apiBase]);
 
   useEffect(() => {
     const controller = new AbortController();
-    live(controller.signal).then(setPcs).catch(() => undefined); // without the list the card says nothing about PCs; its buttons work all the same
+    // without the list the card says nothing about PCs; its buttons work all the same
+    live(controller.signal).then((now) => { setPcs(now); if (!now.length) setSetupOpen(true); }).catch(() => undefined);
     return () => controller.abort("replaced");
   }, [live]);
 
@@ -351,7 +365,7 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
         setPcs(now);
         if (was === null) return; // the first list since the click: nothing to tell a change by yet
         const fresh = connecting ? now.find((k) => !was.some((w) => w.id === k.id)) : undefined;
-        if (fresh) { setConnected(fresh); setConnecting(0); }
+        if (fresh) { setConnected(fresh); setConnecting(0); setSetupOpen(false); }
         const used = sent ? now.find((k) => k.last_used_at !== null && k.last_used_at !== (was.find((w) => w.id === k.id)?.last_used_at ?? null) && !(fresh && fresh.id === k.id)) : undefined;
         if (used) { setAnswered(used); setSent(0); }
       }).catch(() => undefined);
@@ -361,6 +375,16 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
 
   if (!link) return null;
   const pcName = (k: UploadKey) => k.name || "A PC";
+  /** One line under the button, the newest news first: a PC that just connected, the PC that took the coupon, the wait, or which PCs are
+   * connected. Each says what to do next. */
+  const status = connected ? <p className="studio-status" role="status" data-testid="abaqus-connected">{pcName(connected)} is connected. Now click Send to Abaqus.</p>
+    : expecting && answered ? <p className="studio-status" role="status" data-testid="abaqus-answered">Abaqus is opening on {pcName(answered)}. Submit the job there; the comparison appears here when it completes.</p>
+      : expecting ? (
+        <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for your results… Abaqus did not open?{" "}
+          <button type="button" className="studio-text-button studio-abaqus-inline" onClick={() => setSetupOpen(true)} data-testid="abaqus-open-setup">Set up this PC</button></p>
+      ) : pcs === null ? null
+        : pcs.length ? <p className="studio-muted" data-testid="abaqus-pcs">Connected: {[...new Set(pcs.map(pcName))].join(", ")}.</p>
+          : <p className="studio-muted" data-testid="abaqus-pcs">No PC is connected yet. Set this one up below, once.</p>;
 
   function send() {
     setMessage(""); setAnswered(null); setConnected(null);
@@ -382,27 +406,22 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
 
   return (
     <div className="studio-abaqus-quick" data-testid="abaqus-quick">
-      <p className="studio-abaqus-actions">
+      <div className="studio-abaqus-quick-row">
         <button type="button" className="studio-button" onClick={send} data-testid="abaqus-send-to-abaqus">Send to Abaqus</button>
-      </p>
-      <p>Abaqus/CAE starts on this PC with this coupon built as a model you can edit. Change what you want to study and submit its job there. When the job completes, the comparison appears here by itself.</p>
-      {connected ? <p className="studio-status" role="status" data-testid="abaqus-connected">{pcName(connected)} is connected to your account. Now click Send to Abaqus.</p>
-        : expecting && answered ? <p className="studio-status" role="status" data-testid="abaqus-answered">{pcName(answered)} took this coupon at {when(answered.last_used_at)}, and Abaqus is starting there. Submit its job in Abaqus. The comparison appears here when the job completes.</p>
-          : expecting ? <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.</p> : null}
-      {pcs === null || connected || (expecting && answered) ? null : pcs.length
-        ? <p className="studio-muted" data-testid="abaqus-pcs">Connected to your account: {pcs.map((k) => `${pcName(k)} (since ${when(k.created_at)})`).join(", ")}.</p>
-        : <p className="studio-muted" data-testid="abaqus-pcs">No PC is connected to your account yet. Do the two steps below, once.</p>}
-      <details className="studio-details" data-testid="abaqus-setup" open={pcs !== null && pcs.length === 0 ? true : undefined}>
+        <span>Opens this coupon in Abaqus/CAE on this PC. Submit the job there, and the comparison appears here.</span>
+      </div>
+      {status}
+      <details className="studio-details" data-testid="abaqus-setup" open={setupOpen} onToggle={(e) => setSetupOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary>First time on this PC</summary>
         <ol className="studio-abaqus-steps">
-          <li><strong>Set up, once.</strong>{" "}
+          <li><strong>Install.</strong>{" "}
             <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
-            {" "}Unzip it first: right-click the downloaded file and choose Extract All. In the folder that opens, double-click Set up Anisotropy. A box says when it is done. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.</li>
-          <li><strong>Connect, once.</strong>{" "}
-            <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
-            {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>
+            {" "}Right-click the downloaded file, choose Extract All, and double-click Set up Anisotropy in the folder that opens. For Windows.</li>
+          <li><strong>Connect.</strong>{" "}
+            <button type="button" className="studio-text-button studio-abaqus-inline" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>,
+            {" "}then click Yes in the box that names your account.</li>
         </ol>
-        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Answer the box on your PC. This page says when it is connected. If no box appeared, do the setup first.</p> : null}
+        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Click Yes in the box on your PC. No box? Do step 1 first.</p> : null}
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
       </details>
     </div>
@@ -452,7 +471,7 @@ function UploadKeys({ apiBase, job, units, limit, waiting, onOpen }: { apiBase: 
   return (
     <details className="studio-details studio-abaqus-keys" data-testid="abaqus-keys" onToggle={(e) => onOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary><h4>Send straight from Abaqus</h4></summary>
-      <p>With an upload key the connector sends the file itself and prints the answer in your terminal. Create a key once, save it beside the connector, and add three options to the command.</p>
+      <p>With an upload key the connector sends its file here by itself. Create a key once and save it beside the connector.</p>
       <form className="studio-abaqus-key-form" onSubmit={(e) => { e.preventDefault(); void create(); }}>
         <label htmlFor="abaqus-key-name">Where you will use it</label>
         <input id="abaqus-key-name" type="text" maxLength={100} value={name} placeholder="lab workstation" autoComplete="off" onChange={(e) => setName(e.target.value)} />
@@ -468,10 +487,10 @@ function UploadKeys({ apiBase, job, units, limit, waiting, onOpen }: { apiBase: 
           </p>
         </div>
       ) : null}
-      <p>Then, where the connector and your job are:</p>
+      <p>Then run this where the connector and your job are:</p>
       <pre className="studio-abaqus-command" data-testid="abaqus-command"><code>{command}</code></pre>
       <p className="studio-abaqus-actions"><button type="button" className="studio-text-button" onClick={() => void copy("command", command)}>{copied === "command" ? "Copied" : "Copy the command"}</button></p>
-      <p className="studio-muted">Read the line it prints: &ldquo;sent:&rdquo; with the answer, or &ldquo;not sent:&rdquo; with the reason. The file is written beside your job either way.</p>
+      <p className="studio-muted">It prints &ldquo;sent:&rdquo; with the answer, or &ldquo;not sent:&rdquo; with the reason, and keeps the file beside your job either way.</p>
       {waiting ? <p className="studio-status" role="status" data-testid="abaqus-waiting">Waiting for a file from Abaqus…</p> : null}
       {message ? <p className="studio-alert" role="alert">{message}</p> : null}
       {live.length ? (
