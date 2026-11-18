@@ -266,7 +266,8 @@ test("after the demo the page is white, and Mission and Services are two short b
     return { mesh: mesh.backgroundImage, lens: lens.backgroundImage, press: [mesh.pointerEvents, shade.pointerEvents], shade: shade.backgroundImage, own: getComputedStyle(card).isolation, ground: getComputedStyle(card).backgroundColor };
   });
   expect(layers.mesh).toBe(layers.lens);
-  expect(layers.mesh).toMatch(/^repeating-linear-gradient\(to right, rgba\(255, 255, 255, 0\.18\) 0px, rgba\(255, 255, 255, 0\.18\) 1px, rgba\(0, 0, 0, 0\) 1px, rgba\(0, 0, 0, 0\) 18px\), repeating-linear-gradient\((to bottom, )?rgba\(255, 255, 255, 0\.18\) 0px,/);
+  // (A production build writes "to right" as 90deg; it is the same line.)
+  expect(layers.mesh).toMatch(/^repeating-linear-gradient\((to right|90deg), rgba\(255, 255, 255, 0\.18\) 0px, rgba\(255, 255, 255, 0\.18\) 1px, rgba\(0, 0, 0, 0\) 1px, rgba\(0, 0, 0, 0\) 18px\), repeating-linear-gradient\((to bottom, )?rgba\(255, 255, 255, 0\.18\) 0px,/);
   expect(layers).toMatchObject({ press: ["none", "none"], own: "isolate", ground: "rgb(0, 0, 0)" });
   expect(layers.shade).toMatch(/^radial-gradient\(/);
   // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
