@@ -556,10 +556,13 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null }: {
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null,
+  emphasis = null }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
   /** a plate's boundary conditions and loads proposed and not applied yet, drawn dashed (ADR-0110) */
   proposed?: ProposedInputs | null;
+  /** the tab of the model tree open on the left: its boundary conditions or its loads drawn bolder (ADR-0111) */
+  emphasis?: "conditions" | "loads" | null;
   /** told the element clicked on the model, so the assistant can read "here" (ADR-0099) */
   onPicked?: (element: number | null) => void;
   /** a place the assistant answered about: framed on the model once per `at` (ADR-0099) */
@@ -627,7 +630,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
       <div className="studio-scene-block">
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={inputs.held} loads={inputs.loads} about={inputs.about} proposed={pending}
-          highlight={highlight} picked={picked}
+          highlight={highlight} picked={picked} emphasis={emphasis}
           wireframe={wireframe} onPick={setPicked} />
         <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} />
       </div>

@@ -24,6 +24,8 @@ export type SceneProps = {
   held?: SceneMarker[];
   loaded?: SceneLoad | null;
   loads?: SceneLoad[]; // further loads of a plate (ADR-0054), drawn like `loaded`
+  /** The tab of the model tree open on the left: its boundary conditions or its loads are drawn bolder (ADR-0111). */
+  emphasis?: "conditions" | "loads" | null;
   /** What the assistant proposes and the engineer has not applied yet, drawn dashed (ADR-0110). */
   proposed?: { held: SceneMarker[]; loads: SceneLoad[] } | null;
   /** The model the inputs act on, in a few words: material, layup, mesh, step. Shown under the lists. */
@@ -149,7 +151,7 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, onPick 
 
 export function SceneCanvas(props: SceneProps) {
   const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
-    highlight = null, picked = null, wireframe = true, onPick } = props;
+    highlight = null, picked = null, wireframe = true, onPick, emphasis = null } = props;
   const [focus, setFocus] = useState<string | null>(null); // the line of the list clicked: its region is drawn bolder
   const [webgl, setWebgl] = useState<boolean | null>(null);
   useEffect(() => { setWebgl(webglAvailable()); }, []);
@@ -167,7 +169,7 @@ export function SceneCanvas(props: SceneProps) {
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
     <div className="studio-scene-wrap">
-      <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""}>
+      <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""} data-emphasis={emphasis ?? ""}>
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }}
         camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}
         onPointerMissed={() => onPick?.(null)}>
@@ -180,7 +182,7 @@ export function SceneCanvas(props: SceneProps) {
           const z = top + meanHeight(heights, marker.nodes);
           return (
             <group key={`held-${i}`}>
-              <Line points={frame(box, z)} color={HELD} lineWidth={focus === `held-${i}` ? 5 : 2} />
+              <Line points={frame(box, z)} color={HELD} lineWidth={focus === `held-${i}` ? 5 : emphasis === "conditions" ? 4 : 2} />
               {marker.dofs?.length ? <HeldSymbols xy={xy} nodes={marker.nodes} dofs={marker.dofs} z={z} height={symbol} /> : null}
             </group>
           );
@@ -192,7 +194,8 @@ export function SceneCanvas(props: SceneProps) {
           return (
             <group key={`load-${i}`}>
               {/* a pressure's arrows cover its face, so its frame, which would hide the edges' own, is drawn only when its line is clicked */}
-              {load.control !== "pressure" || focus === `load-${i}` ? <Line points={frame(box, z)} color={LOADED} lineWidth={focus === `load-${i}` ? 5 : 2} /> : null}
+              {load.control !== "pressure" || focus === `load-${i}` || emphasis === "loads"
+                ? <Line points={frame(box, z)} color={LOADED} lineWidth={focus === `load-${i}` ? 5 : emphasis === "loads" ? 4 : 2} /> : null}
               <LoadArrows xy={xy} nodes={load.nodes} direction={load.direction} z={z} length={arrow} />
             </group>
           );

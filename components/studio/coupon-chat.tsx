@@ -6,7 +6,7 @@ import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, li
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
-import { isConditionOrLoad, setupAsked, termAsked, termLines, type AbaqusTerm, type TermQuestion } from "@/lib/abaqus-terms";
+import { isConditionOrLoad, setupAsked, termAsked, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
 import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
@@ -26,8 +26,9 @@ import {
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
-import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
-import { showPanel } from "@/components/workspace/panels/step-panel";
+import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
+import { tab, TAB_OF_STEP, tabOfKey, tabToFix, type TabId } from "@/lib/model-tree";
+import { revealPanel, showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { resultsOnPage } from "./use-imported-model";
@@ -129,8 +130,9 @@ const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> =
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5). */
-function PanelLink({ id, children }: { id: PanelId; children: ReactNode }) {
+/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5); a step panel of the full form, or a tab of the
+ * model tree (ADR-0111). */
+function PanelLink({ id, children }: { id: PanelId | TabId; children: ReactNode }) {
   return <button type="button" data-panel={id} onClick={() => showPanel(id)}><SlidersHorizontal size={14} /> {children}</button>;
 }
 
@@ -417,8 +419,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string, echoed = false) {
     const step = nextStep(formRef.current, simpleRef.current);
-    const id = panelOfStep(step);
-    const title = panel(id).title;
+    const id = allTests ? panelOfStep(step) : TAB_OF_STEP[step]; // the full form's step panel, or the model tree's tab (ADR-0111)
+    const title = allTests ? panel(panelOfStep(step)).title : tab(TAB_OF_STEP[step]).title;
     const named = toolNamed(text) === "coupon";
     add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Not sure what to change",
       body: <div data-testid="chat-redirect" data-panel={id}>
@@ -559,7 +561,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** This model's boundary conditions or loads, one line each as the list under the model says them (ADR-0110). `title` replaces the
    * heading when the message asked to add one where the setup fixes them. */
-  function answerApplied(text: string, term: AbaqusTerm, title: string | null) {
+  function answerApplied(text: string, term: FeaTerm, title: string | null) {
     const applied = appliedNow();
     const loads = term.id === "load" || ["concentrated-force", "pressure", "shell-edge-load"].includes(term.id);
     const both = title !== null; // a request to add one is answered with everything the setup holds
@@ -580,7 +582,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** A request to add something the setup does not take from a message (ADR-0110): a coupon's boundary conditions and loads are its test's,
    * a model comes partitioned, there is one step and no interaction. Said once; no row changes. */
-  function answerSetup(text: string, term: AbaqusTerm) {
+  function answerSetup(text: string, term: FeaTerm) {
     if (isConditionOrLoad(term)) {
       const onPlate = formRef.current.test === PLATE_TEST;
       if (onPlate) { // a plate with no model to read the message: its panel takes them
@@ -728,6 +730,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (next !== formRef.current) setForm(next);
     if (onPlate) setPlate(lists);
     clearRun();
+    reveal(onPlate ? ["region"] : Object.keys(rows));
     if (onPlate && next.test === PLATE_TEST) void check(next, lists);
     else proceed(next);
   }
@@ -769,7 +772,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     setForm(next); clearRun();
+    reveal(Object.keys(rows));
     proceed(next);
+  }
+
+  /** Opens, on the left, the panel or tab a message just changed and marks it (ADR-0111): the change is seen where it lives. */
+  function reveal(keys: string[]) {
+    const target = keys.map((key) => (allTests ? panelOfKey(key) : tabOfKey(key))).find((id) => id !== null);
+    if (target) window.setTimeout(() => revealPanel(target), 0);
   }
 
   function askWidget(step: ChatStep | "reopen", isLive: boolean): ReactNode {
@@ -835,7 +845,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
-            <Chips><PanelLink id="layup">My own constants, under Layup and material</PanelLink></Chips>
+            <Chips><PanelLink id={allTests ? "layup" : "material"}>My own constants, under {allTests ? "Layup and material" : "Material"}</PanelLink></Chips>
           </>
         );
       case "shear": {
@@ -850,7 +860,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
               </button>
             ) : null}
-            <PanelLink id="layup">Measured values, under Layup and material</PanelLink>
+            <PanelLink id={allTests ? "layup" : "material"}>Measured values, under {allTests ? "Layup and material" : "Material"}</PanelLink>
           </Chips>
         );
       }
@@ -867,7 +877,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             </Chips>
             <LayupInput needThickness={needThickness} form={form} allTests={allTests} onApply={(notation, rows) => answer(notation, rows)} />
             {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length} (library).</p> : null}
-            <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips>
+            {allTests ? <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips> : null}
           </>
         );
       }
@@ -894,7 +904,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               {(LOAD_CHIPS[units] ?? []).map((chip) => (
                 <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
               ))}
-              <PanelLink id="loads">Another load, under Boundary conditions and loads</PanelLink>
+              <PanelLink id="loads">Another load, under {allTests ? "Boundary conditions and loads" : "Loads"}</PanelLink>
             </Chips>
           </>
         );
@@ -919,9 +929,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
           <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} allTests={allTests} onApply={(rows, echo) => answer(echo, rows)}
             link={(item) => {
-              const target = panelToFix(item);
+              const target = allTests ? panelToFix(item) : tabToFix(item); // the full form's step panel, or the model tree's tab (ADR-0111)
+              const title = target ? (allTests ? panel(target as PanelId).title : tab(target as TabId).title) : "";
               const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
-              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
+              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {title}</button>
                 : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
             }} />
         ) : null}
@@ -936,7 +947,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
             <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
-            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "tension-change")}><SlidersHorizontal size={14} /> Change settings</button>
+            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "geometry")}><SlidersHorizontal size={14} /> Edit the model</button>
           </div>
         ) : null}
       </div>

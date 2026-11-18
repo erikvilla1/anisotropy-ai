@@ -49,7 +49,12 @@ export type ProjectContextValue = {
   /** A plate's boundary conditions and loads the assistant proposes and the engineer has not applied: drawn dashed on the model (ADR-0110). */
   proposed: ProposedInputs | null;
   setProposed(next: ProposedInputs | null): void;
+  /** The tab of the model tree open on the left whose part the model draws bolder: its boundary conditions or its loads (ADR-0111). */
+  emphasis: Emphasis;
+  setEmphasis(next: Emphasis): void;
 };
+
+export type Emphasis = "conditions" | "loads" | null;
 
 /** What a proposal card holds for a plate (ADR-0101), as the model draws it before it is applied (ADR-0110). */
 export type ProposedInputs = { supports: { region: string; dofs: number[] }[]; loads: { region: string; kind: "force" | "pressure"; dof: number | null; value: string; unit: string }[] };
@@ -113,6 +118,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [place, setPlace] = useState<Place | null>(null);
   const showPlace = useCallback((next: Omit<Place, "at">) => setPlace((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
   const [proposed, setProposed] = useState<ProposedInputs | null>(null);
+  const [emphasis, setEmphasis] = useState<Emphasis>(null);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
@@ -121,7 +127,9 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, imports, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
     setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
-  }), [apiBaseUrl, allTests, imports, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed]);
+    emphasis, setEmphasis,
+  }), [apiBaseUrl, allTests, imports, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed,
+    emphasis]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
