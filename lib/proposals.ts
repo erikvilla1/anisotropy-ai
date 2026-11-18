@@ -116,7 +116,7 @@ export function plateLines(answer: Pick<ProposalAnswer, "supports" | "loads">): 
   ];
 }
 
-/** The plate's lists with the ticked supports and loads added, each as a row of the Loads and supports panel. */
+/** The plate's lists with the ticked supports and loads added, each as a row of the Boundary conditions and loads panel. */
 export function plateWith(lists: PlateLists, answer: Pick<ProposalAnswer, "supports" | "loads">, ticked: Set<string>): PlateLists {
   const supports = answer.supports.filter((_, i) => ticked.has(`support:${i}`)).map((s) => ({ region: s.region, dofs: [...s.dofs], value: "" }));
   const loads = answer.loads.filter((_, i) => ticked.has(`load:${i}`)).map((l): PlateLoad => (l.kind === "pressure"

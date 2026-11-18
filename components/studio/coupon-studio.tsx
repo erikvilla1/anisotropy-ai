@@ -5,40 +5,25 @@ import type { Preview } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
-import { ANALYSIS_UNAVAILABLE, heldWords, loadWords } from "@/lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { JobProgress } from "./job-progress";
 import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
 import { Scene } from "./scene";
-import type { SceneMarker } from "./scene-canvas";
+import type { SceneProps } from "./scene-canvas";
+import { proposedInputs, sceneInputs } from "./scene-inputs";
 import { SketchScene } from "./sketch";
 import { shownResults } from "./use-coupon-run";
 
-/** The nodes a load acts on: a node set, or the corner nodes of an element set (a pressure on an area region). */
-function nodesOf(preview: Preview, set: string): number[] {
-  if (preview.mesh.node_sets[set]) return preview.mesh.node_sets[set];
-  const elements = preview.mesh.element_sets[set];
-  if (!elements) return [];
-  return [...new Set(elements.flatMap((e) => preview.mesh.quads[e] ?? []))];
-}
-
-type Load = NonNullable<Preview["loads"]>[number];
-const sameLoad = (a: Load, b: Load) => a.set === b.set && a.direction === b.direction && a.value === b.value && a.control === b.control;
-
-/** The package's preview: the mesh with what is held and loaded, before a run. Each set is one line of the key, in words ("Bottom grip:
- * fixed"); the load the preview also lists among `loads` is drawn and keyed once (audit fea-run-16). */
-export function PreviewScene({ preview, onPick, picked }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null }) {
-  const held: SceneMarker[] = [...new Set(preview.held.map((h) => h.set))].map((set) => {
-    const of = preview.held.filter((h) => h.set === set);
-    return { nodes: preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
-  });
-  const loaded = preview.loaded ? { nodes: nodesOf(preview, preview.loaded.set), direction: preview.loaded.direction, label: loadWords(preview.loaded) } : null;
-  const loads = (preview.loads ?? []).filter((l) => !preview.loaded || !sameLoad(l, preview.loaded))
-    .map((l) => ({ nodes: nodesOf(preview, l.set), direction: l.direction, label: loadWords(l) }));
+/** The package's preview: the mesh with every boundary condition and load drawn on it and listed under it, in words (ADR-0110). */
+export function PreviewScene({ preview, onPick, picked, proposed }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null;
+  proposed?: SceneProps["proposed"] }) {
+  const { held, loads, about } = sceneInputs(preview);
   return (
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
-      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} loads={loads} onPick={onPick} picked={picked ?? null} />
+      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
+        about={about} onPick={onPick} picked={picked ?? null} />
       {preview.shape?.length ? <p className="studio-muted" data-testid="preview-shape">{shapeWords(preview.shape)}</p> : null}
       {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
     </div>
@@ -49,7 +34,7 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
  * it, the fields after a run; a plate's regions are picked here by clicking an element (ADR-0054). Every number comes from the fea package
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setPlate, run: runner, picked, setPicked, place } = useProject();
+  const { form, plate, setPlate, run: runner, picked, setPicked, place, proposed } = useProject();
   const { checked, job, explanation, live, living, problem } = runner;
   // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
   const { fields: shown, live: showLive } = shownResults(runner);
@@ -72,13 +57,14 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
           {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
             live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
-            onPicked={setPicked} place={place} />
+            onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} />
         </>
       ) : (
         <>
           {checked?.preview ? (
             <>
-              <PreviewScene preview={checked.preview} onPick={isPlate ? setPicked : undefined} picked={pickedElement} />
+              <PreviewScene preview={checked.preview} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
+                proposed={isPlate ? proposedInputs(checked.preview, proposed) : null} />
               {isPlate && pickedElement !== null ? (() => {
                 const preview = checked.preview;
                 const touched = regionsOfElement(pickedElement, preview.mesh.quads, preview.mesh.node_sets, preview.mesh.element_sets, regionOptions(form, plate));

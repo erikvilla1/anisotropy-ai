@@ -240,7 +240,11 @@ test("what is held and loaded reads in words, one line per set (audit fea-run-16
   assert.equal(setWords("the top grip"), "the top grip");
   assert.equal(setWords("Edge-Left"), "Edge-Left"); // a plate's own region, as named
   const top = preview.held.filter((h: { set: string }) => h.set === "Grip-Top");
-  assert.equal(heldWords("Grip-Bottom", [1, 2, 3, 4, 5, 6], []), "Bottom grip: fixed");
+  assert.equal(heldWords("Grip-Bottom", [1, 2, 3, 4, 5, 6], []), "Bottom grip: fixed (encastre)");
+  // Abaqus's names for a set of held directions, beside the directions (ADR-0110)
+  assert.equal(heldWords("Edge-Left", [1, 2, 3], ["x", "y", "z"]), "Edge-Left: held along x, y, z (pinned)");
+  assert.equal(heldWords("Edge-Left", [1, 5, 6], ["x", "tilt about y", "rotation about z"]), "Edge-Left: held along x, tilt about y, rotation about z (XSYMM)");
+  assert.equal(heldWords("Edge-Bottom", [2, 4, 6], ["y", "tilt about x", "rotation about z"]), "Edge-Bottom: held along y, tilt about x, rotation about z (YSYMM)");
   assert.equal(heldWords("Grip-Top", top.flatMap((h: { dofs: number[] }) => h.dofs), top.flatMap((h: { directions: string[] }) => h.directions)),
     "Top grip: free to move along the coupon only");
   assert.equal(heldWords("Support-Left", [3], ["z"]), "Left support: held along z");

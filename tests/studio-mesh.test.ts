@@ -15,6 +15,15 @@ test("an element size written in a message is read into its row (ADR-0088 amendm
   assert.equal(readMesh("element size 0", form), null);
 });
 
+test("Abaqus's seed words state the same element size (ADR-0110)", () => {
+  for (const [message, size] of [["seed 2 mm", "2"], ["global seed of 1.5", "1.5"], ["approximate global size 3", "3"], ["seed the part at 2.5 mm", "2.5"],
+    ["Global seeds: 1", "1"], ["seeding to 0.5", "0.5"]] as const) {
+    assert.deepEqual(readMesh(message, form)?.rows, { element_size: size }, message);
+  }
+  assert.equal(readMesh("what is a seed?", form), null);
+  assert.deepEqual(applyMessage(form, "seed 1.5 mm").understood, ["element size 1.5 mm"]);
+});
+
 test("finer is half the element size the form holds and coarser is twice it, each said with the size before (ADR-0088 amendment 2)", () => {
   assert.equal(FINER, 0.5);
   assert.equal(COARSER, 2);

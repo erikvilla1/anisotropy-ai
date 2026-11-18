@@ -5,14 +5,16 @@ import { explainJob, sameResults, StudioError, type Convergence, type ExplainAns
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
-import { customerText, downloadable, heldWords, loadWords, setWords, shownSentence } from "@/lib/studio-copy";
+import { customerText, downloadable, setWords, shownSentence } from "@/lib/studio-copy";
 import { useAllTests, type Place } from "./project-context";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { AbaqusCard } from "./abaqus-card";
 import { JobFiles, namingOf } from "./job-files";
 import { Scene } from "./scene";
-import type { SceneField, SceneMarker } from "./scene-canvas";
+import type { SceneField } from "./scene-canvas";
+import { proposedInputs, sceneInputs } from "./scene-inputs";
+import type { ProposedInputs } from "./project-context";
 
 /** The contour choices: the smooth ramp, or bands with an isoline at every band boundary, each boundary a labelled tick (ADR-0063). */
 export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"]];
@@ -554,8 +556,10 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null }: {
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
+  /** a plate's boundary conditions and loads proposed and not applied yet, drawn dashed (ADR-0110) */
+  proposed?: ProposedInputs | null;
   /** told the element clicked on the model, so the assistant can read "here" (ADR-0099) */
   onPicked?: (element: number | null) => void;
   /** a place the assistant answered about: framed on the model once per `at` (ADR-0099) */
@@ -597,14 +601,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range), [values]);
   const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours } }),
     [values, colorScale, contours]);
-  // the sets in words, one line per set, as the model's key says them (audit fea-run-16)
-  const held: SceneMarker[] = preview ? [...new Set(preview.held.map((h) => h.set))].map((set) => {
-    const of = preview.held.filter((h) => h.set === set);
-    return { nodes: fields.mesh.node_sets[set] ?? preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
-  }) : [];
-  const load = preview?.loaded ?? null; // a solved model states a load; a plate's shape, which has none, is never solved (ADR-0101 amendment 1)
-  const loaded = preview && load ? { nodes: fields.mesh.node_sets[load.set] ?? preview.mesh.node_sets[load.set] ?? [],
-    direction: load.direction, label: loadWords(load) } : null;
+  // every boundary condition and load drawn and listed in words, as before the run (ADR-0110; audit fea-run-16)
+  const inputs = useMemo(() => (preview ? sceneInputs(preview, fields.mesh) : { held: [], loads: [], about: [] }), [preview, fields.mesh]);
+  const pending = useMemo(() => (preview ? proposedInputs(preview, proposed, fields.mesh) : null), [preview, proposed, fields.mesh]);
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
   const show = (element: number, ply: number, criterion: string, face?: string | null) => {
     setHighlight(element); setPicked(element);
@@ -634,7 +633,8 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
       ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating…</p> : null}
       <div className="studio-scene-block">
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
-          displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={held} loaded={loaded} highlight={highlight} picked={picked}
+          displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={inputs.held} loads={inputs.loads} about={inputs.about} proposed={pending}
+          highlight={highlight} picked={picked}
           wireframe={wireframe} onPick={setPicked} />
         <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} />
       </div>

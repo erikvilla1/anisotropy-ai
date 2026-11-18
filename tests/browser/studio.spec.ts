@@ -1458,10 +1458,14 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   const second = page.getByTestId("proposal-card").last();
   await expect(second.locator("[data-key='load:0']")).toContainText("Pressure on Face 0.01 MPa");
   await expect(second.getByTestId("proposal-dropped")).toContainText("it is not where you clicked");
+  // proposed and not applied: drawn dashed on the model and listed apart from what is applied (ADR-0110)
+  await expect(page.getByTestId("applied-proposed")).toContainText("Face: pressure 0.01 MPa");
+  await expect(page.getByTestId("applied-conditions")).toContainText("Edge-Bottom: held along z, rotation about y"); // the checked preview's own (the stand-in package's)
   expect(asked[1].plate?.here).toContain("Face");
   expect(asked[1].plate).toMatchObject({ held: ["Edge-Bottom"], loaded: ["Edge-Top"] });
   await second.getByTestId("proposal-apply").click();
   await expect(page.getByTestId("plate-words")).toContainText("Face under a pressure of 0.01 MPa");
+  await expect(page.getByTestId("applied-proposed")).toHaveCount(0);
   await expect.poll(() => calls.checks.length).toBe(2);
   expect((calls.checks[1] as { values: Record<string, unknown> }).values.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }, { region: "Face", pressure: 0.01 }]);
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
@@ -1540,6 +1544,51 @@ test("a plate with nothing held shows its shape, and the first hold is the edge 
   expect((calls.checks[0] as { values: Record<string, unknown> }).values.supports).toEqual([{ region: clicked, dofs: [1, 2, 3] }]);
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
   for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+  expect(browserErrors).toEqual([]);
+});
+
+test("what is applied is drawn and listed under the model before and after a run, and Abaqus's words are answered from the glossary (ADR-0110)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  // a word's meaning is answered before anything is solved: no result and no model is needed
+  await say("what is a BC?");
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "boundary-condition");
+  await expect(page.getByTestId("chat-term").last()).toContainText("Holds part of the model still");
+  // under the model: each boundary condition with what it holds, the load, and the model they act on
+  const applied = page.getByTestId("applied");
+  await expect(applied.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
+  await expect(applied.getByTestId("applied-conditions")).toContainText("Top grip: free to move along the coupon only");
+  await expect(applied.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
+  await expect(applied.getByTestId("applied-about")).toContainText("[45/0/-45/90]s, 8 plies");
+  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the canvas's clipped box
+  const bottom = applied.getByRole("button", { name: "Bottom grip: fixed (encastre)" });
+  await bottom.click();
+  await expect(bottom).toHaveAttribute("aria-pressed", "true"); // its set is framed on the model
+  await bottom.click();
+  await expect(bottom).toHaveAttribute("aria-pressed", "false");
+  // this model's own, in the same words; a request to add one where the test sets them; a name with one meaning
+  await say("what are the boundary conditions?");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("Bottom grip: fixed (encastre)");
+  await say("add a boundary condition on the left edge");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("set by its test");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("Top grip: pulled 1 mm along the coupon");
+  await say("what does XSYMM mean?");
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "symmetry");
+  await expect(page.getByTestId("chat-term").last()).toContainText("XSYMM holds a face as a mirror across x");
+  expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
+  // after the run the model draws and lists the same, not the first load only
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
+  await expect(page.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
   expect(browserErrors).toEqual([]);
 });
 

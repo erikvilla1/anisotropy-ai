@@ -425,15 +425,20 @@ const SET_WORDS: Record<string, string> = { "Grip-Bottom": "bottom grip", "Grip-
   "Pin-Left": "left pin", "Pin-Right": "right pin" };
 export const setWords = (set: string): string => SET_WORDS[set] ?? (/^Nose/.test(set) ? "loading nose" : set);
 
-/** A held set in one line, every direction it holds merged: "Bottom grip: fixed", "Top grip: free to move along the coupon only", or the
- * directions ("Left support: held along z"). `dofs` 1-3 are x, y, z and 4-6 the rotations about them; y runs along a coupon. */
+/** A held set in one line, every direction it holds merged: "Bottom grip: fixed (encastre)", "Top grip: free to move along the coupon
+ * only", or the directions ("Left support: held along z"), with Abaqus's name when it has one ("held along x, y, z (pinned)").
+ * `dofs` 1-3 are x, y, z and 4-6 the rotations about them; y runs along a coupon. */
 export function heldWords(set: string, dofs: number[], directions: string[]): string {
   const held = new Set(dofs);
   const name = sentence(setWords(set));
-  if ([1, 2, 3, 4, 5, 6].every((d) => held.has(d))) return `${name}: fixed`;
+  if ([1, 2, 3, 4, 5, 6].every((d) => held.has(d))) return `${name}: fixed (encastre)`;
   if (!held.has(2) && [1, 3, 4, 5, 6].every((d) => held.has(d))) return `${name}: free to move along the coupon only`;
-  return `${name}: held along ${[...new Set(directions)].join(", ")}`;
+  const named = ABAQUS_NAMES.find(([of]) => of.length === held.size && of.every((d) => held.has(d)))?.[1];
+  return `${name}: held along ${[...new Set(directions)].join(", ")}${named ? ` (${named})` : ""}`;
 }
+
+/** The boundary conditions Abaqus has a name for, by the directions they hold (ADR-0110): said beside the directions, never in place of them. */
+const ABAQUS_NAMES: [number[], string][] = [[[1, 2, 3], "pinned"], [[1, 5, 6], "XSYMM"], [[2, 4, 6], "YSYMM"], [[3, 4, 5], "ZSYMM"]];
 
 /** What a loaded set does, in the words the results use: "Top grip: pulled 1 mm along the coupon", "Top grip: pulled by 10000 N along the
  * coupon"; a load across or out of the plane names its direction. */
