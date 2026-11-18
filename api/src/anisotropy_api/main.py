@@ -599,9 +599,9 @@ def import_model(actor: Actor, request: Request, data: Annotated[bytes, Depends(
     percent-encoded, which so stays out of the address and its logs. The fea package reads it, or
     refuses it with the line, draws it and solves it with our kernel as it stands: nothing is repaired or filled in. The answer is
     the requester's alone and nothing of the deck is kept: the run record holds its name, size and digest, the state, the counts of
-    what was read and the answer's summary. Offered where every test is offered (ADR-0089): 403 otherwise. 413 past the size a
+    what was read and the answer's summary. Offered where every test is offered, and to a founder's sign-in (ADR-0089 amendment 6): 403 otherwise. 413 past the size a
     model may have, 429 when every solver stays busy, 422 when one does not answer in time, 503 when none can run."""
-    if not _every_test(request):
+    if not _imports(request):
         raise HTTPException(status_code=403, detail="Importing a model is not offered yet.")
     name = unquote(x_anisotropy_model_name or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:200] or "model.inp"
     live: LiveSolver = request.app.state.live
@@ -1508,20 +1508,28 @@ def workspace_assistant(request: Request) -> AssistantInfo:
 
 @app.get("/v1/coupon-tests", response_model=CouponTests)
 def coupon_tests(request: Request) -> CouponTests:
-    """Whether every coupon test is offered to the requester (ADR-0089); the page asks once and offers the unnotched tension coupon only
-    unless this says all: the machine's switch, or a founder's sign-in (amendment 5). Not a run: nothing is computed or recorded."""
-    return CouponTests(all=_every_test(request))
+    """What is offered to the requester (ADR-0089); the page asks once. `all`: every coupon test, by the machine's switch alone; the
+    page offers the unnotched tension coupon only unless this says so. `imports`: bringing a model in as a file (ADR-0105), by the
+    switch or a founder's sign-in (amendment 6). Not a run: nothing is computed or recorded."""
+    return CouponTests(all=_every_test(request), imports=_imports(request))
 
 
 def _every_test(request: Request) -> bool:
-    """Whether every test is offered to this request (ADR-0089 amendment 5): the machine's switch is on, or the signed-in email
-    Cloudflare Access verified is one of the founders'. Nothing the request itself says can turn it on. Without the startup's
+    """Whether every test is offered to this request (ADR-0089): the machine's switch is on. A founder's sign-in was offered every
+    test from amendment 5 to amendment 6, and is no longer. Nothing the request itself says can turn it on. Without the startup's
     settings (a test client), the environment is read."""
     settings = getattr(request.app.state, "settings", None)
-    if settings is None:
-        return all_tests(environment())
+    return all_tests(environment()) if settings is None else settings.all_tests
+
+
+def _imports(request: Request) -> bool:
+    """Whether a model may be brought in as a file by this request (ADR-0105; ADR-0089 amendment 6): the machine's switch is on, or the
+    signed-in email Cloudflare Access verified is one of the founders'. Nothing the request itself says can turn it on."""
+    if _every_test(request):
+        return True
+    settings = getattr(request.app.state, "settings", None)
     email = getattr(request.state, "user_email", None)
-    return settings.all_tests or (email is not None and email.strip().lower() in settings.founder_emails)
+    return settings is not None and email is not None and email.strip().lower() in settings.founder_emails
 
 
 @app.post("/v1/workspace/proposals", response_model=ProposalResponse)

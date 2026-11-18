@@ -11,12 +11,12 @@ const UNREAD = [{ what: "solid elements", keyword: "C3D8R", lines: [15] }, { wha
 /** The API a model is brought in through (ADR-0105), played from the package's own answer for the public gripped coupon
  * (tests/fixtures/studio-import, which fea/tests/test_imported.py keeps the package's); a file that opens with *Solid is refused as the
  * reader refuses one. `sent` keeps each import as it was asked, and `others` every other request that would compute something. */
-async function mockApi(page: Page, sent: { url: string; name: string | null; bytes: number }[], others: string[], allTests = true) {
+async function mockApi(page: Page, sent: { url: string; name: string | null; bytes: number }[], others: string[], allTests = true, imports = allTests) {
   await page.route(API, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.pathname === "/v1/coupon-tests") return json({ all: allTests });
+    if (url.pathname === "/v1/coupon-tests") return json({ all: allTests, imports });
     if (url.pathname === "/v1/workspace/assistant") return json({ proposes: false, provider: null, model: null });
     if (url.pathname === "/v1/coupons") return json([]);
     if (url.pathname.startsWith("/v1/projects")) {
@@ -125,4 +125,23 @@ test("where one workflow is offered, a model cannot be imported (ADR-0089)", asy
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expect(page.getByTestId("import-open")).toHaveCount(0);
+});
+
+test("a founder's sign-in keeps the product's own screen, the tension coupon alone, with the import on it (ADR-0089 amendment 6)", async ({ page }) => {
+  const sent: { url: string; name: string | null; bytes: number }[] = [];
+  await mockApi(page, sent, [], false, true);
+  await page.goto("/workspace/fea");
+  await expect(page.getByTestId("tension-screen")).toBeVisible(); // no list of tests: the screen every customer sees
+  await expect(page.getByTestId("studio-form")).toHaveCount(0);
+  await page.getByTestId("import-open").click();
+  const rail = page.getByTestId("import-rail");
+  await expect(rail).toBeVisible();
+  await expect(page.getByTestId("tension-screen")).toHaveCount(0); // the coupon waits behind the model
+  await page.getByTestId("import-file").setInputFiles({ name: "coupon.inp", mimeType: "text/plain", buffer: DECK });
+  await page.getByTestId("import-units").selectOption("mm-MPa");
+  await page.getByTestId("import-send").click();
+  await expect(page.getByTestId("import-stage")).toHaveAttribute("data-state", "solved", { timeout: 20_000 });
+  expect(sent).toHaveLength(1);
+  await page.getByTestId("import-close").click();
+  await expect(page.getByTestId("tension-screen")).toBeVisible(); // and back to the same screen
 });
