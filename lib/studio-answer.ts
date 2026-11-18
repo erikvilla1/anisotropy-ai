@@ -50,6 +50,21 @@ export function answerOf(fields: Fields): Answer | null {
   };
 }
 
+/** The first-ply stat of the chat's Results card: the answer the page and the list of past analyses lead with (ADR-0085), read where the
+ * package read it, and the earlier failure outside it in one short line. Null for a result without the package's answer. */
+export type AnswerStat = { fails: boolean; verdict: "Holds" | "Fails"; factor: string; facts: string; outside: string | null };
+
+export function answerStat(fields: Fields, print: (value: number) => string): AnswerStat | null {
+  const a = answerOf(fields);
+  if (!a) return null;
+  const e = a.earliest, o = a.outside;
+  const where = o ? (o.touches_grip ? "At a grip edge" : o.near_tab ? "Beside a tab line" : `Outside ${a.basisWords}`) : "";
+  return {
+    fails: e.fails, verdict: e.fails ? "Fails" : "Holds", factor: print(e.factor), facts: `${e.name}, ply ${e.ply} · ${e.angle}°, ${a.basisWords}`,
+    outside: o ? `${where} R = ${print(o.factor)}${o.touches_grip || o.near_tab ? ", reported apart: stress there grows with a finer mesh." : ", reported apart."}` : null,
+  };
+}
+
 /** The largest ply stresses on the answer's basis, one row per component and sign, in the order an engineer reads them; a sign never reached
  * is left out. Each row names its ply, as the package found it over every ply. */
 export type ExtremeRow = { key: string; words: string; extreme: NonNullable<PlyExtreme> };

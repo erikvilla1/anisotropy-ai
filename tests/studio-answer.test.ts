@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Fields } from "../lib/studio-api";
-import { answerOf, extremeRows } from "../lib/studio-answer";
+import { answerOf, answerStat, extremeRows } from "../lib/studio-answer";
 
 // The answer card reads what the package wrote (ADR-0085); the fixtures are the package's own output (`studio_tool.py fixtures`).
 const fixture = (dir: string) => JSON.parse(readFileSync(join(process.cwd(), "tests", "fixtures", dir, "fields.json"), "utf8")) as Fields;
@@ -50,6 +50,24 @@ test("an older job without the package's answer shows none rather than one the p
   const fields = fixture("studio");
   const older = { ...fields, summary: { ...fields.summary, verdict: undefined } } as Fields;
   assert.equal(answerOf(older), null);
+});
+
+test("the chat's results card leads with the page's answer, the earlier failure at the grip said apart", () => {
+  const print = (value: number) => String(Number(value.toPrecision(4)));
+  const fields = fixture("studio");
+  const a = answerOf(fields)!;
+  const stat = answerStat(fields, print)!;
+  assert.equal(stat.verdict, a.earliest.fails ? "Fails" : "Holds");
+  assert.equal(stat.fails, fields.summary.verdict!.fails);
+  assert.equal(stat.factor, print(fields.summary.verdict!.factor)); // the gauge section's factor, not the whole model's lower one
+  assert.notEqual(stat.factor, print(fields.summary.fpf[fields.summary.earliest!].factor));
+  assert.equal(stat.facts, `${a.earliest.name}, ply ${a.earliest.ply} · ${a.earliest.angle}°, the gauge section`);
+  assert.equal(stat.outside, `At a grip edge R = ${print(a.outside!.factor)}, reported apart: stress there grows with a finer mesh.`);
+  const whole = answerStat(fixture("studio-bending"), print)!;
+  assert.match(whole.facts, /, the whole model$/);
+  assert.equal(whole.outside, null);
+  const older = { ...fields, summary: { ...fields.summary, verdict: undefined } } as Fields;
+  assert.equal(answerStat(older, print), null); // the card then keeps the whole model's first failure, as before
 });
 
 test("the largest ply stresses come one per component and sign, a sign never reached left out", () => {

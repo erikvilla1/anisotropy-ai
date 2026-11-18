@@ -23,7 +23,7 @@ import {
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
-import { CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
+import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
@@ -42,7 +42,9 @@ const WorkingSteps = dynamic(() => import("./working-steps").then((module) => mo
   ssr: false, loading: () => <p className="chat-note" role="status">Typesetting the working…</p>,
 });
 
-type Entry =
+/** `stage` marks an entry said while an imported model or a past run had the stage: the conversation about what is shown, which is all
+ * the chat shows while it is (ADR-0109 amendment 1). */
+type Entry = { stage?: boolean } & (
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
   | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen" }
@@ -59,7 +61,9 @@ type Entry =
   // which ply fails first, whether the coupon fails and at what loading: the package's own answer (ADR-0099 amendment 1)
   | { id: number; role: "assistant"; kind: "failure"; found: FailureAnswer; from: Fields; preview: boolean; reader: "patterns" | "model" }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
-  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean };
+  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean });
+/** The project's own cards: a question, a check, a run and its results, a proposal. Their buttons act on the project. */
+const PROJECT_KINDS = new Set(["ask", "check", "job", "result", "proposal"]);
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -164,8 +168,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   const started = useRef(false);
 
   const setForm = useCallback((next: StudioForm) => { formRef.current = next; storeForm(next); }, [storeForm]);
+  const onStage = useRef(false); // whether an imported model or a past run has the stage, for the entries said while it does
+  useEffect(() => { onStage.current = shown.readOnly; }, [shown.readOnly]);
   const add = useCallback((...items: NewEntry[]) => {
-    const made = items.map((item) => ({ ...item, id: nextId.current++ }) as Entry);
+    const made = items.map((item) => ({ stage: onStage.current, ...item, id: nextId.current++ }) as Entry);
     setEntries((list) => [...list, ...made]);
     return made;
   }, []);
@@ -189,7 +195,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     setForm(start);
     const tensionRows = ["library", "ply_1", "own_name"].some((key) => (start[key] ?? "").trim()); // the tension screen names the test itself
     if (simpleRef.current ? tensionRows : start.test) {
-      add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "Picked up from the panels",
+      add({ role: "assistant", kind: "text", stage: false, title: restored ? "Picked up where you left off" : "Picked up from the panels", // the project's, also when a past run opens with the page
         body: <p>Your inputs are kept. Here is what is still needed.</p> });
       proceed(start);
       return;
@@ -827,6 +833,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (!fields) return <p className="chat-note">Loading results…</p>;
     const s = fields.summary, lab = fields.labels;
     const earliest = s.earliest ? s.fpf[s.earliest] : null;
+    const stat = answerStat(fields, printed); // the answer the page leads with (ADR-0085); a result written before it keeps the whole model's first failure
     const check = job ? verificationOf(job.result, s.calculix ?? null) : null;
     return (
       <div data-testid="chat-result">
@@ -834,12 +841,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         <div className="chat-stats">
           <div><span>Reaction</span><strong data-testid="chat-reaction">{printed(Math.abs(s.reaction.value))} {lab.force}</strong><small>{s.reaction.sense}, {setWords(s.reaction.set)}</small></div>
           <div><span>Largest displacement</span><strong>{printed(s.max_displacement.value)} {lab.length}</strong><small>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}</small></div>
-          {earliest ? (
+          {stat ? (
+            <div className={stat.fails ? "chat-stat-bad" : undefined} data-testid="chat-result-answer" data-fails={stat.fails}><span>First-ply failure</span><strong>{stat.verdict}</strong>
+              <small>R = {stat.factor}, {stat.facts}</small></div>
+          ) : earliest ? (
             <div className={earliest.factor < 1 ? "chat-stat-bad" : undefined}><span>First-ply failure</span><strong>R = {printed(earliest.factor)}</strong>
               <small>{CRITERION_NAMES[s.earliest ?? ""] ?? s.earliest}, ply {earliest.ply} · {earliest.angle}°</small></div>
           ) : <div><span>First-ply failure</span><strong>–</strong><small>no criterion selected</small></div>}
         </div>
-        {earliest?.touches_grip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
+        {stat ? (stat.outside ? <p className="chat-note" data-testid="chat-result-outside">{stat.outside}</p> : null)
+          : earliest?.touches_grip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
         {check ? <p className={check.verified ? "chat-ok" : "chat-note"} data-testid="chat-result-line">{check.verified ? <Check size={13} /> : null} {check.line}</p> : null}
         {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state !== "running" ? "."
           : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
@@ -1031,6 +1042,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   function render(entry: Entry, latestCheck: number | undefined): ReactNode {
+    // while an imported model or a past run has the stage, the chat shows the conversation about it alone: the project's own cards (its
+    // questions, checks, runs and proposals) and what was said before wait behind it, since their buttons would act on the project, not on
+    // what is shown (ADR-0109 amendment 1)
+    if (shown.readOnly && (!entry.stage || (entry.role === "assistant" && PROJECT_KINDS.has(entry.kind)))) return null;
     if (entry.role === "user") return <div className="chat-user" key={entry.id}>{entry.text}</div>;
     let content: ReactNode;
     if (entry.kind === "ask") {
@@ -1068,14 +1083,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       <div className="chat-pane-top">
         <span><span className="status-dot" /> Coupon assistant</span>
         <span>
-          {allTests ? <button type="button" className="chat-link" onClick={() => showPanel("advanced")}><TableProperties size={13} /> All inputs</button> : null}
-          <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>
+          {allTests && !shown.readOnly ? <button type="button" className="chat-link" onClick={() => showPanel("advanced")}><TableProperties size={13} /> All inputs</button> : null}
+          {shown.readOnly ? null : <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>}
         </span>
       </div>
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
         {entries.map((e) => render(e, latestCheck))}
         {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
-        {checking ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
+        {checking && !shown.readOnly ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
         {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
