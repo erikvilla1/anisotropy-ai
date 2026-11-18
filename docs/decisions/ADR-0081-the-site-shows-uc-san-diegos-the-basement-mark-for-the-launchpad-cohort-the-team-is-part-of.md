@@ -1,8 +1,8 @@
 # ADR-0081: The site shows UC San Diego's The Basement mark for the Launchpad cohort the team is part of
 
-- Status: Proposed; the mark is shown once, in white on the hero (amendment 1); the mark is replaced by words until written permission is recorded (amendment 2)
+- Status: Proposed; the mark is shown once, in white on the hero (amendment 1); the mark is replaced by words until written permission is recorded (amendment 2); the mark is shown again on the lead's word, in black with the team band (amendments 3 and 4), and the founder confirms the permission (amendment 5)
 - Date: 2026-11-10
-- Decided by: Kai Saucedo, software and UI/UX lead (marketing and communications), 2026-11-10; Founder, 2026-11-12 (the audit's decision D14, "accept": the mark is named in words until written permission is recorded here) | Drafted by: Claude Code
+- Decided by: Kai Saucedo, software and UI/UX lead (marketing and communications), 2026-11-10; Founder, 2026-11-12 (the audit's decision D14, "accept": the mark is named in words until written permission is recorded here) and 2026-11-18 ("we do have permission to use the basements logo since we got accepted to it") | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the home page), [ADR-0018](ADR-0018-source-rights-classes.md) (rights of what we publish), `app/page.tsx`, `app/home.css`, `public/assets/partners/`
 - Area: website
 
@@ -77,3 +77,12 @@ Option 3.
 
 **Evidence.** `tests/marketing-pages.test.ts` finds the mark named once, in `components/team-band.tsx`, which About shows and the home page does not.
 
+## Amendment 5, 2026-11-18 (the founder confirms the permission to show the mark; confirmed by the founder)
+
+**Context.** Amendment 3 put the mark back on the lead's word and left the permission for the founder to confirm with the pull request. That pull request merged on 2026-11-18. The founder, the same day: "we do have permission to use the basements logo since we got accepted to it".
+
+**Options.** (1) Record the founder's confirmation and keep the mark: chosen. (2) Go back to the words of amendment 2 until something written is in hand: not taken, the founder states the permission exists.
+
+**Decision.** The founder confirms what the lead stated: the team may show The Basement's mark, on the ground that it was accepted into the Launchpad cohort. The mark stays as amendments 3 and 4 left it. Nothing written from The Basement is in the repository, and the confirmation says nothing on a one colour version of the mark.
+
+**Evidence.** The founder's words above. No evidence yet: a letter, email or licence from The Basement, or their brand guide.
