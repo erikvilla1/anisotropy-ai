@@ -947,7 +947,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
             <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
-            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "geometry")}><SlidersHorizontal size={14} /> Edit the model</button>
+            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "geometry")}><SlidersHorizontal size={14} /> Edit the setup</button>
           </div>
         ) : null}
       </div>
