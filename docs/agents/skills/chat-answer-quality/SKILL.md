@@ -74,7 +74,7 @@ IM7/8552 [45/0/-45/90]s unnotched tension, 1 mm applied.
 
 - A message sent through the model on the hosted site uses the founder's key. Read the records freely; ask before sending questions of your own.
 - Only the browser tab an agent opened is visible to it, not the founder's own tab. Say so in the report.
-- The hosted API server keeps the code and settings it started with until it restarts. Before saying a change to an answer is live, read the `git_commit` of a fresh run record.
+- Before saying a change to an answer is live, read the `git_commit` of a fresh run record. On 2026-11-17 the hosted API answered with the code of before a deploy for half an hour (ADR-0056 amendment 10 restarts it at the first request after a deploy).
 - A screenshot shows one scroll position. On 2026-11-17 "Ready to run" beside finished results was reported as a failure of criterion 9; the chat was scrolled up to messages from the page's load. Read the whole chat, or the records' times, before reporting what the chat says now.
 - Do not judge an answer by its length or polish. Judge whether the engineer could act on it without asking again.
 

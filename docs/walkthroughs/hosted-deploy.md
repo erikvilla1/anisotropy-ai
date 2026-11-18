@@ -48,7 +48,7 @@ npx wrangler secret put ANISOTROPY_ASSISTANT_MODEL      # claude-opus-5-5, or cl
 npx wrangler secret put ANTHROPIC_API_KEY               # from console.anthropic.com, with a spend limit set there
 ```
 
-The container reads these at its next start (`worker/routing.ts` lists the names it is given). After the migrations have run once against Neon (`cd api && DATABASE_URL=... uv run alembic upgrade head`, or the deploy workflow), the API is complete: with `DATABASE_URL` set and no `ANISOTROPY_RUN_RECORDS=off`, it refuses to start until the database is reachable and migrated, as locally.
+The container reads these at its next start (`worker/routing.ts` lists the names it is given). A deploy brings that start about for the API's container: the first request after it stops a container that was started with other variables or another commit, and starts it again (ADR-0056 amendment 10). A secret set with `wrangler versions secret put` reaches the API with the next deploy, not before. After the migrations have run once against Neon (`cd api && DATABASE_URL=... uv run alembic upgrade head`, or the deploy workflow), the API is complete: with `DATABASE_URL` set and no `ANISOTROPY_RUN_RECORDS=off`, it refuses to start until the database is reachable and migrated, as locally.
 
 Wait a few minutes after the first deploy before expecting the container to answer; Cloudflare provisions it after the Worker is live. `npx wrangler containers list` shows its state.
 

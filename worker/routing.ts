@@ -92,3 +92,16 @@ export function solverEnvironment(env: object): Record<string, string> {
   out[JOB_ROLE_VARIABLE] = "solver";
   return out;
 }
+
+/** What a container was started with, as one word: a SHA-256 of its variables, among them the commit the deploy names
+ * (`ANISOTROPY_GIT_COMMIT`), so a deploy or a changed secret gives another word. Only the digest is kept in the container's storage,
+ * never a value (ADR-0056 amendment 10). */
+export async function releaseOf(variables: Record<string, string>): Promise<string> {
+  const text = JSON.stringify(Object.keys(variables).sort().map((name) => [name, variables[name]]));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Whether a running container is left over from before a deploy: it runs, and what it was started with is not what it would be
+ * started with now. A container whose start left no word (one started before this was written) counts as left over. */
+export const leftOver = (running: boolean, startedWith: string | null, release: string): boolean => running && startedWith !== release;
