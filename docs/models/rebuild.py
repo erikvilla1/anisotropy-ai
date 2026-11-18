@@ -23,7 +23,7 @@ from anisotropy_fea.units import from_si
 TAGS = [
     ("INP", "Read directly from the input deck the kernel solved. Highest confidence."),
     ("INP-derived", "Computed from the deck's data (node coordinates, set membership) by our tools. Reproducible by script."),
-    ("SPEC", "Stated in the spec the decks were generated from; the generator wrote it into the deck."),
+    ("SPEC", "Stated in the model's inputs the decks were generated from; the generator wrote it into the deck."),
     ("CALC", "Calculated by the generator outside the solver (a hash, a nominal strain, a ply fraction). The method is shown."),
     ("CAE-CHECK", "An Abaqus/CAE click path or setting that the deck does not store. Confirm it in Abaqus/CAE before release."),
     ("MANUAL p.N", "A PrePoMax click path quoted from page N of the PrePoMax 2.6.0 manual. Not stored in any file of this model."),
@@ -300,7 +300,7 @@ def render(ctx: Context, h: Helpers) -> str:
          (h.code(ctx.reference_deck.name) + ", SHA-256 " + h.code(ctx.reference_sha256) + " " + tag("CALC"))
          if ctx.reference_deck != ctx.kernel_deck else "the same deck " + tag("INP")),
         ("Source CAE file", ("none: the deck is generated, not drawn " + tag("SPEC")) if generated else ("not supplied; the GUI steps below are therefore " + tag("CAE-CHECK"))),
-        ("Unit system", (e(f"{units}: stated in the spec and written in the deck header") + " " + tag("SPEC")) if generated
+        ("Unit system", (e(f"{units}: stated in the model's inputs and written in the deck header") + " " + tag("SPEC")) if generated
          else (e(f"{units}: not stored by Abaqus; stated by the person who read the deck (ADR-0002)") + " " + tag("ASSUMED"))),
         ("Report date", e(ctx.report_date) + " " + tag("CALC")),
         ("Author / reviewer", tag("OPEN") + " / " + tag("OPEN")),
