@@ -28,7 +28,7 @@ uv run python tools/run_coupon.py <coupon> --run-by "<role>"                    
 uv run python tools/run_coupon.py <values>.json --run-by "<role>"                # the same rows as the workspace sends them
 ```
 
-`tools/weekly_coupons.py` is the weekly check of the coupons on this machine (ADR-0114): each coupon under `../.local/fea/` is copied, re-solved in the copy by `run_coupon.py --every-test --no-pdf`, and every compared value, ours and CalculiX's, set beside last week's (`../.local/weekly/snapshots/`), so a change to the code that moves a team number is seen. The coupons themselves are never touched. On Windows, `scripts/weekly-coupons.ps1 -Register` runs it on Sundays with today's main from a worktree of its own, and a notification says when something moved.
+`tools/weekly_coupons.py` is the weekly check of the coupons on this machine (ADR-0114): each coupon under `../.local/fea/` is copied, re-solved in the copy by `run_coupon.py --every-test --no-pdf`, and every compared value, ours and CalculiX's, set beside last week's (`../.local/weekly/snapshots/`), so a change to the code that moves a team number is seen. The coupons themselves are never touched. On Windows, `scripts/weekly-coupons.ps1 -Register` runs it on Sundays with today's main from a worktree of its own, and a notification says when something moved. A coupon whose last record is older than its deck is solved all the same and gets its first snapshot (ADR-0114 amendment 1).
 
 ## Units
 

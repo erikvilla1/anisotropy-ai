@@ -57,12 +57,14 @@ New-Item -ItemType Directory -Force -Path $weekly | Out-Null
 $script:Log = Join-Path $weekly "$stamp.log"
 $status = 3
 try {
-  Invoke-Step "git fetch" { git -C $Repo fetch --quiet origin }
+  # Long paths on: some decision records' names pass Windows' old 260-character limit under %LOCALAPPDATA%, and Git refuses them
+  # unless core.longpaths is set, which it is not by default (the first run on the founder's PC, ADR-0114 amendment 1).
+  Invoke-Step "git fetch" { git -c core.longpaths=true -C $Repo fetch --quiet origin }
   if (Test-Path (Join-Path $code ".git")) {
-    Invoke-Step "git checkout" { git -C $code checkout --quiet --force --detach $Ref }
+    Invoke-Step "git checkout" { git -c core.longpaths=true -C $code checkout --quiet --force --detach $Ref }
   } else {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $code) | Out-Null
-    Invoke-Step "git worktree add" { git -C $Repo worktree add --detach $code $Ref }
+    Invoke-Step "git worktree add" { git -c core.longpaths=true -C $Repo worktree add --detach $code $Ref }
   }
   $commit = (git -C $code rev-parse HEAD).Trim()
   Write-Log "$Ref at $commit"
