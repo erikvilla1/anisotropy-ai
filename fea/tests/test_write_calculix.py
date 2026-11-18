@@ -53,8 +53,39 @@ def test_refusals():
     with pytest.raises(CalculixWriterError, match="cannot print the reaction at a coupled reference node"):
         write_calculix(build_model(coupling))
     force = order2(NODAL.replace('control = "displacement"\nvalue = 1.0', 'control = "force"\nvalue = 5000.0').replace('region = "tabs"', 'region = "line"'))
-    with pytest.raises(CalculixWriterError, match="force control with nodal grips"):
+    with pytest.raises(CalculixWriterError, match="force control with nodal grips is written for CalculiX as a rigid grip only"):
         write_calculix(build_model(force))
+
+
+FORCED = NODAL.replace('control = "displacement"\nvalue = 1.0', 'control = "force"\nvalue = 5000.0\nrigid_grip = true')
+
+
+def test_a_rigid_grip_under_a_force_is_moved_by_the_travel_our_kernel_finds_for_it():
+    """ADR-0030 amendment 7. CalculiX ties a shell node by its faces alone, so the deck moves the grip instead: by what our kernel finds
+    for the force on the same model, which is the coupled model's travel. The deck says so and carries no load."""
+    from anisotropy_fea.abaqus_reader import parse_deck, to_si as deck_to_si
+    from anisotropy_fea.kernel import solve_deck
+    from anisotropy_fea.write_abaqus import write_abaqus
+    from anisotropy_fea.write_calculix import tied_grips
+
+    model = build_model(order2(FORCED))
+    [tie] = tied_grips(model)
+    assert (tie.node_set, tie.reference_set, tie.dof, tie.force) == ("Grip-Top", "RF-Top", 2, 5000.0)
+    coupled = build_model(to_si(parse_spec(FORCED.replace('kind = "nodal"', 'kind = "coupling"').replace("\nrigid_grip = true", ""))))
+    deck = deck_to_si(parse_deck(write_abaqus(coupled, "mm-MPa")), "mm-MPa")
+    [top] = deck.nsets["RF-Top"]
+    travel = float(solve_deck(deck).displacement_of(top)[1])
+    assert travel > 0 and tie.travel == pytest.approx(travel, rel=1e-9)
+    text = write_calculix(model)
+    assert text == write_calculix(model)
+    assert "*BOUNDARY\nGrip-Bottom, 1, 6\nGrip-Top, 1, 1\nGrip-Top, 3, 6\n*STEP\n*STATIC\n** The coupon states a force of 5000. on Grip-Top, which moves as one." in text
+    assert f"(ADR-0030 amendment 7).\n*BOUNDARY\nGrip-Top, 2, 2, {1000 * travel:.10g}\n" in text
+    assert "*CLOAD" not in text and "*EQUATION" not in text and "RF-Top" not in text
+    assert "*NODE PRINT, NSET=Grip-Bottom, TOTALS=YES\nRF\n" in text and "*NODE PRINT, NSET=Grip-Top" not in text  # the held grip carries the reaction
+    turned = build_model(order2(FORCED))
+    free = turned.__class__(**{**turned.__dict__, "boundaries": tuple(b for b in turned.boundaries if (b.target, b.dof_first) != ("RF-Top", 1))})  # the reference point free sideways
+    with pytest.raises(CalculixWriterError, match="cannot print the reaction at a coupled reference node"):
+        write_calculix(free)
 
 
 def test_the_committed_calculix_deck_matches_its_spec():

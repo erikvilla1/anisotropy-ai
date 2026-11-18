@@ -1,4 +1,4 @@
-# ADR-0113: CI lints the Python, runs every browser spec in three engines and on a phone, pins its actions, and checks the site after each deploy
+# ADR-0114: CI lints the Python, runs every browser spec in three engines and on a phone, pins its actions, and checks the site after each deploy
 
 - Status: Proposed
 - Date: 2026-11-18

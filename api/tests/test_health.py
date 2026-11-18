@@ -26,7 +26,7 @@ def test_only_the_one_path_answers(path):
 
 
 def test_version_names_the_commit_the_container_was_started_with(monkeypatch):
-    """The check after a deploy (ADR-0113) compares this commit with the one it deployed."""
+    """The check after a deploy (ADR-0114) compares this commit with the one it deployed."""
     commit = "0123456789abcdef0123456789abcdef01234567"
     monkeypatch.setenv("ANISOTROPY_RUN_RECORDS", "off")
     monkeypatch.delenv("DATABASE_URL", raising=False)

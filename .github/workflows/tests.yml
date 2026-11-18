@@ -5,13 +5,13 @@ on:
   push:
     branches: [main]
 
-# Every action is pinned to a commit and Dependabot proposes the updates (ADR-0113); no job here writes to the repository.
+# Every action is pinned to a commit and Dependabot proposes the updates (ADR-0114); no job here writes to the repository.
 permissions:
   contents: read
 
 jobs:
   lint:
-    # The Python lint (ADR-0113): the rules are named in ruff.toml, and ruff's version is pinned here so a release cannot change what passes.
+    # The Python lint (ADR-0114): the rules are named in ruff.toml, and ruff's version is pinned here so a release cannot change what passes.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,7 +127,7 @@ jobs:
       - run: npm run test:studio
 
   site-browser:
-    # Every browser spec the jobs above do not run (ADR-0113): the public pages, the home page's demo, the shell, the libraries and every
+    # Every browser spec the jobs above do not run (ADR-0114): the public pages, the home page's demo, the shell, the libraries and every
     # page on a phone. playwright.site.config.ts takes any spec no other configuration claims, so a new spec file is never left out.
     runs-on: ubuntu-latest
     env:
@@ -152,7 +152,7 @@ jobs:
 
   other-browsers:
     # The site's and the workspace's browser specs in Firefox and in WebKit, the engine of Safari and of every browser on an iPhone
-    # (ADR-0113); the jobs above run them in Chromium. The phone check is an iPhone in WebKit.
+    # (ADR-0114); the jobs above run them in Chromium. The phone check is an iPhone in WebKit.
     strategy:
       fail-fast: false
       matrix:
@@ -215,7 +215,7 @@ jobs:
           docker rm -f api || true
 
   worker-run:
-    # The change as the hosted tier runs it (ADR-0113): the Worker, the site built for /api and both containers from this Dockerfile,
+    # The change as the hosted tier runs it (ADR-0114): the Worker, the site built for /api and both containers from this Dockerfile,
     # under `wrangler dev` with the local queue, PostgreSQL and an S3 stand-in for R2; then the deploy's own check and the studio's live
     # browser run against it. The preview version Deploy uploads for a pull request has no address (Cloudflare gives none to a Worker
     # with Durable Objects), so this is where the pull request's Worker and image are run together before a merge deploys them.

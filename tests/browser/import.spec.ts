@@ -94,7 +94,8 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   await say(page, "start over");
   await expect(page.getByTestId("chat-import-read-only")).toHaveCount(2);
   await expect(stage).toHaveAttribute("data-state", "solved"); // still there
-  expect(others.filter((o) => !o.endsWith("/live"))).toEqual([]); // no check, no run, no model asked: nothing of the coupon's was touched
+  // no check, no run, no model asked: nothing of the coupon's was touched (a solver is asked for when the page opens, ADR-0056 amendment 11)
+  expect(others.filter((o) => !o.endsWith("/live") && !o.endsWith("/v1/wake"))).toEqual([]);
 
   // the words on the import's own panels and stage: Abaqus may be named, the file being the engineer's own; nothing else that is banned
   expect(bannedInAbaqusCard(await rail.innerText())).toEqual([]);

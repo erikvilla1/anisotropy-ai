@@ -328,7 +328,9 @@ def test_the_preview_of_a_force_controlled_nodal_coupon(tmp_path):
     assert data["held"][0] == {"set": "Grip-Bottom", "through": None, "dofs": [1, 2, 3, 4, 5, 6],
                                "directions": ["x", "y", "z", "rotation about x", "rotation about y", "rotation about z"], "nodes": data["held"][0]["nodes"]}
     assert data["loaded"]["control"] == "force" and data["loaded"]["value"] == pytest.approx(10000.0) and data["loaded"]["unit"] == "N"
-    assert data["loaded"]["set"] == "Grip-Top" and data["loaded"]["through"] is None and "quality" not in data
+    # under a force the nodal grip is a gripped tab: its nodes move as one, through a reference point that carries the force (ADR-0030 amendment 7)
+    assert data["loaded"]["set"] == "Grip-Top" and data["loaded"]["through"] == "RF-Top" and "quality" not in data
+    assert [(h["set"], h["through"], h["dofs"]) for h in data["held"][1:]] == [("Grip-Top", "RF-Top", [1]), ("Grip-Top", "RF-Top", [3, 4, 5, 6])]
     assert build_model(model.spec).mesh.element_count == model.mesh.element_count
 
 

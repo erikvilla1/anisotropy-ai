@@ -21,6 +21,7 @@ from anisotropy_api.storage import input_key, owner_key
 
 from conftest import needs_test_database
 from memory_store import MemoryStore
+from typesetter_stub import stand_in_typesetter
 
 pytestmark = needs_test_database
 
@@ -28,7 +29,7 @@ STAND_IN = r'''
 """A stand-in for fea/tools/run_coupon.py with its gate: the coupon is the source's name or the values' "coupon"; it writes the
 spec, holds at the gate, numbers the next attempt from the coupon's folder, reports the fields, and waits for a release file when
 the coupon's name starts with WAIT."""
-import argparse, json, os, pathlib, sys, time
+import argparse, json, os, pathlib, sys, time, zipfile
 parser = argparse.ArgumentParser()
 parser.add_argument("source")
 for option in ("--run-by", "--result", "--progress", "--gate"):
@@ -77,6 +78,11 @@ fields = attempt / "run" / "fields.json"
 fields.write_text(json.dumps({"attempt": number}), encoding="utf-8")
 write("CalculiX", False, attempt, {"fields": str(fields)})
 print(f"== CalculiX, attempt {number:02d}", flush=True)
+if coupon.startswith("WAIT-AGAIN"):  # the fields written a second time with what came later, then the result reported (ADR-0056 amendment 11)
+    while not (releases / f"again-{coupon}").exists():
+        time.sleep(0.02)
+    fields.write_text(json.dumps({"attempt": number, "calculix": "beside ours"}), encoding="utf-8")
+    write("the result", False, attempt, {"fields": str(fields)}, result=f"attempt {number:02d}")
 if coupon.startswith("WAIT-RESULT"):  # the result reported, the package still to build (ADR-0064)
     write("the package", False, attempt, {"fields": str(fields)}, result=f"attempt {number:02d}")
 if coupon.startswith("WAIT"):
@@ -85,6 +91,12 @@ if coupon.startswith("WAIT"):
 package = attempt / "package"
 package.mkdir()
 outputs = {"fields": str(fields), "package": str(package)}
+if "--no-pdf" in sys.argv and not coupon.startswith("NO-SOURCE"):  # as the tool without its PDF: the report's LaTeX and figures, this attempt's own (ADR-0064 amendment 3); a coupon NO-SOURCE* stands for a run that could not write them
+    source = attempt / "run" / f"{coupon}-report-source.zip"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr(f"{coupon}.tex", f"the report of {coupon}, attempt {number:02d}")
+        archive.writestr("figures/model.png", "a figure")
+    outputs["document_source"] = str(source)
 if "--no-pdf" not in sys.argv and not coupon.startswith("NO-DOC"):  # as the tool: the PDF by its own key; a coupon NO-DOC* stands for a failed PDF
     (package / "doc.pdf").write_bytes(b"%PDF")
     outputs["document"] = str(package / "doc.pdf")
@@ -166,7 +178,7 @@ def test_a_solver_runs_the_queued_job_and_the_api_reads_it_back_from_the_row_and
     job = solving(solver, uuid.UUID(job_id), monkeypatch)
     assert job.state == "done" and job.outcome["message"] == "attempt 02"
     row = fetch_job(table, uuid.UUID(job_id))
-    assert row.state == "done" and row.coupon == "IM7-UNT-L1" and set(row.stored) == {"fields", "package"} and row.heartbeat_at is not None
+    assert row.state == "done" and row.coupon == "IM7-UNT-L1" and set(row.stored) == {"fields", "package", "document_source"} and row.heartbeat_at is not None
     assert row.peak_memory_bytes is None or row.peak_memory_bytes > 0  # cgroup v2's memory.peak where this runs in a container
     assert "coupons/IM7-UNT-L1/folder/ours/IM7-UNT-L1.toml" in store.objects  # the coupon's folder, for the next container
     status = client.get(f"/v1/coupon-jobs/{job_id}").json()
@@ -291,6 +303,170 @@ def test_a_running_jobs_result_is_read_back_from_its_row_before_the_package(queu
     assert ended["state"] == "done" and ended["result"] == "attempt 02" and ended["documents"] == "written"
 
 
+def test_the_row_says_the_result_once_the_fields_that_go_with_it_are_filed(queue, monkeypatch):
+    """ADR-0056 amendment 11: a running job's fields are filed again when the tool has written them anew (CalculiX's numbers, then the
+    mesh study), and the row says the result's line only once that copy is in the store: the page reads the fields when the line shows."""
+    _, solver, _, store, table, tmp_path = queue
+    job_id = uuid.UUID(queued("WAIT-AGAIN"))
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    held_until(job, lambda: "fields" in (fetch_job(table, job_id).stored or {}), "filing its fields while it runs")
+    key = fetch_job(table, job_id).stored["fields"]
+    assert json.loads(store.objects[key][0]) == {"attempt": 2} and fetch_job(table, job_id).message is None
+
+    seen: list[dict] = []
+    real = coupon_jobs.update_job
+
+    def spied(engine, job, **fields):
+        if fields.get("message") == "attempt 02" and "state" not in fields:  # the beat that first says the result
+            seen.append(json.loads(store.objects[key][0]))
+        return real(engine, job, **fields)
+
+    monkeypatch.setattr(coupon_jobs, "update_job", spied)
+    (tmp_path / "solver-1" / "again-WAIT-AGAIN").touch()
+    held_until(job, lambda: fetch_job(table, job_id).message == "attempt 02", "writing its result to the row")
+    assert seen and seen[0] == {"attempt": 2, "calculix": "beside ours"}  # filed before the row said so
+    assert fetch_job(table, job_id).stage == "the result" and fetch_job(table, job_id).stored["fields"] == key
+    (tmp_path / "solver-1" / "release-WAIT-AGAIN").touch()
+    held_until(job, lambda: job.state == "done", "done")
+
+
+def test_a_new_stage_reaches_the_row_without_waiting_for_the_next_beat(queue, monkeypatch):
+    """ADR-0056 amendment 11: the solver looks at its job every LOOK_S and writes the row when the stage or the filed files changed,
+    and otherwise only every HEARTBEAT_S."""
+    front, _, _, _, table, tmp_path = queue
+    monkeypatch.setattr(coupon_jobs, "HEARTBEAT_S", 30.0)
+    monkeypatch.setattr(coupon_jobs, "LOOK_S", 0.05)
+    solver = CouponJobs(front.command, front.recorder, tmp_path / "looking" / "jobs", store=MemoryStore(), table=table,
+                        local_root=tmp_path / "looking" / "coupons", role="solver")
+    beats: list[str | None] = []
+    real = coupon_jobs.update_job
+
+    def spied(engine, job, **fields):
+        if "state" not in fields and "heartbeat_at" in fields:
+            beats.append(fields.get("stage"))
+        return real(engine, job, **fields)
+
+    monkeypatch.setattr(coupon_jobs, "update_job", spied)
+    job_id = uuid.UUID(queued("WAIT-G"))
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    held_until(job, lambda: "fields" in (fetch_job(table, job_id).stored or {}), "its fields on the row within the looks, not after a 30 s beat")
+    time.sleep(0.5)  # ten looks with nothing new: no further write
+    count = len(beats)
+    time.sleep(0.5)
+    assert len(beats) == count and beats[-1] == "CalculiX" and count <= 8, beats
+    (tmp_path / "looking" / "release-WAIT-G").touch()
+    held_until(job, lambda: job.state == "done", "done")
+
+
+def report_asked(job_id) -> dict:
+    """Ask for the job's report and wait until it is written or the try has failed; the job as it then stands."""
+    asked = client.post(f"/v1/coupon-jobs/{job_id}/document")
+    assert asked.status_code == 202 and asked.json()["report"] == "writing", asked.text
+    deadline = time.monotonic() + 30
+    while (status := client.get(f"/v1/coupon-jobs/{job_id}").json())["report"] == "writing":
+        assert time.monotonic() < deadline, "the report is still being written after 30 s"
+        time.sleep(0.02)
+    return status
+
+
+def test_a_report_is_written_on_request_from_the_jobs_own_source_and_filed_with_its_files(queue, monkeypatch):
+    """ADR-0064 amendment 3: a run without its PDF ends done and keeps the report's LaTeX and figures; the API's container typesets
+    them when someone asks, files the PDF beside the job's other files and lists it on the row. The report is the job's own: a later
+    run of the same coupon does not change it."""
+    _, solver, _, store, table, tmp_path = queue
+    stand_in_typesetter(tmp_path, monkeypatch)
+    first, second = uuid.UUID(queued("REPORT-A")), uuid.UUID(queued("REPORT-A"))
+    solving(solver, first, monkeypatch)
+    solving(solver, second, monkeypatch)
+    before = client.get(f"/v1/coupon-jobs/{first}").json()
+    assert before["state"] == "done" and before["documents"] == "written" and before["report"] is None
+    assert "document_source" in before["outputs"] and "document" not in before["outputs"]
+    assert client.get(f"/v1/coupon-jobs/{first}/files/document").status_code == 404
+
+    after = report_asked(first)
+    assert after["report"] is None and after["outputs"]["document"].endswith("package/REPORT-A.pdf") and after["documents"] == "written"
+    row = fetch_job(table, first)
+    assert row.stored["document"] == "coupons/REPORT-A/attempt-02_2026-11-07/files/document/REPORT-A.pdf" and row.state == "done"
+    assert store.objects[row.stored["document"]][0] == b"%PDF typeset from: the report of REPORT-A, attempt 02"  # its own attempt's, not the later one's
+    assert store.objects[row.stored["document"]][1] == "application/pdf"
+    link = client.get(f"/v1/coupon-jobs/{first}/files/document", params={"name": "D3039_report.pdf"}, follow_redirects=False)
+    assert link.status_code == 307 and link.headers["location"] == f"https://store.test/{row.stored['document']}?expires=600&filename=D3039_report.pdf"
+    again = client.post(f"/v1/coupon-jobs/{first}/document")
+    assert again.status_code == 200 and again.json()["report"] is None and "document" in again.json()["outputs"]
+    assert "document" not in client.get(f"/v1/coupon-jobs/{second}").json()["outputs"]  # nobody asked for the later run's
+
+
+def test_a_report_under_way_is_not_started_twice_and_a_failed_one_can_be_asked_again(queue, monkeypatch):
+    _, solver, _, store, table, tmp_path = queue
+    stand_in_typesetter(tmp_path, monkeypatch)
+    held = uuid.UUID(queued("REPORT-HOLD"))
+    solving(solver, held, monkeypatch)
+    starts: list[uuid.UUID] = []
+    real = CouponJobs._typeset
+    monkeypatch.setattr(CouponJobs, "_typeset", lambda self, job: (starts.append(job.id), real(self, job))[1])
+    assert [client.post(f"/v1/coupon-jobs/{held}/document").status_code for _ in range(3)] == [202, 202, 202]
+    assert client.get(f"/v1/coupon-jobs/{held}").json()["report"] == "writing"
+    assert [job["report"] for job in client.get("/v1/coupon-jobs").json() if job["job_id"] == str(held)] == ["writing"]
+    (tmp_path / "release-typesetter").touch()
+    deadline = time.monotonic() + 30
+    while "document" not in client.get(f"/v1/coupon-jobs/{held}").json()["outputs"]:
+        assert time.monotonic() < deadline
+        time.sleep(0.02)
+    assert starts == [held]
+
+    refused = uuid.UUID(queued("REPORT-REFUSE"))
+    solving(solver, refused, monkeypatch)
+    failed = report_asked(refused)
+    assert failed["report"] == "failed" and "document" not in failed["outputs"] and "document" not in fetch_job(table, refused).stored
+    assert failed["state"] == "done" and failed["documents"] == "written"  # the run and its files stand; the report is asked for again
+    assert report_asked(refused)["report"] == "failed" and starts == [held, refused, refused]
+
+
+def test_a_report_is_refused_in_the_pages_words_when_it_cannot_be_written(queue, monkeypatch):
+    _, solver, _, _, _, tmp_path = queue
+    stand_in_typesetter(tmp_path, monkeypatch)
+    plain = uuid.UUID(queued("NO-SOURCE-B"))  # a run that kept no source for its report (a run of before this, or one whose package failed)
+    waiting = client.post(f"/v1/coupon-jobs/{plain}/document")
+    assert waiting.status_code == 409 and waiting.json()["detail"] == "The report is written once the analysis has finished."
+    solving(solver, plain, monkeypatch)
+    none = client.post(f"/v1/coupon-jobs/{plain}/document")
+    assert none.status_code == 409 and none.json()["detail"] == "This analysis kept no report to write. Run the analysis again to get one."
+    assert client.post(f"/v1/coupon-jobs/{uuid.uuid4()}/document").status_code == 404
+    kept = uuid.UUID(queued("REPORT-B"))
+    solving(solver, kept, monkeypatch)
+    monkeypatch.setattr(coupon_jobs, "typesetter", lambda: None)
+    missing = client.post(f"/v1/coupon-jobs/{kept}/document")
+    assert missing.status_code == 503 and "Tectonic" not in missing.json()["detail"] and "Try again" in missing.json()["detail"]
+    assert client.get(f"/v1/coupon-jobs/{kept}").json()["report"] is None
+
+
+def test_the_page_opening_is_answered_with_the_word_that_wakes_a_solver(queue, monkeypatch):
+    """ADR-0056 amendment 11: with the queue, the API's container marks the answer for the Worker, which starts the pool's first free
+    solver; a process that runs its own jobs, or a solver, has nothing to wake and says so."""
+    front, solver, _, _, _, tmp_path = queue
+    woken = client.post("/v1/wake")
+    assert woken.status_code == 202 and woken.json() == {"waking": True} and woken.headers["X-Anisotropy-Wake"] == "1"
+    assert front.jobs == {} and client.get("/v1/coupon-jobs").json() == []  # nothing is filed or run by it
+    for other in (solver, CouponJobs(front.command, front.recorder, tmp_path / "alone" / "jobs")):
+        monkeypatch.setattr(app.state, "coupon_jobs", other)
+        alone = client.post("/v1/wake")
+        assert alone.status_code == 202 and alone.json() == {"waking": False} and "X-Anisotropy-Wake" not in alone.headers
+
+
+def test_a_solver_says_whether_it_runs_a_job(queue, monkeypatch):
+    """ADR-0056 amendment 11: what the Worker asks the pool's solvers when the page opens; the API's own container has no such route."""
+    _, solver, _, _, _, tmp_path = queue
+    assert client.get("/v1/solver/state").status_code == 404
+    job_id = uuid.UUID(queued("WAIT-H"))
+    monkeypatch.setattr(app.state, "coupon_jobs", solver)
+    assert client.get("/v1/solver/state").json() == {"busy": False}
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    assert client.get("/v1/solver/state").json() == {"busy": True}
+    (tmp_path / "solver-1" / "release-WAIT-H").touch()
+    held_until(job, lambda: job.state == "done", "done")
+    assert client.get("/v1/solver/state").json() == {"busy": False}
+
+
 @pytest.mark.parametrize(("coupon", "written"), [("PDF-A", True), ("NO-DOC-A", False)])
 def test_report_ready_on_a_row_read_back_needs_the_pdf(queue, monkeypatch, coupon, written):
     """ADR-0064 amendment 2: a job read back from its row has its documents "written" only when the package came with the PDF it asked
@@ -303,6 +479,18 @@ def test_report_ready_on_a_row_read_back_needs_the_pdf(queue, monkeypatch, coupo
     assert (status["documents"] == "written") is written
     if not written:
         assert status["documents"] == "the package was written without its document"
+
+
+@pytest.mark.parametrize(("coupon", "written"), [("SOURCE-A", True), ("NO-SOURCE-A", False)])
+def test_report_ready_without_a_pdf_needs_the_source_of_the_report(queue, monkeypatch, coupon, written):
+    """ADR-0064 amendment 3: a job that asked for no PDF has its documents "written" once the source its report is typeset from is
+    filed, since the report can then be had on request; without that source the row says so and Report ready is not ticked."""
+    _, solver, _, _, table, _ = queue
+    job_id = uuid.UUID(queued(coupon))
+    solving(solver, job_id, monkeypatch)
+    status = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert status["state"] == "done" and "document" not in status["outputs"] and ("document_source" in status["outputs"]) is written
+    assert status["documents"] == ("written" if written else "the package was written without the source of its report")
 
 
 def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { devices, expect, test, type Browser, type BrowserContext, type TestInfo } from "@playwright/test";
 
-// Every page on a phone as a phone is, not only a narrow window (ADR-0113): its screen, pixel density, touch and user agent. In
+// Every page on a phone as a phone is, not only a narrow window (ADR-0114): its screen, pixel density, touch and user agent. In
 // WebKit it is an iPhone, as Safari on one is; in Chromium an Android phone. Firefox has no phone mode (isMobile), so it gets the
 // Android phone's screen and touch without it. The specs that set a phone's width keep checking each page's own layout; this one
 // checks that nothing breaks on any page when the browser is a phone.

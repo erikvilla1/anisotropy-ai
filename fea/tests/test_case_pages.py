@@ -85,3 +85,18 @@ def test_the_local_index_has_the_four_categories_with_or_without_the_local_folde
     text = local_index()  # on CI there is no .local/: no team tests, the attempt folders count 0 and homework says so
     assert all(f"## {category}" in text for category in ("Team tests", "Benchmarks", "Homework", "Projects"))
     assert all(f"**{folder.name}**" in text for folder in model_folders())
+
+
+def test_the_reaction_row_is_the_moving_grips_or_under_a_force_the_held_grips():
+    """ADR-0030 amendment 7: a record made under a force holds the held grip's reaction alone, which answers against the load."""
+    from anisotropy_fea.case_pages import reaction_difference, reaction_row
+    from anisotropy_fea.report import ComparisonRow
+
+    def row(name, component, reference, kernel):
+        return ComparisonRow(key=f"rf.{name}", group="rf", name=name, ply=None, component=component, reference=reference, kernel=kernel, allowed=300.0)
+
+    moved = [row("Grip-Top", 0, 1.0, 0.0), row("Grip-Top", 1, 16000.0, 16160.0), row("Grip-Bottom", 1, -16000.0, -16160.0)]
+    assert reaction_row(moved) == (moved[1], 1.0) and reaction_difference(moved) == "+1.00 %"
+    forced = [row("Grip-Bottom", 0, 1.0, 0.0), row("Grip-Bottom", 1, -9900.0, -10000.0)]
+    assert reaction_row(forced) == (forced[1], -1.0) and reaction_difference(forced) == "+1.01 %"  # ours carries more, as under a displacement
+    assert reaction_row([row("Support-Left", 2, 1.0, 1.0)]) is None and reaction_difference([]) is None

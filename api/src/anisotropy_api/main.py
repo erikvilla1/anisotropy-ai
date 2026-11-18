@@ -40,7 +40,7 @@ from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_
 from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
+from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
@@ -70,6 +70,9 @@ RECORDS_HEADER = "X-Anisotropy-Records"
 # drops the header, so a browser never sees it.
 ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
+WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
+WAKE_HEADER = "X-Anisotropy-Wake"  # what the Worker reads on the answer to start a solver (worker/routing.ts)
+SOLVER_STATE = "/v1/solver/state"  # whether a solver container runs a job: the wake-up's question (ADR-0056 amendment 11)
 SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
 IMPORTED_MODELS = "/v1/imported-models"  # a model brought in as an Abaqus deck, answered and not kept (ADR-0105)
@@ -184,7 +187,7 @@ async def healthz() -> dict[str, str]:
 @app.get("/version")
 async def running_version(request: Request) -> dict[str, str | None]:
     """The commit this container runs and its packages' versions: what the check after a deploy reads to know the deployed code
-    answers, not a container left from before it (ADR-0113, ADR-0056 amendment 10). Not a run; behind Access like every route but
+    answers, not a container left from before it (ADR-0114, ADR-0056 amendment 10). Not a run; behind Access like every route but
     /healthz."""
     return {"git_commit": getattr(request.app.state, "git_commit", None), "api_version": version("anisotropy-api"),
             "engine_version": version("anisotropy-engine")}
@@ -472,6 +475,18 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
         return CouponJobOutput.of(job)
 
 
+@app.post(WAKE, status_code=202)
+def wake_a_solver(request: Request, response: Response) -> dict[str, bool]:
+    """The page says an analysis may be started soon: it opened, or a setup check passed (ADR-0056 amendment 11). With the job queue
+    the answer carries a header and the Worker starts the pool's first free solver container, so the job that follows does not wait
+    for one to start; the request passed the sign-in like any other, which is why the page asks here and not the Worker alone. Without
+    the queue this process runs the jobs itself and there is nothing to wake: `waking` is false. Nothing is computed or recorded."""
+    waking = _coupon_jobs(request).role == "queue"
+    if waking:
+        response.headers[WAKE_HEADER] = "1"
+    return {"waking": waking}
+
+
 def _solver_jobs(request: Request) -> CouponJobs:
     """The jobs of a solver container; 404 anywhere else, as if the route did not exist, since only the solver's Durable Object reaches it."""
     jobs = _coupon_jobs(request)
@@ -514,6 +529,13 @@ def solver_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
         if job is None:
             raise HTTPException(status_code=404, detail=f"this solver has no coupon job {job_id}")
         return CouponJobOutput.of(job)
+
+
+@app.get(SOLVER_STATE)
+def solver_state(request: Request) -> dict[str, bool]:
+    """Whether this solver container runs a job now. The Worker asks the pool's solvers in turn when the page opens, which starts the
+    first free one before a job is filed (ADR-0056 amendment 11): the ask itself is what wakes a sleeping container."""
+    return {"busy": _solver_jobs(request).busy()}
 
 
 @app.post(SOLVER_JOBS + "/{job_id}/stop", response_model=CouponJobOutput)
@@ -1272,6 +1294,35 @@ def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
     """A coupon job as it stands: its state, the end of its console, and once it is done the files it made (ADR-0050)."""
     jobs = _coupon_jobs(request)
     job = _known_job(request, jobs, job_id)
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+# What the page shows for a report that cannot be written (ADR-0091 amendment 2): what happened and what to do; the cause goes to the log.
+NO_REPORT = "This analysis kept no report to write. Run the analysis again to get one."
+REPORT_NOT_NOW = "The report cannot be written right now. Try again in a minute; if it keeps failing, contact us."
+
+
+@app.post(COUPON_JOBS + "/{job_id}/document", response_model=CouponJobOutput)
+def write_coupon_job_document(job_id: uuid.UUID, request: Request, response: Response) -> CouponJobOutput:
+    """The report of a done job as a PDF, written when someone asks for it (ADR-0064 amendment 3): a run started with `pdf: false`
+    ends without typesetting it and keeps its LaTeX and figures (`document_source`); this typesets them, half a minute on the hosted
+    tier, and files the PDF as the job's `document`. 202 with the job as it stands, `report: "writing"`, while it is typeset: poll the
+    job until its outputs hold `document`, or `report` says "failed" (ask again to retry). 200 when the job has its report already. 409
+    while the job has not ended done, or when it kept no source. Nothing is computed: the report is the run's own, typeset later."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(request, jobs, job_id)
+    try:
+        state = jobs.write_document(job)
+    except JobNotDone as exc:
+        raise HTTPException(status_code=409, detail="The report is written once the analysis has finished.") from exc
+    except NoDocument as exc:
+        print(str(exc), flush=True)
+        raise HTTPException(status_code=409, detail=NO_REPORT) from exc
+    except JobRefused as exc:
+        print(f"coupon job {job_id}: its report was not started: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail=REPORT_NOT_NOW) from exc
+    response.status_code = 200 if state == "written" else 202
     with jobs.lock:
         return CouponJobOutput.of(job)
 

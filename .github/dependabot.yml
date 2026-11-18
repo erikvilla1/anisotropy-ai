@@ -1,4 +1,4 @@
-# Dependabot (ADR-0113): one pull request a month per kind of dependency, every update of that kind grouped in it, so updates arrive
+# Dependabot (ADR-0114): one pull request a month per kind of dependency, every update of that kind grouped in it, so updates arrive
 # as a few reviewable pull requests and not a stream. Each waits for the founder's approval like any other (.github/CODEOWNERS).
 # Security fixes are separate: with Dependabot's alerts and security updates on (Settings, Advanced Security), they come when published.
 version: 2

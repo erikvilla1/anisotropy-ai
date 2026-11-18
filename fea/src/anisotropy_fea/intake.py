@@ -1708,6 +1708,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     if values.dogbone is not None:
         geometry["dogbone"] = dict(values.dogbone)
         comments["geometry.width"] = "the overall width at the ends; the narrow section's is geometry.dogbone.narrow_width"
+    tied = not bending and not plate and grips_kind == "nodal" and values.control == "force"  # a gripped tab under a force moves as one
     data: dict = {
         "title": title, "kind": kind, "units": values.units,
         "coupon": {"designation": designation.name, "standard": values.standard, "size_from": values.size_from, "team_model": values.team_model,
@@ -1718,7 +1719,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                       "ply_thickness": values.ply_thickness if values.ply_thickness is not None else "library"}}),
         "material": material,
         **({} if bending or plate else {"grips": {"kind": grips_kind, "region": values.region}}),
-        **({} if plate else {"loading": {"control": values.control, "value": sign * values.value}}),
+        **({} if plate else {"loading": {"control": values.control, "value": sign * values.value, **({"rigid_grip": True} if tied else {})}}),
         "probes": probes_data(values),
     }
     if plate:
@@ -1755,6 +1756,8 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     if not bending and not plate:
         comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
                                   else "the grip nodes held directly: the CalculiX twin, which reports no reaction at a coupled reference node")
+    if tied:
+        comments["loading.rigid_grip"] = "the top grip's nodes move together, the force on their reference node: what a coupled grip does (ADR-0030 amendment 7)"
     if not plate:
         comments["loading.value"] = ("the nose moves down onto the coupon: negative along z" if bending
                                      else "a push: negative along the coupon" if kind == "compression" else "along the coupon")

@@ -93,7 +93,7 @@ def cae_facts(model: FEModel, units: str | None = None) -> dict:
         problems.append("it holds the coupon by its two grips only")
     if problems:
         raise CaeScriptError(problems)
-    coupled = bool(model.couplings)
+    coupled = spec.grips.kind == "coupling"  # nodal grips under a force tie the top grip alone (ADR-0030 amendment 7); the script builds neither
     if model.loads and not coupled:
         problems.append("a force on nodal grips is a set of nodal loads that Abaqus/CAE has no one object for: pull by a displacement, or couple the grips")
 

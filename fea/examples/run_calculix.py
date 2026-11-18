@@ -37,8 +37,12 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.spec.stem
     ccx_deck = args.out / f"{stem}-ccx.inp"
-    ccx_deck.write_text(write_calculix(model), encoding="utf-8", newline="\n")
-    print("written", ccx_deck, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S8R elements)")
+    text = write_calculix(model)
+    if ccx_deck.is_file() and ccx_deck.read_text(encoding="utf-8") == text:  # a run started ahead on this deck is reading it (ADR-0056 amendment 11)
+        print("unchanged", ccx_deck, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S8R elements)")
+    else:
+        ccx_deck.write_text(text, encoding="utf-8", newline="\n")
+        print("written", ccx_deck, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S8R elements)")
     try:
         result = run_calculix(ccx_deck, threads=os.cpu_count() or 1)  # every core for the assembly, one for SPOOLES (ADR-0056 amendments 6 and 7)
     except CalculixError as exc:

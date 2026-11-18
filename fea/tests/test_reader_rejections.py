@@ -51,6 +51,9 @@ CASES = [
     ("grips", "s_Top, 1.\n", "s_Top, 0.5\n", "weights other than 1"),
     ("grips", "*Coupling, constraint name=Grip-Top", "*Coupling, influence radius=2., constraint name=Grip-Top", "influence radius"),
     ("grips", "*Nset, nset=s_Top, instance=Strip-1\n 25, 26, 27", "*Nset, nset=s_Top, instance=Strip-1\n 25, 26, 99", "names node Strip-1.99, which does not exist"),
+    ("grips", "*Nset, nset=s_Top, instance=Strip-1\n 25, 26, 27", "*Nset, nset=s_Top, instance=Strip-1\n 98, 26, 99", "names node Strip-1.98, which does not exist"),  # the first in the set's order
+    ("grips", "*Elset, elset=s_Top, instance=Strip-1, generate\n 15,  16,   1", "*Elset, elset=s_Top, instance=Strip-1, generate\n 15,  18,   1",
+     "element set 's_Top' names element Strip-1.17, which does not exist"),
 ]
 
 

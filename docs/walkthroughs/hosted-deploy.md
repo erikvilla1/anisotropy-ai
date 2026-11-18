@@ -7,8 +7,8 @@ The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudfl
 | Piece | What it is | Where it is configured |
 | --- | --- | --- |
 | The Worker `anisotropy-studio` | Serves the website's static export (`out/`) and forwards `/api/*` to the container | [`wrangler.jsonc`](../../wrangler.jsonc), [`worker/index.ts`](../../worker/index.ts) |
-| The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy`; with the queue it files coupon jobs and runs none | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
-| The containers `SolverContainer` | The same image in the role `solver`: a warm pool `solver-0` to `solver-9`, one coupon job at a time each, a finished job's container staying warm 15 minutes with its coupons on disk; each one's Durable Object watches its job on a timer (ADR-0056 amendments 3, 4 and 6) | `wrangler.jsonc` (`containers`), [`worker/solver-queue.ts`](../../worker/solver-queue.ts) |
+| The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy`; with the queue it files coupon jobs and runs none, and it typesets a run's report when the page asks for it (ADR-0064 amendment 3) | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
+| The containers `SolverContainer` | The same image in the role `solver`: a warm pool `solver-0` to `solver-9`, one coupon job at a time each, a finished job's container staying warm 15 minutes with its coupons on disk; each one's Durable Object watches its job on a timer (ADR-0056 amendments 3, 4 and 6); the first free one is started when a signed-in page opens, before a job is filed (`POST /api/v1/wake`, amendment 11) | `wrangler.jsonc` (`containers`), [`worker/solver-queue.ts`](../../worker/solver-queue.ts) |
 | The queues `anisotropy-coupon-jobs` and `anisotropy-coupon-jobs-dead` | One message per coupon job, consumed by the Worker; a message that fails 100 times goes to the second | `wrangler.jsonc` (`queues`); created by Wrangler, below |
 | Cloudflare Access | Sign-in with an email allow list and one-time PINs, in front of the Worker; adds the token the API checks | Zero Trust dashboard; the API's `ANISOTROPY_ACCESS_*` secrets |
 | Neon PostgreSQL | The run records, the jobs table and the projects table (migration 0007, ADR-0062 part 6) | the `DATABASE_URL` secret; migrations by the deploy workflow |
@@ -76,7 +76,7 @@ To serve the Worker at another hostname without a moment unguarded (as amendment
 
 ### The check after a deploy
 
-The Deploy workflow's `check` job runs after each production deploy (ADR-0113): `scripts/check-hosted.py` loads the home page, waits up to 10 minutes for `GET /api/version` to name the commit just deployed (the first request after a deploy restarts the API's container, ADR-0056 amendment 10), then runs the public IM7/8552 coupon through the queue to its result, with no PDF. It fails the run with the step that failed. Access must let it in:
+The Deploy workflow's `check` job runs after each production deploy (ADR-0114): `scripts/check-hosted.py` loads the home page, waits up to 10 minutes for `GET /api/version` to name the commit just deployed (the first request after a deploy restarts the API's container, ADR-0056 amendment 10), then runs the public IM7/8552 coupon through the queue to its result, with no PDF. It fails the run with the step that failed. Access must let it in:
 
 1. Zero Trust → Access controls → Service credentials → Service tokens → **Create Service Token**, named for the check; copy its Client ID and Client Secret (the secret is shown once).
 2. In the `anisotropy.dev` application, add a policy with the action **Service Auth** that includes that service token.

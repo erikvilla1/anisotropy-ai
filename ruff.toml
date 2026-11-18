@@ -1,4 +1,4 @@
-# The Python lint every pull request runs (ADR-0113): one set of rules for the engine, fea, api, mcp-server, docs and scripts.
+# The Python lint every pull request runs (ADR-0114): one set of rules for the engine, fea, api, mcp-server, docs and scripts.
 # The rules are named here, not left to ruff's defaults, so a new ruff release cannot change what passes; CI pins ruff's version too.
 target-version = "py312"
 line-length = 140

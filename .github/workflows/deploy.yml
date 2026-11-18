@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
   pull_request:
 
-# The actions are pinned to commits (ADR-0113): these jobs hold the Cloudflare and database secrets. The `newest` job reads main's head.
+# The actions are pinned to commits (ADR-0114): these jobs hold the Cloudflare and database secrets. The `newest` job reads main's head.
 permissions:
   contents: read
 
@@ -67,7 +67,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --var ANISOTROPY_GIT_COMMIT:${{ github.event.workflow_run.head_sha || github.sha }}
 
-  # The site as a visitor reaches it, after the deploy (ADR-0113): the home page, the API answering with the commit just deployed, and one
+  # The site as a visitor reaches it, after the deploy (ADR-0114): the home page, the API answering with the commit just deployed, and one
   # public coupon job through the queue to its result. On 2026-11-17 a deploy reached the API only after 20 idle minutes and nothing
   # said so (ADR-0056 amendment 10). Access lets the check in with a service token, two repository secrets; without them it says so.
   check:

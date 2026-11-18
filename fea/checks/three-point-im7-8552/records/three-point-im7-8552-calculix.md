@@ -1,6 +1,6 @@
 # Reading: the three-point bending IM7/8552 coupon, CalculiX 2.22 S8R against the kernel
 
-The reading note of the record with the same name: the first comparison of the flat shell kernel (ADR-0053) with another solver on a coupon that bends. Numbers quoted here are the ones in the record and in the evaluation note `docs/evaluations/fea/2026-10-28-plate-bending.md`; the document's own tables are recomputed at every build.
+The reading note of the record with the same name: the first comparison of the flat shell kernel (ADR-0053) with another solver on a coupon that bends. Numbers quoted here are the ones in the record and in our evaluation of plate bending (2026-10-28); the document's own tables are recomputed at every build.
 
 ## What the numbers show
 
@@ -21,4 +21,4 @@ The reading note of the record with the same name: the first comparison of the f
 
 ## What would settle the open items
 
-Refine the mesh under the nose in both solvers and record the element one row further from the nose line; have the team run the generated Abaqus deck `fea/checks/three-point-im7-8552/decks/three-point-im7-8552-abaqus.inp` with an S4R shell and export per the recipe in `docs/abaqus-export-recipe.md`.
+Refine the mesh under the nose in both solvers and record the element one row further from the nose line; have the team run the generated Abaqus deck, `three-point-im7-8552-abaqus.inp`, with an S4R shell and export its field reports per our Abaqus export recipe.

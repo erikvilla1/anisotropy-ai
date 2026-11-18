@@ -146,6 +146,17 @@ def test_the_public_coupon_filled_in_gives_its_spec(blank, tmp_path):
     assert "# IM7-UNT-L1, unnotched tension: built from the coupon input form filled.xlsx, filled in by A. Engineer on 2026-10-25." in main
 
 
+def test_under_a_force_the_twin_says_its_top_grip_moves_as_one(blank, tmp_path):
+    """ADR-0030 amendment 7: a coupled grip under a force is rigid, so its twin with nodal grips states the same; a displacement needs no word."""
+    main, twin = (parse_spec(text) for text in specs_of(blank, tmp_path, PUBLIC_FILL, control="force", value=10000.0))
+    assert main.grips.kind == "coupling" and main.loading.control == "force" and not main.loading.rigid_grip
+    assert twin.grips.kind == "nodal" and twin.loading.rigid_grip and twin.loading.value == main.loading.value == 10000.0
+    assert "rigid_grip = true  # the top grip's nodes move together" in specs_of(blank, tmp_path, PUBLIC_FILL, control="force", value=10000.0)[1]
+    nodal_main, nodal_twin = (parse_spec(text) for text in specs_of(blank, tmp_path, PUBLIC_FILL, grips="nodal", control="force", value=10000.0))
+    assert nodal_main.loading.rigid_grip and nodal_twin.loading.rigid_grip  # the form's nodal grip is a gripped tab too
+    assert all("rigid_grip" not in text for text in specs_of(blank, tmp_path, PUBLIC_FILL))
+
+
 def test_the_writer_and_the_parser_agree(blank, tmp_path):
     form = read_form(filled(blank, tmp_path, PUBLIC_FILL))
     values = check_form(form)

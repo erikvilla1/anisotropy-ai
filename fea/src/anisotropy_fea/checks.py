@@ -454,7 +454,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             elif not any(b.dof_first <= 1 and b.dof_last >= 2 for b in held):
                 notes.note("constraints", "fail", "no grip holds both in-plane directions; the coupon could move as a rigid body", ("Grip kind",))
             else:
-                how = "through a reference point at each end" if model.couplings else "node by node"
+                how = ("through a reference point at each end" if len(model.couplings) == 2 else
+                       "the bottom node by node, the top through a reference point that carries the force" if model.couplings else "node by node")
                 notes.note("constraints", "pass", f"bottom grip held in every direction ({bottom.size} nodes), top grip held across the width "
                            f"({top.size} nodes), {how}; no rigid-body motion is left")
             # load

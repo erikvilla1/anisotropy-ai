@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// The engine the browser tests run in (ADR-0113): Chromium unless BROWSER names another. Chromium runs as an installed Edge locally,
+// The engine the browser tests run in (ADR-0114): Chromium unless BROWSER names another. Chromium runs as an installed Edge locally,
 // or as BROWSER_CHANNEL names it (CI's bundled `chromium`); BROWSER=firefox runs Firefox, BROWSER=webkit runs WebKit, Safari's engine
 // and the one every browser on an iPhone or iPad uses.
 const ENGINES = ["chromium", "firefox", "webkit"] as const;

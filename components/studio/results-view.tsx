@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { explainJob, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+import { explainJob, sameResults, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
@@ -587,7 +587,14 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
       .catch((error) => { if (!cancelled && !(error instanceof StudioError && error.status === 409)) setAnswer(null); });
     return () => { cancelled = true; };
   }, [job?.job_id, job?.state, "explanation" in (job?.outputs ?? {}), apiBase]);
-  useEffect(() => { setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); setHighlight(criticalElement(fields)); }, [fields]);
+  const shownBefore = useRef(fields);
+  useEffect(() => {
+    // a run's fields read again (its later parts arrived) are the same model: the field, the ply and the place shown stay (ADR-0056 amendment 11)
+    const again = sameResults(shownBefore.current, fields);
+    shownBefore.current = fields;
+    if (again) return;
+    setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); setHighlight(criticalElement(fields));
+  }, [fields]);
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);

@@ -1,4 +1,4 @@
-"""Check a hosted Anisotropy after a deploy (ADR-0113): the site answers, the API answers with the commit just deployed, and one
+"""Check a hosted Anisotropy after a deploy (ADR-0114): the site answers, the API answers with the commit just deployed, and one
 public coupon job goes through the queue to a solver and comes back with its result. Standard library only, so the runner's Python
 runs it.
 

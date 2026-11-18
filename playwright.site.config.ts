@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 
-// Every browser spec the other configurations do not run (ADR-0113): the public pages, the home page's demo, the shell, the
+// Every browser spec the other configurations do not run (ADR-0114): the public pages, the home page's demo, the shell, the
 // libraries and the phone check. They need the built site only, so a new spec file is run here by default and CI cannot miss it.
 // The calculator needs the real API (playwright.calculator.config.ts), the workspace's scenarios play the API from fixtures
 // (playwright.studio.config.ts), and the live run reaches a real API on purpose (playwright.studio-live.config.ts).

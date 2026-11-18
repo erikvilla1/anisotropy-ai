@@ -88,13 +88,13 @@ def tokenize(text: str) -> list[KeywordBlock]:
     blocks: list[KeywordBlock] = []
     current: list | None = None
     for number, raw in enumerate(text.splitlines(), start=1):
-        line = raw.rstrip()
-        if not line.strip() or line.lstrip().startswith("**"):
+        line = raw.strip()
+        if not line or line.startswith("**"):
             continue
-        if line.lstrip().startswith("*"):
+        if line.startswith("*"):
             if current is not None:
                 blocks.append(_finish(current))
-            name, params = _keyword(line.lstrip(), number)
+            name, params = _keyword(line, number)
             current = [name, params, [], number, []]
             continue
         if current is None:

@@ -58,6 +58,34 @@ def test_force_control_with_nodal_grips_gives_consistent_edge_loads():
     assert coupling.loads[0].target == "RF-Top" and coupling.loads[0].value == pytest.approx(5000.0)
 
 
+def test_a_rigid_grip_under_a_force_is_held_below_and_tied_to_one_reference_point_above():
+    """ADR-0030 amendment 7: the CalculiX twin of a coupon under a force. The bottom grip is held node by node, so its reaction can be
+    printed; the top grip moves as one, as a coupled grip does, and our kernel gives it the coupled model's solution."""
+    from anisotropy_fea.abaqus_reader import parse_deck, to_si as deck_to_si
+    from anisotropy_fea.kernel import solve_deck
+    from anisotropy_fea.write_abaqus import write_abaqus
+
+    text = NODAL.replace('control = "displacement"\nvalue = 1.0', 'control = "force"\nvalue = 5000.0\nrigid_grip = true')
+    model = build_model(spec_from(text))
+    assert [(p.set_name, p.xy) for p in model.reference_points] == [("RF-Top", pytest.approx((0.0125, 0.250)))]
+    assert [(c.reference_set, c.node_set) for c in model.couplings] == [("RF-Top", "Grip-Top")]
+    assert model.boundaries == (BoundaryDefinition("Grip-Bottom", 1, 6), BoundaryDefinition("RF-Top", 1, 1), BoundaryDefinition("RF-Top", 3, 6))
+    assert [(load.target, load.dof, load.value) for load in model.loads] == [("RF-Top", 2, 5000.0)]
+    assert model.support_sets == ("RF-Top", "Grip-Bottom") and model.reaction_set == "Grip-Bottom"
+    assert "the top grip moves as one, its reference point carrying the force" in "\n".join(model.heading)
+    coupled = build_model(spec_from(text.replace('kind = "nodal"', 'kind = "coupling"').replace("\nrigid_grip = true", "")))
+    assert coupled.support_sets == ("RF-Top", "RF-Bottom") and coupled.reaction_set == "RF-Bottom"
+    solved = [solve_deck(deck_to_si(parse_deck(write_abaqus(m, "mm-MPa")), "mm-MPa")) for m in (model, coupled)]
+    count = model.mesh.node_count  # the coupon's own nodes come first in both
+    assert np.allclose(solved[0].displacement[:count], solved[1].displacement[:count], rtol=0, atol=1e-12)
+    moved = build_model(spec_from(NODAL))
+    assert moved.support_sets == ("Grip-Top", "Grip-Bottom") and moved.reaction_set == "Grip-Top" and not moved.couplings
+    for wrong in (NODAL.replace("value = 1.0", "value = 1.0\nrigid_grip = true"),  # a displacement moves every grip node alike already
+                  text.replace('kind = "nodal"', 'kind = "coupling"')):  # a coupled grip is rigid already
+        with pytest.raises(SpecError, match="rigid_grip belongs to force control on nodal grips"):
+            spec_from(wrong)
+
+
 def test_consistent_loads_for_eight_node_edges():
     mesh = structured_rectangle(10.0, 20.0, 2, 2, order=2)
     loads = consistent_edge_loads(mesh, "Grip-Top", 2, 300.0, instance="I")

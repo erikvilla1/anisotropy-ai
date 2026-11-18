@@ -533,6 +533,9 @@ class CouponJobOutput(Contract):
     claimed_at: str | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
     timings: dict[str, float] = {}  # the seconds of each stage of the tool and of the solver's phases around it, as far as the job got
     answer: JobAnswer | None = None  # a done run's answer in a few values, for the list of past analyses (ADR-0109); null when it kept none
+    # the report asked for after the run (ADR-0064 amendment 3): "writing" while its PDF is typeset, "failed" when the last try did not
+    # write it, null otherwise; once written it is the output `document`
+    report: Literal["writing", "failed"] | None = None
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
@@ -555,7 +558,7 @@ class CouponJobOutput(Contract):
                    project_id=None if getattr(job, "project_id", None) is None else str(job.project_id),
                    claimed_at=None if getattr(job, "claimed_at", None) is None else job.claimed_at.isoformat(),
                    timings=job.all_timings() if hasattr(job, "all_timings") else {},
-                   answer=job.answer() if hasattr(job, "answer") else None)
+                   answer=job.answer() if hasattr(job, "answer") else None, report=getattr(job, "report", None))
 
 
 class CouponCheckReceipt(Contract):

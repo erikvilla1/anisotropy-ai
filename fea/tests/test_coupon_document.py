@@ -203,12 +203,13 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     names = files_in(package)
     for name in ("README.txt", f"{package.name}-audit.xlsx", f"2-our-model/abaqus/{DESIGNATION}-abaqus.inp", "2-our-model/calculix/unnotched-im7-8552-nodal-ccx.inp",
                  "2-our-model/calculix/unnotched-im7-8552-nodal-abaqus.inp",  # the twin our engine compared with CalculiX
-                 f"2-our-model/spec/{DESIGNATION}.toml", "2-our-model/spec/unnotched-im7-8552-nodal.toml", "3-material/im7-8552.csv",
-                 "4-results/ours-all-plies.csv"):
+                 "3-material/im7-8552.csv", "4-results/ours-all-plies.csv"):
         assert name in names, name
+    assert not any(name.startswith("2-our-model/spec") or name.endswith(".toml") for name in names)  # our specs stay with us (ADR-0112)
     # what the team reads: numbered figures the text refers to, no decision-record numbers, the hand check where the record compares
     prose = coupon.VERBATIM.sub("", tex)
-    assert "ADR-" not in prose and "engine theory, Section" not in prose and "the engine manual, Sections 3 and 4" in prose
+    assert "ADR-" not in prose and "engine theory, Section" not in prose and r"Sections~\ref{sec:engine-3} and~\ref{sec:engine-4}" in prose
+    assert all(rf"\label{{sec:engine-{n}}}" in tex for n in "12345")  # each pointer lands on a step of the hand calculation
     for label in ("fig:model", "fig:solution", "fig:differences"):
         assert rf"\label{{{label}}}" in tex, label
     assert r"Figure~\ref{fig:solution}" in tex and r"Figure~\ref{fig:differences}" in tex
@@ -250,7 +251,8 @@ def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_co
     middle gets our every output, the two scripts that read their ODB and compare it, the README's steps and the CAE steps for S4; the
     package names the attempt that built it."""
     assert EVERY_LAYER_PUBLIC != D3039_PUBLIC
-    tex_path, package = coupon.build_document(public_sources(coupon, tmp_path, EVERY_LAYER_PUBLIC), pdf=False, theory=False, attempt="02")
+    src = public_sources(coupon, tmp_path, EVERY_LAYER_PUBLIC)
+    tex_path, package = coupon.build_document(src, pdf=False, theory=False, attempt="02")
     names = files_in(package)
     for name in ("4-results/ours-every-output.csv", "4-results/ours-every-output.json", "4-results/ours-all-plies.csv",
                  *(f"5-verify/{tool}" for tool in coupon.VERIFY_TOOLS)):
@@ -262,7 +264,7 @@ def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_co
     built = [name for name in names if name.startswith("2-our-model/abaqus/") and name.endswith("-build.py")]
     assert len(built) == 1 and built[0] in readme and "builds that model for you (File, Run Script)" in readme
     script = (package / built[0]).read_text(encoding="utf-8")
-    assert script == coupon.cae_script(load_spec(package / "2-our-model/spec" / f"{DESIGNATION}.toml"))
+    assert script == coupon.cae_script(load_spec(src.spec))
     assert script.isascii() and "sketch.rectangle(point1=(0.0, 0.0), point2=(WIDTH, LENGTH))" in script
     assert "build.py" in tex_path.read_text(encoding="utf-8")  # the document's list of files names it too
     assert "Attempt:       02 (our attempt this package delivers)" in readme
@@ -281,6 +283,42 @@ def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_co
     rubric = {form[RUBRIC_SHEET].cell(r, 1).value: r for r in range(2, form[RUBRIC_SHEET].max_row + 1)}
     ours = form[RUBRIC_SHEET].cell(rubric["C8"], RUBRIC_COLUMNS.index("Ours") + 1).value  # every other output, for the engineer to judge
     assert ours.startswith("Every element and ply: 4-results/ours-every-output.csv") and "compare_every_output.py" in ours
+
+
+def test_the_reader_gets_hand_calculations_and_no_code_of_ours(coupon, tmp_path):
+    """ADR-0112 (the founder, 2026-11-18): no line of our code and no file of ours in the PDF, its LaTeX or the package; in their place
+    the coupon worked by hand with its own numbers. The package keeps the Abaqus scripts the engineer runs (his choice, the same day)."""
+    src = public_sources(coupon, tmp_path, EVERY_LAYER_PUBLIC)
+    tex_path, package = coupon.build_document(src, pdf=False, theory=True)
+    tex = tex_path.read_text(encoding="utf-8")
+    body = tex.split(r"\begin{document}", 1)[1].replace("fea/checks/unnotched-im7-8552/", "")  # the stand-in's card says where its size came from
+    allowed = coupon.package_scripts(src, load_spec(src.spec))
+    assert coupon.our_code_named(body, allowed) == []
+    assert not re.search(r"^%", tex, re.M) and "enginecode}" not in body and r"\begin{plainfile}" in body  # the Abaqus keyword boxes stay
+    readme = (package / "README.txt").read_text(encoding="utf-8").replace("fea/checks/unnotched-im7-8552/", "")
+    assert coupon.our_code_named(readme, allowed) == []
+    form = load_workbook(package / f"{package.name}-audit.xlsx")
+    cells = " ".join(str(cell.value) for sheet in form for row in sheet.iter_rows() for cell in row if cell.value is not None)
+    assert coupon.our_code_named(cells.replace("fea/checks/unnotched-im7-8552/", ""), allowed) == []
+    names = files_in(package)
+    assert not any(name.endswith((".toml", ".md")) for name in names) and f"2-our-model/abaqus/{DESIGNATION}-build.py" in names
+    # the hand calculation, step by step, with the coupon's numbers and the engine's results
+    hand = tex[tex.index(r"\label{sec:hand}"):tex.index(r"\label{sec:clt}")]
+    for title in ("The ply's stiffness in its fibre axes", "Each ply angle's stiffness in the coupon's axes", "The laminate's membrane stiffness",
+                  "The force and the strain the loading gives", "Every ply's stress in its fibre axes", "The loading at first-ply failure"):
+        assert title in hand, title
+    assert r"\begin{align*}" in hand and r"\times" in hand and "98842.3" in hand  # A11 in N/mm, worked from the plies
+    assert "Daniel and Ishai" in hand and r"\label{sec:engine-5}" in hand
+    # the finite element model in equations, beside the hand result
+    theory = tex[tex.index(r"\label{sec:theory}"):tex.index(r"\chapter{", tex.index(r"\label{sec:theory}"))]
+    assert r"\mathbf{K}\,\mathbf{u} = \mathbf{f}" in theory and "Gauss" in theory
+    assert "By hand" in tex[tex.index(r"\label{sec:clt}"):tex.index(r"\label{sec:theory}")]
+    # the record and the conventions as tables of what they hold
+    assert "Our record of the CalculiX run is kept with us" in tex and "Layer order" in tex and "first-line-bottom" in tex
+    # a note that names a file of ours is caught
+    assert coupon.our_code_named(r"see \texttt{docs/\allowbreak{}models/\allowbreak{}build.py}") == ["docs/models/build.py"]
+    assert coupon.our_code_named(r"\begin{enginecode}") == [r"\begin{enginecode}"]
+    assert coupon.our_code_named("2-our-model/abaqus/X-build.py", ("X-build.py",)) == []
 
 
 def test_the_coupon_document_compiles_where_tectonic_is_installed(coupon, tmp_path):
@@ -324,10 +362,10 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert "PrePoMax 2.6}" not in tex  # the Abaqus chapter writes the Abaqus/CAE steps only
     assert package == tmp_path / "documents" / f"{TODAY}_grips"
     expected = ["README.txt", f"{package.name}-audit.xlsx", "1-team-model/coupon-2x8-grips-im7-8552.inp", "2-our-model/abaqus/grips-coupon-abaqus.inp",
-                "2-our-model/spec/grips-coupon.toml", "3-material/im7-8552.csv", "4-results/ours-S11.csv", "4-results/ours-S22.csv", "4-results/ours-Mises.csv",
+                "3-material/im7-8552.csv", "4-results/ours-S11.csv", "4-results/ours-S22.csv", "4-results/ours-Mises.csv",
                 "4-results/team-vs-ours.csv", "4-results/ours-all-plies.csv"]
     names = files_in(package)
-    assert set(expected) <= names and not any(name.endswith(".frd") for name in names)
+    assert set(expected) <= names and not any(name.endswith((".frd", ".toml")) for name in names)  # no spec of ours (ADR-0112)
     ours = (package / "4-results/ours-S22.csv").read_text(encoding="utf-8").splitlines()[0]
     assert ours == (tmp_path / "team/Test_S22.csv").read_text(encoding="utf-8").splitlines()[0]  # the team's columns, in the team's order
     readme = (package / "README.txt").read_text(encoding="utf-8").splitlines()
@@ -338,7 +376,7 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     cover = {form["Cover"].cell(r, 1).value: form["Cover"].cell(r, 2).value for r in range(1, form["Cover"].max_row + 1)}
     record = {form[RECORD_SHEET].cell(r, 1).value: form[RECORD_SHEET].cell(r, 2).value for r in range(1, form[RECORD_SHEET].max_row + 1)}
     assert cover["Package"] == package.name and record["Team deck"] == "coupon-2x8-grips-im7-8552.inp"  # the digest and the build: Record sheet
-    assert cover["Team's deck"].startswith("coupon-2x8-grips-im7-8552.inp (") and cover["Our deck"].startswith("grips-coupon-abaqus.inp, written from the spec ")
+    assert cover["Team's deck"].startswith("coupon-2x8-grips-im7-8552.inp (") and cover["Our deck"] == "grips-coupon-abaqus.inp, written by our model generator"
     assert "/" not in cover["Team's deck"] and "/" not in cover["Our deck"]  # file names only, as the founder asked
     rows = {form["Rubric"].cell(r, 1).value: r for r in range(2, form["Rubric"].max_row + 1)}
     result = lambda item: form["Rubric"].cell(rows[item], RUBRIC_COLUMNS.index("Result") + 1).value  # noqa: E731

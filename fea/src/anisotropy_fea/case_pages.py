@@ -109,14 +109,31 @@ NO_RECORD_YET = ("No CalculiX record yet: run the twin in CalculiX and write `ou
                  "`fea/tools/record_from_dat.py` (the Rebuild section says how).")  # a coupon just started from its input form
 
 
+def reaction_row(rows) -> tuple[ComparisonRow, float] | None:
+    """The record's row for the force a gripped coupon carries along its length, and the sign that turns it to the load's: the moving
+    grip's reaction, or under a force the held grip's, which answers against the load (ADR-0030 amendment 7). None when the record holds
+    neither."""
+    for name, sign in (("Grip-Top", 1.0), ("Grip-Bottom", -1.0)):
+        row = next((r for r in rows if r.group == "rf" and r.name == name and r.component == 1), None)
+        if row is not None:
+            return row, sign
+    return None
+
+
+def reaction_difference(rows) -> str | None:
+    """How far our reaction is from the reference's in the load's sense, as the tables print it; None when the record holds no reaction."""
+    reaction = reaction_row(rows)
+    return None if reaction is None else signed(reaction[1] * reaction[0].reference, reaction[1] * reaction[0].kernel)
+
+
 def record_summary(folder: Path) -> tuple[list[ComparisonRow] | None, str]:
     """A coupon's CalculiX rows and their one-line summary, or None and "no record yet" while the record is not written."""
     record_path = calculix_record(folder)
     if not record_path.is_file():
         return None, "no record yet"
     _, record, _ = record_rows(record_path)
-    reaction = [r for r in record if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
-    return record, f"{sum(r.agrees for r in record)} of {len(record)}" + (f"; reaction {signed(reaction[0].reference, reaction[0].kernel)}" if reaction else "")
+    reaction = reaction_difference(record)
+    return record, f"{sum(r.agrees for r in record)} of {len(record)}" + (f"; reaction {reaction}" if reaction else "")
 
 
 def record_rows(record_path: Path) -> tuple[list[list[str]], list[ComparisonRow], dict]:
@@ -127,9 +144,10 @@ def record_rows(record_path: Path) -> tuple[list[list[str]], list[ComparisonRow]
     agreeing = sum(row.agrees for row in rows)
     out = [[f"Values compared ({record_path.name})", f"{solver_text(solver)}, {len(rows)} values",
             "our kernel", f"{agreeing} of {len(rows)} within {100 * expected['tolerance']:g} % (floor {100 * expected.get('floor', 0.0):g} %)"]]
-    for row in rows:
-        if row.group == "rf" and row.name == "Grip-Top" and row.component == 1:
-            out.append(["Reaction at Grip-Top, along the coupon", f"{row.reference:.6g} N", f"{row.kernel:.6g} N", signed(row.reference, row.kernel)])
+    reaction = reaction_row(rows)
+    if reaction is not None:
+        row = reaction[0]
+        out.append([f"Reaction at {row.name}, along the coupon", f"{row.reference:.6g} N", f"{row.kernel:.6g} N", signed(row.reference, row.kernel)])
     for row in rows:
         if row.group == "strain" and row.component == 1:
             out.append([f"Strain eps_y at element {row.name}", f"{row.reference:.5g}", f"{row.kernel:.5g}", signed(row.reference, row.kernel)])
@@ -263,11 +281,11 @@ def benchmarks_block() -> str:
         if paths.CHECKS not in record_path.parents:
             continue
         _, record, raw = record_rows(record_path)
-        reaction = [r for r in record if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
+        reaction = reaction_difference(record)
         solver = raw["solver"]
         rows.append([f"`{record_path.parent.parent.name}/records/{record_path.stem}`", raw["title"].rsplit(": ", 1)[0],
                      solver_text(solver),
-                     f"{sum(r.agrees for r in record)} of {len(record)} agree" + (f"; reaction {signed(reaction[0].reference, reaction[0].kernel)}" if reaction else "")])
+                     f"{sum(r.agrees for r in record)} of {len(record)} agree" + (f"; reaction {reaction}" if reaction else "")])
     for case_path in sorted(p for p in paths.CASES.glob("*.toml") if not p.name.startswith("_")):
         case = load_case(case_path)
         reference = ("the engine's laminate theory, recomputed live" if "engine-equality" in case_path.stem

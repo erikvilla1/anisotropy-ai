@@ -21,6 +21,7 @@ from anisotropy_api.main import app, job_recorder
 from anisotropy_api.settings import DATABASE_VARIABLE, RECORDING_VARIABLE
 
 from conftest import TEST_URL, needs_test_database
+from typesetter_stub import stand_in_typesetter
 
 FORM = b"PK\x03\x04" + bytes(200)  # starts as an .xlsx file does; only the stand-in reads it
 STAND_IN = r'''
@@ -83,6 +84,16 @@ if args.source == "RESULT":
     sys.exit(0)
 package = result.parent / "2026-10-27_IM7-UNT-L1"
 package.mkdir()
+if args.source == "REPORT":  # a run without its PDF: the package without it, and the report's own LaTeX and figures (ADR-0064 amendment 3)
+    (package / "README.txt").write_text("the package", encoding="utf-8")
+    import zipfile
+    kept = result.parent / "IM7-UNT-L1-report-source.zip"
+    with zipfile.ZipFile(kept, "w") as archive:
+        archive.writestr("IM7-UNT-L1.tex", "the report of IM7-UNT-L1")
+        archive.writestr("figures/model.png", "a figure")
+    result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "message": "done", "documents": "written",
+                                  "outputs": {"package": str(package), "fields": str(fields), "document_source": str(kept)}}), encoding="utf-8")
+    sys.exit(0)
 (package / "IM7-UNT-L1.pdf").write_bytes(b"%PDF")
 source = pathlib.Path(args.source)
 size = source.stat().st_size if source.is_file() else 0
@@ -131,6 +142,29 @@ def test_a_form_runs_in_the_background_to_its_package(jobs):
     package = client.get(f"/v1/coupon-jobs/{job_id}/package")
     assert package.status_code == 200 and package.headers["content-type"] == "application/zip"
     assert zipfile.ZipFile(io.BytesIO(package.content)).namelist() == ["2026-10-27_IM7-UNT-L1/", "2026-10-27_IM7-UNT-L1/IM7-UNT-L1.pdf"]
+
+
+def test_a_report_asked_for_on_this_machine_is_written_into_the_package(jobs, tmp_path, monkeypatch):
+    """ADR-0064 amendment 3, without a store: the report is typeset from the run's own source into the package folder, where a run
+    with its PDF writes it; the job lists it and the package's zip, made after it, holds it."""
+    stand_in_typesetter(tmp_path, monkeypatch)
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "REPORT", "run_by": "A. Engineer", "pdf": False}).json()["job_id"]
+    done = ended(job_id)
+    assert done["state"] == "done" and "document" not in done["outputs"] and done["report"] is None
+    early = zipfile.ZipFile(io.BytesIO(client.get(f"/v1/coupon-jobs/{job_id}/package").content)).namelist()
+    assert "2026-10-27_IM7-UNT-L1/IM7-UNT-L1.pdf" not in early
+    assert client.post(f"/v1/coupon-jobs/{job_id}/document").status_code == 202
+    deadline = time.monotonic() + 30
+    while "document" not in (status := client.get(f"/v1/coupon-jobs/{job_id}").json())["outputs"]:
+        assert status["report"] == "writing" and time.monotonic() < deadline, status
+        time.sleep(0.02)
+    assert status["report"] is None and status["outputs"]["document"].endswith("2026-10-27_IM7-UNT-L1/IM7-UNT-L1.pdf")
+    report = client.get(f"/v1/coupon-jobs/{job_id}/files/document", params={"name": "D3039_report.pdf"})
+    assert report.status_code == 200 and report.content == b"%PDF typeset from: the report of IM7-UNT-L1"
+    assert report.headers["content-type"] == "application/pdf" and "D3039_report.pdf" in report.headers["content-disposition"]
+    later = zipfile.ZipFile(io.BytesIO(client.get(f"/v1/coupon-jobs/{job_id}/package").content)).namelist()
+    assert "2026-10-27_IM7-UNT-L1/IM7-UNT-L1.pdf" in later
+    assert client.post(f"/v1/coupon-jobs/{job_id}/document").status_code == 200
 
 
 def test_one_job_runs_at_a_time(jobs):
