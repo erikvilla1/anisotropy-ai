@@ -50,6 +50,13 @@
 .studio-scene-block { display: grid; gap: 10px; }
 .studio-canvas { position: relative; height: 520px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
 .studio-canvas canvas { display: block; }
+/* the view's buttons over the model (ADR-0111 amendment 2): fit, top, and each layer shown (pressed) or hidden */
+.studio-view-tools { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: calc(100% - 16px); }
+.studio-view-tools button { padding: 4px 9px; border-radius: 6px; border: 1px solid #383838; background: rgba(20, 20, 20, 0.85); color: #bdbdbd; font-size: 12px; cursor: pointer; }
+.studio-view-tools button:hover { border-color: #808080; color: #efefef; }
+.studio-view-tools button[aria-pressed="true"] { color: #efefef; border-color: #6a6a6a; background: rgba(48, 48, 48, 0.9); }
+.studio-view-tools button[aria-pressed="false"] { text-decoration: line-through; color: #8a8a8a; }
+.studio-view-sep { width: 1px; background: #383838; margin: 2px 2px; }
 .studio-scene-loading, .studio-webgl-missing { min-height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
 .studio-webgl-missing strong { color: var(--text); }
 .studio-label { font-size: 11px; color: var(--text); background: rgba(12, 14, 13, 0.85); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; white-space: nowrap; pointer-events: none; }

@@ -348,12 +348,16 @@ export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & {
 export type Verification = { line: string; verified: boolean };
 /** The reference solver's check in one line, from the summary the package wrote when it is there, else from the result line the
  * pipeline reported ("57 of 57 recorded values agree with …"); null before the reference solver has run. "Verified" only when every
- * value agrees; otherwise the line says how many did, and `verified` is false so the page does not show it as a pass. */
-export function verificationOf(result: string | null | undefined, beside?: { agree: string; tolerance: number } | null): Verification | null {
+ * value agrees; otherwise the line says how many did, and `verified` is false so the page does not show it as a pass. `brief`, the
+ * product's view: no counts, which a customer is not asked to judge (the founder, 2026-11-17: "something the user shouldn't be trying to
+ * verify"), only whether a second solver agrees. */
+export function verificationOf(result: string | null | undefined, beside?: { agree: string; tolerance: number } | null, brief = false): Verification | null {
   const counted = beside && /\d+\s+of\s+\d+/.test(beside.agree) ? beside.agree.match(/(\d+)\s+of\s+(\d+)/)
     : result?.match(/(\d+)\s+of\s+(\d+)\s+recorded values agree/);
   if (!counted) return null;
   const [agree, of] = [Number(counted[1]), Number(counted[2])];
+  if (brief) return agree === of && of > 0 ? { line: "Checked by a second solver", verified: true }
+    : { line: "A second solver differs on some values: treat this result with care", verified: false };
   const how = beside && /\d+\s+of\s+\d+/.test(beside.agree) ? `within ${Number((100 * beside.tolerance).toPrecision(3))} %` : "agree";
   return agree === of && of > 0
     ? { line: `Verified against reference solver: ${agree} of ${of} values ${how}`, verified: true }

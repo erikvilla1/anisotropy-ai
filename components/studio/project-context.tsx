@@ -12,6 +12,7 @@ import { useCouponRun, type CouponRun } from "./use-coupon-run";
 import { useImportedModel, type ImportedState } from "./use-imported-model";
 import { useLiveSolve } from "./use-live-solve";
 import { usePastRun, type PastState } from "./use-past-run";
+import { useVersions, type VersionsState } from "./use-versions";
 
 /** The project the workspace edits and its run, shared by the chat, the form and the viewer (ADR-0062): the rows live in one place, so
  * switching between them loses nothing, and a reload picks the last project up from this browser. */
@@ -62,6 +63,8 @@ export type ProjectContextValue = {
   /** The field and ply the model is coloured by now, as the viewer says it, so the Results tab presses the button of what is shown. */
   shownField: { id: string; ply: number } | null;
   setShownField(next: { id: string; ply: number } | null): void;
+  /** The versions of the setup (ADR-0113): each settled change, who made it and why, and the run made from it; any can be gone back to. */
+  versions: VersionsState;
 };
 
 /** A field to colour the results by; `at` tells one request from the next, so the same field can be asked twice. */
@@ -135,6 +138,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [view, setView] = useState<FieldView | null>(null);
   const showField = useCallback((next: Omit<FieldView, "at">) => setView((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
   const [shownField, setShownField] = useState<{ id: string; ply: number } | null>(null);
+  const versions = useVersions(project.id, project.form, project.plate, run, setForm, setPlate, browserStorage);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   const offersAll = allTests || (plates && project.form.test === PLATE_TEST); // a founder's plate is offered every row (ADR-0089 amendment 7)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests, offersAll); // our kernel answers each settled edit (ADR-0086)
@@ -144,9 +148,9 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, imports, plates, offersAll, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
     setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
-    emphasis, setEmphasis, view, showField, shownField, setShownField,
+    emphasis, setEmphasis, view, showField, shownField, setShownField, versions,
   }), [apiBaseUrl, allTests, imports, plates, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed,
-    emphasis, view, showField, shownField]);
+    emphasis, view, showField, shownField, versions]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

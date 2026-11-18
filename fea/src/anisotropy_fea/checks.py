@@ -484,7 +484,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             notes.note("criterion", "warn", ("no failure criterion: an isotropic material's yield and failure are not modelled yet, so the run reports "
                                              "stiffness, stress and strain only" if isotropic else
                                              "no failure criterion: first-ply failure will not be reported"
-                                             + ("" if has_strengths else " (the material has no strengths)")), ("Failure criterion",))
+                                             + ("" if has_strengths else " (the material has no strengths: it needs F1t, F1c, F2t, F2c and F6, along and "
+                                                "across the fibres in tension and compression, and in shear)")), ("Failure criterion",))
         else:
             bad = []
             for criterion in criteria:

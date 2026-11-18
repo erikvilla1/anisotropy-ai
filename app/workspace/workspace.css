@@ -79,6 +79,9 @@
 .ws-tree-fields button:hover { border-color: var(--muted); }
 .ws-tree-fields button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 .ws-tree-ply { margin-top: 10px; }
+/* a check's warning, in the tab it is about (ADR-0111 amendment 2) */
+.ws-tree-warnings { list-style: none; margin: 10px 0 0; padding: 8px 10px; border: 1px solid #5b4a24; border-radius: 6px; background: #221d12; color: #eadcb8; font-size: 13px; line-height: 1.45; }
+.ws-tree-warnings li + li { margin-top: 6px; }
 .ws-panel-changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); transition: border-color 0.2s, box-shadow 0.2s; }
 .ws-fix-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; }
 .ws-outputs { margin: 0; }

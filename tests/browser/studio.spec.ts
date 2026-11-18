@@ -537,6 +537,7 @@ test.describe("the model tree", () => {
     await expect(page.locator("#studio-control option[value='']")).toHaveText("displacement, chosen for you"); // a blank row says what stands for it
     await expect(page.getByTestId("tension-files")).toContainText("Report (PDF)", { timeout: 45_000 });
     await expect(page.getByTestId("panel-outputs")).toHaveAttribute("open", "");
+    await expect(page.getByTestId("chat-result-line")).toHaveText("Checked by a second solver"); // no counts for the customer to judge
     // the Results tab says the answer in three lines and colours the model by a field and a ply, both ways with the viewer
     const answer = page.getByTestId("tree-results-answer");
     await expect(answer).toContainText("Reaction");
@@ -606,6 +607,12 @@ test.describe("the model tree", () => {
     await expect.poll(() => calls.checks.length).toBe(1); // applied, the setup is checked with the lists and the model appears
     const first = (calls.checks[0] as { values: Record<string, unknown> }).values;
     expect([first.test, first.supports, first.loads]).toEqual(["plate", [{ region: "Edge-Left", dofs: [1, 2, 3, 4, 5, 6] }], [{ region: "Edge-Right", dof: 1, total: 10000 }]]);
+    // a warning is said in the tab it is about, naming what is missing, and the chat's warning opens that tab (ADR-0111 amendment 2)
+    await expect(page.getByTestId("warnings-material")).toContainText("it needs F1t, F1c, F2t, F2c and F6");
+    await page.getByTestId("panel-material").locator("summary").click();
+    await expect(page.getByTestId("panel-material")).not.toHaveAttribute("open", "");
+    await page.getByTestId("chat-check").last().getByRole("button", { name: "Open Material" }).click();
+    await expect(page.getByTestId("panel-material")).toHaveAttribute("open", "");
     // clicked on the model: the face is loaded from the click, and the Loads tab opens with its row to fill in
     await expect(page.getByTestId("preview")).toBeVisible();
     await expect(async () => { // the scene takes a click once it has drawn the new model
@@ -2035,7 +2042,8 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await expect(run).toHaveAttribute("data-state", "running", { timeout: 30_000 });
   await expectNoBannedTerms(page, "running");
   phase = "result"; // solved and checked against the reference solver, the report still being written
-  await expect(run.getByTestId("job-message")).toHaveText("Verified against reference solver: 57 of 57 values agree", { timeout: 30_000 });
+  // the customer is told the second solver agrees, not asked to judge its counts (the founder, 2026-11-17; ADR-0111 amendment 2)
+  await expect(run.getByTestId("job-message")).toHaveText("Checked by a second solver", { timeout: 30_000 });
   await expectNoBannedTerms(page, "the result in, the report being written");
   phase = "done";
   await expect(run).toHaveAttribute("data-state", "done", { timeout: 30_000 });

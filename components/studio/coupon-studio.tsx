@@ -56,7 +56,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
-      {job ? <JobProgress job={job} /> : null}
+      {job ? <JobProgress job={job} brief={!allTests} /> : null}
       {shown ? (
         <>
           {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}

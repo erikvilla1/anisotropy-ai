@@ -6,7 +6,7 @@ import { isActive, StudioError } from "@/lib/studio-api";
 import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadable, runStatus, sentence } from "@/lib/studio-copy";
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { appliedOf } from "@/lib/applied";
-import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tabState, type TabId } from "@/lib/model-tree";
+import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tab, tabState, type TabId } from "@/lib/model-tree";
 import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import {
@@ -106,7 +106,14 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   const state = (id: TabId) => tabState(id, checklist);
   /** A tab whose part is drawn on the model lights it while it is open (ADR-0111). */
   const lights = (id: "conditions" | "loads") => (open: boolean) => setEmphasis(open ? id : emphasis === id ? null : emphasis);
-  const defaults = (id: TabId) => <Defaults id={id} lines={builtFor(id, built)} />;
+  /** What the check warns about a tab, said in that tab (ADR-0111 amendment 2): a material without strengths names the five under Material. */
+  const warned = (id: TabId) => {
+    const items = checklist?.items.filter((item) => item.state === "warn" && tab(id).items.includes(item.id)) ?? [];
+    return items.length ? (
+      <ul className="ws-tree-warnings" data-testid={`warnings-${id}`}>{items.map((item) => <li key={item.id}><strong>{item.label}:</strong> {checkText(item)}</li>)}</ul>
+    ) : null;
+  };
+  const defaults = (id: TabId) => <>{warned(id)}<Defaults id={id} lines={builtFor(id, built)} /></>;
 
   return (
     <div className="studio-form ws-rail-panels ws-tree" data-testid="tension-screen">
@@ -219,6 +226,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
           {layupError ? <span className="chat-error" role="alert">{layupError}</span> : null}
           <span className="studio-hint">{isPlate ? "0° runs along the plate's length, x." : "0° runs along the load."}</span>
         </form>
+        {warned("layup")}
       </StepPanel>
 
       <StepPanel id="step" title="Analysis step" step={5} open={false} note="Static, linear">

@@ -90,6 +90,10 @@ test("the verification line says verified only when every value agrees, from the
   assert.deepEqual(verificationOf(null, { agree: "71 of 73", tolerance: 0.03 }), { line: "Reference solver check: 71 of 73 values within 3 %", verified: false });
   assert.deepEqual(verificationOf("52 of 57 recorded values agree with CalculiX"), { line: "Reference solver check: 52 of 57 values agree", verified: false });
   assert.equal(verificationOf(null), null);
+  // the product's view: whether a second solver agrees, without the counts a customer is not asked to judge (ADR-0111 amendment 2)
+  assert.deepEqual(verificationOf(null, { agree: "73 of 73", tolerance: 0.03 }, true), { line: "Checked by a second solver", verified: true });
+  assert.deepEqual(verificationOf("52 of 57 recorded values agree with CalculiX", null, true),
+    { line: "A second solver differs on some values: treat this result with care", verified: false });
   assert.equal(verificationOf("the package not written"), null);
 });
 

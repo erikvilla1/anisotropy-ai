@@ -143,7 +143,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const lastSaid = useRef<string | null>(null); // the engineer's last message: the reason a change it led to is kept with its version (ADR-0113)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
   // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105),
@@ -348,6 +349,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function answer(echo: string, rows: StudioForm) {
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     if (rows.filled_by) remember(RUN_BY_KEY, rows.filled_by.trim());
+    versions.attribute("you", echo);
     setForm(next);
     clearRun();
     add({ role: "user", text: echo });
@@ -371,6 +373,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function startOver() {
     setProposed(null);
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
+    versions.attribute("you", "Start over");
     setForm(fresh); runner.reset();
     setEntries([]);
     ask(simpleRef.current ? "material" : "test");
@@ -619,6 +622,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const text = value.trim();
     if (!text) return;
     setInput("");
+    lastSaid.current = text;
     if (!shown.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
     // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
     const term = termAsked(text);
@@ -738,6 +742,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const onPlate = lists.supports.length > plateRef.current.supports.length || lists.loads.length > plateRef.current.loads.length;
     if (!Object.keys(rows).length && !onPlate) return;
     const next: StudioForm = Object.keys(rows).length ? mergeRows(formRef.current, rows) : formRef.current; // a new test clears a standard it is not under (ADR-0072)
+    versions.attribute("assistant", lastSaid.current); // applied from the message, ticked by the engineer
     if (next !== formRef.current) setForm(next);
     if (onPlate) setPlate(lists);
     clearRun();
@@ -783,6 +788,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     add(...you, { role: "assistant", kind: "text", title: "Got it", body: <>
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
+    versions.attribute("assistant", text);
     setForm(next); clearRun();
     reveal(Object.keys(rows));
     proceed(next);
@@ -934,6 +940,13 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const warnings = items.filter((i) => i.state === "warn");
     const passed = items.filter((i) => i.state === "pass").length;
     const stepsFor = (rows: string[]) => [...new Set(rows.map((label) => stepOfKey(fieldByLabel[label]?.key ?? "")))];
+    const fixLink = (item: CheckAnswer["checklist"]["items"][number], word = "Fix under") => {
+      const target = allTests ? panelToFix(item) : tabToFix(item); // the full form's step panel, or the model tree's tab (ADR-0111)
+      const title = target ? (allTests ? panel(target as PanelId).title : tab(target as TabId).title) : "";
+      const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
+      return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>{word} {title}</button>
+        : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
+    };
     return (
       <div data-testid="chat-check" data-state={result.state}>
         <h4>{result.state === "ready" ? "Ready to run" : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
@@ -941,17 +954,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {blocking.length ? (
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
           <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} allTests={allTests} onApply={(rows, echo) => answer(echo, rows)}
-            link={(item) => {
-              const target = allTests ? panelToFix(item) : tabToFix(item); // the full form's step panel, or the model tree's tab (ADR-0111)
-              const title = target ? (allTests ? panel(target as PanelId).title : tab(target as TabId).title) : "";
-              const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
-              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {title}</button>
-                : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
-            }} />
+            link={(item) => fixLink(item)} />
         ) : null}
         {warnings.length ? (
           <ul className="chat-issues chat-warnings">
-            {warnings.map((item) => <li key={item.id}><CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)}</span></li>)}
+            {/* a warning says where it is dealt with, as an item to fix does (ADR-0111 amendment 2) */}
+            {warnings.map((item) => <li key={item.id}><CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)} {fixLink(item, "Open")}</span></li>)}
           </ul>
         ) : null}
         <details className="chat-details"><summary>All checks</summary>
@@ -973,7 +981,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const s = fields.summary, lab = fields.labels;
     const earliest = s.earliest ? s.fpf[s.earliest] : null;
     const stat = answerStat(fields, printed); // the answer the page leads with (ADR-0085); a result written before it keeps the whole model's first failure
-    const check = job ? verificationOf(job.result, s.calculix ?? null) : null;
+    const check = job ? verificationOf(job.result, s.calculix ?? null, !allTests) : null;
     return (
       <div data-testid="chat-result">
         <h4>Results</h4>
