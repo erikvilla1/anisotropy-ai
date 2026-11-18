@@ -214,6 +214,68 @@ jobs:
           docker logs api || true
           docker rm -f api || true
 
+  worker-run:
+    # The change as the hosted tier runs it (ADR-0113): the Worker, the site built for /api and both containers from this Dockerfile,
+    # under `wrangler dev` with the local queue, PostgreSQL and an S3 stand-in for R2; then the deploy's own check and the studio's live
+    # browser run against it. The preview version Deploy uploads for a pull request has no address (Cloudflare gives none to a Worker
+    # with Durable Objects), so this is where the pull request's Worker and image are run together before a merge deploys them.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: anisotropy
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: anisotropy_worker
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U anisotropy -d anisotropy_worker" --health-interval 5s --health-retries 10
+    env:
+      WRANGLER_SEND_METRICS: "false"
+      BROWSER_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: npm ci
+      - run: uv sync --project api --locked
+      - name: The database's tables, and an S3 stand-in with its bucket
+        run: |
+          (cd api && DATABASE_URL=postgresql://anisotropy:ci-only@127.0.0.1:5432/anisotropy_worker uv run alembic upgrade head)
+          nohup uv run --project api moto_server -H 0.0.0.0 -p 9000 > moto.log 2>&1 &
+          for i in $(seq 30); do curl -sf http://127.0.0.1:9000/ > /dev/null && break; sleep 1; done
+          uv run --project api python -c "import boto3; boto3.client('s3', endpoint_url='http://127.0.0.1:9000', region_name='us-east-1', aws_access_key_id='ci-only', aws_secret_access_key='ci-only').create_bucket(Bucket='anisotropy-ci')"
+      - run: npm run build:hosted
+      - name: The Worker under wrangler dev, its containers reaching the database and the store through Docker's bridge
+        run: |
+          {
+            echo "DATABASE_URL=postgresql://anisotropy:ci-only@172.17.0.1:5432/anisotropy_worker"
+            echo "ANISOTROPY_R2_BUCKET=anisotropy-ci"
+            echo "ANISOTROPY_R2_ENDPOINT=http://172.17.0.1:9000"
+            echo "ANISOTROPY_R2_ACCESS_KEY_ID=ci-only"
+            echo "ANISOTROPY_R2_SECRET_ACCESS_KEY=ci-only"
+            echo "ANISOTROPY_GIT_COMMIT=$GITHUB_SHA"
+          } > .dev.vars
+          nohup npx wrangler dev --ip 127.0.0.1 --port 8787 > wrangler.log 2>&1 &
+          for i in $(seq 900); do grep -q "Ready on" wrangler.log && break; sleep 1; done
+          grep -q "Ready on" wrangler.log
+      - name: The deploy's check against it (the site, the API on this commit, one public coupon job through the queue)
+        run: python3 scripts/check-hosted.py --site http://127.0.0.1:8787 --commit "$GITHUB_SHA" --values tests/fixtures/studio/values.json --wait 900
+      - run: npx playwright install --with-deps chromium
+      - name: The studio's live browser run, the public example end to end through the Worker
+        run: npm run test:studio-live
+        env:
+          PREVIEW_URL: http://127.0.0.1:8787
+      - name: The Worker's log and the containers' logs
+        if: always()
+        run: |
+          tail -n 200 wrangler.log || true
+          for c in $(docker ps -aq); do echo "=== $(docker inspect -f '{{.Name}} {{.Config.Image}}' $c)"; docker logs --tail 80 $c 2>&1; done
+          tail -n 40 moto.log || true
+
   manual:
     runs-on: ubuntu-latest
     steps:
