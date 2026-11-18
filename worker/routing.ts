@@ -63,6 +63,11 @@ export function containerEnvironment(env: object): Record<string, string> {
 export const ENQUEUE_HEADER = "X-Anisotropy-Enqueue";
 export const JOB_ROLE_VARIABLE = "ANISOTROPY_JOB_ROLE";
 
+/** The wake-up (ADR-0056 amendment 11). The page asks the API's container (`POST /v1/wake`), which checks the sign-in as it does for
+ * every request and answers with this header when it files jobs for the queue; the Worker then starts the pool's first free solver
+ * and drops the header. */
+export const WAKE_HEADER = "X-Anisotropy-Wake";
+
 /** The solver containers' routes, which only the queue's consumer reaches: never forwarded from the site. */
 export function isSolverPath(path: string): boolean {
   return path === "/v1/solver" || path.startsWith("/v1/solver/");

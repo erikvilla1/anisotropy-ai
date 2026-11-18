@@ -155,7 +155,8 @@ test("your analyses lists the finished runs with their answers, and one opens ag
   await expect(page.getByTestId("chat-failure").last().getByTestId("chat-failure-ply")).toHaveText(`Ply ${first.ply} (${first.angle}°) fails first`);
   await say("make the mesh finer"); // a past run is read as it stands: no row changes by talking
   await expect(page.getByTestId("chat-past-read-only")).toContainText("Nothing is changed by talking here.");
-  expect(asked.filter((line) => line.startsWith("POST") && !line.endsWith("/explain"))).toEqual([]); // nothing was checked, solved or read by a model
+  // nothing was checked, solved or read by a model (a solver is asked for when the page opens, ADR-0056 amendment 11)
+  expect(asked.filter((line) => line.startsWith("POST") && !line.endsWith("/explain") && !line.endsWith("/v1/wake"))).toEqual([]);
 
   // its inputs are taken up again only when asked: the project then holds the rows the run ran on
   await rail.getByTestId("past-use").click();

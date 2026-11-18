@@ -1,7 +1,8 @@
 """Run CalculiX on a deck and read what it printed (ADR-0030).
 
 `find_ccx` locates the solver (an explicit path, then `ANISOTROPY_CCX`, then `ccx` on PATH); `run_calculix` runs
-it in a working folder and collects the `.dat`, `.frd` and `.sta` outputs, warnings and errors; `parse_dat` turns
+it in a working folder and collects the `.dat`, `.frd` and `.sta` outputs, warnings and errors (`start_calculix` and
+`finish_calculix` are its two halves, for a run started ahead of its step); `parse_dat` turns
 the `.dat` text into blocks of numbers keyed by what CalculiX printed, with the header kept verbatim so nothing
 is lost. The `.dat` wording was read from a real run (CalculiX 2.22, 2026-10-15); the parser tolerates the
 small variations the manual's examples show.
@@ -13,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,9 +77,29 @@ def solver_environment(threads: int) -> dict[str, str]:
     return {**os.environ, "OMP_NUM_THREADS": str(max(1, int(threads))), "CCX_NPROC_EQUATION_SOLVER": "1"}
 
 
-def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: Path | str | None = None,
-                 timeout_s: float = 600.0, threads: int = 1) -> CalculixResult:
-    """Copy the deck into the working folder as <job>.inp, run `ccx -i <job>` there, and collect the outputs."""
+@dataclass
+class CalculixStart:
+    """A CalculiX run that was started and not yet collected (`start_calculix`): the process, the deck it reads and where its console goes."""
+
+    deck_path: Path
+    workdir: Path
+    job: str
+    ccx: Path
+    process: subprocess.Popen
+    console: Path
+    deck_text: str
+    began: float
+    ended: float | None = None  # time.perf_counter() when the solver ended, set by the thread that waits for it
+
+
+AHEAD: dict[Path, CalculixStart] = {}  # runs started ahead of their step in this process, by the deck they read (ADR-0056 amendment 11)
+
+
+def start_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: Path | str | None = None, threads: int = 1,
+                   ahead: bool = False) -> CalculixStart:
+    """Copy the deck into the working folder as <job>.inp and start `ccx -i <job>` there, its console written to <job>.log; returns
+    at once. `finish_calculix` waits for it and collects the outputs. With `ahead`, the run is kept by its deck, and the
+    `run_calculix` of the same deck with the same text collects it instead of starting the solver again (ADR-0056 amendment 11)."""
     solver = find_ccx(ccx)
     if solver is None:
         raise CalculixError(f"CalculiX not found: pass ccx=, set {ENV_VARIABLE}, or put ccx on PATH (docs/installation-fea-tools.md)")
@@ -88,33 +110,79 @@ def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: 
     target = workdir / f"{job}.inp"
     if target.resolve() != deck_path.resolve():
         shutil.copyfile(deck_path, target)
-    env = solver_environment(threads)
-    start = time.perf_counter()
+    console = workdir / f"{job}.log"  # the console, kept beside the deck for a failed run too
+    began = time.perf_counter()
+    with console.open("w", encoding="utf-8", newline="\n") as log:
+        process = subprocess.Popen([str(solver), "-i", job], cwd=workdir, stdout=log, stderr=subprocess.STDOUT, env=solver_environment(threads))
+    start = CalculixStart(deck_path, workdir, job, solver, process, console, target.read_text(encoding="utf-8", errors="replace"), began)
+
+    def wait() -> None:
+        process.wait()
+        start.ended = time.perf_counter()
+
+    threading.Thread(target=wait, name=f"ccx-{job}", daemon=True).start()
+    if ahead:
+        discard_ahead(target)
+        AHEAD[target.resolve()] = start
+    return start
+
+
+def discard_ahead(deck: Path | None = None) -> None:
+    """Stop and forget the runs started ahead and not collected: the one reading `deck`, or every one. A run that failed before
+    its CalculiX step leaves no solver running."""
+    for key in ([deck.resolve()] if deck is not None else list(AHEAD)):
+        start = AHEAD.pop(key, None)
+        if start is not None and start.process.poll() is None:
+            start.process.kill()
+            start.process.wait()
+
+
+def finish_calculix(start: CalculixStart, timeout_s: float = 600.0) -> CalculixResult:
+    """Wait for a started run, up to `timeout_s` from its start, and collect the outputs."""
+    job, workdir = start.job, start.workdir
     try:
-        done = subprocess.run([str(solver), "-i", job], cwd=workdir, capture_output=True, text=True, timeout=timeout_s, env=env, check=False)
+        start.process.wait(timeout=max(0.0, timeout_s - (time.perf_counter() - start.began)))
     except subprocess.TimeoutExpired as exc:
+        start.process.kill()
+        start.process.wait()
         raise CalculixError(f"CalculiX did not finish {job} within {timeout_s:g} s") from exc
-    elapsed = time.perf_counter() - start
-    stdout = done.stdout + done.stderr
+    elapsed = (start.ended if start.ended is not None else time.perf_counter()) - start.began
+    stdout = start.console.read_text(encoding="utf-8", errors="replace") if start.console.exists() else ""
     warnings = tuple(_paragraphs(stdout, "*WARNING"))
     errors = tuple(_paragraphs(stdout, "*ERROR"))
     dat = workdir / f"{job}.dat"
     sta = workdir / f"{job}.sta"
     frd = workdir / f"{job}.frd"
     result = CalculixResult(
-        deck_path=deck_path, workdir=workdir, ccx=solver, version=ccx_version(solver), returncode=done.returncode, stdout=stdout,
+        deck_path=start.deck_path, workdir=workdir, ccx=start.ccx, version=ccx_version(start.ccx), returncode=start.process.returncode, stdout=stdout,
         elapsed_s=elapsed, dat_text=dat.read_text(encoding="utf-8", errors="replace") if dat.exists() else "",
         frd_path=frd if frd.exists() else None, sta_text=sta.read_text(encoding="utf-8", errors="replace") if sta.exists() else None,
         warnings=warnings, errors=errors,
     )
-    (workdir / f"{job}.log").write_text(stdout, encoding="utf-8", newline="\n")  # the console, kept beside the deck for a failed run too
-    if errors or done.returncode != 0:
+    if errors or start.process.returncode != 0:
         detail = "\n".join(errors) if errors else stdout[-2000:]
         known = diagnose(stdout)
-        raise CalculixError(f"CalculiX failed on {job} (exit {done.returncode}):" + (f" {known}\n" if known else "\n") + detail)
+        raise CalculixError(f"CalculiX failed on {job} (exit {start.process.returncode}):" + (f" {known}\n" if known else "\n") + detail)
     if not result.dat_text.strip():
         raise CalculixError(f"CalculiX wrote no .dat for {job}; the deck has no *NODE PRINT or *EL PRINT request")
     return result
+
+
+def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: Path | str | None = None,
+                 timeout_s: float = 600.0, threads: int = 1) -> CalculixResult:
+    """Copy the deck into the working folder as <job>.inp, run `ccx -i <job>` there, and collect the outputs. A run of this deck
+    started ahead in this process (`start_calculix(..., ahead=True)`) is collected instead, when the deck still reads as it did then;
+    one whose deck has changed since is stopped and the solver run again."""
+    deck_path = Path(deck_path)
+    target = (Path(workdir) if workdir is not None else deck_path.parent) / f"{deck_path.stem}.inp"
+    ahead = AHEAD.pop(target.resolve(), None)
+    if ahead is not None:
+        if deck_path.is_file() and deck_path.read_text(encoding="utf-8", errors="replace") == ahead.deck_text:
+            return finish_calculix(ahead, timeout_s)
+        if ahead.process.poll() is None:
+            ahead.process.kill()
+        ahead.process.wait()
+    return finish_calculix(start_calculix(deck_path, ccx, workdir, threads), timeout_s)
 
 
 KNOWN_FATALS = (  # a text CalculiX prints without an *ERROR paragraph, and what it means in our words (fea/checks/calculix-conventions.toml)

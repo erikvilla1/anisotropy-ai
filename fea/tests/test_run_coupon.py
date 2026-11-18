@@ -9,6 +9,7 @@ import re
 import sys
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ import pytest
 from public_coupon import DESIGNATION
 from test_intake import PUBLIC_FILL
 
-from anisotropy_fea import checks, paths
+from anisotropy_fea import calculix, checks, paths
 from anisotropy_fea.calculix import find_ccx
 from anisotropy_fea.case_pages import NO_RECORD_YET, read_case, record_rows
 from anisotropy_fea.intake import convert, fill_form, next_commands, write_blank_form
@@ -51,14 +52,25 @@ def public_values(tmp_path: Path, **changes) -> Path:
 
 
 @needs_ccx
-def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
+def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path, capsys):
     progress_path = tmp_path / "progress.json"
     outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False, progress=tool.Progress(progress_path))
     folder, attempt = paths.LOCAL / DESIGNATION, outcome.attempt
     out = attempt / "run"
     assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "abaqus_build", "prepomax_deck", "prepomax_results", "kernel_summary",
                                                                       "convergence", "kernel_vtu", "fields", "explanation", "record", "checklist",
-                                                                      "preview", "values"}  # no document without the PDF; the build script of ADR-0094 with the deck
+                                                                      "preview", "values", "document_source"}  # no document without the PDF; the build script of ADR-0094 with the deck
+    # without the PDF the run keeps what it is typeset from, its own copy: the LaTeX and the figures it names (ADR-0064 amendment 3)
+    with zipfile.ZipFile(outcome.outputs["document_source"]) as source:
+        names = source.namelist()
+        assert f"{DESIGNATION}.tex" in names and "figures/model.png" in names and all(n == f"{DESIGNATION}.tex" or n.startswith("figures/") for n in names)
+        assert all(f"figures/{m}" in names for m in re.findall(r"\{figures/([^}]+)\}", source.read(f"{DESIGNATION}.tex").decode("utf-8")))
+    # CalculiX solved beside our engine, started on the deck "the decks" wrote; its step collected that run and started no second (ADR-0056 amendment 11)
+    console = capsys.readouterr().out
+    assert console.count("CalculiX started on") == 1 and f"unchanged {out / 'calculix' / f'{DESIGNATION}-nodal-ccx.inp'}" in console
+    assert console.index("CalculiX started on") < console.index("== our engine") < console.index("== CalculiX") and not calculix.AHEAD
+    assert console.index("\nResult: attempt 02") < console.index("== the mesh study") < console.index("== the drawings")  # the study after the result (ADR-0064 amendment 3)
+    assert json.loads((out / "kernel" / f"{DESIGNATION}-fields.json").read_text(encoding="utf-8"))["summary"]["convergence"]["studied"] is True
     assert outcome.outputs["abaqus_build"].name == f"{DESIGNATION}-build.py"
     assert all(path.exists() for path in outcome.outputs.values())
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
@@ -119,6 +131,7 @@ def pretend_calculix(tool, monkeypatch) -> None:
     # The setup check takes its CalculiX finder as a default argument, bound when checks.py was imported, so patching the
     # module's name does not reach it: the tool's own name for the check gets a copy that is told where CalculiX is.
     monkeypatch.setattr(tool, "setup_checklist", functools.partial(checks.setup_checklist, ccx=lambda: Path("ccx")))
+    monkeypatch.setattr(tool, "start_ahead", lambda twin, folder: None)  # a pretended CalculiX is not started ahead of its step, wherever a real one is installed
 
 
 def test_a_failing_script_leaves_its_last_words_in_the_message(tool, tmp_path, capsys):
@@ -182,9 +195,40 @@ def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     row = next(line for line in (folder / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
     assert "stopped at CalculiX: run_calculix.py exited with code 1" in row
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
-    assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study"]
+    assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine"]
     assert set(progress["outputs"]) == {"checklist", "preview", "values"}  # the stand-in steps wrote nothing; the studio files are there, the run's rows among them (ADR-0109)
     assert (folder / "team" / progress["attempt"].rsplit("_", 1)[-1] / "values.json").is_file()  # the values file is filed with the coupon
+
+
+@needs_ccx
+def test_a_run_that_stops_before_its_calculix_step_leaves_no_solver_running(tool, tmp_path, monkeypatch):
+    """ADR-0056 amendment 11: CalculiX is started beside our engine; when our engine stops the run, that solver is stopped with it."""
+    started = {}
+    real = tool.start_calculix
+
+    def start(*args, **kwargs):
+        started["run"] = real(*args, **kwargs)
+        return started["run"]
+
+    def script(step, args, cwd):
+        raise tool.StepFailed(f"{step}: build_model.py exited with code 1")
+
+    monkeypatch.setattr(tool, "start_calculix", start)
+    monkeypatch.setattr(tool, "script", script)
+    with pytest.raises(tool.StepFailed, match="our engine"):
+        tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=False)
+    assert started["run"].process.poll() is not None and not calculix.AHEAD
+
+
+def test_calculix_is_not_started_ahead_for_a_step_in_a_python_of_its_own(tool, tmp_path, monkeypatch):
+    """With ANISOTROPY_STEP_PROCESS=1 the CalculiX step runs in another Python, which could not collect a run started here."""
+    monkeypatch.setenv(tool.STEP_PROCESS, "1")
+    monkeypatch.setattr(tool, "start_calculix", lambda *a, **k: pytest.fail("started ahead"))
+    twin = tmp_path / "decks" / "x-nodal.toml"
+    monkeypatch.setattr(tool.paths, "deck_path", lambda spec, kind: tmp_path / "x-nodal-ccx.inp")
+    (tmp_path / "x-nodal-ccx.inp").write_text("*NODE\n", encoding="utf-8")
+    tool.start_ahead(twin, tmp_path / "calculix")
+    assert not (tmp_path / "calculix").exists()
 
 
 def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool, tmp_path, monkeypatch):
@@ -288,7 +332,9 @@ def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
         targets = [out / f for f in files] if files else [out]
         for target in targets:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(json.dumps(STAND_IN_STUDY) if step == "the convergence study" else "stand-in", encoding="utf-8")
+            target.write_text(json.dumps(STAND_IN_STUDY) if step == "the mesh study" else "stand-in", encoding="utf-8")
+        if step == "the mesh study":
+            seen["result when the study started"] = json.loads(seen["progress"].read_text(encoding="utf-8"))["result"]
         seen.setdefault("steps", []).append(step)
 
     def package(name, pdf, theory, attempt=None, study=None):
@@ -304,14 +350,14 @@ def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
 
 
 def test_the_result_is_reported_before_the_documents_and_a_failed_package_leaves_it_standing(tool, tmp_path, monkeypatch):
-    """ADR-0064: the progress says the result once the solve and the record are done, before the drawings and the package; a package
-    that fails after it is reported on the row and in the outcome, and the run ends done."""
+    """ADR-0064: the progress says the result once the solve and the record are done, before the mesh study (its amendment 3), the
+    drawings and the package; a package that fails after it is reported on the row and in the outcome, and the run ends done."""
     pretend_calculix(tool, monkeypatch)
     seen = {"progress": tmp_path / "progress.json"}
     stand_in_steps(tool, monkeypatch, seen)
     outcome = tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=True, progress=tool.Progress(seen["progress"]))
-    assert seen["steps"] == ["our engine", "the convergence study", "CalculiX", "the CalculiX record", "the drawings"]
-    assert seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
+    assert seen["steps"] == ["our engine", "CalculiX", "the CalculiX record", "the mesh study", "the drawings"]
+    assert seen["result when the study started"] == seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome.result == "57 of 57 recorded values agree with CalculiX" and outcome.result_at is not None
     assert seen["attempt"] == "02" and seen["study"] == STAND_IN_STUDY
     assert outcome.documents.startswith("the package not written (the package: Tectonic stopped)")

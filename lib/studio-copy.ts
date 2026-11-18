@@ -33,6 +33,7 @@ export const FAILED_WORDS: Record<string, string> = {
   "the results": "The results could not be loaded",
   "the run's inputs": "The run's inputs could not be loaded",
   "the explanation": "The explanation could not be loaded",
+  "the report": "The report could not be written",
   "the laminate solve": "The laminate could not be solved",
   "the proposals": "The message could not be read",
   "the reading of the question": "The question could not be read",
@@ -239,7 +240,8 @@ const STAGE_STEP: Record<string, RunStepId> = {
   "the setup check": "meshing", "the input": "meshing", "the decks": "meshing", "the attempt": "meshing",
   "our engine": "solving", "the convergence study": "solving", "CalculiX": "solving",
   "the CalculiX record": "post", "the result": "post",
-  "the drawings": "report", "the package": "report", "the outputs": "report",
+  // the mesh study runs after the result since ADR-0064 amendment 3, under a name of its own: a run of before it keeps its study in solving
+  "the mesh study": "report", "the drawings": "report", "the package": "report", "the outputs": "report",
 };
 export const stepOfStage = (stage: string | null | undefined): RunStepId => (stage ? STAGE_STEP[stage] ?? "solving" : "meshing");
 
@@ -279,10 +281,10 @@ export function runTook(job: Pick<JobStatus, "state" | "started_at" | "finished_
 /** The step a job is at: a job that ended before any stage (refused at the gate, or never taken up) ended in the queue. */
 const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
   !job.stage && (job.state === "stopped" || job.state === "refused") ? "queued" : stepOfStage(job.stage);
-/** A finished job whose report was not written: the outcome says so, or, for a job that does not say, its files hold no PDF. "Report ready"
- * means the PDF exists, not only the package (ADR-0064 amendment 2). */
+/** A finished job whose report was not written: the outcome says so, or, for a job that does not say, its files hold neither the PDF nor
+ * what it is written from on request. "Report ready" means the report can be had, not only the package (ADR-0064 amendments 2 and 3). */
 const reportMissing = (job: Pick<JobStatus, "documents"> & { outputs?: JobStatus["outputs"] }): boolean =>
-  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs);
+  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs) && !("document_source" in job.outputs);
 const order = (id: RunStepId) => RUN_STEPS.findIndex((s) => s.id === id);
 
 export type StepState = "done" | "current" | "waiting" | "stopped";
@@ -382,10 +384,22 @@ export const DOWNLOAD_LABELS: [string, string][] = [
 export const CUSTOMER_DOWNLOADS: readonly string[] = ["document", "abaqus_deck"];
 /** The files offered, in order: the customer's, or every one with the development switch on. */
 export const downloadsFor = (all: boolean): [string, string][] => DOWNLOAD_LABELS.filter(([key]) => all || CUSTOMER_DOWNLOADS.includes(key));
+/** A report written when someone asks for it (ADR-0064 amendment 3): the run is done, kept what its report is typeset from, and has no
+ * PDF yet. The page then offers "Report (PDF)" as a button that asks for it. */
+export const reportOnRequest = (job: Pick<JobStatus, "state" | "outputs"> | null | undefined): boolean =>
+  Boolean(job) && job!.state === "done" && !("document" in job!.outputs) && "document_source" in job!.outputs;
+/** What the page says beside a report that is asked for: before the click, while it is written, and when a try failed. */
+export const REPORT_WORDS = {
+  idle: "Written when you ask for it, in about half a minute.",
+  writing: "Writing the report. It downloads when it is ready, in about half a minute.",
+  failed: "The report could not be written. Try again; if it keeps failing, contact us.",
+} as const;
+export type ReportState = keyof typeof REPORT_WORDS;
 /** The files a job offers to download: none while it runs, since its files are still being written and stored and a link would fail
- * (ADR-0064 amendment 2); once it has ended, those of `downloadsFor` it made. */
+ * (ADR-0064 amendment 2); once it has ended, those of `downloadsFor` it made, and the report when it is written on request. */
 export const downloadable = (job: Pick<JobStatus, "state" | "outputs"> | null | undefined, all: boolean): [string, string][] =>
-  job && (job.state === "done" || job.state === "stopped") ? downloadsFor(all).filter(([key]) => key in job.outputs) : [];
+  job && (job.state === "done" || job.state === "stopped")
+    ? downloadsFor(all).filter(([key]) => key in job.outputs || (key === "document" && reportOnRequest(job))) : [];
 /** The neutral name a file is asked for by (ADR-0091 amendment 2): what it is, not the program it is for; the API maps it back. */
 export const FILE_URL_KEY: Record<string, string> = { abaqus_deck: "solver_input", prepomax_deck: "reference_input", prepomax_results: "reference_results" };
 const DOWNLOAD_SUFFIX: Record<string, string> = {

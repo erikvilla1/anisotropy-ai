@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  checkSetup, DOWNLOADS, explainJob, fetchFields, fileUrl, getJob, getProject, listProjects, noProjectStore, putProject, readChecklist, readExplainAnswer, readExplanation,
-  readFields, readJob, readPreview, readProjectRecord, RECORDS_HEADER, startSolve, StudioError,
+  askReport, checkSetup, DOWNLOADS, explainJob, fetchFields, fileUrl, getJob, getProject, listProjects, noProjectStore, putProject, readChecklist, readExplainAnswer, readExplanation,
+  readFields, readJob, readPreview, readProjectRecord, RECORDS_HEADER, sameResults, startSolve, StudioError, wakeSolver,
 } from "../lib/studio-api";
 import { bannedIn, customerText, FAILED_WORDS, failedText, JOB_GONE, RESULTS_UNREADABLE } from "../lib/studio-copy";
 
@@ -42,7 +42,8 @@ test("the check and the solve send the values with the studio's actor and read t
     assert.deepEqual(JSON.parse(calls[0].init.body as string), { values: { form_version: "0.3", length: 250 } });
     const job = await startSolve("http://api.test", { form_version: "0.3" }, "A. Engineer", true);
     assert.equal(job.state, "running");
-    assert.deepEqual(JSON.parse(calls[1].init.body as string), { values: { form_version: "0.3" }, run_by: "A. Engineer", replace: true });
+    // pdf false: the run ends without typesetting its report, which is written when someone asks for it (ADR-0064 amendment 3)
+    assert.deepEqual(JSON.parse(calls[1].init.body as string), { values: { form_version: "0.3" }, run_by: "A. Engineer", replace: true, pdf: false });
     assert.equal(calls[1].init.credentials, "same-origin");  // the Access cookie reaches the hosted /api, never another origin
   } finally {
     globalThis.fetch = original;
@@ -92,6 +93,36 @@ test("file addresses and the download list", () => {
   assert.deepEqual(DOWNLOADS.map(([, label]) => label), ["Report (PDF)", "Full package (ZIP)", "Abaqus input file (.inp)", "Reference solver input (.inp)", "Reference solver results (.frd)"]);
 });
 
+test("the report is asked for with one POST, and the wake-up never fails the page", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const original = globalThis.fetch;
+  let answer: () => Response = () => new Response(JSON.stringify({ ...fixture("job-done"), report: "writing" }), { status: 202, headers: { "Content-Type": "application/json" } });
+  globalThis.fetch = (async (url: string, init: RequestInit) => { calls.push({ url, init }); return answer(); }) as typeof fetch;
+  try {
+    const job = await askReport("http://api.test/", "0f3a2c9e");
+    assert.equal(job.report, "writing");
+    assert.equal(calls[0].url, "http://api.test/v1/coupon-jobs/0f3a2c9e/document");
+    assert.equal(calls[0].init.method, "POST");
+    assert.equal(calls[0].init.body, undefined); // the job's id says it all
+    // refused in words the customer can act on: shown as the API says them
+    answer = () => new Response(JSON.stringify({ detail: "This analysis kept no report to write. Run the analysis again to get one." }), { status: 409 });
+    await assert.rejects(askReport("http://api.test", "0f3a2c9e"), (error: unknown) =>
+      error instanceof StudioError && error.message === "This analysis kept no report to write. Run the analysis again to get one.");
+    // the wake-up: one POST, and neither a refusal nor an outage reaches the page
+    answer = () => new Response(JSON.stringify({ waking: true }), { status: 202 });
+    await wakeSolver("http://api.test/");
+    assert.equal(calls[2].url, "http://api.test/v1/wake");
+    assert.equal(calls[2].init.method, "POST");
+    assert.equal(calls[2].init.credentials, "same-origin");
+    answer = () => new Response("Not Found", { status: 404 });
+    await wakeSolver("http://api.test");
+    answer = () => { throw new TypeError("fetch failed"); };
+    await wakeSolver("http://api.test");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("the explain answer carries its writer and reads only a known shape", async () => {
   const answer = { run_id: null, job_id: "j", kind: "result", writer: "anthropic", model: "claude-opus-5-5", prose: ["The top grip carries 16211 N."], withheld: false, reason: null, facts: {} };
   assert.equal(readExplainAnswer(answer).model, "claude-opus-5-5");
@@ -137,6 +168,28 @@ test("the projects are PUT by id with the studio's actor, listed, and a 503 mean
     await assert.rejects(listProjects("http://api.test"), (error: unknown) => !noProjectStore(error)); // an outage is not that (audit fea-screens-3)
     assert.throws(() => readProjectRecord({ ...row, kind: "stl" }), /could not be read/);
     assert.throws(() => readProjectRecord({ ...row, content: [] }), /could not be read/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a run's fields read again are the same result; another run's, or a live answer's, are not (ADR-0056 amendment 11)", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify(fixture("fields")), { status: 200 })) as typeof fetch;
+  try {
+    const first = await fetchFields("http://api.test", "job-1");
+    const again = await fetchFields("http://api.test", "job-1"); // read again once the mesh study arrived
+    const other = await fetchFields("http://api.test", "job-2");
+    const live = readFields(fixture("fields")); // a live answer's fields are read from no job
+    assert.notEqual(first, again);
+    assert.equal(sameResults(first, again), true);
+    assert.equal(sameResults(first, first), true);
+    assert.equal(sameResults(first, other), false);
+    assert.equal(sameResults(first, live), false);
+    assert.equal(sameResults(live, readFields(fixture("fields"))), false);
+    assert.equal(sameResults(live, live), true);
+    assert.equal(sameResults(first, null), false);
+    assert.equal(sameResults(null, null), true);
   } finally {
     globalThis.fetch = original;
   }

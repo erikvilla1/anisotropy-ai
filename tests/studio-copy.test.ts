@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadable, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead, rowProblems,
-  RUN_STEPS, runDetail, runHeadline, runProblem, runStatus, runSteps, runTook, secondsText, setWords, shownSentence, stepSeconds, verificationOf, withSymbols,
+  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadable, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead,
+  REPORT_WORDS, reportOnRequest, rowProblems, RUN_STEPS, runDetail, runHeadline, runProblem, runStatus, runSteps, runTook, secondsText, setWords, shownSentence, stepSeconds, verificationOf, withSymbols,
 } from "../lib/studio-copy";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
@@ -26,6 +26,10 @@ test("the pipeline's stages fold into five steps, and a job's state says which i
   assert.equal(stored({ fields: "f" }), "done done done done stopped"); // read back from its row with no package stored: no report
   assert.equal(stored({ fields: "f", package: "p" }), "done done done done stopped"); // a package without its PDF is no report (ADR-0064 am. 2)
   assert.equal(stored({ fields: "f", package: "p", document: "d" }), "done done done done done");
+  assert.equal(stored({ fields: "f", package: "p", document_source: "s" }), "done done done done done"); // written when asked for: the report can be had (ADR-0064 am. 3)
+  // the mesh study runs after the result since ADR-0064 amendment 3, under its own name: the report's step; a run of before keeps its study in solving
+  assert.equal(states({ state: "running", stage: "the mesh study" }), "done done done done current");
+  assert.equal(states({ state: "running", stage: "the convergence study" }), "done done current waiting waiting");
   const missing = { state: "done", stage: "the outputs", documents: "the package was written without its document", outputs: { package: "p" } };
   assert.equal(runSteps(missing as Parameters<typeof runSteps>[0]).map((s) => s.state).join(" "), "done done done done stopped"); // the hosted row's word
 });
@@ -45,6 +49,8 @@ test("each step shows the seconds it took, and a done run how long it took in al
   near(seconds.solving, 3.4 + 7.2 + 5.6);
   near(seconds.post, 4.7 + 0.3);
   near(seconds.report, 6 + 35.2 + 0.2 + 9.7); // the drawings, the package, the outputs and the upload
+  // a run since ADR-0064 amendment 3: the study's seconds are the report step's, where it now runs
+  near(stepSeconds({ started_at: job.started_at, claimed_at: null, timings: { "our engine": 3.4, CalculiX: 1.1, "the mesh study": 7.2, "the package": 5 } }).report, 12.2);
   assert.deepEqual(Object.keys(stepSeconds({ started_at: job.started_at, claimed_at: null, timings: { "our engine": 1.2, some_phase_s: 3 } })), ["solving"]); // local: no queue
   assert.deepEqual(stepSeconds({ started_at: job.started_at, claimed_at: null }), {});
   assert.equal(secondsText(4.23), "4.2 s");
@@ -100,6 +106,24 @@ test("files are offered once the run has ended, never while they are still being
   assert.deepEqual(downloadable({ state: "done", outputs }, false).map(([key]) => key), ["document", "abaqus_deck"]);
   assert.deepEqual(downloadable({ state: "stopped", outputs: { prepomax_deck: "p" } }, true).map(([key]) => key), ["prepomax_deck"]); // a stopped run's deck
   assert.deepEqual(downloadable(null, true), []);
+});
+
+test("a run that wrote no PDF offers its report to be written when asked for (ADR-0064 amendment 3)", () => {
+  const kept = { state: "done" as const, outputs: { abaqus_deck: "a", package: "z", document_source: "s" } };
+  assert.equal(reportOnRequest(kept), true);
+  assert.deepEqual(downloadable(kept, false).map(([key, label]) => `${key}: ${label}`), ["document: Report (PDF)", "abaqus_deck: Abaqus input file (.inp)"]);
+  // once written it is a file like the others; a run still going, a stopped one and one that kept no source offer no report
+  assert.equal(reportOnRequest({ state: "done", outputs: { ...kept.outputs, document: "d" } }), false);
+  assert.equal(reportOnRequest({ ...kept, state: "running" }), false);
+  assert.equal(reportOnRequest({ ...kept, state: "stopped" }), false);
+  assert.equal(reportOnRequest({ state: "done", outputs: { abaqus_deck: "a", package: "z" } }), false);
+  assert.equal(reportOnRequest(null), false);
+  assert.deepEqual(downloadable({ state: "done", outputs: { abaqus_deck: "a", package: "z" } }, false).map(([key]) => key), ["abaqus_deck"]);
+  for (const words of Object.values(REPORT_WORDS)) {
+    assert.deepEqual(bannedIn(words), []);
+    assert.equal(customerText(words), words);
+  }
+  assert.match(REPORT_WORDS.writing, /downloads when it is ready/);
 });
 
 test("a downloaded file is named by the standard and the layup, never by an internal code", () => {
