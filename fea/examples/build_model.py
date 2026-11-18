@@ -159,8 +159,7 @@ def main() -> None:
                        f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n")
         else:
             # under displacement control the moving grip carries the reaction; under force control the fixed grip does
-            moving = spec.loading.control == "displacement"
-            reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
+            reaction_set = model.reaction_set
             rf = solution.reaction_of(deck.nsets[reaction_set])
             applied = sum(load.value for load in model.loads)
             residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))

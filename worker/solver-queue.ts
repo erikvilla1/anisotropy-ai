@@ -46,6 +46,35 @@ export async function startInPool(begin: (name: string) => Promise<StartVerdict>
   return { verdict: { kind: "retry", delaySeconds: retryDelay(attempts), reason: `every solver of the pool (${names.length}) runs a job; the job waits in the queue` }, solver: null };
 }
 
+/** The wake-up (ADR-0056 amendment 11): the page says an analysis may be started soon, and the first free solver of the pool is started
+ * before a job is filed, so the job does not wait for a container to start. */
+export const STATE_PATH = "/v1/solver/state";
+export type WakeAnswer = "free" | "busy";
+
+/** One solver asked whether it runs a job. The ask itself starts a sleeping container and keeps a warm one awake. Only a clear
+ * `busy: true` is busy: a solver of before this route (a container still warm from before a deploy) answers 404 and is awake and free. */
+export async function wakeSolver(call: SolverCall): Promise<WakeAnswer> {
+  const answer = await call("GET", STATE_PATH);
+  const busy: unknown = typeof answer.body === "object" && answer.body !== null ? Reflect.get(answer.body, "busy") : null;
+  return answer.status === 200 && busy === true ? "busy" : "free";
+}
+
+/** The pool's solvers asked in the consumer's order (`solverNames`) until one is free: that is the solver the next job goes to, and
+ * it is awake now. At most one sleeping container is started, since every solver asked before it runs a job. A solver that cannot
+ * be reached ends the walk: the job's own start will try it again. Returns the solver that is ready, or null, and why. */
+export async function wakePool(wake: (name: string) => Promise<WakeAnswer>, names: string[]): Promise<{ solver: string | null; reason: string }> {
+  for (const name of names) {
+    let answer: WakeAnswer;
+    try {
+      answer = await wake(name);
+    } catch (error) {
+      return { solver: null, reason: `the solver ${name} could not be woken: ${String(error)}` };
+    }
+    if (answer === "free") return { solver: name, reason: `the solver ${name} is awake and free` };
+  }
+  return { solver: null, reason: `every solver of the pool (${names.length}) runs a job` };
+}
+
 /** The timer's state between two looks, kept by the solver's Durable Object (JSON). */
 export type Watch = { jobId: string; startedAt: number; stoppedAt: number | null; errors: number };
 

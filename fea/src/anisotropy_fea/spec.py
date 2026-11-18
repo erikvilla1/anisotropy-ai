@@ -192,6 +192,9 @@ class Load(Record):
 class Loading(Record):
     control: Literal["displacement", "force"]
     value: float  # displacement: length at the moving grip (negative = compression); force: total force; bending: nose displacement (dof 3)
+    # force control on nodal grips only (ADR-0030 amendment 7): true ties the top grip's nodes to move together along the coupon, the force on
+    # their reference node, as a gripped tab does and as a coupled grip is; false spreads the force along the grip as a uniform traction
+    rigid_grip: bool = False
 
 
 class Probes(Record):
@@ -423,6 +426,8 @@ def validate_spec(spec: CouponSpec) -> None:
         need(g.tab_length is not None, "in-plane kinds need geometry.tab_length (0 for no tabs)")
         need(g.tab_length >= 0 and 2 * g.tab_length < g.length, "geometry.tab_length must be zero or positive and the two tabs shorter than the length")
         need(spec.grips is not None, "in-plane kinds need a [grips] table with kind = \"nodal\" or \"coupling\" and region = \"line\" or \"tabs\"")
+        need(not spec.loading.rigid_grip or (spec.loading.control == "force" and spec.grips is not None and spec.grips.kind == "nodal"),
+             "loading.rigid_grip belongs to force control on nodal grips: a coupled grip is rigid already, and a displacement moves every grip node alike")
         if spec.grips is not None and spec.grips.region == "tabs":
             need(g.tab_length > 0, "grips.region = \"tabs\" needs a positive geometry.tab_length")
     if not plate:

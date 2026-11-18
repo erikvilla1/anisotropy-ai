@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  checkSetup, fetchExplanation, fetchFields, getJob, isActive, liveSolve, POLL_MS, startSolve, StudioError,
+  checkSetup, fetchExplanation, fetchFields, getJob, isActive, liveSolve, POLL_MS, startSolve, StudioError, wakeSolver,
   type CheckAnswer, type Explanation, type Fields, type JobStatus, type LiveAnswer,
 } from "@/lib/studio-api";
 import type { StudioValues } from "@/lib/studio-form";
@@ -13,6 +13,9 @@ import { liveKey } from "@/lib/studio-live";
  * `StudioError` for the caller to word; a polling or reading failure lands in `problem` and is tried again a moment later, up to RETRIES
  * times per job, since the hosted API answers through a Worker and a container that can miss one request (seen live on 2026-11-07). */
 export const RETRIES = 10;
+/** How long a wake-up is taken to last (ADR-0056 amendment 11): a solver that was woken stays up for fifteen minutes, so one is not
+ * asked for again within ten. */
+export const WAKE_EVERY_MS = 10 * 60_000;
 export type CouponRun = {
   checking: boolean;
   checked: CheckAnswer | null;
@@ -82,6 +85,15 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
     window.setTimeout(() => setTick((t) => t + 1), POLL_MS);
   }, []);
   useEffect(() => () => aborts.current.forEach((c) => c.abort("unmount")), []);
+  // A solver is asked for when the page opens and again when a setup passes its check, at most every WAKE_EVERY_MS, so the run that
+  // follows finds one awake instead of waiting for a container to start (ADR-0056 amendment 11). Nothing waits for the answer.
+  const wokenAt = useRef(0);
+  const wake = useCallback(() => {
+    if (!apiBaseUrl || Date.now() - wokenAt.current < WAKE_EVERY_MS) return;
+    wokenAt.current = Date.now();
+    void wakeSolver(apiBaseUrl);
+  }, [apiBaseUrl]);
+  useEffect(() => { wake(); }, [wake]);
 
   const check = useCallback(async (values: StudioValues) => {
     if (!apiBaseUrl) throw new StudioError("The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.");
@@ -93,11 +105,12 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
       setChecked(answer);
       checkedKey.current = liveKey(values);
       checks.current += 1;
+      if (answer.state === "ready") wake(); // a run is likely next
       return answer;
     } finally {
       setChecking(false);
     }
-  }, [apiBaseUrl, projectId]);
+  }, [apiBaseUrl, projectId, wake]);
 
   const solve = useCallback(async (values: StudioValues, runBy: string, replace: boolean) => {
     if (!apiBaseUrl) throw new StudioError("The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.");
@@ -163,7 +176,9 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
 
   useEffect(() => {
     if (!job || !apiBaseUrl || !("fields" in job.outputs)) return;
-    const stamp = `${job.job_id}:${"explanation" in job.outputs}:${job.state}`; // the explanation and the final state arrive after the fields
+    // the explanation, the result's line (the reference solver's numbers are then beside ours), the mesh study and the final state arrive
+    // after the fields, and the fields are read again at each (ADR-0056 amendment 11)
+    const stamp = `${job.job_id}:${"explanation" in job.outputs}:${Boolean(job.result)}:${"convergence" in job.outputs}:${job.state}`;
     if (fieldsLoaded.current === stamp) return;
     fieldsLoaded.current = stamp;
     const controller = new AbortController();

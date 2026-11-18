@@ -88,8 +88,7 @@ def mesh_values(spec: CouponSpec, factor: int, model: FEModel, deck, solution) -
         gauge = next(e for e, key in enumerate(mesh.element_keys) if key[1] == label)
     else:
         gauge = int(np.argmin(np.linalg.norm(xy - np.array([g.width / 2.0, g.length / 2.0]), axis=1)))
-    moving = spec.loading.control == "displacement"
-    reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
+    reaction_set = model.reaction_set
     reaction = solution.reaction_of(deck.nsets[reaction_set])
     field = element_ply_states(solution)
     stress_12 = np.stack(field.stress_12)  # (ne, plies, 3), Pa

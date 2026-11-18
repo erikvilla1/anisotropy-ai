@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  BUSY_RETRY_S, ERROR_RETRY_S, JOB_TIMEOUT_MS, LOST_AFTER_ERRORS, POLL_MS, RETRY_CAP_S, SOLVER_POOL, STOP_GRACE_MS, firstWatch, jobIdOf,
-  retryDelay, solverNames, startInPool, startJob, watchJob, type SolverAnswer, type SolverCall, type StartVerdict, type WatchStep,
+  BUSY_RETRY_S, ERROR_RETRY_S, JOB_TIMEOUT_MS, LOST_AFTER_ERRORS, POLL_MS, RETRY_CAP_S, SOLVER_POOL, STATE_PATH, STOP_GRACE_MS, firstWatch, jobIdOf,
+  retryDelay, solverNames, startInPool, startJob, wakePool, wakeSolver, watchJob, type SolverAnswer, type SolverCall, type StartVerdict, type WakeAnswer,
+  type WatchStep,
 } from "../worker/solver-queue";
 
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -152,4 +153,45 @@ test("a busy solver answers 423 and the consumer asks the pool's next one; every
   const allBusy = await startInPool(async () => ({ kind: "busy", reason: "this solver runs another job" }), solverNames(2), 3);
   assert.equal(allBusy.solver, null);
   assert.deepEqual(allBusy.verdict, { kind: "retry", delaySeconds: retryDelay(3), reason: "every solver of the pool (2) runs a job; the job waits in the queue" });
+});
+
+test("the wake-up asks the pool in the consumer's order and stops at the first free solver (ADR-0056 amendment 11)", async () => {
+  const asked: string[] = [];
+  const pool = (answers: Record<string, WakeAnswer | Error>) => async (name: string): Promise<WakeAnswer> => {
+    asked.push(name);
+    const answer = answers[name] ?? "free";
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  // a quiet pool: the first solver is the one the next job goes to, and the only one started
+  assert.deepEqual(await wakePool(pool({}), solverNames()), { solver: "solver-0", reason: "the solver solver-0 is awake and free" });
+  assert.deepEqual(asked.splice(0), ["solver-0"]);
+  // the first two run jobs: the third is woken, as the consumer would give it the next job; no solver after it is touched
+  assert.equal((await wakePool(pool({ "solver-0": "busy", "solver-1": "busy" }), solverNames())).solver, "solver-2");
+  assert.deepEqual(asked.splice(0), ["solver-0", "solver-1", "solver-2"]);
+  // every solver busy: nothing to wake, and the job will wait in the queue as it does today
+  const full = await wakePool(pool(Object.fromEntries(solverNames().map((name) => [name, "busy" as const]))), solverNames());
+  assert.deepEqual(full, { solver: null, reason: `every solver of the pool (${SOLVER_POOL}) runs a job` });
+  assert.equal(asked.splice(0).length, SOLVER_POOL);
+  // a solver that cannot be reached ends the walk: the wake-up never starts a second container to make up for it
+  const lost = await wakePool(pool({ "solver-0": "busy", "solver-1": new Error("the container did not start") }), solverNames());
+  assert.equal(lost.solver, null);
+  assert.match(lost.reason, /solver-1 could not be woken: Error: the container did not start/);
+  assert.deepEqual(asked.splice(0), ["solver-0", "solver-1"]);
+});
+
+test("a solver is busy only when it says so: one still warm from before the route existed is awake and free", async () => {
+  const answering = (answer: SolverAnswer) => {
+    const calls: string[] = [];
+    const call: SolverCall = async (method, path) => { calls.push(`${method} ${path}`); return answer; };
+    return { call, calls };
+  };
+  const busy = answering({ status: 200, body: { busy: true } });
+  assert.equal(await wakeSolver(busy.call), "busy");
+  assert.deepEqual(busy.calls, [`GET ${STATE_PATH}`]);
+  assert.equal(STATE_PATH, "/v1/solver/state");
+  for (const answer of [{ status: 200, body: { busy: false } }, { status: 404, body: { detail: "Not Found" } }, { status: 200, body: "busy" },
+                        { status: 500, body: { busy: true } }]) {
+    assert.equal(await wakeSolver(answering(answer).call), "free");
+  }
 });

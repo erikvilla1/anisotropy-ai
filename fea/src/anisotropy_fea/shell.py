@@ -27,6 +27,10 @@ from .results import ShellSolution
 DOFS = 5  # u, v, w, theta_x, theta_y per node: Abaqus dofs 1 to 5
 PLATE_DOFS = (3, 4, 5)
 TYING = {"A": (0.0, 1.0), "B": (-1.0, 0.0), "C": (0.0, -1.0), "D": (1.0, 0.0)}  # edge midpoints, in natural coordinates
+# How SuperLU factors the plate's stiffness (ADR-0073 amendment 2). The three belong together: the ordering is the one for a symmetric
+# pattern, and the pivot stays on the diagonal so that ordering holds. The ordering without the diagonal pivot fills the factor in
+# (ten times the entries on a 20 by 20 plate) and is far slower than SuperLU's defaults; `test_shell_solve.py` holds the fill.
+SYMMETRIC_FACTOR = {"permc_spec": "MMD_AT_PLUS_A", "diag_pivot_thresh": 0.0, "options": {"SymmetricMode": True}}
 
 
 def membrane_rows(dN: np.ndarray) -> np.ndarray:
@@ -112,6 +116,123 @@ def pressure_loads(xy: np.ndarray, pressure: float) -> np.ndarray:
     return f
 
 
+def element_xy(mesh: Mesh, elements: np.ndarray | None = None) -> np.ndarray:
+    """The corner coordinates of every element (ne, 4, 2), or of the elements listed."""
+    connectivity = mesh.connectivity if elements is None else mesh.connectivity[elements]
+    return mesh.xy[connectivity].reshape(len(connectivity), 4, 2)
+
+
+def jacobians_all(xy: np.ndarray, points) -> tuple[np.ndarray, np.ndarray]:
+    """J (points, ne, 2, 2) and det J (points, ne) of every element at each natural point, the operations of `jacobian` and
+    `physical_derivatives` on a stack (ADR-0073 amendment 2)."""
+    J = np.array([shape_derivatives(xi, eta) @ xy for xi, eta in points]).reshape(len(points), len(xy), 2, 2)
+    det = np.linalg.det(J) if len(xy) else np.zeros((len(points), 0))
+    return J, det
+
+
+def first_inverted(det: np.ndarray) -> tuple[int, int] | None:
+    """The first element, and in it the first point, with det J <= 0: the one a call per element would refuse. None when every
+    element is sound."""
+    bad = det <= 0.0
+    if not bad.any():
+        return None
+    e = int(np.flatnonzero(bad.any(axis=0))[0])
+    return e, int(np.flatnonzero(bad[:, e])[0])
+
+
+def inverted_message(det: np.ndarray, points, e: int, g: int) -> str:
+    xi, eta = points[g]
+    return (f"element has det J = {float(det[g, e]):.3g} <= 0 at (xi, eta) = ({float(xi):.3g}, {float(eta):.3g}): "
+            "its nodes are listed clockwise or it is degenerate")
+
+
+def covariant_shear_rows_all(xy: np.ndarray, xi: float, eta: float) -> np.ndarray:
+    """`covariant_shear_rows` for every element at one point: (ne, 2, 20)."""
+    N = shape_functions(xi, eta)
+    dN = shape_derivatives(xi, eta)
+    J = dN @ xy
+    rows = np.zeros((len(xy), 2, 4 * DOFS))
+    rows[:, :, 2::DOFS] = dN
+    rows[:, :, 4::DOFS] = J[:, :, 0:1] * N
+    rows[:, :, 3::DOFS] = -J[:, :, 1:2] * N
+    return rows
+
+
+def shell_rows_all(xy: np.ndarray, points, J: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """B_m, B_b (points, ne, 3, 20) and B_s (points, ne, 2, 20) of every element at each natural point: `membrane_rows`,
+    `bending_rows` and `shear_rows` on a stack, the same operations in the same order, so the same numbers to the last bit
+    (ADR-0073 amendment 2). The elements are sound: det J > 0 at every point (`first_inverted`)."""
+    ne = len(xy)
+    Bm, Bb, Bs = (np.zeros((len(points), ne, rows, 4 * DOFS)) for rows in (3, 3, 2))
+    if not ne:
+        return Bm, Bb, Bs
+    a = covariant_shear_rows_all(xy, *TYING["A"])[:, 0]
+    c = covariant_shear_rows_all(xy, *TYING["C"])[:, 0]
+    d = covariant_shear_rows_all(xy, *TYING["D"])[:, 1]
+    b = covariant_shear_rows_all(xy, *TYING["B"])[:, 1]
+    for g, (xi, eta) in enumerate(points):
+        dN = np.linalg.solve(J[g], np.broadcast_to(shape_derivatives(xi, eta), (ne, 2, 4)))  # rows dN/dx, dN/dy
+        Bm[g, :, 0, 0::DOFS] = dN[:, 0]
+        Bm[g, :, 1, 1::DOFS] = dN[:, 1]
+        Bm[g, :, 2, 0::DOFS] = dN[:, 1]
+        Bm[g, :, 2, 1::DOFS] = dN[:, 0]
+        Bb[g, :, 0, 4::DOFS] = dN[:, 0]
+        Bb[g, :, 1, 3::DOFS] = -dN[:, 1]
+        Bb[g, :, 2, 4::DOFS] = dN[:, 1]
+        Bb[g, :, 2, 3::DOFS] = -dN[:, 0]
+        covariant = np.stack([0.5 * (1.0 + eta) * a + 0.5 * (1.0 - eta) * c, 0.5 * (1.0 + xi) * d + 0.5 * (1.0 - xi) * b], axis=1)
+        Bs[g] = np.linalg.solve(J[g], covariant)
+    return Bm, Bb, Bs
+
+
+def element_sections(mesh: Mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Every element's A, B, D (ne, 3, 3) and H (ne, 2, 2), from its section."""
+    of = np.asarray(mesh.element_section, dtype=int)
+    return tuple(np.array([getattr(section, name) for section in mesh.sections], dtype=float).reshape(len(mesh.sections), size, size)[of]
+                 for name, size in (("A", 3), ("B", 3), ("D", 3), ("H", 2)))
+
+
+def element_stiffness_shell_all(mesh: Mesh) -> np.ndarray:
+    """`element_stiffness_shell` for every element at once (ne, 20, 20): the same sum over the Gauss points (ADR-0073 amendment 2).
+    The first element a call per element would refuse is refused with the same words: a section without bending stiffness, or
+    det J <= 0, named as `assemble_shell` names it."""
+    without = np.array([section.D is None or section.H is None or section.B is None for section in mesh.sections], dtype=bool)
+    missing = without[np.asarray(mesh.element_section, dtype=int)] if mesh.element_count else np.zeros(0, dtype=bool)
+    xy = element_xy(mesh)
+    points = [(float(xi), float(eta)) for xi, eta in GAUSS_POINTS]
+    J, det = jacobians_all(xy, points)
+    inverted = first_inverted(det)
+    if missing.any() and (inverted is None or int(np.flatnonzero(missing)[0]) <= inverted[0]):
+        section = mesh.sections[mesh.element_section[int(np.flatnonzero(missing)[0])]]
+        raise KernelError(f"section {section.name!r} carries no bending stiffness; build the mesh with mesh_from_deck(deck, shell=True)")
+    if inverted is not None:
+        instance, label = mesh.element_keys[inverted[0]]
+        raise KernelError(f"element {instance}.{label}: {inverted_message(det, points, *inverted)}")
+    A, B, D, H = element_sections(mesh)
+    Bm, Bb, Bs = shell_rows_all(xy, points, J)
+    k = np.zeros((mesh.element_count, 4 * DOFS, 4 * DOFS))
+    for g, weight in enumerate(GAUSS_WEIGHTS):
+        m, b, s = Bm[g], Bb[g], Bs[g]
+        mT, bT, sT = m.transpose(0, 2, 1), b.transpose(0, 2, 1), s.transpose(0, 2, 1)
+        k += (weight * det[g])[:, None, None] * (mT @ A @ m + mT @ B @ b + bT @ B @ m + bT @ D @ b + sT @ H @ s)
+    return k
+
+
+def pressure_loads_all(xy: np.ndarray, pressure: float) -> np.ndarray:
+    """`pressure_loads` for a stack of elements (ne, 20); an element with det J <= 0 is refused as one call would refuse it."""
+    points = [(float(xi), float(eta)) for xi, eta in GAUSS_POINTS]
+    _, det = jacobians_all(xy, points)
+    inverted = first_inverted(det)
+    if inverted is not None:
+        raise KernelError(inverted_message(det, points, *inverted))
+    f = np.zeros((len(xy), 4 * DOFS))
+    for g, ((xi, eta), weight) in enumerate(zip(points, GAUSS_WEIGHTS)):
+        N = shape_functions(xi, eta)
+        for i in range(4):
+            f[:, DOFS * i + 2] += -pressure * weight * det[g] * N[i]
+    return f
+
+
 @dataclass(frozen=True)
 class ShellDofMap:
     """How the full dofs (5 per mesh node) map to the reduced system the kernel solves."""
@@ -150,9 +271,9 @@ def constraint_map_shell(deck: Deck, mesh: Mesh) -> ShellDofMap:
     attached[mesh.connectivity.ravel()] = True
     for master in masters:
         attached[master] = True
-    for i, key in enumerate(mesh.node_keys):
-        if not attached[i] and i not in coupled_by:
-            raise KernelError(f"node {node_name(key)} belongs to no element and drives no coupling; its dofs would be free")
+    for i in np.flatnonzero(~attached).tolist():
+        if i not in coupled_by:
+            raise KernelError(f"node {node_name(mesh.node_keys[i])} belongs to no element and drives no coupling; its dofs would be free")
     representative_of_reduced, reduced = np.unique(representative, return_inverse=True)
     size = int(representative_of_reduced.size)
     prescribed: dict[int, float] = {}
@@ -178,37 +299,36 @@ def constraint_map_shell(deck: Deck, mesh: Mesh) -> ShellDofMap:
                 raise KernelError(f"line {load.line}: a load on dof 6 (the drilling rotation) has nothing to act on in a flat plate")
             for key in resolve_nodes(deck, load.target, load.line):
                 loads[reduced[DOFS * mesh.node(key) + (load.dof - 1)]] += load.value
-        for dload in step.dloads:
-            for key in resolve_elements(deck, dload.target, dload.line):
-                e = mesh.element(key)
-                nodes = mesh.connectivity[e]
-                f = pressure_loads(mesh.xy[nodes], dload.value)
-                full = np.repeat(DOFS * nodes, DOFS) + np.tile(np.arange(DOFS), 4)
-                np.add.at(loads, reduced[full], f)
+        for dload in step.dloads:  # every element of a pressure at once, added in the elements' order (ADR-0073 amendment 2)
+            pressed = np.array([mesh.element(key) for key in resolve_elements(deck, dload.target, dload.line)], dtype=int)
+            if pressed.size:
+                f = pressure_loads_all(element_xy(mesh, pressed), dload.value)
+                np.add.at(loads, reduced[element_dofs(mesh.connectivity[pressed])], f)
     return ShellDofMap(representative=representative, reduced=reduced, representative_of_reduced=representative_of_reduced, size=size,
                        prescribed=prescribed, loads=loads, notes=tuple(notes))
 
 
+def element_dofs(connectivity: np.ndarray) -> np.ndarray:
+    """The full dofs of each element (ne, 20): u, v, w, theta_x, theta_y of its first node, then of the next."""
+    return (np.repeat(DOFS * np.asarray(connectivity, dtype=int), DOFS, axis=1) + np.tile(np.arange(DOFS), 4)).astype(int)
+
+
 def assemble_shell(mesh: Mesh, dofmap: ShellDofMap) -> csr_matrix:
-    """The reduced global stiffness: every element's k scattered through the dof map."""
-    rows, cols, values = [], [], []
-    for e in range(mesh.element_count):
-        nodes = mesh.connectivity[e]
-        section = mesh.sections[mesh.element_section[e]]
-        if section.D is None or section.H is None or section.B is None:
-            raise KernelError(f"section {section.name!r} carries no bending stiffness; build the mesh with mesh_from_deck(deck, shell=True)")
-        try:
-            k = element_stiffness_shell(mesh.xy[nodes], section.A, section.B, section.D, section.H)
-        except KernelError as exc:
-            instance, label = mesh.element_keys[e]
-            raise KernelError(f"element {instance}.{label}: {exc}") from None
-        full = np.repeat(DOFS * nodes, DOFS) + np.tile(np.arange(DOFS), 4)
-        r = dofmap.reduced[full]
-        rows.append(np.repeat(r, 4 * DOFS))
-        cols.append(np.tile(r, 4 * DOFS))
-        values.append(k.ravel())
-    K = coo_matrix((np.concatenate(values), (np.concatenate(rows), np.concatenate(cols))), shape=(dofmap.size, dofmap.size))
+    """The reduced global stiffness: every element's k scattered through the dof map. Every element's k is formed at once
+    (`element_stiffness_shell_all`), in the elements' order, so the sums are the ones a loop over the elements makes."""
+    k = element_stiffness_shell_all(mesh)
+    r = dofmap.reduced[element_dofs(mesh.connectivity)]
+    rows = np.repeat(r, 4 * DOFS, axis=1).ravel()
+    cols = np.tile(r, (1, 4 * DOFS)).ravel()
+    K = coo_matrix((k.reshape(mesh.element_count, (4 * DOFS) ** 2).ravel(), (rows, cols)), shape=(dofmap.size, dofmap.size))
     return K.tocsr()
+
+
+def factor_stiffness(K_ff):
+    """The sparse LU factors of the free part of the stiffness, which is symmetric and positive definite once the plate is held:
+    SuperLU in its symmetric mode (`SYMMETRIC_FACTOR`). A matrix that is not held shows as a zero or a vanishing pivot, which
+    `solve_shell` refuses."""
+    return splu(K_ff, **SYMMETRIC_FACTOR)
 
 
 def needs_shell(deck: Deck) -> bool:
@@ -244,7 +364,7 @@ def solve_shell(deck: Deck, mesh: Mesh | None = None) -> ShellSolution:
         K_ff = K[free][:, free].tocsc()
         rhs = f[free] - (K[free][:, fixed] @ values if fixed.size else 0.0)
         try:
-            factor = splu(K_ff)
+            factor = factor_stiffness(K_ff)
         except RuntimeError as exc:
             raise KernelError(f"the stiffness matrix is singular ({exc}); a region can move as a rigid body or is disconnected. Check the boundary "
                               "conditions: a plate needs its translations and its two tilts held somewhere") from None
@@ -260,33 +380,31 @@ def solve_shell(deck: Deck, mesh: Mesh | None = None) -> ShellSolution:
     residual = K @ u - f
     displacement = u[dofmap.reduced].reshape(mesh.node_count, DOFS)
     reaction = np.zeros((mesh.node_count, DOFS))
-    for r in fixed.tolist():
-        full = int(dofmap.representative_of_reduced[r])
-        reaction[full // DOFS, full % DOFS] = residual[r]
+    held = dofmap.representative_of_reduced[fixed].astype(int)
+    reaction[held // DOFS, held % DOFS] = residual[fixed]
     free_residual = float(np.max(np.abs(residual[free]))) if free.size else 0.0
     strain0, curvature, shear = element_states(mesh, displacement)
-    N = np.zeros_like(strain0)
-    M = np.zeros_like(curvature)
-    Q = np.zeros_like(shear)
-    for e in range(mesh.element_count):
-        section = mesh.sections[mesh.element_section[e]]
-        N[e] = section.A @ strain0[e] + section.B @ curvature[e]
-        M[e] = section.B @ strain0[e] + section.D @ curvature[e]
-        Q[e] = section.H @ shear[e]
+    A, B, D, H = element_sections(mesh)  # N = A eps + B kappa, M = B eps + D kappa, Q = H gamma, every element at once
+    on = lambda stiffness, values: (stiffness @ values[:, :, None])[:, :, 0]  # noqa: E731
+    N = on(A, strain0) + on(B, curvature)
+    M = on(B, strain0) + on(D, curvature)
+    Q = on(H, shear)
     return ShellSolution(mesh=mesh, displacement=displacement, reaction=reaction, strain=strain0, curvature=curvature, shear_strain=shear,
                          section_force=N, moment=M, shear_force=Q, free_residual=free_residual, notes=dofmap.notes)
 
 
 def element_states(mesh: Mesh, displacement: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Membrane strain, curvature and transverse shear strain at every element's centroid, from the nodal displacements (n, 5)."""
+    """Membrane strain, curvature and transverse shear strain at every element's centroid, from the nodal displacements (n, 5),
+    every element at once (ADR-0073 amendment 2)."""
     ne = mesh.element_count
-    strain0, curvature, shear = np.zeros((ne, 3)), np.zeros((ne, 3)), np.zeros((ne, 2))
-    for e in range(ne):
-        nodes = mesh.connectivity[e]
-        xy = mesh.xy[nodes]
-        u_e = displacement[nodes].ravel()
-        dN, _ = physical_derivatives(xy, 0.0, 0.0)
-        strain0[e] = membrane_rows(dN) @ u_e
-        curvature[e] = bending_rows(dN) @ u_e
-        shear[e] = shear_rows(xy, 0.0, 0.0) @ u_e
-    return strain0, curvature, shear
+    if not ne:
+        return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2))
+    xy = element_xy(mesh)
+    centroid = [(0.0, 0.0)]
+    J, det = jacobians_all(xy, centroid)
+    inverted = first_inverted(det)
+    if inverted is not None:
+        raise KernelError(inverted_message(det, centroid, *inverted))
+    Bm, Bb, Bs = shell_rows_all(xy, centroid, J)
+    u = np.asarray(displacement)[mesh.connectivity].reshape(ne, 4 * DOFS, 1)
+    return (Bm[0] @ u)[:, :, 0], (Bb[0] @ u)[:, :, 0], (Bs[0] @ u)[:, :, 0]

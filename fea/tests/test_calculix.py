@@ -10,7 +10,8 @@ from anisotropy_engine.response import ply_surfaces
 from anisotropy_engine.rotation import stress_transformation
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import section_plies
-from anisotropy_fea.calculix import ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, find_ccx, parse_dat, run_calculix, solver_environment
+from anisotropy_fea.calculix import (AHEAD, ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, discard_ahead, find_ccx, finish_calculix, parse_dat,
+                                     run_calculix, solver_environment, start_calculix)
 from anisotropy_fea.compare import layer_values, load_conventions
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
@@ -217,6 +218,62 @@ def test_calculix_gives_the_same_answer_on_every_run_of_a_deck(tmp_path):
     deck = paths.FEA / "checks" / "unnotched-im7-8552" / "decks" / "unnotched-im7-8552-nodal-ccx.inp"
     texts = {run_calculix(deck, workdir=tmp_path / f"run-{k}", threads=4).dat_text for k in range(3)}
     assert len(texts) == 1
+
+
+PUBLIC_DECK = paths.FEA / "checks" / "unnotched-im7-8552" / "decks" / "unnotched-im7-8552-nodal-ccx.inp"
+
+
+@needs_ccx
+def test_a_run_started_ahead_is_collected_by_the_run_of_the_same_deck(tmp_path, monkeypatch):
+    """ADR-0056 amendment 11: CalculiX started ahead of its step solves beside our engine; the step's `run_calculix` of the same deck,
+    reading as it did, collects that run and starts no second one, and what it collects is what a run of its own gives."""
+    deck = tmp_path / "ahead" / PUBLIC_DECK.name
+    deck.parent.mkdir()
+    deck.write_text(PUBLIC_DECK.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    started = start_calculix(deck, threads=2, ahead=True)
+    assert AHEAD == {deck.resolve(): started}
+    monkeypatch.setattr("anisotropy_fea.calculix.start_calculix", lambda *a, **k: pytest.fail("the solver was started a second time"))
+    result = run_calculix(deck, threads=2)
+    assert not AHEAD and result.returncode == 0 and result.errors == () and result.frd_path == deck.with_suffix(".frd")
+    assert started.ended is not None and 0 < result.elapsed_s == pytest.approx(started.ended - started.began)  # the solver's own time, not the wait for its step
+    assert deck.with_suffix(".log").read_text(encoding="utf-8") == result.stdout and "Job finished" in result.stdout
+    monkeypatch.undo()
+    assert run_calculix(PUBLIC_DECK, workdir=tmp_path / "alone", threads=2).dat_text == result.dat_text
+
+
+@needs_ccx
+def test_a_run_started_ahead_on_a_deck_that_changed_is_stopped_and_run_again(tmp_path):
+    deck = tmp_path / PUBLIC_DECK.name
+    text = PUBLIC_DECK.read_text(encoding="utf-8")
+    deck.write_text(text, encoding="utf-8", newline="\n")
+    started = start_calculix(deck, ahead=True)
+    started.process.wait()
+    deck.write_text(text.replace("*STEP", "** the step\n*STEP", 1), encoding="utf-8", newline="\n")  # the step wrote another deck than the one that was started
+    result = run_calculix(deck)
+    assert not AHEAD and result.returncode == 0 and "** the step" in deck.read_text(encoding="utf-8")
+    assert result.elapsed_s > 0 and result.dat_text.strip()
+
+
+@needs_ccx
+def test_runs_started_ahead_and_not_collected_are_stopped(tmp_path):
+    """A coupon run that stops before its CalculiX step leaves no solver running (`discard_ahead`)."""
+    deck = tmp_path / PUBLIC_DECK.name
+    deck.write_text(PUBLIC_DECK.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    started = start_calculix(deck, ahead=True)
+    again = start_calculix(deck, ahead=True)  # the same deck started again: the first is stopped, one run is kept
+    assert started.process.poll() is not None and AHEAD == {deck.resolve(): again}
+    discard_ahead()
+    assert not AHEAD and again.process.poll() is not None
+
+
+@needs_ccx
+def test_a_started_run_that_does_not_end_in_time_is_stopped(tmp_path):
+    deck = tmp_path / PUBLIC_DECK.name
+    deck.write_text(PUBLIC_DECK.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    started = start_calculix(deck)
+    with pytest.raises(CalculixError, match="did not finish"):
+        finish_calculix(started, timeout_s=0.0)
+    assert started.process.poll() is not None
 
 
 def test_the_environment_variable_is_documented():

@@ -39,6 +39,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,13 +67,16 @@ GATE = "gate"  # the file the tool waits for once it has named the coupon (--gat
 GATE_GO = "go"
 # The job queue (ADR-0056 amendment 3). Every number here is a first choice to be revised from the hosted tier's measurements.
 TICK_S = 0.1  # how often a solver looks at a job held at the gate
-HEARTBEAT_S = 5.0  # how often a solver writes a running job's row (its sign of life, stage, log, where its files are) and files its running files
+HEARTBEAT_S = 5.0  # a solver writes a running job's row at least this often: its sign of life, stage, log and where its files are
+LOOK_S = 1.0  # how often a solver looks at its running job: a new stage or file is filed and written to the row then, not at the next beat (ADR-0056 amendment 11)
 SILENT_AFTER = dt.timedelta(minutes=2)  # a running job whose solver has written nothing for this long has lost its container
 QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the queue or ran out of retries
 SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
 SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
 LIVE_KEYS = ("checklist", "preview", "fields", "explanation", "kernel_summary", "record")  # the files a browser reads while the job still runs:
 # the result's, which the tool reports before it draws and builds the package (ADR-0064)
+DOCUMENT_SOURCE = "document_source"  # the report as LaTeX with its figures, kept by a run that wrote no PDF (fea/tools/run_coupon.py, ADR-0064 amendment 3)
+DOCUMENT_TIMEOUT_S = 300.0  # Tectonic on one report takes half a minute on the hosted tier; past this it is stopped
 # The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
 CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
@@ -100,6 +104,10 @@ class JobBusy(RuntimeError):
 
 class JobNotDone(RuntimeError):
     """A file that exists only once the job has ended, asked for while it runs: the package's zip (ADR-0064 amendment 2)."""
+
+
+class NoDocument(RuntimeError):
+    """The job's report cannot be written on request: the job kept no source for it (ADR-0064 amendment 3)."""
 
 
 class RecordingFailed(RuntimeError):
@@ -167,6 +175,17 @@ def studio_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", str(STUDIO)]
 
 
+def typesetter() -> str | None:
+    """Tectonic, which typesets a report's LaTeX (docs/manual/build.py finds it the same way), or None when it is not on PATH."""
+    return shutil.which("tectonic")
+
+
+def reported(path: Path) -> str:
+    """A path as the tool reports one: from the repository root, or absolute when it lies elsewhere (`repository_path` reads it back)."""
+    resolved = path.resolve()
+    return resolved.relative_to(REPO.resolve()).as_posix() if resolved.is_relative_to(REPO.resolve()) else str(resolved)
+
+
 def repository_path(text: str) -> Path:
     """A path the tool reported: from the repository root, or absolute when it lies elsewhere."""
     path = Path(text)
@@ -175,12 +194,15 @@ def repository_path(text: str) -> Path:
 
 def documents_of_row(outputs: dict, inputs: dict) -> str | None:
     """`documents` for a job read back from its row (ADR-0064 amendment 2): "written" only when the package is there and its PDF too,
-    unless the job asked for no PDF; what is missing otherwise, so "Report ready" is never ticked without the report; None when no
-    package was made, which the page reads from the outputs."""
+    or, for a job that asked for no PDF, the source its report is typeset from when someone asks (amendment 3); what is missing
+    otherwise, so "Report ready" is never ticked without a report to have; None when no package was made, which the page reads
+    from the outputs."""
     if "package" not in outputs:
         return None
-    if "document" in outputs or inputs.get("pdf", True) is False:
+    if "document" in outputs:
         return "written"
+    if inputs.get("pdf", True) is False:
+        return "written" if DOCUMENT_SOURCE in outputs else "the package was written without the source of its report"
     return "the package was written without its document"
 
 
@@ -220,6 +242,10 @@ class Job:
     stop_reason: str | None = None  # why a solver stopped the tool, when it did (the per-job timeout)
     claimed_at: dt.datetime | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
     timings: dict[str, float] = field(default_factory=dict)  # the solver's own phases in seconds: restore, lock wait, gate, upload
+    # what a solver has filed of its running job: the files the tool reported and the result's line, as of the last look whose live files
+    # are all in the store; the row says these, so a file the row lists can be read (`_live_files`, ADR-0056 amendment 11)
+    filed: dict = field(default_factory=lambda: {"outputs": {}, "result": None})
+    report: str | None = None  # the report asked for after the run (ADR-0064 amendment 3): "writing", "failed", or None
 
     def answer(self) -> dict | None:
         """The answer in a few values once the job is done (ADR-0109); None before, and for a job that kept none."""
@@ -302,6 +328,8 @@ class CouponJobs:
         self.process = str(uuid.uuid4())
         self.jobs: dict[uuid.UUID, Job] = {}
         self.lock = threading.Lock()
+        self.reports: dict[uuid.UUID, str] = {}  # the reports asked for in this process and not written: "writing" or "failed" (ADR-0064 amendment 3)
+        self.typesetting = threading.Lock()  # one report at a time: Tectonic takes a core of this container for its half minute
 
     def get(self, job_id: uuid.UUID) -> Job | None:
         """A job of this process, or of an earlier one from the jobs table."""
@@ -313,7 +341,15 @@ class CouponJobs:
             if row is not None and row.state == "queued" and not row.message:
                 ahead = queue_position(self.table, row.id, row.started_at)
                 job.snapshot["message"] = f"queued; {ahead} ahead" if ahead else "queued"  # the words a customer reads (ADR-0091)
+        if job is not None:
+            with self.lock:
+                job.report = self.reports.get(job.id)
         return job
+
+    def busy(self) -> bool:
+        """Whether this process runs a job now: what a solver answers when the pool is asked which of its solvers is free."""
+        with self.lock:
+            return any(job.state == "running" for job in self.jobs.values())
 
     def coupons_of(self, user_email: str | None) -> set[str]:
         """The names of the coupons that owner's jobs alone have run, here and in the jobs table (ADR-0104)."""
@@ -371,6 +407,9 @@ class CouponJobs:
         if self.table is not None:
             for row in list_jobs(self.table, user_email=user_email):
                 jobs.setdefault(row.id, Job.from_row(row))
+        with self.lock:
+            for job in jobs.values():
+                job.report = self.reports.get(job.id)
         return sorted(jobs.values(), key=lambda job: job.started_at, reverse=True)
 
     def _folder(self) -> Path:
@@ -590,6 +629,102 @@ class CouponJobs:
             raise FileNotFoundError(f"the file {outputs[key]} is no longer there")
         return path
 
+    # --- the report on request (ADR-0064 amendment 3) ------------------------------------------------------------------------
+
+    def write_document(self, job: Job) -> str:
+        """The report of a done job as a PDF, when someone asks for it: "written" when the job has it already, else "writing", the
+        typesetting started in the background unless it is under way. JobNotDone while the job runs or when it did not end done;
+        NoDocument when it kept no source to typeset; JobRefused without Tectonic on this machine. The PDF is typeset from the job's
+        own `document_source`, the LaTeX and figures its run wrote, so it is that run's report whatever was run since."""
+        with self.lock:
+            state, outputs = job.state, dict((job.outcome or {}).get("outputs") or {})
+        if state != "done":
+            raise JobNotDone(f"coupon job {job.id} is {state}: its report is written once it is done")
+        if "document" in outputs:
+            return "written"
+        if DOCUMENT_SOURCE not in outputs:
+            raise NoDocument(f"coupon job {job.id} kept no source for its report")
+        if typesetter() is None:
+            raise JobRefused("Tectonic is not on PATH; a report's PDF is typeset by it (docs/installation-fea-tools.md)")
+        with self.lock:
+            if self.reports.get(job.id) == "writing":
+                return "writing"
+            self.reports[job.id] = "writing"
+            job.report = "writing"
+        threading.Thread(target=self._write_document, args=(job,), name=f"coupon-report-{job.id}", daemon=True).start()
+        return "writing"
+
+    def _write_document(self, job: Job) -> None:
+        """The background half of `write_document`: typeset, file, and say how it ended. A failure is kept as "failed" for the page and
+        printed with its cause; the next ask tries again."""
+        try:
+            with self.typesetting:
+                started = time.monotonic()
+                self._file_document(job, self._typeset(job))
+            print(f"coupon job {job.id}: its report was written on request in {time.monotonic() - started:.1f} s", flush=True)
+            ended = None
+        except Exception as exc:  # the store, the disk, the zip or Tectonic: the page hears "failed", the log the cause
+            print(f"coupon job {job.id}: its report was not written: {(str(exc).splitlines() or [type(exc).__name__])[0]}", flush=True)
+            ended = "failed"
+        with self.lock:
+            if ended is None:
+                self.reports.pop(job.id, None)
+            else:
+                self.reports[job.id] = ended
+
+    def _typeset(self, job: Job) -> Path:
+        """The job's report source unpacked into a folder of the job's own and typeset there; returns the PDF."""
+        compiler = typesetter()
+        if compiler is None:
+            raise JobRefused("Tectonic is not on PATH")
+        source = self.output_file(job, DOCUMENT_SOURCE)
+        folder = (job.folder if job.folder is not None else self._folder() / str(job.id)) / "report"
+        shutil.rmtree(folder, ignore_errors=True)
+        folder.mkdir(parents=True)
+        with zipfile.ZipFile(source) as archive:
+            for member in archive.namelist():  # our own tool wrote it; a name that leaves the folder is refused all the same
+                if not (folder / member).resolve().is_relative_to(folder.resolve()):
+                    raise ValueError(f"the report's source names a file outside its folder: {member}")
+            archive.extractall(folder)
+        sources = sorted(folder.glob("*.tex"))
+        if len(sources) != 1:
+            raise ValueError(f"the report's source holds {len(sources)} .tex files; one is the report")
+        done = subprocess.run([compiler, "--outdir", str(folder), str(sources[0])], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              cwd=folder, timeout=DOCUMENT_TIMEOUT_S, check=False)
+        pdf = sources[0].with_suffix(".pdf")
+        if done.returncode != 0 or not pdf.is_file():
+            last = ((done.stderr or done.stdout).strip().splitlines() or ["no message"])[-1]
+            raise RuntimeError(f"Tectonic exited with code {done.returncode}: {last[:300]}")
+        return pdf
+
+    def _file_document(self, job: Job, pdf: Path) -> None:
+        """The typeset report filed as the job's `document`: in the store beside the job's other files when they are there, else in the
+        package folder on this disk, where a run with its PDF writes it. The row first, then this process's job."""
+        with self.lock:
+            outcome = dict(job.outcome or {})
+            outputs, stored = dict(outcome.get("outputs") or {}), dict(job.stored)
+        coupon, attempt = outcome["coupon"], Path(outcome["attempt"]).name
+        owner = None if job.user_email is None else owner_key(job.user_email)
+        package = repository_path(outputs["package"]) if "package" in outputs else None
+        where = reported(pdf)
+        if self.store is not None and stored:
+            stored["document"] = store_file(self.store, coupon, attempt, "document", pdf, owner)
+            if package is not None:
+                where = reported(package / pdf.name)  # where the run would have written it; the store hands it out
+        elif package is not None and package.is_dir():
+            shutil.copyfile(pdf, package / pdf.name)
+            where = reported(package / pdf.name)
+            if job.folder is not None:
+                (job.folder / f"{package.name}.zip").unlink(missing_ok=True)  # a zip made before the report: the next one holds it
+        outputs["document"] = where
+        if self.table is not None:
+            update_job(self.table, job.id, outputs=outputs, stored=stored)
+        with self.lock:
+            live = self.jobs.get(job.id)
+            for one in {id(j): j for j in (job, live) if j is not None}.values():
+                one.outcome = {**(one.outcome or {}), "outputs": outputs}
+                one.stored = stored
+
     # --- the solver (the job queue, ADR-0056 amendment 3) ------------------------------------------------------------------
 
     def take(self, job_id: uuid.UUID) -> Job | None:
@@ -762,42 +897,61 @@ class CouponJobs:
             job.state, job.process = "queued", None
 
     def _heartbeat(self, job: Job, stop: threading.Event) -> None:
-        """Every HEARTBEAT_S from the claim to the row's last write, the finish's uploads included: the row's sign of life, stage, files,
-        log and where the store keeps the files so far. The write alone, nothing else, so that a slow bucket never delays the sign of
-        life (`_live_files` uploads). A failed beat is tried again at the next; one that takes longer than a beat is reported on the
-        console, since the sweep stops a job silent for SILENT_AFTER (ADR-0056 amendment 5)."""
-        while not stop.wait(HEARTBEAT_S):
+        """From the claim to the row's last write, the finish's uploads included: the row's sign of life, stage, files, log and where
+        the store keeps the files so far, written at least every HEARTBEAT_S and within LOOK_S of a new stage or a newly filed file,
+        so the page hears of a step when it happens (ADR-0056 amendment 11). The files and the result's line are the ones
+        `_live_files` has filed, so a file the row lists can be read. The write alone, nothing else, so that a slow bucket never
+        delays the sign of life (`_live_files` uploads). A failed beat is tried again at the next look; one that takes longer than
+        a beat is reported on the console, since the sweep stops a job silent for SILENT_AFTER (ADR-0056 amendment 5)."""
+        said, last = None, None
+        while not stop.wait(min(LOOK_S, HEARTBEAT_S)):
             started = time.monotonic()
             try:
                 progress = job.progress() or {}
                 with self.lock:
-                    stored = dict(job.stored)
+                    stored, filed = dict(job.stored), dict(job.filed)
+                saying = json.dumps([progress.get("stage"), progress.get("done"), progress.get("attempt"), filed, stored], sort_keys=True, default=str)
+                if saying == said and last is not None and started - last < HEARTBEAT_S:
+                    continue
                 update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
                            stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=progress.get("attempt"),
-                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=progress.get("result"),
+                           outputs=dict(filed.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=filed.get("result"),
                            timings=job.all_timings(), claimed_at=job.claimed_at)
-            except Exception as exc:  # the database for a moment: the next beat tries again
+                said, last = saying, started
+            except Exception as exc:  # the database for a moment: the next look tries again
                 print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
             took = time.monotonic() - started
             if took > HEARTBEAT_S:
                 print(f"coupon job {job.id}: a heartbeat took {took:.1f} s", flush=True)
 
     def _live_files(self, job: Job, stop: threading.Event) -> None:
-        """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs (LIVE_KEYS) into the store as the tool reports
-        them, each once, apart from the heartbeat (ADR-0056 amendment 5). A failed upload is tried again at the next look."""
-        while not stop.wait(HEARTBEAT_S):
+        """Every LOOK_S while the job runs: the files a browser reads while it runs (LIVE_KEYS) into the store as the tool reports
+        them, and again when the tool has written one anew (the fields get CalculiX's numbers, then the mesh study), apart from the
+        heartbeat (ADR-0056 amendment 5). What the tool had reported at a look, the result's line with it, is kept as filed once
+        that look's files are all in the store: the heartbeat says no more than that, so the page never asks for a file the store
+        does not hold yet, nor reads the result's line before the fields that go with it (ADR-0056 amendment 11). A failed upload is
+        tried again at the next look."""
+        marks: dict[str, tuple[int, int]] = {}
+        while not stop.wait(min(LOOK_S, HEARTBEAT_S)):
             try:
                 progress = job.progress() or {}
                 coupon, attempt = progress.get("coupon"), progress.get("attempt")
-                if not (coupon and attempt):
-                    continue
+                outputs = dict(progress.get("outputs") or {})
                 for key in LIVE_KEYS:
-                    reported = (progress.get("outputs") or {}).get(key)
-                    if reported and key not in job.stored and self._servable(job, repository_path(reported)):
-                        object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported),
+                    path = repository_path(outputs[key]) if outputs.get(key) else None
+                    if path is None or not (coupon and attempt) or not self._servable(job, path):
+                        outputs.pop(key, None)  # not there to file yet: the row lists it once it is
+                        continue
+                    status = path.stat()
+                    mark = (status.st_mtime_ns, status.st_size)
+                    if marks.get(key) != mark:
+                        object_key = store_file(self.store, coupon, Path(attempt).name, key, path,
                                                 None if job.user_email is None else owner_key(job.user_email))
+                        marks[key] = mark
                         with self.lock:
                             job.stored[key] = object_key
+                with self.lock:
+                    job.filed = {"outputs": outputs, "result": progress.get("result")}
             except Exception as exc:  # the store for a moment: the next look tries again
                 print(f"coupon job {job.id}: a running job's file could not be filed: {str(exc).splitlines()[0]}", flush=True)
 

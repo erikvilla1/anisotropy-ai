@@ -31,8 +31,10 @@ const TENSION_BUILT = [
 ];
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown } = {}) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[]; wakes?: number;
+    reports?: number; reportReads?: string[] },
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
+    report?: () => { status: number; body: unknown } } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -96,6 +98,19 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
         return json(route, { run_id: null, state: "blocked", designation: null, checklist, preview: null });
       }
       return json(route, { run_id: "run-1", state: "ready", designation: "IM7-UNT-L1", checklist: fixture("checklist"), preview: fixture("preview") });
+    }
+    if (path === "/v1/wake" && request.method() === "POST") { // the page says a run may follow (ADR-0056 amendment 11); nothing to wake here
+      calls.wakes = (calls.wakes ?? 0) + 1;
+      return json(route, { waking: false }, 202);
+    }
+    if (/^\/v1\/coupon-jobs\/[^/]+\/document$/.test(path) && request.method() === "POST") { // a report asked for (ADR-0064 amendment 3)
+      calls.reports = (calls.reports ?? 0) + 1;
+      const answer = options.report?.() ?? { status: 409, body: { detail: "This analysis kept no report to write. Run the analysis again to get one." } };
+      return json(route, answer.body, answer.status);
+    }
+    if (path.endsWith("/files/document")) {
+      (calls.reportReads ??= []).push(url.search);
+      return route.fulfill({ status: 200, contentType: "application/pdf", headers: { "Content-Disposition": 'attachment; filename="report.pdf"' }, body: "%PDF-1.5" });
     }
     if (path === "/v1/coupon-jobs" && request.method() === "POST") {
       calls.solves.push(request.postDataJSON());
@@ -480,6 +495,65 @@ test("the tension screen takes the material and the layup, builds the model, say
   await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveAttribute("href", /\/files\/solver_input\?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_solver\.inp$/);
   await expect(page.getByTestId("tension-files").locator("a[data-key=package], a[data-key=prepomax_deck], a[data-key=prepomax_results]")).toHaveCount(0);
   await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Files.");
+});
+
+test("a run ends without its PDF; Report (PDF) writes it when asked, says so, and downloads it when it is ready (ADR-0064 amendment 3)", async ({ page }) => {
+  const calls: Parameters<typeof mockApi>[1] = { checks: [], solves: [] };
+  // the run as the hosted tier now ends it: no PDF among its files, and what the report is typeset from kept in its place
+  const { document: _pdf, ...kept } = fixture("job-done").outputs as Record<string, string>;
+  const done = { ...fixture("job-done"), outputs: { ...kept, document_source: ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/IM7-UNT-L1-report-source.zip" } };
+  let asked = 0, pollsSince = 0, fails = true;
+  await mockApi(page, calls, {
+    allTests: false,
+    jobs: (poll) => {
+      if (poll === 0) return fixture("job-running");
+      if (poll < 3) return fixture("job-result-in");
+      if (!asked) return done;
+      pollsSince += 1;
+      if (pollsSince < 3) return { ...done, report: "writing" };
+      return fails ? { ...done, report: "failed" } : { ...done, outputs: { ...done.outputs, document: ".local/fea/IM7-UNT-L1/documents/2026-10-28_IM7-UNT-L1/IM7-UNT-L1.pdf" } };
+    },
+    report: () => { asked += 1; pollsSince = 0; return { status: 202, body: { ...done, report: "writing" } }; },
+  });
+  await page.goto("/workspace/fea");
+  await expect.poll(() => calls.wakes ?? 0).toBe(1); // the page opened: a solver is asked for before any run (ADR-0056 amendment 11)
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByTestId("build-button").click();
+  await expect.poll(() => calls.solves.length).toBe(1);
+  expect((calls.solves[0] as { pdf: boolean }).pdf).toBe(false); // the run is asked for no PDF
+  expect(calls.wakes).toBe(1); // the check that passed asks again only after ten minutes
+
+  const files = page.getByTestId("tension-files");
+  const ask = files.locator("button[data-key=document]");
+  await expect(ask).toHaveText("Report (PDF)", { timeout: 45_000 });
+  await expect(ask).toHaveAttribute("data-state", "idle");
+  await expect(files.getByTestId("report-note")).toHaveText("Written when you ask for it, in about half a minute.");
+  await expect(files.locator("a[data-key=document]")).toHaveCount(0);
+  await expect(page.getByTestId("job-state")).toHaveText("Done"); // the report can be had: the run's last step is ticked
+  await expect(page.getByTestId("job-progress").locator("li[data-step=report]")).toHaveAttribute("data-state", "done");
+  expect(calls.reports ?? 0).toBe(0); // nothing is written before someone asks
+
+  await ask.click(); // the first try fails at the service: the page says so and offers it again
+  await expect(ask).toBeDisabled();
+  await expect(files.getByTestId("report-note")).toHaveText("Writing the report. It downloads when it is ready, in about half a minute.");
+  await expect(files.getByTestId("report-note")).toHaveText("The report could not be written. Try again; if it keeps failing, contact us.", { timeout: 20_000 });
+  await expect(ask).toBeEnabled();
+  expect(calls.reports).toBe(1);
+  expect(calls.reportReads ?? []).toEqual([]);
+
+  fails = false;
+  const download = page.waitForEvent("download");
+  await ask.click();
+  await expect(files.locator("a[data-key=document]")).toHaveText("Report (PDF)", { timeout: 20_000 }); // written: a file like the others
+  await expect(files.locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45,0,-45,90]s_report.pdf");
+  await expect(files.locator("button[data-key=document]")).toHaveCount(0);
+  await expect(files.getByTestId("report-note")).toHaveCount(0);
+  await download; // and it came down by itself, under the page's name for it
+  expect(calls.reports).toBe(2);
+  expect(calls.reportReads).toEqual(["?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_report.pdf"]);
+  expect(bannedIn(await files.innerText())).toEqual([]);
 });
 
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
