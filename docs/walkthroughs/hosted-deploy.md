@@ -74,6 +74,16 @@ To serve the Worker at another hostname without a moment unguarded (as amendment
 
 `deploy.yml` runs when the Tests workflow finishes green on `main`: it builds the site, applies the migrations to Neon and runs `wrangler deploy`, passing the commit as `ANISOTROPY_GIT_COMMIT` so run records carry it. It needs three repository secrets: `CLOUDFLARE_API_TOKEN` (a token made from the "Edit Cloudflare Workers" template, with the account's Workers, Containers and R2 permissions, and Zone → Workers Routes → Edit on `anisotropy.dev` for the custom domain), `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` when Neon gives one). A pull request uploads a preview version of the Worker without production traffic, without a new container image and, with preview URLs off, without an address of its own. **Run workflow** on the Actions page deploys `main` by hand.
 
+### The check after a deploy
+
+The Deploy workflow's `check` job runs after each production deploy (ADR-0113): `scripts/check-hosted.py` loads the home page, waits up to 10 minutes for `GET /api/version` to name the commit just deployed (the first request after a deploy restarts the API's container, ADR-0056 amendment 10), then runs the public IM7/8552 coupon through the queue to its result, with no PDF. It fails the run with the step that failed. Access must let it in:
+
+1. Zero Trust → Access controls → Service credentials → Service tokens → **Create Service Token**, named for the check; copy its Client ID and Client Secret (the secret is shown once).
+2. In the `anisotropy.dev` application, add a policy with the action **Service Auth** that includes that service token.
+3. In the repository, Settings → Secrets and variables → Actions → **New repository secret**: `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`.
+
+Without the two secrets the job warns that it did not run and passes. A run of the check counts against the daily cap of the jobs with no signed-in email; a refusal by the cap is a warning. To check the site by hand: `CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... python3 scripts/check-hosted.py --site https://anisotropy.dev --values tests/fixtures/studio/values.json`.
+
 ## Limits per person
 
 `ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the page shows ("Your analysis started at 12:03 UTC is still running. Wait for it to finish, then run this one.", "You have started 20 analyses today, the most allowed per day. ..."); the job's id and the actor go to the container's log (ADR-0091 amendment 2). Unset, there is no cap. With the queue, a person's queued job counts as their one job; without it, the container's one-job-at-a-time rule applies to everybody.
