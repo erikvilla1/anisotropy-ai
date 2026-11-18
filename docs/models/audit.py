@@ -85,20 +85,20 @@ def audited(*, card: dict[str, str], package: str, attempt: str | None) -> list[
 SUB = "  "  # a label that starts with it is a row under the one above: the team's file, then ours, file names only
 
 
-def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str], ...], every_output: bool = False,
+def files_compared(*, c, our_deck: str, physics: tuple[tuple[str, str], ...], every_output: bool = False,
                    job: str = "") -> list[tuple[str, str]]:
     """What the audit compares, one row per thing compared and under it one row for the team's file and one for ours, by file name
-    (no folder paths, at the founder's request): the cover's block and the chapter's table. `our_deck` and `spec` are package paths;
-    only their names are shown; `physics` gives each section D check that applies to the test with who judges it, or that it is not
+    (no folder paths, at the founder's request): the cover's block and the chapter's table. `our_deck` is a package path; only its
+    name is shown, and no file of ours behind it (ADR-0112); `physics` gives each section D check that applies to the test with who judges it, or that it is not
     built yet. Without a team model, the run section C compares is the README's steps when the package has them (`every_output`), else
     the `job` command that runs our deck."""
-    our_deck, spec = Path(our_deck).name, Path(spec).name
+    our_deck = Path(our_deck).name
     physics = ("Physics", "our engine on its own, no Abaqus involved (section D): "
                + "; ".join(f"{check[:1].lower() + check[1:]} ({status})" for check, status in physics))
     if c is None:
         run = " (README.txt, steps 1 to 4)" if every_output else f" ({job})" if job else ""
         return [("The model", f"No team model yet: section B is not applicable. Section C compares your Abaqus run of our deck{run} with our values"),
-                (SUB + "Our deck", f"{our_deck}, written from the spec {spec}"),
+                (SUB + "Our deck", f"{our_deck}, written by our model generator"),
                 ("Other values", "the reaction force, the displacements and strains, the first ply to fail: our engine's values are given, for "
                                  "your Abaqus run of our deck (section C)"),
                 (SUB + "Our values", "in the Ours column of the Rubric sheet, the numbers behind them on the Results sheet; every ply of every "
@@ -109,7 +109,7 @@ def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str
     m = c.manifest.team
     return [("The model", "nodes, elements, layup, section, material, grips, boundary conditions and loads, step (section B)"),
             (SUB + "Team's deck", f"{c.team_deck_path.name} ({m.solver}, run {m.run_date})"),
-            (SUB + "Our deck", f"{our_deck}, written from the spec {spec}"),
+            (SUB + "Our deck", f"{our_deck}, written by our model generator"),
             ("The stresses", f"{', '.join(c.quantities)} at the same elements and plies, in the graded band (section C)"),
             (SUB + "Team's reports", ", ".join(p.name for p in c.report_paths) + ": the team's own exports, not repeated in this package"),
             (SUB + "Our values", ", ".join(f"ours-{q}.csv" for q in c.quantities)),
@@ -122,7 +122,7 @@ def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str
 def build_record(*, team_deck: str | None, team_sha256: str | None, fea_version: str, commit: str, run_by: str, built: str) -> list[tuple[str, str]]:
     """How the package was built: the form's Record sheet. The team deck's digest and the engine's commit live here, not on the cover."""
     return [("Team deck", team_deck or "none: the team has not built this coupon"), ("Team deck SHA-256", team_sha256 or "--"),
-            ("Engine", f"anisotropy-fea {fea_version}, commit {commit}"), ("Run by", run_by), ("Built", built)]
+            ("Engine", f"Anisotropy {fea_version}, build {commit}"), ("Run by", run_by), ("Built", built)]
 
 
 MATH = ((r"gamma\_xy", r"$\gamma_{xy}$"), (r"eps\_x", r"$\varepsilon_x$"), (r"eps\_y", r"$\varepsilon_y$"), (r"N\_xy", r"$N_{xy}$"),

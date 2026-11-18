@@ -1,6 +1,6 @@
 # Reading: the unnotched IM7/8552 coupon, CalculiX 2.22 S8R against the kernel
 
-The reading note of the record with the same name. It is printed as the last section of the model's comparison document (`docs/models/build.py`). Numbers quoted here are the ones in the record and in the chunk B evaluation note, `docs/evaluations/fea/2026-10-15-calculix-first-comparison.md`; the document's own tables are recomputed at every build.
+The reading note of the record with the same name, printed in every document that compares this record. Numbers quoted here are the ones in the record and in our evaluation of the first CalculiX comparison (2026-10-15); the document's own tables are recomputed at every build. It names no file of our repository, since a coupon report prints it as written.
 
 ## What the numbers show
 
@@ -11,7 +11,7 @@ The reading note of the record with the same name. It is printed as the last sec
 ## What explains the differences
 
 - The two element formulations differ: the kernel's bilinear four-node membrane with full 2 by 2 integration against CalculiX's eight-node shell expanded to a twenty-node brick with reduced integration, transverse shear and a three-dimensional material law. In the uniform field at the centre they agree; beside the grip, where the field has a gradient, they do not: the element one row past the tab differs by up to 20 % on small strain components (shear strain minus 0.000360 against minus 0.000326 on the regenerated deck) and by a few percent on the across-the-width plies' sigma_1. Those numbers are reported in the evaluation note and deliberately left out of the record, which holds the centre probe only.
-- The spec states `plane_stress = false`, so CalculiX's law couples the plies' thickness contraction through nu13 and nu23 (ADR-0030, amendment 1). On this material the effect is small because E2, and so E3, are small: the committed record kept its numbers when the plane-stress option was added.
+- The model does not take CalculiX's plies as plane stress, so CalculiX's law couples the plies' thickness contraction through nu13 and nu23 (ADR-0030, amendment 1). On this material the effect is small because E2, and so E3, are small: the committed record kept its numbers when the plane-stress option was added.
 
 ## Verified, and not
 
@@ -20,4 +20,4 @@ The reading note of the record with the same name. It is printed as the last sec
 
 ## What would settle the open items
 
-Run the same spec with the kernel's eight-node element and record the near-grip probe; have the team run the generated Abaqus deck `fea/checks/unnotched-im7-8552/decks/unnotched-im7-8552-nodal-abaqus.inp` and export per the recipe in `docs/abaqus-export-recipe.md`.
+Run the same model with the kernel's eight-node element and record the near-grip probe; have the team run the generated Abaqus deck, `unnotched-im7-8552-nodal-abaqus.inp`, and export its field reports per our Abaqus export recipe.
