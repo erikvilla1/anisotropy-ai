@@ -28,6 +28,8 @@ uv run python tools/run_coupon.py <coupon> --run-by "<role>"                    
 uv run python tools/run_coupon.py <values>.json --run-by "<role>"                # the same rows as the workspace sends them
 ```
 
+`tools/weekly_coupons.py` is the weekly check of the coupons on this machine (ADR-0114): each coupon under `../.local/fea/` is copied, re-solved in the copy by `run_coupon.py --every-test --no-pdf`, and every compared value, ours and CalculiX's, set beside last week's (`../.local/weekly/snapshots/`), so a change to the code that moves a team number is seen. The coupons themselves are never touched. On Windows, `scripts/weekly-coupons.ps1 -Register` runs it on Sundays with today's main from a worktree of its own, and a notification says when something moved.
+
 ## Units
 
 An Abaqus deck carries no units. `read_deck(path, units)` requires `units` to be `"mm-MPa"` or `"m-Pa"` and converts coordinates, thicknesses, moduli, strengths, prescribed displacements and loads to SI base units on entry (ADR-0002). A missing or unknown statement is refused (ADR-0003). When a converted modulus falls outside 1 GPa to 1000 GPa the reader warns that the statement is probably wrong.
