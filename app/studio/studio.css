@@ -163,6 +163,12 @@
 .studio-downloads { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 12px; }
 .studio-downloads a { color: var(--accent); }
 .studio-downloads a:hover { text-decoration: underline; }
+/* the report asked for (ADR-0064 amendment 3): a button that reads as the links beside it, and one line on what happens */
+.studio-download-ask { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer; }
+.studio-download-ask:hover:not(:disabled) { text-decoration: underline; }
+.studio-download-ask:disabled { color: var(--muted); cursor: progress; }
+.studio-download-note { display: block; margin: 2px 0 0 19px; color: var(--muted); }
+.studio-download-note.studio-problem { color: #f6bba9; }
 .studio-viewer-link a { color: var(--accent); font-size: 12px; }
 .studio-results { display: grid; gap: 16px; }
 .studio-results > *, .studio-output > *, .studio-probe, .studio-readout { min-width: 0; }

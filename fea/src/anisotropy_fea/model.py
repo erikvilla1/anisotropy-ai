@@ -378,6 +378,33 @@ def prescribed_dofs(deck: Deck, key: NodeKey) -> dict[int, float]:
 # --- validation ---------------------------------------------------------------------------------
 
 
+def _first_absent(deck: Deck, keys, elements: bool):
+    """The first key of an assembly set, in the set's order, whose node or element does not exist (or whose instance is not
+    defined); None when every one exists. One array test per instance the set names, not one pass over the part per key: the pass
+    per key took time with the square of the mesh (ADR-0073 amendment 2)."""
+    places: dict[str | None, list[int]] = {}
+    for i, (instance, _) in enumerate(keys):
+        places.setdefault(instance, []).append(i)
+    first = None
+    for instance, at in places.items():
+        if instance is not None and (instance not in deck.instances or deck.instances[instance].part not in deck.parts):
+            bad = at[0]
+        else:
+            part = None if instance is None else deck.parts[deck.instances[instance].part]
+            if elements:
+                have = None if part is None or part.elements is None else part.elements.labels
+            else:
+                have = deck.assembly_nodes.labels if part is None else part.nodes.labels
+            if have is None:
+                bad = at[0]
+            else:
+                found = np.isin(np.array([keys[i][1] for i in at]), have)
+                bad = None if found.all() else at[int(np.flatnonzero(~found)[0])]
+        if bad is not None and (first is None or bad < first):
+            first = bad
+    return None if first is None else keys[first]
+
+
 def validate_deck(deck: Deck) -> tuple[str, ...]:
     """Every reference resolves and the model is a flat plate one of the kernels can represent; what each kernel refuses is checked
     when it is asked to solve (`membrane_limits` for the membrane). Returns notes."""
@@ -390,14 +417,15 @@ def validate_deck(deck: Deck) -> tuple[str, ...]:
         if instance.part not in deck.parts:
             raise DeckError(f"instance {instance.name!r} names part {instance.part!r}, which is not defined")
     for name, keys in deck.nsets.items():
-        for key in keys:
-            if not node_exists(deck, key):
-                raise DeckError(f"node set {name!r} names node {node_name(key)}, which does not exist")
+        absent = _first_absent(deck, keys, elements=False)
+        if absent is not None and not node_exists(deck, absent):  # an instance that is not defined is refused by node_exists, by name
+            raise DeckError(f"node set {name!r} names node {node_name(absent)}, which does not exist")
     for name, keys in deck.elsets.items():
-        for instance, label in keys:
-            part = part_of_instance(deck, instance, f"element set {name!r}")
-            if part.elements is None or not np.any(part.elements.labels == label):
-                raise DeckError(f"element set {name!r} names element {instance}.{label}, which does not exist")
+        absent = _first_absent(deck, keys, elements=True)
+        if absent is not None:
+            instance, label = absent
+            part_of_instance(deck, instance, f"element set {name!r}")
+            raise DeckError(f"element set {name!r} names element {instance}.{label}, which does not exist")
     for surface in deck.surfaces.values():
         if isinstance(surface, NodeSurface) and surface.nset not in deck.nsets:
             raise DeckError(f"surface {surface.name!r} names node set {surface.nset!r}, which is not defined")

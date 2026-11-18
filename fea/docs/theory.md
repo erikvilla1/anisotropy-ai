@@ -272,11 +272,13 @@ the sign being positive against the element normal, which is $`+z`$ for counterc
 
 ### 8.3 Constraints, assembly and solution
 
-Degrees of freedom are numbered $`5i`$ to $`5i + 4`$ for node $`i`$. A kinematic coupling aliases every coupled dof the coupling names (dofs 1 to 5; dof 6 is dropped) to the reference node's, so a coupled edge translates and tilts with its reference node and the reference node's reaction carries the summed forces and moments. Prescribed values on dofs 1 to 5, concentrated loads on dofs 1 to 5 (forces in N, moments in N m) and the pressure forces are collected on the reduced dofs, with the same conflict and detachment refusals as the membrane's constraints and assembly; all of this is computed by `constraint_map_shell`, and the sparse global stiffness is computed by `assemble_shell`. The partition, the sparse LU solve, the singularity checks and the reactions as the residual at the prescribed dofs are those of the membrane's solution; a plate whose translation along z or whose tilts are nowhere held is refused with that message. The solve is computed by `solve_shell`.
+Degrees of freedom are numbered $`5i`$ to $`5i + 4`$ for node $`i`$. A kinematic coupling aliases every coupled dof the coupling names (dofs 1 to 5; dof 6 is dropped) to the reference node's, so a coupled edge translates and tilts with its reference node and the reference node's reaction carries the summed forces and moments. Prescribed values on dofs 1 to 5, concentrated loads on dofs 1 to 5 (forces in N, moments in N m) and the pressure forces are collected on the reduced dofs, with the same conflict and detachment refusals as the membrane's constraints and assembly; all of this is computed by `constraint_map_shell`, and the sparse global stiffness is computed by `assemble_shell`. The partition, the singularity checks and the reactions as the residual at the prescribed dofs are those of the membrane's solution. $`\mathbf{K}_{ff}`$ is symmetric and positive definite once the plate is held, so its sparse LU factors are taken with the ordering for a symmetric pattern and each pivot kept on the diagonal (SuperLU's symmetric mode, ADR-0073 amendment 2), which fills the factors less than the general ordering; they are computed by `factor_stiffness`. Every element's rows and stiffness are formed at once on stacked arrays, by the operations of the single-element functions above in the same order (ADR-0073 amendment 2). A plate whose translation along z or whose tilts are nowhere held is refused with that message. The solve is computed by `solve_shell`.
 
 <!-- code: constraint_map_shell -->
 
 <!-- code: assemble_shell -->
+
+<!-- code: factor_stiffness -->
 
 <!-- code: solve_shell -->
 

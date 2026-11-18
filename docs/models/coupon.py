@@ -71,7 +71,7 @@ from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
-from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
+from anisotropy_fea.case_pages import CasePageError, calculix_record, reaction_row, read_case  # noqa: E402
 from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.every_output import write_ours as write_every_output  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
@@ -1200,7 +1200,8 @@ def convergence_section(spec, units: str, study: dict | None = None) -> str:
 def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
                          figures: Path, coupled_reaction: float | None = None, spec=None, study: dict | None = None) -> str:
     solver = record["solver"]
-    twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
+    carried = reaction_row(rows)  # the moving grip's reaction, or under a force the held grip's turned to the load's sign
+    twin = None if carried is None else carried[1] * carried[0].kernel
     same = ""
     if coupled_reaction is not None and twin is not None:
         unit = documents.UNIT_LABEL[units]["force"]
@@ -1344,7 +1345,7 @@ def record_points(rows, probes: dict[str, str] | None = None) -> str:
 def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units: str, scored, rubric_version: str,
                probes: dict[str, str] | None = None, study: dict | None = None) -> str:
     solver = record["solver"]
-    reaction = next((r for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
+    reaction = (reaction_row(rows) or (None, 1.0))[0]
     labels = documents.UNIT_LABEL[units]
     verdict = []
     if "reaction" in summary:

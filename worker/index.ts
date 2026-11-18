@@ -8,14 +8,16 @@
  * warm pool's solvers (`SolverContainer`, `solver-0` to `solver-9`, from the same image) in turn until one takes the job, and returns;
  * that solver's Durable Object watches the job on a timer until it ends (worker/solver-queue.ts). A solver that runs a job answers
  * busy; a finished job's container stays warm for a while with its coupons on disk, so the next job starts without a cold start.
- * Nothing here computes a result (ADR-0001). */
+ * When the page opens it says so (`POST /api/v1/wake`), and the pool's first free solver is started then, before a job is filed
+ * (amendment 11). Nothing here computes a result (ADR-0001). */
 
 import { Container, getContainer } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
-import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, leftOver, movedLocation, releaseOf, solverEnvironment, type ContainerVariable } from "./routing";
-import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, startJob, watchJob, type SolverCall, type StartVerdict,
-         type Watch, type WatchStep } from "./solver-queue";
+import { ENQUEUE_HEADER, WAKE_HEADER, apiEnvironment, apiPath, isSolverPath, leftOver, movedLocation, releaseOf, solverEnvironment,
+         type ContainerVariable } from "./routing";
+import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, startJob, wakePool, wakeSolver, watchJob, type SolverCall,
+         type StartVerdict, type WakeAnswer, type Watch, type WatchStep } from "./solver-queue";
 
 type WorkerEnv = Env & Partial<Record<ContainerVariable, string>>;
 /** What a job the API filed but the Worker could not queue answers: what happened and what to do, never the cause. */
@@ -113,6 +115,11 @@ export class SolverContainer extends Container<WorkerEnv> {
     return verdict;
   }
 
+  /** The wake-up's ask (ADR-0056 amendment 11): whether this solver runs a job. Asking starts the container when it sleeps. */
+  async wake(): Promise<WakeAnswer> {
+    return wakeSolver(this.call());
+  }
+
   /** The timer: one look at the job, then the next look, the job sent back to the queue, or the end. A look that throws is
    * counted as a failed one, so the timer never stops by accident while the job runs. */
   async watch(watch: Watch): Promise<void> {
@@ -135,7 +142,7 @@ export class SolverContainer extends Container<WorkerEnv> {
 }
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
     const moved = movedLocation(request.url);
     if (moved !== null) return Response.redirect(moved, 301);  // /chat, /studio and their viewers moved (ADR-0058 amendment 2)
     const url = new URL(request.url);
@@ -145,6 +152,15 @@ export default {
     url.pathname = path;
     const forwarded = new Request(url.toString(), request);
     const answer = await getContainer(env.API, "api").fetch(forwarded);
+    if (answer.headers.get(WAKE_HEADER) !== null) {
+      // the page opened and the API let the request through: the pool's first free solver is started while the answer goes back
+      const waking = wakePool((name) => getContainer(env.SOLVER, name).wake(), solverNames())
+        .then(({ reason }) => console.log(`wake-up: ${reason}`), (error) => console.log(`wake-up: failed: ${String(error)}`));
+      ctx.waitUntil(waking);
+      const kept = new Headers(answer.headers);
+      kept.delete(WAKE_HEADER);
+      return new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers: kept });
+    }
     const queued = answer.headers.get(ENQUEUE_HEADER);
     if (queued === null) return answer;
     const headers = new Headers(answer.headers);

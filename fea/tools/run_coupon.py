@@ -6,17 +6,19 @@
 
 Runs the steps of the case page's Rebuild section in order, with its placeholders filled: reads the input (as coupon_from_form.py),
 writes the decks (as regenerate_decks.py --ccx), starts the next attempt (as new_attempt.py), solves the coupon with our engine
-(build_model.py, without its drawings), runs the CalculiX twin (run_calculix.py) and writes the CalculiX record (record_from_dat.py).
+(build_model.py, without its drawings) while CalculiX solves the twin beside it (started on the twin's deck; run_calculix.py collects
+it, ADR-0056 amendment 11) and writes the CalculiX record (record_from_dat.py).
 That is the result: the progress file says it (`result`) before anything else is made, so the studio shows it while the rest is
-built (ADR-0064). Then the documents: the engine's drawings (build_model.py --drawings only) and the package (as
-docs/models/coupon.py). Last it adds the attempt's row to the case page's attempt log, a failed try included, refreshes the page's
+built (ADR-0064). Then what is read beside it: the mesh convergence study (convergence_study.py; after the result since ADR-0064
+amendment 3), the engine's drawings (build_model.py --drawings only) and the package (as docs/models/coupon.py). Last it adds the attempt's row to the case page's attempt log, a failed try included, refreshes the page's
 result and lists the files to open. It stops at the first step before the result that fails and names it; a document that fails
 after the result leaves the result standing, and the row and the outcome say which document is missing and why. Nothing is written before CalculiX
 is found (ANISOTROPY_CCX or ccx on PATH) and the coupon's case page reads. An input that the setup check blocks is refused with the
 failing items named, before anything is written.
 
 Options: --machine (default: the operating system and the CalculiX version found), --replace (with an input: rewrite the specs of a
-coupon that has them), --no-pdf (the package without its PDF, where Tectonic is missing), --no-theory, --result <file> (the outcome
+coupon that has them), --no-pdf (the package without its PDF, where Tectonic is missing or the PDF is written on request: the run
+then keeps the report's LaTeX and figures as `document_source`, ADR-0064 amendment 3), --no-theory, --result <file> (the outcome
 as JSON, for the API's coupon jobs), --progress <file> (the stage reached and the files made so far, rewritten after every step, for
 the studio), --gate <file> (once the coupon is named and its specs are written, wait for this file before the attempt: `go` goes on,
 any other text refuses the run with that text; the hosted tier's solver claims the coupon there, ADR-0056 amendment 3).
@@ -27,6 +29,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+import zipfile
 import json
 import os
 import platform
@@ -43,9 +46,9 @@ from anisotropy_fea import __version__, enabled, paths
 from anisotropy_fea.standards.conformance import conformance
 from anisotropy_fea.test_quantities import STRAIN_PROBES
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
-from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
+from anisotropy_fea.calculix import CalculixError, ccx_version, discard_ahead, find_ccx, start_calculix
 from anisotropy_fea.calculix_summary import calculix_summary, extensometer_of
-from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
+from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, reaction_difference, record_summary, rel
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.fields import run_answer
@@ -63,9 +66,9 @@ LEFT_OUT = {  # why the record keeps the gauge probes only, in the words the cou
 }
 COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded under the name its tests use
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
-STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study", "CalculiX", "the CalculiX record", "the result",
+STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result", "the mesh study",
           "the drawings", "the package", "the outputs")
-DOCUMENT_STAGES = STAGES[STAGES.index("the drawings"):]  # after the result: made in the background of the studio's view (ADR-0064)
+DOCUMENT_STAGES = STAGES[STAGES.index("the mesh study"):]  # after the result: made in the background of the studio's view (ADR-0064; the study since its amendment 3)
 STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run, and the rows it ran on
 SETUP_KEYS = ("checklist", "preview", "values")  # that folder's files by key: kept on a run's outputs whatever became of the run
 GATE_GO = "go"  # the word at the gate that lets a held run go on
@@ -336,13 +339,21 @@ def package(name: str, pdf: bool, theory: bool, attempt: str | None = None, stud
     return folder
 
 
+def write_whole(path: Path, text: str) -> None:
+    """A file a reader may open while the run goes on (the fields the page shows), written whole: to a neighbour, then moved into
+    place, so nobody reads half of it."""
+    draft = path.with_name(path.name + ".draft")
+    draft.write_text(text, encoding="utf-8")
+    os.replace(draft, path)
+
+
 def beside(fields_path: Path, record: Path, twin: Path | None = None) -> None:
     """CalculiX's reaction, gauge ply stresses and .frd peaks written into the fields file's summary as `calculix`, so the page shows
     them beside ours from the one file it reads (ADR-0030 amendment 6); with the twin's spec, its chord modulus too (ADR-0072)."""
     try:
         data = json.loads(fields_path.read_text(encoding="utf-8"))
         data["summary"]["calculix"] = calculix_summary(record, data["units"], extensometer_of(load_spec(twin)) if twin is not None else None)
-        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        write_whole(fields_path, json.dumps(data))
         print(f"written    {rel(fields_path)} (CalculiX's numbers beside ours)")
     except (OSError, ValueError, KeyError) as exc:  # the page then shows ours alone, and says nothing of CalculiX's; the record itself stands
         print(f"CalculiX's numbers were not written beside ours in {rel(fields_path)}: {str(exc).splitlines()[0]}")
@@ -354,7 +365,7 @@ def convergence_into(fields_path: Path, study_path: Path) -> None:
     try:
         data = json.loads(fields_path.read_text(encoding="utf-8"))
         data["summary"]["convergence"] = json.loads(study_path.read_text(encoding="utf-8"))
-        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        write_whole(fields_path, json.dumps(data))
         print(f"written    {rel(fields_path)} (the mesh convergence study in the summary)")
     except (OSError, ValueError, KeyError) as exc:  # the page then shows the result without the study; the study file itself stands
         print(f"the convergence study was not written into {rel(fields_path)}: {str(exc).splitlines()[0]}")
@@ -392,6 +403,52 @@ def write_studio(out: Path, checklist, model, quality) -> dict[str, Path]:
         path.write_text(json.dumps(preview_data(model, quality), indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
         written["preview"] = path
     return written
+
+
+def start_ahead(twin: Path, folder: Path) -> None:
+    """CalculiX started on the twin's deck as "the decks" wrote it, so that it solves beside our engine and its step collects what it
+    wrote (`calculix.run_calculix`; ADR-0056 amendment 11). Nothing is started for a step in a Python of its own, without the deck or
+    without the solver: the step then runs the solver itself, or says what is missing, as before."""
+    deck = paths.deck_path(twin, "ccx")
+    try:
+        if os.environ.get(STEP_PROCESS) == "1" or not deck.is_file() or find_ccx() is None:
+            return
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / deck.name
+        target.write_text(deck.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+        start_calculix(target, threads=os.cpu_count() or 1, ahead=True)  # every core for the assembly, one for SPOOLES (ADR-0056 amendments 6 and 7)
+        print(f"CalculiX started on {rel(target)}, beside our engine")
+    except (OSError, CalculixError) as exc:  # the step runs it and reports the fault where it belongs
+        print(f"CalculiX was not started ahead: {str(exc).splitlines()[0]}")
+
+
+def mesh_study(name: str, out: Path, spec: Path, progress: Progress) -> Path | None:
+    """After the result (ADR-0064 amendment 3): the mesh convergence study, written into the fields the result shows; returns its file,
+    or None when it was not written. A reading beside the result, never a reason to stop the run (ADR-0068)."""
+    study, fields = out / "kernel" / f"{name}-convergence.json", out / "kernel" / f"{name}-fields.json"
+    progress.start("the mesh study")
+    try:
+        script("the mesh study", [str(paths.FEA / "tools/convergence_study.py"), str(spec), "--out", str(study)], paths.FEA)
+    except StepFailed as exc:
+        print(f"{exc}; the run goes on without the mesh study")
+    if not study.is_file():
+        return None
+    convergence_into(fields, study)
+    progress.made(convergence=study, fields=fields)
+    return study
+
+
+def report_source(name: str, target: Path) -> Path:
+    """The report as LaTeX with the figures it names, one zip in the attempt's run folder: what its PDF is typeset from when someone
+    asks for it, for a run that wrote none (ADR-0064 amendment 3). The coupon's latex/ folder is rewritten by its next attempt; this is
+    the attempt's own copy."""
+    folder = paths.latex(name)
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(folder / f"{name}.tex", f"{name}.tex")
+        for figure in sorted((folder / "figures").glob("*")):
+            if figure.is_file():
+                archive.write(figure, f"figures/{figure.name}")
+    return target
 
 
 def run(source: str, run_by: str, machine: str | None = None, replace: bool = False, pdf: bool = True, theory: bool = True,
@@ -446,12 +503,12 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     nodes, elements = gauge_probes(kind)
     nodes = (*nodes, *(name for name in STRAIN_PROBES if name in twin_spec.probes.nodes))  # the strain measurement's ends (ADR-0072)
     notes = f"written by fea/tools/run_coupon.py, attempt {number:02d}; {LEFT_OUT.get(kind, LEFT_OUT[None])}"
+    if twin_spec.loading is not None and twin_spec.loading.rigid_grip:  # ADR-0030 amendment 7
+        notes += "; the coupon states a force: CalculiX's top grip is moved by the travel our kernel finds for it, and its reaction is what it carries there"
     steps = [
         ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel"), "--drawings", "without"],
          {"kernel_summary": out / "kernel" / "summary.txt", "fields": out / "kernel" / f"{name}-fields.json",
           "explanation": out / "kernel" / f"{name}-explanation.json"}),
-        ("the convergence study", [str(paths.FEA / "tools/convergence_study.py"), str(spec), "--out", str(out / "kernel" / f"{name}-convergence.json")],
-         {"convergence": out / "kernel" / f"{name}-convergence.json"}),
         ("CalculiX", [str(paths.FEA / "examples/run_calculix.py"), str(twin), "--out", str(out / "calculix")],
          {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd",
           "calculix_console": out / "calculix" / f"{name}-nodal-ccx.log", "calculix_status": out / "calculix" / f"{name}-nodal-ccx.sta"}),
@@ -472,26 +529,17 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run",
                 "values": "the rows of this run, as the studio edits them"}[key], path)
          for key, path in progress.outputs.items() if key in SETUP_KEYS]
+    start_ahead(twin, out / "calculix")  # CalculiX beside our engine; its step collects it (ADR-0056 amendment 11)
     try:
         for step, args, made in steps:
             progress.start(step)
             try:
-                try:
-                    script(step, args, paths.FEA)
-                except StepFailed as exc:
-                    if step != "the convergence study":  # the study is a reading beside the result, never a reason to stop the run (ADR-0068)
-                        raise
-                    print(f"{exc}; the run goes on without the convergence study")
-                if step == "the convergence study":
-                    convergence_into(out / "kernel" / f"{name}-fields.json", out / "kernel" / f"{name}-convergence.json")  # into the fields the result shows
+                script(step, args, paths.FEA)
                 if step == "the CalculiX record":
                     beside(out / "kernel" / f"{name}-fields.json", record, twin)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
-            finally:  # what the step wrote stays reported, a failed step's deck and console included; a study that was not written is not
-                progress.made(**{key: path for key, path in made.items() if path.exists() or step != "the convergence study"})
+            finally:  # what the step wrote stays reported, a failed step's deck and console included
+                progress.made(**made)
         progress.start("the result")
-        study = out / "kernel" / f"{name}-convergence.json"
-        if study.is_file():
-            answer.append(("convergence", "our engine: the mesh convergence study", study))
         missing = [path for _, _, path in answer if not path.exists()]
         if missing:
             raise StepFailed(f"the result: {', '.join(rel(path) for path in missing)} not written")
@@ -501,9 +549,14 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         add_row(folder, [f"{number:02d}", day, what, "--", f"stopped at {exc}", f"`ours/runs/{attempt.name}/run/`"])
         exc.coupon, exc.attempt = name, attempt
         raise
+    finally:
+        discard_ahead()  # a run that stopped before its CalculiX step leaves no solver running
     progress.result, result_at = result, time.perf_counter()
     progress.made(**{key: path for key, _, path in answer})
-    print(f"\nResult: attempt {number:02d} of {name}: {result}. The drawings and the package follow.", flush=True)
+    print(f"\nResult: attempt {number:02d} of {name}: {result}. The mesh study, the drawings and the package follow.", flush=True)
+    study = mesh_study(name, out, spec, progress)
+    if study is not None:
+        answer.append(("convergence", "our engine: the mesh convergence study", study))
     opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress, f"{number:02d}")
     evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`" + ("" if delivered is None else f"; `{paths.DOCUMENTS}/{delivered.name}/`")
     written = ("package written" if pdf else "package written without its PDF") if documents == "written" else documents
@@ -553,9 +606,9 @@ def answer_of_run(fields: Path) -> dict | None:
 def outcome_line(folder: Path) -> str:
     """The result's one line, from the CalculiX record: how many recorded values agree, and our reaction against CalculiX's."""
     rows, _ = record_summary(folder)
-    reaction = [signed(r.reference, r.kernel) for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
-    return f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + "".join(
-        f"; our reaction {value} from CalculiX's" for value in reaction)
+    reaction = reaction_difference(rows)  # the moving grip's, or under a force the held grip's (ADR-0030 amendment 7)
+    return f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + (
+        f"; our reaction {reaction} from CalculiX's" if reaction else "")
 
 
 def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, progress: Progress,
@@ -580,6 +633,11 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
     except StepFailed as exc:
         failed.append(f"the package not written ({exc})")
     progress.start("the outputs")
+    if delivered is not None and not pdf:
+        try:
+            opens.append(("document_source", "the report as LaTeX with its figures, for its PDF on request", report_source(name, out / f"{name}-report-source.zip")))
+        except (OSError, ValueError) as exc:
+            failed.append(f"the report's source not kept ({str(exc).splitlines()[0]})")
     if delivered is not None:
         opens = [("package", "the package for the team", delivered)] + (
             [("document", "its document", delivered / f"{name}.pdf")] if pdf else []) + [
@@ -616,7 +674,7 @@ def main() -> None:
     parser.add_argument("--run-by", required=True, help="who runs it, as the CalculiX record and the attempt log name them")
     parser.add_argument("--machine", default=None, help="the machine, as the record names it; default the operating system and the CalculiX version")
     parser.add_argument("--replace", action="store_true", help="with an input file: rewrite the two specs of a coupon that already has them")
-    parser.add_argument("--no-pdf", action="store_true", help="write the package's LaTeX but not its PDF (Tectonic missing)")
+    parser.add_argument("--no-pdf", action="store_true", help="write the package without its PDF (Tectonic missing, or the PDF is written on request) and keep the report's LaTeX and figures")
     parser.add_argument("--no-theory", action="store_true", help="leave the equations and code of Chapter 2 out of the document")
     parser.add_argument("--result", type=Path, default=None, help="also write the outcome to this JSON file (the API's coupon jobs read it)")
     parser.add_argument("--progress", type=Path, default=None, help="rewrite this JSON file after every step: the stage and the files so far")

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
+import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
@@ -1020,7 +1020,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const lab = from.labels;
     const lines = valueLines(answer, resultUnit(from, answer.columns[0]), printed);
     const faces = answer.rows.some((r) => r.face);
-    const current = shown.fields === from;
+    const current = sameResults(shown.fields, from);
     const one = answer.rows.length === 1 ? answer.rows[0] : null;
     const read = [...new Set(answer.rows.map((r) => r.ply))]; // the plies read: one, some (a comparison) or every one
     const sets = answer.sets.map((name) => setWords(name) === name ? `${name} set` : setWords(name).replace(/^the /, "")); // a set with no words of its own is named as a set
@@ -1092,7 +1092,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
    * lies is by the package's own reading of the gauge section. */
   function elementMessage(entry: Extract<Entry, { kind: "element" }>): ReactNode {
     const { answer, from } = entry;
-    const current = shown.fields === from;
+    const current = sameResults(shown.fields, from);
     const number = answer.label?.split(".").pop() ?? null;
     const sets = answer.sets.map((name) => setWords(name)).filter((words, i) => words !== answer.sets[i]);
     const where = answer.where === "gauge" ? "in the gauge section, where the answer is read"
@@ -1118,7 +1118,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function failureMessage(entry: Extract<Entry, { kind: "failure" }>): ReactNode {
     const { found, from, preview, reader } = entry;
     const { answer, row } = found;
-    const current = shown.fields === from;
+    const current = sameResults(shown.fields, from);
     const L = from.labels.length ?? "";
     const lines = failureLines(found, printed);
     const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
@@ -1161,7 +1161,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
    * largest value at a grip edge is flagged in one line, since it is not a value to rely on. */
   function extremesMessage(entry: Extract<Entry, { kind: "extremes" }>): ReactNode {
     const { answer, from, preview, reader } = entry;
-    const current = shown.fields === from;
+    const current = sameResults(shown.fields, from);
     const [first] = answer.blocks;
     const single = answer.blocks.length === 1;
     const region = answer.region.replace(/^the /, "");

@@ -23,6 +23,9 @@ export type JobStatus = {
   claimed_at?: string | null; timings?: Record<string, number>;
   /** A done run's answer in a few values, for the list of past analyses (ADR-0109); read with `readJobAnswer` before it is shown. */
   answer?: unknown;
+  /** The report asked for after the run (ADR-0064 amendment 3): "writing" while its PDF is typeset, "failed" when the last try did not
+   * write it; once written it is the output `document`. */
+  report?: "writing" | "failed" | null;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {
@@ -411,8 +414,23 @@ export async function towTest(apiBase: string, values: Record<string, unknown>, 
 }
 
 export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {
-  const body = { values, run_by: runBy, replace, ...(projectId ? { project_id: projectId } : {}) };
+  // pdf false: the run ends without typesetting its report, which is written when someone asks for it (`askReport`, ADR-0064 amendment 3)
+  const body = { values, run_by: runBy, replace, pdf: false, ...(projectId ? { project_id: projectId } : {}) };
   return readJob(await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "POST", headers, body: JSON.stringify(body), signal }, "starting the analysis"));
+}
+
+/** Ask for a done run's report (ADR-0064 amendment 3): the job as it then stands, its `report` "writing" until its outputs hold
+ * `document`. Poll the job with `getJob`. */
+export async function askReport(apiBase: string, jobId: string, signal?: AbortSignal): Promise<JobStatus> {
+  return readJob(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/document`, { method: "POST", headers, signal }, "the report", JOB_GONE));
+}
+
+/** Say that an analysis may be started soon, so the hosted tier starts a solver before the job is filed (ADR-0056 amendment 11).
+ * Nothing depends on the answer: a failure is left alone, and an API that has nothing to wake says so. */
+export async function wakeSolver(apiBase: string): Promise<void> {
+  try {
+    await fetch(`${base(apiBase)}/v1/wake`, { method: "POST", headers, credentials: "same-origin", cache: "no-store" });
+  } catch { /* the run itself starts a solver, as before */ }
 }
 
 export async function getJob(apiBase: string, jobId: string, signal?: AbortSignal): Promise<JobStatus> {
@@ -497,7 +515,21 @@ export function fileUrl(apiBase: string, jobId: string, key: string, name?: stri
 }
 
 export async function fetchFields(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Fields> {
-  return readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the results", JOB_GONE));
+  const fields = readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the results", JOB_GONE));
+  readFrom.set(fields, jobId);
+  return fields;
+}
+
+/** The job each set of fields was read from. A run's fields are read again as its later parts arrive (the reference solver's numbers,
+ * the mesh study, the final state; ADR-0056 amendment 11), and every read of one job is the same model with the same values. */
+const readFrom = new WeakMap<Fields, string>();
+
+/** Whether two sets of fields are the same result: the same read, or two reads of one job. An answer given from an earlier read still
+ * stands, and the model keeps the field it shows; a live answer (ADR-0086) is the same only as itself. */
+export function sameResults(a: Fields | null, b: Fields | null): boolean {
+  if (a === b) return true;
+  const job = a ? readFrom.get(a) : undefined;
+  return job !== undefined && b !== null && job === readFrom.get(b);
 }
 
 /** The rows a past run ran on, as the values object the studio edits (ADR-0109): the run's own `values` file, kept beside its result. */
