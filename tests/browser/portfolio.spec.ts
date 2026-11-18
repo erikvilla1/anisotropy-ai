@@ -31,6 +31,7 @@ test("the chat keeps a coupon across messages and starts over on request", async
   await page.goto("/workspace/fea");
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
   const spec = page.getByTestId("chat-spec");
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // no test to pick: the first question
   await box.fill("Open-hole tension 250 x 36 mm, 6 mm hole");
   await page.getByRole("button", { name: "Send message" }).click();
   // A test that is not offered is answered in words: its name and its hole stay out of the coupon, the size goes in.
@@ -46,12 +47,11 @@ test("the chat keeps a coupon across messages and starts over on request", async
   await expect(spec).not.toContainText("hole");
   await box.fill("hello");
   await box.press("Enter");
-  // A message that names no value is sent to the panel holding the next thing to state (ADR-0062 part 5), in the product's
-  // own words (ADR-0091); this chat asks for no shear moduli, so with the material stated that is the layup.
+  // A message that names no value is answered with the next thing to state (ADR-0062 part 5), in the product's own words
+  // (ADR-0091); this chat asks for no shear moduli, so with the material stated that is the layup. The panel the answer
+  // names is not checked here: it is one of the full panels, which this screen does not have.
   await expect(page.getByText("Not sure what to change")).toBeVisible();
-  const redirect = page.getByTestId("chat-redirect").last();
-  await expect(redirect).toHaveAttribute("data-panel", "layup");
-  await expect(redirect).toContainText("Next: what is the layup (Layup and material).");
+  await expect(page.getByTestId("chat-redirect").last()).toContainText("Next: what is the layup");
   await page.getByRole("button", { name: "Start a new coupon" }).click();
   await expect(page.locator(".chat-user")).toHaveCount(0);
   await expect(spec).not.toContainText("250");
