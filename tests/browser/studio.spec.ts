@@ -651,7 +651,9 @@ test.describe("the model tree", () => {
     expect([first.test, first.supports, first.loads]).toEqual(["plate", [{ region: "Edge-Left", dofs: [1, 2, 3, 4, 5, 6] }], [{ region: "Edge-Right", dof: 1, total: 10000 }]]);
     // a warning is said in the tab it is about, naming what is missing, and the chat's warning opens that tab (ADR-0111 amendment 2)
     await expect(page.getByTestId("warnings-material")).toContainText("it needs F1t, F1c, F2t, F2c and F6");
-    await page.getByTestId("panel-material").locator("summary").click();
+    // folded first, by the page's own property: a click on its summary was lost once in Firefox on CI, and folding is not what
+    // this checks (ADR-0114)
+    await page.getByTestId("panel-material").evaluate((panel) => { (panel as HTMLDetailsElement).open = false; });
     await expect(page.getByTestId("panel-material")).not.toHaveAttribute("open", "");
     await page.getByTestId("chat-check").last().getByRole("button", { name: "Open Material" }).click();
     await expect(page.getByTestId("panel-material")).toHaveAttribute("open", "");
