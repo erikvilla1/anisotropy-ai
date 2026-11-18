@@ -36,7 +36,7 @@ from .mesh import KernelError
 from .model import Deck, all_boundaries, node_name, resolve_elements, resolve_nodes
 from .quality import QualityField, quality_summary
 from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_invariants, ply_mises, ply_ratio_per_ply, strength_ratios
-from .report import edge_widths, fpf_place, gripped_groups
+from .report import edge_widths, fpf_place, gauge_element, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
 from .units import UNIT_LABEL, from_si
@@ -492,6 +492,11 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     summary["gauge_reading"] = None if reading is None else {
         "stand_off": float(length(reading["stand_off"])), "fraction": reading["fraction"], "of": reading["of"],
         "tab_lines": [float(length(v)) for v in reading["tab_lines"]], "elements": len(reading["elements"]), "left_out": len(reading["near"])}
+    # the element a question with no place named is answered at (ADR-0099 amendment 3): the gauge centre, the element the hand check
+    # and the Verification table read (`report.gauge_element`), for a coupon with a gauge section whose centre lies in an element
+    centre = gauge_element(deck, solution) if reading is not None else None
+    summary["gauge_centre"] = None if centre is None or centre.centre_in_hole else {
+        "element": int(centre.index), "label": centre.name, "xy": [float(length(v)) for v in centre.xy], "basis": centre.basis}
     for criterion, found in failures.items():
         e = mesh.element_keys.index(found.element)
         place, touches_grip, tied = fpf_place(deck, solution, found, units)

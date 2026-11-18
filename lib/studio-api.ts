@@ -108,6 +108,9 @@ export type Fields = {
     /** The same over the gauge section alone, read past the stand-off from each tab line (`gauge_reading`, ADR-0108; before it, the Gauge elements
      * that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null; gauge_reading?: GaugeReading | null;
+    /** The gauge-centre element (ADR-0099 amendment 3): the one the hand check and the Verification table read, which a question that names
+     * no place is answered at. Null for a model without a gauge section or with a hole at its centre; absent on a result solved before it. */
+    gauge_centre?: { element: number; label: string; xy: number[]; basis: string } | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
     /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */
@@ -705,19 +708,27 @@ export async function answerResult(apiBase: string, question: string, facts: Rec
   return readResultAnswer(payload);
 }
 
-const couponTestAnswers = new Map<string, Promise<boolean>>();
-/** Whether every coupon test is offered here (ADR-0089), asked once per API address. False, the unnotched tension coupon only, unless the
- * API says all: before it answers, when it does not (an older API) and with no API at all. */
-export function allCouponTests(apiBase: string): Promise<boolean> {
-  if (!apiBase) return Promise.resolve(false);
+/** What the API offers this visitor (ADR-0089): `all`, every coupon test; `imports`, bringing a model in as a file (ADR-0105), which a
+ * founder's sign-in is offered where the tests are not (amendment 6). */
+export type Offered = { all: boolean; imports: boolean };
+const couponTestAnswers = new Map<string, Promise<Offered>>();
+/** What is offered here, asked once per API address. Nothing but the unnotched tension coupon unless the API says more: before it
+ * answers, when it does not (an older API) and with no API at all. Where every test is offered, so is the import. */
+export function offeredHere(apiBase: string): Promise<Offered> {
+  if (!apiBase) return Promise.resolve({ all: false, imports: false });
   const key = base(apiBase);
   if (!couponTestAnswers.has(key)) {
     couponTestAnswers.set(key, call(`${key}/v1/coupon-tests`, { method: "GET", headers }, "the tests offered")
-      .then((payload) => isObject(payload) && payload.all === true)
-      .catch(() => false));
+      .then((payload) => {
+        const all = isObject(payload) && payload.all === true;
+        return { all, imports: all || (isObject(payload) && payload.imports === true) };
+      })
+      .catch(() => ({ all: false, imports: false })));
   }
   return couponTestAnswers.get(key)!;
 }
+/** Whether every coupon test is offered here (ADR-0089); false, the unnotched tension coupon only, unless the API says all. */
+export const allCouponTests = (apiBase: string): Promise<boolean> => offeredHere(apiBase).then((offered) => offered.all);
 
 const assistantInfos = new Map<string, Promise<AssistantInfo | null>>();
 /** Whether a model reads messages here, asked once per API address; null when the API does not say (an older API, or none). */

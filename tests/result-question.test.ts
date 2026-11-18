@@ -8,7 +8,8 @@ import { bannedIn } from "../lib/studio-copy";
 import { exampleForm } from "../lib/studio-form";
 import { PROBE_COLUMNS, probeTable } from "../lib/studio-fields";
 import { readResultReading } from "../lib/studio-api";
-import { answerResultQuestion, extremeLines, extremeWords, gaugeSection, questionFrom, readResultQuestion, resultOffer, RESULT_COLUMNS, resultUnit, valueLines, type ResultExtremes, type ResultValues } from "../lib/result-question";
+import { answerResultQuestion, asksElement, comparisonNote, describeElement, extremeLines, extremeWords, gaugeSection, questionFrom, readFollowUp, readResultQuestion, resultOffer, RESULT_COLUMNS,
+  resultUnit, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "../lib/result-question";
 
 const fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8")) as Fields;
 /** The mesh index of the element the fixture labels `Strip-1.<number>`. */
@@ -230,4 +231,108 @@ test("an answer of the API that is not a reading is refused by the page", () => 
     { ...reading.request, sense: "average" }, { kind: "extreme" }]) {
     assert.throws(() => readResultReading({ ...reading, request }), /could not be read/);
   }
+});
+
+test("a question that names no element is answered at the gauge centre the package names, and says so; it asks back only for “here” with nothing clicked (ADR-0099 amendment 3)", () => {
+  const centre = fields.summary.gauge_centre!;
+  assert.equal(fields.mesh.element_labels[centre.element], centre.label);
+  assert.ok(gaugeSection(fields)!.includes(centre.element), "the gauge centre is in the gauge section");
+  const answer = values(answerResultQuestion(fields, readResultQuestion("what is the stress at ply 7")!, null));
+  assert.equal(answer.place, "gauge centre");
+  assert.equal(answer.element, centre.element);
+  assert.equal(answer.label, centre.label.split(".").pop());
+  assert.deepEqual(answer.rows.map((r) => r.ply), [7]);
+  assert.deepEqual(answer.rows[0].values, (fields.element.ply.stress_12[centre.element][6] as number[]).slice(0, 3)); // the fields' own cells
+  const one = values(answerResultQuestion(fields, readResultQuestion("s11 in ply 7")!, null));
+  assert.deepEqual(valueLines(one, "MPa", printed)!.facts, ["ply 7 (0°)", `element ${answer.label}`, "gauge centre"]);
+  // an element that is clicked, or named, is the place before the default
+  assert.equal(values(answerResultQuestion(fields, readResultQuestion("stress at ply 7")!, indexOf(40))).place, "picked");
+  assert.equal(values(answerResultQuestion(fields, readResultQuestion("stress at ply 7, element 40")!, null)).place, "named");
+  // "here" points at the model: with nothing clicked there is nothing to read, and a model with no gauge centre has no default
+  assert.equal(answerResultQuestion(fields, readResultQuestion("stress here, ply 7")!, null).kind, "ask");
+  for (const none of [null, undefined, { ...centre, element: fields.mesh.element_labels.length }]) {
+    const without = { ...fields, summary: { ...fields.summary, gauge_centre: none } } as Fields;
+    assert.equal(answerResultQuestion(without, readResultQuestion("stress at ply 7")!, null).kind, "ask");
+  }
+});
+
+test("a follow-up names only what changes, and takes its ply, place and quantity from the question before it (ADR-0099 amendment 3)", () => {
+  const first = readResultQuestion("show me the stress in ply 4 at element 120")!;
+  assert.deepEqual(first, { kind: "values", element: 120, plies: [4], columns: ["S11", "S22", "S12"] });
+  const second = readFollowUp("now in ply 5", first)!;
+  assert.deepEqual(second, { kind: "values", element: 120, plies: [5], columns: ["S11", "S22", "S12"] });
+  const third = readFollowUp("sigma 1", second)!;
+  assert.deepEqual(third, { kind: "values", element: 120, plies: [5], columns: ["S11"] });
+  assert.deepEqual(readFollowUp("and at element 400", third), { kind: "values", element: 400, plies: [5], columns: ["S11"] });
+  assert.deepEqual(readFollowUp("von misses", third), { kind: "values", element: 120, plies: [5], columns: ["Mises"] });
+  assert.deepEqual(readFollowUp("what about the transverse strain?", third), { kind: "values", element: 120, plies: [5], columns: ["E22"] });
+  assert.deepEqual(readFollowUp("same for ply 2", third), { kind: "values", element: 120, plies: [2], columns: ["S11"] });
+  // the element clicked stays the element clicked
+  assert.deepEqual(readFollowUp("ply 6", { kind: "values", element: "picked", plies: [4], columns: ["S12"] }), { kind: "values", element: "picked", plies: [6], columns: ["S12"] });
+  // after "where is it highest", a ply or a quantity asks where again; an element named is a place to read
+  const highest: ResultQuestion = { kind: "extreme", sense: "largest", plies: null, region: "gauge", columns: ["S12"] };
+  assert.deepEqual(readFollowUp("now in ply 5", highest), { ...highest, plies: [5] });
+  assert.deepEqual(readFollowUp("sigma 2", highest), { ...highest, columns: ["S22"] });
+  assert.deepEqual(readFollowUp("at element 12", highest), { kind: "values", element: 12, plies: null, columns: ["S12"] });
+  // with no question before it, the place is the page's default and the quantity the ply's three stresses
+  assert.deepEqual(readFollowUp("ply 5", null), { kind: "values", element: null, plies: [5], columns: ["S11", "S22", "S12"] });
+  assert.deepEqual(readFollowUp("sigma 1", null), { kind: "values", element: null, plies: null, columns: ["S11"] });
+});
+
+test("a follow-up is a few words of place and quantity alone: a line of the setup, or anything with another word in it, is not one", () => {
+  for (const text of ["make ply 5 a 30", "remove ply 5", "rotate ply 3 to 45", "ply 5 is 90 degrees", "ply 5 at 45", "30 wide", "run", "check", "finer mesh", "tsai-wu", "max stress criterion",
+    "IM7/8552", "[0/90]2s", "why", "hello", "ply 5 thickness 0.2", "sigma 1 limit 2000", "use sigma 1"]) {
+    assert.equal(readFollowUp(text, { kind: "values", element: 120, plies: [4], columns: ["S11"] }), null, text);
+  }
+  // the follow-ups the chat reads change no row of the setup
+  for (const text of ["now in ply 5", "sigma 1", "and at element 400", "von misses", "same for ply 2"]) {
+    assert.deepEqual(applyMessage(exampleForm("2026-11-18"), text).understood, [], text);
+  }
+});
+
+test("a question of what an element is asks for no quantity: it is told from a value, and read for the element named, clicked, spoken of last, or any (ADR-0099 amendment 3)", () => {
+  assert.deepEqual(asksElement("what does element 376 represent"), { element: 376 });
+  assert.deepEqual(asksElement("What is element 12?"), { element: 12 });
+  assert.deepEqual(asksElement("where is element 40"), { element: 40 });
+  assert.deepEqual(asksElement("what is this element"), { element: "picked" });
+  assert.deepEqual(asksElement("what is an element?"), { element: null });
+  assert.deepEqual(asksElement("what are the elements"), { element: null });
+  assert.deepEqual(asksElement("no, what does it represent"), { element: "last" });
+  for (const text of ["what is the stress at element 376", "what is ply 4 at element 12", "element 376", "show element 12", "what does it cost", "what is the modulus", "which ply fails first",
+    "stress in ply 5", "which is worse here, tension or compression?", "which is worse at element 12, tension or compression?", "what is here", "what is the load on element 12",
+    "where is the gauge section", "what does the colour mean", "what is the mesh size"]) {
+    assert.equal(asksElement(text), null, text);
+  }
+  assert.equal(readResultQuestion("what does element 376 represent"), null);
+});
+
+test("what an element is comes from the mesh the package wrote: its number, its centre and whether it is in the gauge section or at a grip", () => {
+  const facts = (answer: ReturnType<typeof describeElement>): ElementFacts => {
+    assert.equal(answer.kind, "element");
+    return answer as ElementFacts;
+  };
+  const centre = fields.summary.gauge_centre!;
+  const inGauge = facts(describeElement(fields, 123, null));
+  assert.deepEqual({ count: inGauge.count, element: inGauge.element, label: inGauge.label, where: inGauge.where }, { count: 250, element: centre.element, label: "123", where: "gauge" });
+  assert.deepEqual(inGauge.centroid!.map((v) => Number(printed(v))), centre.xy.map((v) => Number(printed(v))));
+  assert.ok(inGauge.sets.includes("Gauge"));
+  const gripped = new Set(fields.mesh.node_sets["Grip-Bottom"]);
+  const atGrip = fields.mesh.quads.findIndex((nodes, i) => nodes.some((n) => gripped.has(n)) && !gaugeSection(fields)!.includes(i) && fields.mesh.element_sets.Gauge.includes(i));
+  assert.ok(atGrip >= 0, "the fixture has an element on the tab line");
+  assert.equal(facts(describeElement(fields, Number(fields.mesh.element_labels[atGrip].split(".").pop()), null)).where, "grip");
+  assert.equal(facts(describeElement(fields, "picked", indexOf(40))).label, "40");
+  // elements in general, and "this element" with none clicked: how many there are, and no place
+  for (const general of [describeElement(fields, null, null), describeElement(fields, "picked", null)]) {
+    assert.deepEqual(general, { kind: "element", count: 250, element: null, label: null, centroid: null, where: null, sets: [] });
+  }
+  assert.deepEqual(describeElement(fields, 1212, null), { kind: "refused", text: "This model has no element 1212. Its elements are numbered 1 to 250." });
+});
+
+test("a quantity that is no failure measure of a composite ply is given with one line that says so", () => {
+  const note = comparisonNote(["Mises"]);
+  assert.match(note!, /not composite failure criteria/);
+  for (const columns of [["Tresca"], ["S11", "Max. Principal"], ["Min. Principal"]]) assert.equal(comparisonNote(columns), note);
+  for (const columns of [["S11", "S22", "S12"], ["E11"], []]) assert.equal(comparisonNote(columns), null);
+  assert.deepEqual(bannedIn(note!), []);
+  assert.deepEqual(readResultQuestion("von misses in ply 3")!.columns, ["Mises"]); // typed loosely
 });

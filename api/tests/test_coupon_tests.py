@@ -24,15 +24,15 @@ def test_any_other_word_is_refused_at_startup(value):
 def test_the_page_is_told_whether_every_test_is_offered(monkeypatch):
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     monkeypatch.setattr(app.state, "settings", None, raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False}
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")
-    assert client.get("/v1/coupon-tests").json() == {"all": True}
+    assert client.get("/v1/coupon-tests").json() == {"all": True, "imports": True}  # where every test is offered, so is the import
 
 
 def test_the_startup_settings_answer_when_they_are_there(monkeypatch):
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")  # the settings read at startup win over a later change of the environment
     monkeypatch.setattr(app.state, "settings", load_settings({RECORDING_VARIABLE: "off"}), raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False}
 
 
 # --------------------------------------------------------------------------------------------- part 2: a stored coupon of a hidden test
@@ -67,7 +67,7 @@ def test_reopening_a_stored_coupon_of_a_hidden_test_is_a_422_that_says_why(hidde
     assert client.get("/v1/coupons/OTHER/values").status_code == 503  # any other failure of the tool stays a 503
 
 
-# --------------------------------------------------------------------------------------------- amendment 5: every test for a founder's sign-in
+# ------------------------------------------- amendment 5: every test by a switch per request; amendment 6: a founder's sign-in is offered the import alone
 
 import dataclasses
 import json
@@ -75,7 +75,7 @@ from types import SimpleNamespace
 
 from anisotropy_api import access
 from anisotropy_api.live import LiveSolver
-from anisotropy_api.main import _every_test
+from anisotropy_api.main import _every_test, _imports
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, FOUNDER_EMAILS_VARIABLE, AccessSettings
 
 from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
@@ -108,15 +108,20 @@ def request_of(settings, email):
     return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=settings)), state=SimpleNamespace(user_email=email))
 
 
-def test_every_test_is_offered_to_a_founders_sign_in_and_to_nobody_else():
+def test_a_founders_sign_in_is_offered_the_import_and_not_every_test_and_nobody_else_either():
     off = load_settings({RECORDING_VARIABLE: "off"})
     founders = dataclasses.replace(off, founder_emails=frozenset({FOUNDER}))
-    assert _every_test(request_of(founders, FOUNDER)) is True
-    assert _every_test(request_of(founders, " Founder@Example.com ")) is True  # as Access writes it, whatever its case
-    assert _every_test(request_of(founders, "engineer@example.com")) is False
-    assert _every_test(request_of(founders, None)) is False  # no sign-in: a local user, a service token
-    assert _every_test(request_of(off, FOUNDER)) is False  # no founders named: nobody
-    assert _every_test(request_of(dataclasses.replace(off, all_tests=True), None)) is True  # the machine's switch, as before
+    # every test is the machine's switch alone (amendment 6): a founder sees the product as a customer does
+    for email in (FOUNDER, " Founder@Example.com ", "engineer@example.com", None):
+        assert _every_test(request_of(founders, email)) is False
+    assert _every_test(request_of(dataclasses.replace(off, all_tests=True), None)) is True
+    # bringing a model in as a file is a founder's, and anyone's where the switch is on
+    assert _imports(request_of(founders, FOUNDER)) is True
+    assert _imports(request_of(founders, " Founder@Example.com ")) is True  # as Access writes it, whatever its case
+    assert _imports(request_of(founders, "engineer@example.com")) is False
+    assert _imports(request_of(founders, None)) is False  # no sign-in: a local user, a service token
+    assert _imports(request_of(off, FOUNDER)) is False  # no founders named: nobody
+    assert _imports(request_of(dataclasses.replace(off, all_tests=True), None)) is True
 
 
 @pytest.fixture
@@ -130,12 +135,12 @@ def switch_studio(tmp_path, monkeypatch):
     return registry
 
 
-@pytest.mark.parametrize("founder", [False, True])
-def test_the_tools_are_started_with_the_option_for_a_founder_and_without_it_for_anyone_else(switch_studio, monkeypatch, founder):
+@pytest.mark.parametrize("founder", [False, True])  # `founder`: whether every test is offered to the request, as amendment 5 named it
+def test_the_tools_are_started_with_the_option_where_every_test_is_offered_and_without_it_otherwise(switch_studio, monkeypatch, founder):
     monkeypatch.setattr("anisotropy_api.main._every_test", lambda request: founder)
     state = "ready" if founder else "blocked"
     values = {"values": {"form_version": "0.9", "test": "plate"}}
-    assert client.get("/v1/coupon-tests").json() == {"all": founder}
+    assert client.get("/v1/coupon-tests").json() == {"all": founder, "imports": founder}
     assert client.post("/v1/coupon-jobs/check", json=values).json()["state"] == state
     assert client.post("/v1/coupon-jobs/live", json=values).json()["state"] == state
     reopened = client.get("/v1/coupons/NOM-PLT-L1/values")
@@ -168,7 +173,7 @@ def test_a_founders_job_carries_the_option_to_its_tool_and_another_persons_does_
 
 
 @needs_test_database
-def test_behind_access_the_founders_sign_in_is_offered_every_test_and_another_is_not(empty_runs, monkeypatch):
+def test_behind_access_the_founders_sign_in_is_offered_the_import_alone_and_another_neither(empty_runs, monkeypatch):
     monkeypatch.setenv(RECORDING_VARIABLE, "on")
     monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
     monkeypatch.setenv(ACCESS_TEAM_DOMAIN_VARIABLE, TEAM)
@@ -177,6 +182,6 @@ def test_behind_access_the_founders_sign_in_is_offered_every_test_and_another_is
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     with TestClient(app, headers={"X-Anisotropy-Actor": "browser"}) as hosted:
         app.state.access_verifier = access.verifier(AccessSettings(TEAM, AUDIENCE), key_for=key_for)
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": False, "imports": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": False, "imports": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False, "imports": False}

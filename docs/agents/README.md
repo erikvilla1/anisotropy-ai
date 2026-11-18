@@ -13,6 +13,7 @@ The `docs/` folder is also the Obsidian vault, so these files can be read and ed
 | `skills/project-rules/` | The repository's rules and where each kind of content goes. Every agent loads it first. |
 | `skills/workspace-layout/` | Where the team's and our finite element files go, test by test under each tool, and where course homework and the code that solves it go (ADR-0032). |
 | `skills/decision-records/` | How to write and amend a decision record: new record or amendment, numbering, the header lines, the amendment heading, evidence, the index row and the changelog line. |
+| `skills/chat-answer-quality/` | How to judge an answer of the workspace chat to an engineer's question: eleven criteria, the procedure for reviewing questions asked on the live site, how to check the numbers without the engine, and worked examples. |
 | `skills/<name>/` | One folder per workflow skill. |
 | `subagents/document-reviewer.md` | A read-only peer reviewer for a generated document, today the coupon package PDF. It returns findings by page and section with where each fix goes; it never edits a file or computes a number (ADR-0047). |
 

@@ -149,6 +149,15 @@ def test_where_not_every_test_is_offered_a_model_is_not_imported(tmp_path, monke
     assert not (tmp_path / "live").exists(), "the deck was not written anywhere"
 
 
+def test_a_founders_sign_in_imports_a_model_where_every_test_is_not_offered(tmp_path, monkeypatch):
+    """ADR-0089 amendment 6: the import is offered to a founder's sign-in, which is no longer offered every test."""
+    monkeypatch.setattr("anisotropy_api.main._every_test", lambda request: False)
+    monkeypatch.setattr("anisotropy_api.main._imports", lambda request: True)
+    monkeypatch.setattr(app.state, "live", solver(tmp_path, 0), raising=False)
+    answer = client.post(IMPORTED_MODELS, **ASKED, content=DECK)
+    assert answer.status_code == 200 and answer.json()["state"] == "solved"
+
+
 def test_a_slow_tool_is_refused_in_the_pages_words_and_a_failing_one_is_a_503(warm):
     slow = client.post(IMPORTED_MODELS, **ASKED, content=b"SLOW\n")
     assert slow.status_code == 422 and slow.json()["detail"] == "This model took too long to solve here. Try a coarser mesh."

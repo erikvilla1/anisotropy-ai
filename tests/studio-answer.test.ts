@@ -25,6 +25,7 @@ test("a gripped coupon is answered in its gauge section, every number the packag
     assert.equal(r.tied.includes(r.ply), false);
   }
   assert.equal(a.control, "displacement");
+  assert.deepEqual(a.appliedNow, { applied: s.applied.value, reaction: s.reaction.value }); // the state as applied, beside the state at failure
   assert.equal(a.appliedUnit, "mm");
   assert.equal(a.forceUnit, "N");
   assert.ok(a.outside, "the public coupon's clamped edge fails earlier than its gauge section");
