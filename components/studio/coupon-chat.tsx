@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
+import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
@@ -143,7 +143,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace, imported, past, setProposed } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed } = useProject(); // the rows and the run live in the project (ADR-0062)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
   // the results on the page: what a question about a value is answered from (ADR-0099); an imported model's while it is open (ADR-0105),
@@ -157,8 +157,15 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
-  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current ? tensionValues(rows)
-    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined)); // a plate goes with its supports and loads
+  // a plate goes with its supports and loads, every row sent, on the full form and on the model tree alike (ADR-0089 amendment 7)
+  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current && rows.test !== PLATE_TEST ? tensionValues(rows)
+    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined));
+  /** Whether a plate's regions are offered to a message: every test is, or a plate is, and the coupon is one. */
+  const platesRef = useRef(plates);
+  platesRef.current = plates;
+  const plateHere = () => formRef.current.test === PLATE_TEST && (allTests || platesRef.current);
+  /** Whether every row of the coupon as it stands is offered (ADR-0089): the switch, or a founder's plate (amendment 7). */
+  const offersAll = () => allTests || plateHere();
   const { checking, checked, job, fields, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -298,8 +305,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function proceed(next: StudioForm) {
     const hidden = hiddenReason(next, false);
     if (!hidden) { proceedWith(next); return; }
-    void allCouponTests(apiBaseUrl).then((all) => {
-      if (all) { proceedWith(next); return; }
+    void offeredHere(apiBaseUrl).then((offered) => {
+      if (offered.all || (offered.plates && next.test === PLATE_TEST)) { proceedWith(next); return; } // a founder's plate (ADR-0089 amendment 7)
       setActive(null);
       add({ role: "assistant", kind: "text", tone: "problem", title: "Not offered yet",
         body: <><p data-testid="chat-not-available">{hidden} Your inputs are kept.</p>
@@ -319,8 +326,11 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
-        body: <><p>Pick the held and loaded regions under Boundary conditions and loads, or click an element on the model.</p>
-          <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></> });
+        body: allTests ? <><p>Pick the held and loaded regions under Boundary conditions and loads, or click an element on the model.</p>
+          <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></>
+          : <><p>Say which edge or face is held and which is loaded, for example “fix the left edge and pull the right edge with 10 kN”, or click
+            it on the model. Each goes under Boundary conditions or Loads on the left.</p>
+          <Chips><PanelLink id="conditions">Open Boundary conditions</PanelLink><PanelLink id="loads">Open Loads</PanelLink></Chips></> });
       return;
     }
     const step = nextStep(next, simpleRef.current);
@@ -571,7 +581,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       : shown.past ? "A past run is shown without them. Choose “Use these inputs” to see them."
       : !applied ? "They are drawn on the model and listed under it once the setup is checked."
       : onPlate ? "Add one by naming a region, for example “fix the left edge” or “10 kN tension on the right edge”."
-      : `A coupon’s are set by its test, as in the test machine. Change the load under Boundary conditions and loads${allTests ? "; for boundary conditions of your own, choose Plate" : ""}.`;
+      : `A coupon’s are set by its test, as in the test machine. Change the load under ${allTests ? "Boundary conditions and loads" : "Loads"}${allTests ? "; for boundary conditions of your own, choose Plate" : plates ? "; for boundary conditions of your own, choose Plate under Test" : ""}.`;
     add({ role: "user", text }, { role: "assistant", kind: "text", title: title ?? (loads ? "Loads" : "Boundary conditions"), body: (
       <div data-testid="chat-applied" data-term={term.id}>
         {lines.length ? <ul className="chat-understood">{lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}
@@ -586,9 +596,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (isConditionOrLoad(term)) {
       const onPlate = formRef.current.test === PLATE_TEST;
       if (onPlate) { // a plate with no model to read the message: its panel takes them
-        add({ role: "user", text }, { role: "assistant", kind: "text", title: "Add it under Boundary conditions and loads", body: (
+        add({ role: "user", text }, { role: "assistant", kind: "text", title: allTests ? "Add it under Boundary conditions and loads" : "Add it on the model tree", body: (
           <div data-testid="chat-setup" data-term={term.id}><p>Pick the region and the directions it holds, or the force or pressure on it. Each is drawn on the model as you add it.</p>
-            <Chips><PanelLink id="loads">Open Boundary conditions and loads</PanelLink></Chips></div>
+            <Chips>{allTests ? <PanelLink id="loads">Open Boundary conditions and loads</PanelLink>
+              : <><PanelLink id="conditions">Open Boundary conditions</PanelLink><PanelLink id="loads">Open Loads</PanelLink></>}</Chips></div>
         ) });
         return;
       }
@@ -690,8 +701,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     let failed: string | null = null;
     try { if (await readQuestionWithModel(text)) { setReading(false); return; } } catch { /* the setup's reading goes on */ }
     // a plate also offers its regions and the place clicked, so "hold this edge" and "10 kN in tension here" can be read (ADR-0101)
-    const onPlate = allTests && formRef.current.test === PLATE_TEST ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
-    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests), ...onPlate }); }
+    const onPlate = plateHere() ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, offersAll()), ...onPlate }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
     if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) {
@@ -730,7 +741,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (next !== formRef.current) setForm(next);
     if (onPlate) setPlate(lists);
     clearRun();
-    reveal(onPlate ? ["region"] : Object.keys(rows));
+    if (onPlate) revealTab(allTests ? "loads" : lists.supports.length > plateRef.current.supports.length ? "conditions" : "loads");
+    else reveal(Object.keys(rows));
     if (onPlate && next.test === PLATE_TEST) void check(next, lists);
     else proceed(next);
   }
@@ -753,7 +765,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function readWithPatterns(text: string, echoed = false, nothing?: () => void) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const read = applyMessage(formRef.current, text);
-    const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, allTests); // what the studio does not offer yet stays out (ADR-0089)
+    const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, offersAll()); // what the studio does not offer yet stays out (ADR-0089)
     const understood = understoodWithout(read.understood, dropped);
     const note = read.note;
     if (hiddenNotes.length) {
@@ -779,8 +791,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens, on the left, the panel or tab a message just changed and marks it (ADR-0111): the change is seen where it lives. */
   function reveal(keys: string[]) {
     const target = keys.map((key) => (allTests ? panelOfKey(key) : tabOfKey(key))).find((id) => id !== null);
-    if (target) window.setTimeout(() => revealPanel(target), 0);
+    if (target) revealTab(target);
   }
+  const revealTab = (id: string) => { window.setTimeout(() => revealPanel(id), 0); };
 
   function askWidget(step: ChatStep | "reopen", isLive: boolean): ReactNode {
     if (!isLive) return null;
@@ -1235,7 +1248,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
-  const onPlateNow = allTests && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
+  const onPlateNow = (allTests || plates) && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
   const hereNow = onPlateNow ? here() : [];
   return (
     <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
@@ -1275,7 +1288,7 @@ function ChatRun({ job }: { job: JobStatus }) {
   return (
     <div data-testid="chat-job" data-state={job.state}>
       <h4>Analysis: {runHeadline(job)}</h4>
-      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown above the model.</p> : null}
+      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown in the centre of the page.</p> : null}
     </div>
   );
 }

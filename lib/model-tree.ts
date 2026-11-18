@@ -9,6 +9,8 @@ import { fieldByLabel, PLY_KEYS, unitLabels, unitsOf, type Checklist, type Studi
 import { LOAD_KEYS, MESH_KEYS, OWN_MATERIAL_KEYS, SIZE_KEYS, type BuiltLine } from "./tension-screen";
 import type { ChatStep } from "./studio-chat";
 import type { PanelState } from "./workspace-panels";
+import type { PlateLists } from "./studio-plate";
+import type { ImportReading } from "./studio-api";
 
 export type TabId = "test" | "geometry" | "material" | "layup" | "step" | "conditions" | "loads" | "mesh" | "run" | "outputs";
 export type Tab = { id: TabId; title: string; keys: string[]; items: string[]; built: string[] };
@@ -39,9 +41,27 @@ export const TAB_OF_STEP: Record<ChatStep, TabId> = {
   test: "test", material: "material", shear: "material", layup: "layup", geometry: "geometry", loading: "loads", name: "run", review: "run",
 };
 
+/** A plate's rows on the tree beyond the tension coupon's (ADR-0089 amendment 7): its size with an optional hole and tabs, under Geometry.
+ * Its boundary conditions and loads are lists, not rows, under their own tabs. */
+export const PLATE_SIZE_KEYS = ["length", "width", "hole_diameter", "tab_length"];
+
 /** The tab that holds a row: where the assistant opens the tree when a message changes it. */
 export function tabOfKey(key: string): TabId | null {
-  return MODEL_TREE.find((t) => t.keys.includes(key))?.id ?? null;
+  return MODEL_TREE.find((t) => t.keys.includes(key))?.id ?? (PLATE_SIZE_KEYS.includes(key) ? "geometry" : null);
+}
+
+/** What a plate still needs before it can be solved, besides the material, the layup and its size: something held, and a load or a held
+ * region that moves (ADR-0101 amendment 1). Words for the line above the tree. */
+export function plateMissing(lists: PlateLists): string[] {
+  const moves = lists.supports.some((s) => s.value.trim());
+  return [...(lists.supports.length ? [] : ["a boundary condition"]), ...(lists.loads.length || moves ? [] : ["a load"])];
+}
+
+/** A plate's boundary conditions or loads in the tab's one line: how many, on which regions ("2 on Edge-Bottom, Edge-Left"); null for none. */
+export function listLine(entries: { region: string }[]): string | null {
+  if (!entries.length) return null;
+  const regions = [...new Set(entries.map((e) => e.region))];
+  return `${entries.length} on ${regions.join(", ")}`;
 }
 
 /** Where a failing checklist item is fixed on the tree: the tab holding the first row it names, else the tab its item belongs to. */
@@ -91,4 +111,26 @@ export function meshLine(form: StudioForm, inUse: Record<string, string>, elemen
   const size = valueOf(form, inUse, "element_size");
   const parts = [size ? `${formatNumber(Number(size), { zeros: false })} ${unitLabels(unitsOf(form)).length} elements` : null, elements ? `${elements} in all` : null].filter(Boolean);
   return parts.length ? parts.join(", ") : null;
+}
+
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** The tabs of a model brought in as a file (ADR-0105) on the same tree (ADR-0111 amendment 1): read as it stands, so no tab has a row
+ * and no badge; each tab's one line is the reader's own report. */
+export const IMPORTED_TABS: readonly TabId[] = ["geometry", "material", "layup", "step", "conditions", "loads", "mesh", "run", "outputs"];
+
+/** Each tab's one line for an imported model, from what the reader took from the file: no number is the page's own. */
+export function importedLines(reading: ImportReading): Record<"geometry" | "material" | "layup" | "step" | "conditions" | "loads" | "mesh", string> {
+  const section = reading.sections[0];
+  const loads = [reading.concentrated_loads ? count(reading.concentrated_loads, "force line") : "", reading.pressures ? count(reading.pressures, "pressure line") : "",
+    reading.edge_loads ? count(reading.edge_loads, "edge load") : ""].filter(Boolean);
+  return {
+    geometry: `${count(reading.parts, "part")}, ${count(reading.instances, "instance")}`,
+    material: reading.materials.map((m) => m.name).join(", ") || "none",
+    layup: reading.layup ? `${reading.layup}${section ? `, ${count(section.plies, "ply", "plies")}` : ""}` : "none stated",
+    step: "Static, linear",
+    conditions: `${count(reading.boundaries, "boundary line")}${reading.couplings ? `, ${count(reading.couplings, "coupling")}` : ""}`,
+    loads: loads.join(", ") || "by moved supports only",
+    mesh: `${count(reading.elements, "element")}, ${count(reading.nodes, "node")}`,
+  };
 }

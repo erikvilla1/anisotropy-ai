@@ -3,7 +3,9 @@
 import { DOF_WORDS, plateWords, regionOptions, type PlateLists, type PlateLoad, type PlateRegion, type PlateSupport } from "@/lib/studio-plate";
 import type { StudioForm } from "@/lib/studio-form";
 
-type Props = { form: StudioForm; lists: PlateLists; errors: Record<string, string>; disabled: boolean; onChange: (lists: PlateLists) => void };
+type Props = { form: StudioForm; lists: PlateLists; errors: Record<string, string>; disabled: boolean; onChange: (lists: PlateLists) => void;
+  /** one list only, for a tab of the model tree (ADR-0111): its boundary conditions, its loads, or the boxes drawn under Geometry */
+  part?: "supports" | "loads" | "regions" };
 
 const DOFS = [1, 2, 3, 4, 5, 6];
 /** Each direction as Abaqus names it (ADR-0110): U1 to U3 the moves along x, y, z, UR1 to UR3 the turns about them. Its words are the title. */
@@ -11,7 +13,7 @@ const DOF_CODES: Record<number, string> = { 1: "U1", 2: "U2", 3: "U3", 4: "UR1",
 
 /** The supports, loads and regions of a plate (ADR-0054): one row per entry, each region picked from what the plate offers; a click on
  * the model adds a row too (the studio page wires it). The API's check judges the rows and names the list that is wrong. */
-export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
+export function PlatePanel({ form, lists, errors, disabled, onChange, part }: Props) {
   const options = regionOptions(form, lists);
   const regionSelect = (value: string, onPick: (region: string) => void, label: string) => (
     <select value={value} disabled={disabled} aria-label={label} onChange={(e) => onPick(e.target.value)}>
@@ -22,11 +24,8 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
   const setLoad = (i: number, load: PlateLoad) => onChange({ ...lists, loads: lists.loads.map((l, k) => (k === i ? load : l)) });
   const setRegion = (i: number, region: PlateRegion) => onChange({ ...lists, regions: lists.regions.map((r, k) => (k === i ? region : r)) });
   const first = options[0]?.name ?? "Face";
-  return (
-    <fieldset className="studio-plate" data-testid="plate-panel" disabled={disabled}>
-      <legend>Boundary conditions and loads over the plate&apos;s regions</legend>
-      <p className="studio-hint">Click a region on the model to hold or load it, or add a row here. Regions: the four edges, the face, the tabs when
-        there are tabs, the hole&apos;s ring when there is a hole, and the boxes you draw below.</p>
+  const supports = (
+    <>
       <h4>Boundary conditions {errors.Supports ? <span className="studio-field-error">{errors.Supports}</span> : null}</h4>
       {lists.supports.map((s, i) => (
         <div className="studio-plate-row" key={`s${i}`} data-testid="support-row">
@@ -43,6 +42,10 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
         </div>
       ))}
       <button type="button" className="studio-text-button" data-testid="add-support" onClick={() => onChange({ ...lists, supports: [...lists.supports, { region: first, dofs: [1, 2, 3], value: "" }] })}>+ boundary condition</button>
+    </>
+  );
+  const loads = (
+    <>
       <h4>Loads {errors.Loads ? <span className="studio-field-error">{errors.Loads}</span> : null}</h4>
       {lists.loads.map((l, i) => (
         <div className="studio-plate-row" key={`l${i}`} data-testid="load-row">
@@ -68,6 +71,10 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
         </div>
       ))}
       <button type="button" className="studio-text-button" data-testid="add-load" onClick={() => onChange({ ...lists, loads: [...lists.loads, { region: "Face", kind: "pressure", pressure: "" }] })}>+ load</button>
+    </>
+  );
+  const regions = (
+    <>
       <h4>Boxes you draw {errors.Regions ? <span className="studio-field-error">{errors.Regions}</span> : null}</h4>
       {lists.regions.map((r, i) => (
         <div className="studio-plate-row" key={`r${i}`} data-testid="region-row">
@@ -80,6 +87,26 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
         </div>
       ))}
       <button type="button" className="studio-text-button" data-testid="add-region" onClick={() => onChange({ ...lists, regions: [...lists.regions, { name: `Box-${lists.regions.length + 1}`, x0: "", x1: "", y0: "", y1: "" }] })}>+ box (x0, x1, y0, y1 in mm)</button>
+    </>
+  );
+  if (part) { // one list, under its tab of the tree, with its entries said in words
+    const only: PlateLists = { supports: part === "supports" ? lists.supports : [], loads: part === "loads" ? lists.loads : [], regions: part === "regions" ? lists.regions : [] };
+    const words = plateWords(only);
+    return (
+      <fieldset className="studio-plate" data-testid={`plate-${part}`} disabled={disabled}>
+        {part === "supports" ? supports : part === "loads" ? loads : regions}
+        {words.length ? <ul className="studio-plate-words" data-testid={`plate-words-${part}`}>{words.map((w, i) => <li key={i}>{w}</li>)}</ul> : null}
+      </fieldset>
+    );
+  }
+  return (
+    <fieldset className="studio-plate" data-testid="plate-panel" disabled={disabled}>
+      <legend>Boundary conditions and loads over the plate&apos;s regions</legend>
+      <p className="studio-hint">Click a region on the model to hold or load it, or add a row here. Regions: the four edges, the face, the tabs when
+        there are tabs, the hole&apos;s ring when there is a hole, and the boxes you draw below.</p>
+      {supports}
+      {loads}
+      {regions}
       {lists.supports.length || lists.loads.length ? (
         <ul className="studio-plate-words" data-testid="plate-words">{plateWords(lists).map((w, i) => <li key={i}>{w}</li>)}</ul>
       ) : <p className="studio-muted">No boundary conditions yet: a plate needs at least one, and a load or a boundary condition that moves.</p>}

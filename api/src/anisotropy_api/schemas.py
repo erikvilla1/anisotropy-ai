@@ -1124,10 +1124,12 @@ class TheorySectionsResponse(Contract):
 class CouponTests(Contract):
     """Whether every coupon test is offered here (ADR-0089): the page asks once, and with no answer offers the unnotched tension
     coupon only, the list its form definition carries. `imports`: whether a model may be brought in as a file (ADR-0105), which a
-    founder's sign-in is offered where the tests are not (ADR-0089 amendment 6)."""
+    founder's sign-in is offered where the tests are not (ADR-0089 amendment 6). `plates`: whether a plate may be set up on the model tree,
+    held and loaded on any edge or face (ADR-0089 amendment 7), offered where the import is."""
 
     all: bool
     imports: bool = False
+    plates: bool = False
 
 
 class AssistantInfo(Contract):

@@ -68,6 +68,17 @@
 .ws-tree-lines { margin: 0 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.5; }
 .ws-tree-defaults { margin-top: 10px; }
 .ws-tree-defaults caption { text-align: left; font-size: 11px; color: var(--muted); padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+/* The Results tab (ADR-0111): the answer in three lines, then buttons that colour the model by a field, the one shown pressed. */
+.ws-tree-answer { display: grid; gap: 6px; margin: 0 0 10px; font-size: 13px; }
+.ws-tree-answer > div { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr); gap: 8px; }
+.ws-tree-answer dt { color: var(--muted); }
+.ws-tree-answer dd { margin: 0; }
+.ws-tree-caption { margin: 10px 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.ws-tree-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-tree-fields button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.ws-tree-fields button:hover { border-color: var(--muted); }
+.ws-tree-fields button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+.ws-tree-ply { margin-top: 10px; }
 .ws-panel-changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); transition: border-color 0.2s, box-shadow 0.2s; }
 .ws-fix-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; }
 .ws-outputs { margin: 0; }

@@ -8,7 +8,7 @@ import { ResultsView } from "./results-view";
 /** The centre of the workspace while a model brought in as a file has it (ADR-0105): the results when it was solved, the model as read
  * when it was not, and why when the file was refused. Every number is the fea package's, on the file as it stands. */
 export function ImportedStage({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { imported, setPicked, place } = useProject();
+  const { imported, setPicked, place, emphasis, view, setShownField } = useProject();
   const { model, busy } = imported;
   if (!model || model.state === "refused") {
     return (
@@ -29,12 +29,12 @@ export function ImportedStage({ apiBaseUrl }: { apiBaseUrl: string }) {
             <strong>Imported model</strong> ({seconds} s). Solved as the file states it: no mesh study, and not checked against a second solver.
           </p>
           <ResultsView fields={model.fields} explanation={model.explanation} job={null} apiBase={apiBaseUrl} preview={model.preview} showFiles={false}
-            onPicked={setPicked} place={place} />
+            onPicked={setPicked} place={place} emphasis={emphasis} view={view} onShown={setShownField} />
         </>
       ) : (
         <>
           <p className="studio-alert" role="alert" data-testid="import-unsolved">{importProblemWords(model)}</p>
-          {model.preview ? <PreviewScene preview={model.preview} /> : null}
+          {model.preview ? <PreviewScene preview={model.preview} emphasis={emphasis} /> : null}
         </>
       )}
     </section>

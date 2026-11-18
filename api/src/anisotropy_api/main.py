@@ -447,7 +447,7 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
         _their_coupon(request, jobs, job_request.coupon)
     try:
         # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
-        options = [*job_request.options(), *EVERY_TEST[_every_test(request)]]
+        options = [*job_request.options(), *EVERY_TEST[_every_for(request, values)]]
         job = jobs.start(actor, job_request.recorded_inputs(), options, form=form, coupon=job_request.coupon, values=values,
                          user_email=getattr(request.state, "user_email", None), project_id=project_id)
     except JobBusy as exc:
@@ -525,7 +525,7 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
     its actor (ADR-0026); the studio tool answers within two minutes or the check is refused with 504.
     """
     jobs = _coupon_jobs(request)
-    every = _every_test(request)
+    every = _every_for(request, problem.values_bytes)
 
     def compute() -> CouponCheckResponse:
         try:
@@ -554,7 +554,7 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     live: LiveSolver = request.app.state.live
     try:
         email = _email(request)  # the preview names the coupon among the coupons of whoever asked (ADR-0106)
-        found = live.solve(problem.values_bytes(), every=_every_test(request), root=None if email is None else _coupon_jobs(request).root_of(email))
+        found = live.solve(problem.values_bytes(), every=_every_for(request, problem.values_bytes), root=None if email is None else _coupon_jobs(request).root_of(email))
     except LiveBusy as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except LiveTimedOut as exc:
@@ -1511,7 +1511,7 @@ def coupon_tests(request: Request) -> CouponTests:
     """What is offered to the requester (ADR-0089); the page asks once. `all`: every coupon test, by the machine's switch alone; the
     page offers the unnotched tension coupon only unless this says so. `imports`: bringing a model in as a file (ADR-0105), by the
     switch or a founder's sign-in (amendment 6). Not a run: nothing is computed or recorded."""
-    return CouponTests(all=_every_test(request), imports=_imports(request))
+    return CouponTests(all=_every_test(request), imports=_imports(request), plates=_plates(request))
 
 
 def _every_test(request: Request) -> bool:
@@ -1520,6 +1520,30 @@ def _every_test(request: Request) -> bool:
     settings (a test client), the environment is read."""
     settings = getattr(request.app.state, "settings", None)
     return all_tests(environment()) if settings is None else settings.all_tests
+
+
+PLATE_WORD = "plate"  # the Test row's word of a plate, held and loaded on regions the engineer names (ADR-0054)
+
+
+def _plates(request: Request) -> bool:
+    """Whether a plate may be set up on the model tree by this request (ADR-0089 amendment 7): where the import is, the machine's switch
+    or a founder's sign-in. Nothing the request itself says can turn it on."""
+    return _imports(request)
+
+
+def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> bool:
+    """Whether every test is offered to this call: the machine's switch is on, or a founder sets up a plate (ADR-0089 amendment 7), that
+    is, the values the call sends name the plate's test. The package's list holds the tension coupon alone, so the plate needs the option;
+    a founder's values of any other test are judged by the list, as everyone's are."""
+    if _every_test(request):
+        return True
+    if values is None or not _plates(request):
+        return False
+    try:  # a values object the request's own check refuses is refused there, by row, as before
+        test = json.loads(values() if callable(values) else values).get("test")
+    except (ValueError, AttributeError):
+        return False
+    return isinstance(test, str) and test.strip().lower() == PLATE_WORD
 
 
 def _imports(request: Request) -> bool:

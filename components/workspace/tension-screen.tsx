@@ -6,28 +6,33 @@ import { isActive, StudioError } from "@/lib/studio-api";
 import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadable, runStatus, sentence } from "@/lib/studio-copy";
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { appliedOf } from "@/lib/applied";
-import { builtFor, loadLine, meshLine, sizeLine, tabState, type TabId } from "@/lib/model-tree";
-import { libraryOptions, NO_STANDARD, PLY_KEYS, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
+import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tabState, type TabId } from "@/lib/model-tree";
+import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
+import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import {
   builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS, tensionMissing, valuesInUse,
   tensionValues, underD3039, type BuiltLine,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
+import { PlatePanel } from "@/components/studio/plate-panel";
 import { remembered, RUN_BY_KEY } from "@/components/studio/local";
-import { JobFiles, namingOf } from "@/components/studio/job-files";
 import { useProject } from "@/components/studio/project-context";
+import { shownResults } from "@/components/studio/use-coupon-run";
 import { StepPanel } from "./panels/step-panel";
+import { ResultsTab } from "./results-tab";
 
 const TENSION = "unnotched tension";
 const OWN = "own";
 
-/** The tension coupon's model tree (ADR-0111, on ADR-0090): Test, Geometry, Material, Layup, Analysis step, Boundary conditions, Loads,
- * Mesh, Solve and Results, in the order a finite element program sets a model up. The engineer gives the material and the layup; the
- * standard and the software choose every other row, and each tab says what it chose and why. A tab's line says its value; Boundary
- * conditions and Loads light their part of the model while open. Run analysis, above the tree, runs the setup check and, when it is
- * ready, the full analysis; the report and the solver input appear under Results (ADR-0091 amendment 2). */
+/** The model tree (ADR-0111, on ADR-0090): Test, Geometry, Material, Layup, Analysis step, Boundary conditions, Loads, Mesh, Solve and
+ * Results, in the order a finite element program sets a model up. For the tension coupon the engineer gives the material and the layup;
+ * the standard and the software choose every other row, and each tab says what it chose and why. Where a plate is offered (a founder's
+ * sign-in, ADR-0089 amendment 7), the Test tab also offers it: then Boundary conditions and Loads hold its lists, filled here, by a click
+ * on the model or by the chat. A tab's line says its value; Boundary conditions and Loads light their part of the model while open. Run
+ * analysis, above the tree, runs the setup check and, when it is ready, the full analysis; the report and the solver input appear under
+ * Results (ADR-0091 amendment 2). */
 export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, setForm, run: runner, imports, imported, emphasis, setEmphasis } = useProject();
+  const { form, setForm, plate, setPlate, run: runner, imports, plates, offersAll, imported, emphasis, setEmphasis } = useProject();
   const { checking, checked, job, fields, problem } = runner;
   const [layup, setLayup] = useState(() => layupNotation(form));
   const [layupError, setLayupError] = useState("");
@@ -35,13 +40,18 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [ownPicked, setOwnPicked] = useState(() => !form.library && Boolean(form.own_name));
   const busy = checking || isActive(job?.state);
-  const hidden = hiddenItem(form, false); // a project of a test the studio does not offer yet (ADR-0089)
+  const hidden = hiddenItem(form, offersAll); // a project of a test the studio does not offer yet (ADR-0089); a founder's plate is (amendment 7)
+  const isPlate = form.test === PLATE_TEST;
 
   useEffect(() => { setLayup(layupNotation(form)); }, [form.ply_1, form.symmetric]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const edit = (rows: StudioForm) => { setForm((f) => ({ ...f, ...rows })); runner.clearChecked(); setMessage(""); setErrors({}); };
+  const editPlate = (lists: PlateLists) => { setPlate(lists); runner.clearChecked(); setMessage(""); setErrors({}); };
+  /** The kind of model: the tension coupon, its test choosing its boundary conditions, or a plate held and loaded where the engineer says. */
+  const pickKind = (kind: "tension" | "plate") => edit(kind === "plate" ? withTest(form, PLATE_TEST).form : { test: TENSION, standard: D3039 });
   const own = ownPicked || isOwnMaterial(form) && Boolean(form.own_name);
-  const missing = tensionMissing(form);
+  // a plate's tabs are optional; it needs something held and a load (ADR-0101 amendment 1)
+  const missing = [...tensionMissing(form).filter((m) => !(isPlate && m === fieldByKey.tab_length?.label)), ...(isPlate ? plateMissing(plate) : [])];
   const checklist = checked?.checklist ?? null;
   const built = builtLines(checklist);
   const problems = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
@@ -68,7 +78,9 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     // a refused layup never reached the form, which still holds the one before: nothing runs until the layup is fixed (review R2-3)
     if (!apiBaseUrl || missing.length || layupError) return;
     setMessage(""); setErrors({});
-    const values = tensionValues({ ...form, filled_by: form.filled_by || remembered(RUN_BY_KEY) });
+    const rows = { ...form, filled_by: form.filled_by || remembered(RUN_BY_KEY) };
+    // a plate sends every row with its lists, as the full form does (ADR-0089 amendment 7); the tension coupon its own rows (ADR-0090)
+    const values = isPlate ? buildValues(rows, plateValues(plate)) : tensionValues(rows);
     try {
       const answer = await runner.check(values);
       setErrors(rowErrorsFrom(answer.checklist));
@@ -80,10 +92,14 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     }
   }
 
+  const results = shownResults(runner).fields; // the newest answer on the model, live or full (ADR-0086)
   const preview = checked?.preview ?? runner.live?.preview ?? null;
   const applied = preview ? appliedOf(preview) : null;
   const inUse = valuesInUse(checklist);
   const chosenControl = String(checklist?.built?.find((b) => b.row === "control")?.value ?? "") || null;
+  // before the first check, the load the package will apply, in the units it is stated in (audit fea-screens-J1-3)
+  const pull = formDefinition.tension && unitsOf(form) === formDefinition.tension.units ? formDefinition.tension : null;
+  const loadsInUse = pull && !inUse.value ? { ...inUse, value: String(pull.value) } : inUse;
   const material = own ? (form.own_name || "My own material") : libraryOptions.find((m) => m.id === form.library)?.name ?? null;
   const notation = layupNotation(form);
   const plies = PLY_KEYS.filter((key) => (form[key] ?? "").trim()).length * ((form.symmetric ?? "").trim() === "yes" ? 2 : 1);
@@ -113,8 +129,24 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
       </div>
 
       <StepPanel id="test" title="Test" step={1} state={state("test")} open={false}
-        note={`Unnotched tension, ${underD3039(form) ? "ASTM D3039" : "no standard"}`}>
-        <fieldset className="ws-question" data-testid="tension-standard" disabled={busy}>
+        note={isPlate ? "Plate, held and loaded where you say" : `Unnotched tension, ${underD3039(form) ? "ASTM D3039" : "no standard"}`}>
+        {/* a plate, held and loaded on any edge or face, where it is offered: a founder's sign-in until it is validated (ADR-0089 amendment 7) */}
+        {plates ? (
+          <fieldset className="ws-question" data-testid="tree-kind" disabled={busy}>
+            <legend>What are you analysing?</legend>
+            <div className="ws-choices" role="radiogroup" aria-label="Model">
+              {([["tension", "Tension coupon", "Held by its grips and pulled, as in the test machine"],
+                ["plate", "Plate", "Held and loaded on any edge or face you choose. Founders only, until it is validated"]] as const).map(([kind, title, detail]) => (
+                <label key={kind} className="ws-choice" data-checked={(kind === "plate") === isPlate}>
+                  <input type="radio" name="tree-kind" value={kind} checked={(kind === "plate") === isPlate} aria-label={title} onChange={() => pickKind(kind)} />
+                  <span className="ws-choice-title">{title}</span>
+                  <span className="ws-choice-detail">{detail}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+        {isPlate ? null : <fieldset className="ws-question" data-testid="tension-standard" disabled={busy}>
           <legend>Which standard?</legend>
           <div className="ws-choices" role="radiogroup" aria-label="Standard">
             {[[D3039, "ASTM D3039", "Specimen size from Table 2; extensometer at mid-length"],
@@ -127,15 +159,26 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
               </label>
             ))}
           </div>
-        </fieldset>
+        </fieldset>}
         {defaults("test")}
       </StepPanel>
 
       <StepPanel id="geometry" title="Geometry" step={2} state={state("geometry")} open={!underD3039(form)}
         note={sizeLine(form, inUse) ?? (underD3039(form) ? "from the standard" : "your own size")}>
-        <p className="studio-hint">Leave a field blank to use the {underD3039(form) ? "standard's size" : "value shown"}.</p>
-        <FieldGrid form={form} keys={SIZE_KEYS} errors={errors} disabled={busy} hints={TENSION_HINTS} placeholders={inUse}
-          onChange={(key, value) => edit({ [key]: value })} />
+        {isPlate ? (
+          <>
+            <p className="studio-hint">Length along x, width along y. A hole is drilled at the centre; tabs, when given, are regions at both ends.</p>
+            <FieldGrid form={form} keys={PLATE_SIZE_KEYS} errors={errors} disabled={busy} onChange={(key, value) => edit({ [key]: value })} />
+            <p className="studio-hint">Its regions: the four edges, the face, the hole&apos;s ring and the tabs, and any box you draw here.</p>
+            <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="regions" />
+          </>
+        ) : (
+          <>
+            <p className="studio-hint">Leave a field blank to use the {underD3039(form) ? "standard's size" : "value shown"}.</p>
+            <FieldGrid form={form} keys={SIZE_KEYS} errors={errors} disabled={busy} hints={TENSION_HINTS} placeholders={inUse}
+              onChange={(key, value) => edit({ [key]: value })} />
+          </>
+        )}
         {defaults("geometry")}
       </StepPanel>
 
@@ -174,7 +217,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <button type="submit" className="studio-text-button" disabled={busy}>Use</button>
           </span>
           {layupError ? <span className="chat-error" role="alert">{layupError}</span> : null}
-          <span className="studio-hint">0° runs along the load.</span>
+          <span className="studio-hint">{isPlate ? "0° runs along the plate's length, x." : "0° runs along the load."}</span>
         </form>
       </StepPanel>
 
@@ -182,24 +225,40 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
         <p className="studio-hint" data-testid="tree-step">One static step, linear: the load is applied in one go and every result scales with it.</p>
       </StepPanel>
 
-      <StepPanel id="conditions" title="Boundary conditions" step={6} state={state("conditions")} open={false} onToggle={lights("conditions")}
-        note={applied ? `${applied.conditions.length} on the grips` : "on the grips"}>
+      <StepPanel id="conditions" title="Boundary conditions" step={6} state={isPlate && !plate.supports.length ? "missing" : state("conditions")} open={false}
+        onToggle={lights("conditions")}
+        note={isPlate ? listLine(plate.supports) ?? "none yet" : applied ? `${applied.conditions.length} on the grips` : "on the grips"}>
         {applied ? (
           <ul className="ws-tree-lines" data-testid="tree-conditions">{applied.conditions.map((c) => <li key={c.set}>{c.words}</li>)}</ul>
-        ) : <p className="studio-hint">Drawn on the model and listed here once it is built.</p>}
-        <p className="studio-hint">A tension test holds the coupon by its grips: the bottom one fixed, the top one moving along the coupon.</p>
+        ) : isPlate ? null : <p className="studio-hint">Drawn on the model and listed here once it is built.</p>}
+        {isPlate ? (
+          <>
+            <p className="studio-hint" data-testid="tree-plate-how">Click an edge or the face on the model, or say it: “fix the left edge”, “XSYMM on the bottom edge”. Or add one here.</p>
+            <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="supports" />
+          </>
+        ) : <p className="studio-hint">A tension test holds the coupon by its grips: the bottom one fixed, the top one moving along the coupon.</p>}
         {defaults("conditions")}
       </StepPanel>
 
-      <StepPanel id="loads" title="Loads" step={7} state={state("loads")} open={false} onToggle={lights("loads")}
-        note={loadLine(form, inUse, chosenControl) ?? "a pull at the top grip"}>
+      <StepPanel id="loads" title="Loads" step={7} state={isPlate && plateMissing(plate).includes("a load") ? "missing" : state("loads")} open={false}
+        onToggle={lights("loads")}
+        note={isPlate ? listLine(plate.loads) ?? "none yet" : loadLine(form, loadsInUse, chosenControl ?? pull?.control ?? null) ?? "a pull at the top grip"}>
         {applied ? (
           <ul className="ws-tree-lines" data-testid="tree-loads">{applied.loads.map((l) => <li key={`${l.set}-${l.direction}`}>{l.words}</li>)}</ul>
         ) : null}
-        <p className="studio-hint">Leave a field blank to use the default.</p>
-        <FieldGrid form={form} keys={LOAD_KEYS} errors={errors} disabled={busy} hints={TENSION_HINTS}
-          placeholders={chosenControl ? { ...inUse, control: chosenControl } : inUse}
-          onChange={(key, value) => edit({ [key]: value })} />
+        {isPlate ? (
+          <>
+            <p className="studio-hint">Click an edge or the face on the model, or say it: “10 kN tension on the right edge”, “0.01 MPa on the face”. Or add one here.</p>
+            <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="loads" />
+          </>
+        ) : (
+          <>
+            <p className="studio-hint">Leave a field blank to use the default.</p>
+            <FieldGrid form={form} keys={LOAD_KEYS} errors={errors} disabled={busy} hints={TENSION_HINTS}
+              placeholders={chosenControl ? { ...inUse, control: chosenControl } : inUse}
+              onChange={(key, value) => edit({ [key]: value })} />
+          </>
+        )}
         {defaults("loads")}
       </StepPanel>
 
@@ -220,16 +279,15 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
           {runStatus(job, "Results")}</p> : <p className="studio-hint">Run analysis checks the setup, then solves it and verifies the result.</p>}
       </StepPanel>
 
-      <StepPanel id="outputs" title="Results" step={10} open={available.length > 0} note={available.length ? undefined : "after the analysis"}>
-        {job && available.length ? (
-          <JobFiles apiBase={apiBaseUrl} job={job} naming={namingOf(fields, form, layupNotation(form))} testId="tension-files" />
-        ) : <p className="studio-hint">The report and files appear here when the analysis finishes. The results show on the model.</p>}
+      <StepPanel id="outputs" title="Results" step={10} open={available.length > 0 || Boolean(fields)} note={results ? undefined : "after the analysis"}>
+        <ResultsTab apiBaseUrl={apiBaseUrl} />
       </StepPanel>
     </div>
   );
 }
 
-const missingMaterial = (missing: string[]): boolean => missing.some((m) => m !== "the layup" && !/length|width/i.test(m));
+const NOT_MATERIAL = ["the layup", "a boundary condition", "a load"];
+const missingMaterial = (missing: string[]): boolean => missing.some((m) => !NOT_MATERIAL.includes(m) && !/length|width/i.test(m));
 
 /** What the software chose for a tab, each with its reason (ADR-0090), shown in the tab it belongs to (ADR-0111). */
 function Defaults({ id, lines }: { id: TabId; lines: BuiltLine[] }) {

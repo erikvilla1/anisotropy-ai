@@ -24,15 +24,15 @@ def test_any_other_word_is_refused_at_startup(value):
 def test_the_page_is_told_whether_every_test_is_offered(monkeypatch):
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     monkeypatch.setattr(app.state, "settings", None, raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False}
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")
-    assert client.get("/v1/coupon-tests").json() == {"all": True, "imports": True}  # where every test is offered, so is the import
+    assert client.get("/v1/coupon-tests").json() == {"all": True, "imports": True, "plates": True}  # where every test is offered, so are the import and the plate
 
 
 def test_the_startup_settings_answer_when_they_are_there(monkeypatch):
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")  # the settings read at startup win over a later change of the environment
     monkeypatch.setattr(app.state, "settings", load_settings({RECORDING_VARIABLE: "off"}), raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False}
 
 
 # --------------------------------------------------------------------------------------------- part 2: a stored coupon of a hidden test
@@ -75,7 +75,7 @@ from types import SimpleNamespace
 
 from anisotropy_api import access
 from anisotropy_api.live import LiveSolver
-from anisotropy_api.main import _every_test, _imports
+from anisotropy_api.main import _every_for, _every_test, _imports, _plates
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, FOUNDER_EMAILS_VARIABLE, AccessSettings
 
 from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
@@ -140,7 +140,7 @@ def test_the_tools_are_started_with_the_option_where_every_test_is_offered_and_w
     monkeypatch.setattr("anisotropy_api.main._every_test", lambda request: founder)
     state = "ready" if founder else "blocked"
     values = {"values": {"form_version": "0.9", "test": "plate"}}
-    assert client.get("/v1/coupon-tests").json() == {"all": founder, "imports": founder}
+    assert client.get("/v1/coupon-tests").json() == {"all": founder, "imports": founder, "plates": founder}
     assert client.post("/v1/coupon-jobs/check", json=values).json()["state"] == state
     assert client.post("/v1/coupon-jobs/live", json=values).json()["state"] == state
     reopened = client.get("/v1/coupons/NOM-PLT-L1/values")
@@ -182,6 +182,37 @@ def test_behind_access_the_founders_sign_in_is_offered_the_import_alone_and_anot
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     with TestClient(app, headers={"X-Anisotropy-Actor": "browser"}) as hosted:
         app.state.access_verifier = access.verifier(AccessSettings(TEAM, AUDIENCE), key_for=key_for)
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": False, "imports": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": False, "imports": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False, "imports": False}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": False, "imports": True, "plates": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": False, "imports": True, "plates": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False, "imports": False, "plates": False}
+
+
+# ------------------------------------------- amendment 7: a founder's sign-in may set up a plate on the model tree, and nothing else hidden
+
+def test_a_founders_plate_is_offered_every_test_for_its_call_and_nothing_else_of_theirs_or_anyone_elses_is():
+    off = load_settings({RECORDING_VARIABLE: "off"})
+    founders = dataclasses.replace(off, founder_emails=frozenset({FOUNDER}))
+    plate = json.dumps({"form_version": "0.9", "test": "plate"}).encode()
+    hole = json.dumps({"form_version": "0.9", "test": "open-hole tension"}).encode()
+    tension = json.dumps({"form_version": "0.9", "input": "tension"}).encode()
+    assert _plates(request_of(founders, FOUNDER)) is True
+    assert _plates(request_of(founders, "engineer@example.com")) is False
+    assert _every_for(request_of(founders, FOUNDER), plate) is True
+    assert _every_for(request_of(founders, " Founder@Example.com "), lambda: plate) is True  # read only when the call is a founder's
+    for values in (hole, tension, b"not json", b"[1, 2]", None):
+        assert _every_for(request_of(founders, FOUNDER), values) is False, values
+    for email in ("engineer@example.com", None):
+        assert _every_for(request_of(founders, email), plate) is False
+    assert _every_for(request_of(dataclasses.replace(off, all_tests=True), None), hole) is True  # the switch, as before
+
+
+def test_a_founders_plate_reaches_the_tool_with_the_option_and_a_founders_open_hole_coupon_does_not(switch_studio, monkeypatch):
+    monkeypatch.setattr("anisotropy_api.main._every_test", lambda request: False)
+    monkeypatch.setattr("anisotropy_api.main._plates", lambda request: True)
+    plate = {"values": {"form_version": "0.9", "test": "plate"}}
+    hole = {"values": {"form_version": "0.9", "test": "open-hole tension"}}
+    assert client.post("/v1/coupon-jobs/check", json=plate).json()["state"] == "ready"
+    assert client.post("/v1/coupon-jobs/live", json=plate).json()["state"] == "ready"
+    assert client.post("/v1/coupon-jobs/check", json=hole).json()["state"] == "blocked"
+    assert client.post("/v1/coupon-jobs/live", json=hole).json()["state"] == "blocked"
+

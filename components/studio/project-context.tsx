@@ -3,9 +3,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
 import { takeRunToOpen } from "@/lib/run-history";
-import { offeredHere, type TowAnswer } from "@/lib/studio-api";
+import { offeredHere, type Offered, type TowAnswer } from "@/lib/studio-api";
 import type { StudioForm } from "@/lib/studio-form";
-import type { PlateLists } from "@/lib/studio-plate";
+import { PLATE_TEST, type PlateLists } from "@/lib/studio-plate";
 import type { TowSpecimenRow } from "@/lib/studio-tow";
 import { useNewestFromServer, useProjectSync } from "./project-sync";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
@@ -21,6 +21,10 @@ export type ProjectContextValue = {
   allTests: boolean;
   /** Whether a model may be brought in as a file (ADR-0105): where every test is offered, and for a founder's sign-in (ADR-0089 amendment 6). */
   imports: boolean;
+  /** Whether a plate may be set up on the model tree, held and loaded on any edge or face (ADR-0089 amendment 7): where the import is. */
+  plates: boolean;
+  /** Whether this form's every row is offered: every test is, or it is a plate where plates are (ADR-0089 amendment 7). */
+  offersAll: boolean;
   project: CouponProject;
   form: StudioForm;
   plate: PlateLists;
@@ -52,7 +56,16 @@ export type ProjectContextValue = {
   /** The tab of the model tree open on the left whose part the model draws bolder: its boundary conditions or its loads (ADR-0111). */
   emphasis: Emphasis;
   setEmphasis(next: Emphasis): void;
+  /** The field the Results tab of the model tree asks the model to be coloured by, and its ply (ADR-0111); null until one is asked. */
+  view: FieldView | null;
+  showField(next: Omit<FieldView, "at">): void;
+  /** The field and ply the model is coloured by now, as the viewer says it, so the Results tab presses the button of what is shown. */
+  shownField: { id: string; ply: number } | null;
+  setShownField(next: { id: string; ply: number } | null): void;
 };
+
+/** A field to colour the results by; `at` tells one request from the next, so the same field can be asked twice. */
+export type FieldView = { id: string; ply?: number; at: number };
 
 export type Emphasis = "conditions" | "loads" | null;
 
@@ -90,7 +103,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   if (start.current === null) start.current = initial();
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
   const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
-  const { all: allTests, imports } = useOffered(apiBaseUrl);
+  const { all: allTests, imports, plates } = useOffered(apiBaseUrl);
   const imported = useImportedModel(apiBaseUrl);
   const past = usePastRun(apiBaseUrl);
   // a run picked from the list of past analyses is opened once, as the page arrives (ADR-0109)
@@ -119,23 +132,27 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const showPlace = useCallback((next: Omit<Place, "at">) => setPlace((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
   const [proposed, setProposed] = useState<ProposedInputs | null>(null);
   const [emphasis, setEmphasis] = useState<Emphasis>(null);
+  const [view, setView] = useState<FieldView | null>(null);
+  const showField = useCallback((next: Omit<FieldView, "at">) => setView((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
+  const [shownField, setShownField] = useState<{ id: string; ply: number } | null>(null);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
-  useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests); // our kernel answers each settled edit (ADR-0086)
+  const offersAll = allTests || (plates && project.form.test === PLATE_TEST); // a founder's plate is offered every row (ADR-0089 amendment 7)
+  useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests, offersAll); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
     (found) => { if (found.kind === "fea") replace(found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
-    apiBaseUrl, allTests, imports, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
+    apiBaseUrl, allTests, imports, plates, offersAll, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
     setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
-    emphasis, setEmphasis,
-  }), [apiBaseUrl, allTests, imports, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed,
-    emphasis]);
+    emphasis, setEmphasis, view, showField, shownField, setShownField,
+  }), [apiBaseUrl, allTests, imports, plates, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed,
+    emphasis, view, showField, shownField]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
 /** What the API offers here (ADR-0089), asked once per API address; nothing more than the tension coupon until the API answers. */
-export function useOffered(apiBaseUrl: string): { all: boolean; imports: boolean } {
-  const [offered, setOffered] = useState({ all: false, imports: false });
+export function useOffered(apiBaseUrl: string): Offered {
+  const [offered, setOffered] = useState<Offered>({ all: false, imports: false, plates: false });
   useEffect(() => {
     let current = true;
     void offeredHere(apiBaseUrl).then((answer) => { if (current) setOffered(answer); });
