@@ -21,6 +21,7 @@
   },
   "parts": 1,
   "instances": 1,
+  "moved": [],
   "nodes": 27,
   "reference_nodes": 2,
   "elements": 16,
@@ -54,6 +55,7 @@
   "boundaries": 12,
   "concentrated_loads": 0,
   "pressures": 0,
+  "edge_loads": 0,
   "skipped": [
    "line 8: *preprint",
    "line 127: *restart",

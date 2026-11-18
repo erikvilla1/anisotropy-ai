@@ -32,7 +32,8 @@ def read(deck_path, units, name, out):
     head = {"state": "solved", "name": name, "units": units, "problem": None,
             "reading": {"elements": 16, "layup": "[0/90]s", "skipped": ["line 8: *preprint"], "warnings": [], "seen_at": str(deck_path)}}
     if first == "*Solid":
-        head.update(state="refused", reading=None, problem={"message": "line 15: element type 'C3D8R' is not supported", "line": 15})
+        head.update(state="refused", reading=None, problem={"message": "line 15: this version does not read solid elements (C3D8R)", "line": 15,
+                                                                 "unread": [{"what": "solid elements", "keyword": "C3D8R", "lines": [15]}]})
     if first == "*Loose":
         head.update(state="read", problem={"message": "the stiffness matrix is singular", "line": None})
     (out / "import.json").write_text(json.dumps(head), encoding="utf-8")
@@ -114,7 +115,9 @@ def test_nothing_of_the_deck_is_left_on_the_machine(warm, tmp_path):
 def test_a_refused_deck_and_one_that_is_read_but_not_solved_answer_with_why(warm):
     refused = client.post(IMPORTED_MODELS, **ASKED, content=b"*Solid\n")
     body = refused.json()
-    assert refused.status_code == 200 and body["state"] == "refused" and body["problem"] == {"message": "line 15: element type 'C3D8R' is not supported", "line": 15}
+    assert refused.status_code == 200 and body["state"] == "refused" and body["problem"] == {
+        "message": "line 15: this version does not read solid elements (C3D8R)", "line": 15,
+        "unread": [{"what": "solid elements", "keyword": "C3D8R", "lines": [15]}]}  # everything unread, passed on as the package wrote it (ADR-0105 amendment 1)
     assert body["reading"] is None and body["preview"] is None and body["fields"] is None and body["explanation"] is None
     read = client.post(IMPORTED_MODELS, **ASKED, content=b"*Loose\n").json()
     assert read["state"] == "read" and "singular" in read["problem"]["message"] and read["preview"] is not None and read["fields"] is None

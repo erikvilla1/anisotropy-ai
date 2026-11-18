@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { importModel, MAX_MODEL_BYTES, MODEL_NAME_HEADER, MODEL_UNITS, readImportedModel, readPreview, StudioError } from "../lib/studio-api";
-import { bannedIn, bannedInAbaqusCard, importProblemWords, importText } from "../lib/studio-copy";
+import { bannedIn, bannedInAbaqusCard, importProblemWords, importText, importUnreadLines } from "../lib/studio-copy";
 import { resultsOnPage } from "../components/studio/use-imported-model";
 import formDefinition from "../lib/coupon-form-definition.json";
 
@@ -11,7 +11,8 @@ const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio
 const answer = (changes: Record<string, unknown> = {}) => ({ run_id: null, ...fixture("import"), solver: "kernel", warm: true, seconds: 0.4, timings: {},
   preview: fixture("preview"), fields: fixture("fields"), explanation: fixture("explanation"), ...changes });
 const refused = { run_id: "r2", state: "refused", name: "solid.inp", units: "mm-MPa", solver: "kernel", warm: true, seconds: 0.1, timings: {},
-  problem: { message: "line 15: element type 'C3D8R' is not supported; this version reads S4, S4R, S4R5 (four-node shells)", line: 15 },
+  problem: { message: "line 15: this version does not read solid elements (C3D8R). It reads flat four-node shells (S4, S4R, S4R5)", line: 15,
+    unread: [{ what: "solid elements", keyword: "C3D8R", lines: [15] }] },
   reading: null, preview: null, fields: null, explanation: null };
 
 test("the import's answer is read as the package wrote it, and other shapes are refused", () => {
@@ -24,6 +25,10 @@ test("the import's answer is read as the package wrote it, and other shapes are 
   assert.ok(solved.explanation?.sentences.length);
   const not = readImportedModel(refused);
   assert.deepEqual([not.state, not.problem?.line, not.reading, not.fields], ["refused", 15, null, null]);
+  assert.deepEqual(not.problem?.unread, [{ what: "solid elements", keyword: "C3D8R", lines: [15] }]);
+  // an answer written before the survey has no list, and an entry that is not one is left out
+  assert.deepEqual(readImportedModel({ ...refused, problem: { message: "line 3: no", line: 3 } }).problem?.unread, []);
+  assert.deepEqual(readImportedModel({ ...refused, problem: { message: "no", line: 3, unread: [{ what: "contact" }, { what: "contact", keyword: "*Tie", lines: [4] }] } }).problem?.unread.length, 1);
   const read = readImportedModel(answer({ state: "read", fields: null, explanation: null, problem: { message: "the stiffness matrix is singular", line: null } }));
   assert.deepEqual([read.state, read.fields, read.problem?.line], ["read", null, null]);
   assert.throws(() => readImportedModel(answer({ fields: null })), StudioError); // solved, with nothing solved
@@ -72,7 +77,15 @@ test("the units offered for a model are the package's four", () => {
 });
 
 test("why a file was not read is said in the reader's words when they are fit to show, with its line", () => {
-  assert.equal(importProblemWords(refused), "Line 15: element type 'C3D8R' is not supported; this version reads S4, S4R, S4R5 (four-node shells)");
+  assert.equal(importProblemWords(refused), "Line 15: this version does not read solid elements (C3D8R). It reads flat four-node shells (S4, S4R, S4R5)");
+  // several kinds of thing that are not read: the count, and each on a line of its own with the keyword the file writes and where
+  const several = [{ what: "second-order shell elements", keyword: "S8R", lines: [15] }, { what: "contact", keyword: "*Contact Pair", lines: [212, 230] },
+    { what: "a tie between surfaces", keyword: "*Tie", lines: [190, 194, 198, 202, 206] }, { what: "the keyword *Thing", keyword: "*Thing", lines: [7] }];
+  assert.equal(importProblemWords({ state: "refused", problem: { message: "this file holds 4 things that this version does not read: ...", line: 15, unread: several } }),
+    "This file holds 4 things that are not read yet:");
+  assert.deepEqual(importUnreadLines(several), ["Second-order shell elements (S8R), line 15", "Contact (*Contact Pair), lines 212 and 230",
+    "A tie between surfaces (*Tie), lines 190, 194 and 198, and 2 more", "The keyword *Thing, line 7"]);
+  assert.deepEqual(importUnreadLines([{ what: "the keyword *Claude", keyword: "*Claude", lines: [1] }]), []); // a banned word is not shown, whoever wrote it
   assert.equal(importProblemWords({ state: "solved", problem: null }), null);
   // words that name our own files or tools are not shown: the plain thing instead, still with the line
   assert.equal(importProblemWords({ state: "refused", problem: { message: "line 8: see fea/README.md for the supported subset", line: 8 } }),

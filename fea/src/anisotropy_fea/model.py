@@ -141,7 +141,15 @@ class Part:
 
 class Instance(Record):
     name: str
-    part: str  # identity placement only; a translated or rotated instance is refused by the reader
+    part: str
+    # Where the deck places the instance, kept for the record: the reader has already moved the part's nodes (and turned its sections'
+    # material directions), so nothing downstream applies it again. Abaqus translates first, then turns the translated part about an
+    # axis given in the assembly's frame (seen on Abaqus 2025, ADR-0105 amendment 1); only a turn about an axis along z keeps the plate
+    # in the plane z = 0, so `rotation_deg` is that turn, counterclockwise seen from +z, about the point `rotation_about`. A turn about
+    # any other axis, and a move along z, are refused by the reader.
+    translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation_deg: float = 0.0
+    rotation_about: tuple[float, float] = (0.0, 0.0)
 
 
 class NodeSurface(Record):
@@ -151,9 +159,23 @@ class NodeSurface(Record):
 
 
 class ElementSurface(Record):
+    """A `*Surface, type=ELEMENT`: element sets with the side of their elements the surface lies on. On a shell, SPOS is the face the
+    normal leaves by, SNEG the other one, and E1 to E4 the edges between corner nodes 1-2, 2-3, 3-4 and 4-1. The first line is `elset`
+    and `side`; a surface over several sides (edges that are E2 of some elements and E3 of others) has the rest in `more`."""
+
     name: str
     elset: str
     side: str
+    more: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def faces(self) -> tuple[tuple[str, str], ...]:
+        return ((self.elset, self.side), *self.more)
+
+
+# A shell element's edges, by the positions of their two corner nodes in the element's node list, in the order the element lists them.
+EDGE_CORNERS = {"E1": (0, 1), "E2": (1, 2), "E3": (2, 3), "E4": (3, 0)}
+EDGE_LABELS = ("EDNOR", "EDSHR", "EDTRA")
 
 
 class KinematicCoupling(Record):
@@ -177,11 +199,32 @@ class ConcentratedLoad(Record):
     dof: int
     value: float
     line: int
+    edge: str | None = None  # set on a nodal force the reader made from an edge load: the `EdgeLoad.tag` it belongs to
+
+
+class EdgeLoad(Record):
+    """A `*Dsload` line with an edge label on a shell edge surface: a force per length of edge, as the deck states it. EDNOR is normal
+    to the edge in the plate's plane, positive pushing into the element (compression); EDSHR runs along the edge in the direction the
+    element lists its two nodes; EDTRA is along the element normal, +z for counterclockwise nodes (each seen on Abaqus 2025, ADR-0105
+    amendment 1). This is the record of what the deck said: the reader has already turned it into nodal forces, the step's
+    `cloads` whose `edge` is this load's `tag` (half the force of each element edge at each of its two nodes, which is the consistent
+    load of a four-node element), so no solver reads an `EdgeLoad` and none counts it twice."""
+
+    surface: str
+    label: str  # one of EDGE_LABELS
+    value: float  # force per length
+    line: int
+
+    @property
+    def tag(self) -> str:
+        return f"{self.surface} {self.label} (line {self.line})"
 
 
 class DistributedLoad(Record):
-    """A `*Dload` line with the P label: a uniform pressure on an element set or one element (ADR-0053). A positive value pushes
-    against the element normal, which is +z for counterclockwise nodes, so it loads the plate toward -z."""
+    """A uniform pressure on an element set or one element (ADR-0053). A positive value pushes against the element normal, which is +z
+    for counterclockwise nodes, so it loads the plate toward -z: a pressure pressing on the plate's top face. That is the sign of a
+    pressure in a spec and of Abaqus's `*Dsload` P on a shell's SPOS face. Abaqus's `*Dload` P on a shell element is the other way,
+    positive along the normal (seen on Abaqus 2025, ADR-0053 amendment 1), so the deck reader and the deck writer change its sign."""
 
     target: str | ElementKey  # an assembly element set name, or one element
     label: str  # "P" is the only label read
@@ -196,6 +239,7 @@ class Step(Record):
     cloads: tuple[ConcentratedLoad, ...]
     line: int
     dloads: tuple[DistributedLoad, ...] = ()
+    edge_loads: tuple[EdgeLoad, ...] = ()  # the record of the deck's edge loads; their forces are in `cloads`
 
 
 @dataclass(frozen=True)
@@ -289,7 +333,10 @@ def resolve_nodes(deck: Deck, target: str | NodeKey, line: int) -> tuple[NodeKey
     """The nodes a boundary or load target names: an assembly node set, or one node."""
     if isinstance(target, str):
         if target not in deck.nsets:
-            raise DeckError(f"line {line}: node set {target!r} is not defined in the assembly")
+            own = _part_set(deck, target, "nsets")
+            if own is None:
+                raise DeckError(f"line {line}: node set {target!r} is not defined in the assembly")
+            return own
         return deck.nsets[target]
     if not node_exists(deck, target):
         raise DeckError(f"line {line}: node {node_name(target)} does not exist")
@@ -354,8 +401,10 @@ def validate_deck(deck: Deck) -> tuple[str, ...]:
     for surface in deck.surfaces.values():
         if isinstance(surface, NodeSurface) and surface.nset not in deck.nsets:
             raise DeckError(f"surface {surface.name!r} names node set {surface.nset!r}, which is not defined")
-        if isinstance(surface, ElementSurface) and surface.elset not in deck.elsets:
-            raise DeckError(f"surface {surface.name!r} names element set {surface.elset!r}, which is not defined")
+        if isinstance(surface, ElementSurface):
+            for elset, _ in surface.faces:
+                if elset not in deck.elsets:
+                    raise DeckError(f"surface {surface.name!r} names element set {elset!r}, which is not defined")
     if not deck.steps:
         raise DeckError("the deck has no *Step; there is nothing to solve")
     _validate_boundaries(deck)
@@ -380,8 +429,21 @@ def resolve_elements(deck: Deck, target: str | ElementKey, line: int) -> tuple[E
             raise DeckError(f"line {line}: element {instance}.{label} does not exist")
         return (target,)
     if target not in deck.elsets:
-        raise DeckError(f"line {line}: element set {target!r} is not defined at the assembly level")
+        own = _part_set(deck, target, "elsets")
+        if own is None:
+            raise DeckError(f"line {line}: element set {target!r} is not defined at the assembly level")
+        return own
     return deck.elsets[target]
+
+
+def _part_set(deck: Deck, target: str, kind: str) -> tuple[tuple[str, int], ...] | None:
+    """A set a part defines, named from the assembly as `Instance.Set` (how Abaqus/CAE writes a boundary or a load on a set made in the
+    Part module): the set's labels in that instance. None when the name is not of that form or names no such set."""
+    instance, dot, name = target.rpartition(".")
+    if not dot or instance not in deck.instances:
+        return None
+    labels = getattr(deck.parts[deck.instances[instance].part], kind).get(name)
+    return None if labels is None else tuple((instance, int(label)) for label in labels)
 
 
 def membrane_limits(deck: Deck) -> None:
@@ -526,6 +588,7 @@ def to_si(deck: Deck, units: str, any_system: bool = False) -> Deck:
             "boundaries": tuple(scale_boundary(b) for b in step.boundaries),
             "cloads": tuple(load.model_copy(update={"value": load.value * (force if load.dof <= 3 else force * length)}) for load in step.cloads),
             "dloads": tuple(load.model_copy(update={"value": load.value * stress}) for load in step.dloads),
+            "edge_loads": tuple(load.model_copy(update={"value": load.value * force / length}) for load in step.edge_loads),
         })
 
     parts = {
@@ -544,6 +607,8 @@ def to_si(deck: Deck, units: str, any_system: bool = False) -> Deck:
     return dataclasses.replace(
         deck,
         parts=parts,
+        instances={name: i.model_copy(update={"translation": tuple(v * length for v in i.translation), "rotation_about": tuple(v * length for v in i.rotation_about)})
+                   for name, i in deck.instances.items()},
         assembly_nodes=scale_nodes(deck.assembly_nodes),
         materials=materials,
         model_boundaries=tuple(scale_boundary(b) for b in deck.model_boundaries),

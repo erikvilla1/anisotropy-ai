@@ -18,12 +18,13 @@ from typing import Any
 
 import numpy as np
 
-from .abaqus_reader import parse_deck
+from .abaqus_reader import HANDLERS, IGNORED_KEYWORDS, UNUSED_KEYWORDS, parse_deck, tokenize
 from .explain import explanation
 from .fields import field_data
 from .kernel import solve_deck
 from .mesh import KernelError, Mesh, mesh_from_deck
 from .model import (
+    SUPPORTED_ELEMENT_TYPES,
     Deck,
     DeckError,
     all_boundaries,
@@ -43,6 +44,8 @@ from .units import UNIT_LABEL, from_si, unit_factors
 KIND = "imported"  # the preview's `coupon.kind` for a model that came in as a deck
 TEST = "imported model"
 BY_ELEMENT = "Pressure by element"  # the preview's name for the elements a deck loads one by one
+# A load along an edge, by its label, as the preview names it: per length of edge. A positive EDNOR pushes into the plate.
+EDGE_WORDS = {"EDNOR": "edge load, normal to the edge,", "EDSHR": "edge load, along the edge,", "EDTRA": "edge load, across the plate,"}
 MAX_BYTES = 20_000_000  # a deck above this is refused before it is read: the kernel's meshes are far below it
 _LINE = re.compile(r"\bline (\d+)\b")
 
@@ -53,11 +56,106 @@ def plain(message: str) -> str:
 
 
 class ImportRefused(ValueError):
-    """The file cannot be taken as it stands; the message says why, and `line` where when the reader named one."""
+    """The file cannot be taken as it stands; the message says why, and `line` where when the reader named one. `unread` lists every
+    kind of thing the file holds that is not read, when the survey found any."""
 
-    def __init__(self, message: str, line: int | None = None):
+    def __init__(self, message: str, line: int | None = None, unread: list[dict[str, Any]] | None = None):
         super().__init__(message)
         self.line = line
+        self.unread = unread or []
+
+
+# What a model may hold that is not read, by keyword, in the words an engineer has for it. Several keywords may be one thing ("contact").
+# A keyword that is not here is named as the file writes it.
+UNREAD_WORDS = {
+    "contact": "contact", "contact pair": "contact", "contact inclusions": "contact", "contact exclusions": "contact",
+    "contact property assignment": "contact", "surface interaction": "contact", "surface behavior": "contact", "friction": "contact",
+    "contact controls": "contact", "contact initialization data": "contact", "contact initialization assignment": "contact",
+    "contact formulation": "contact", "contact stabilization": "contact", "clearance": "contact",
+    "tie": "a tie between surfaces", "mpc": "multi-point constraints", "equation": "constraint equations", "rigid body": "a rigid body",
+    "distributing": "a distributing coupling", "distributing coupling": "a distributing coupling", "shell to solid coupling": "a shell-to-solid coupling",
+    "embedded element": "embedded elements", "connector section": "connectors", "connector behavior": "connectors", "fastener": "fasteners",
+    "spring": "springs", "dashpot": "dashpots", "mass": "point masses", "rotary inertia": "point masses",
+    "solid section": "solid or plane-element sections", "beam section": "beams", "beam general section": "beams", "membrane section": "membranes",
+    "shell general section": "a shell stated by its stiffness matrix", "cohesive section": "cohesive elements", "rigid surface": "a rigid surface",
+    "transverse shear": "a stated transverse shear stiffness", "transverse shear stiffness": "a stated transverse shear stiffness",
+    "section controls": "element controls (hourglass or distortion settings)", "hourglass stiffness": "element controls (hourglass or distortion settings)",
+    "nodal thickness": "a thickness stated node by node", "distribution": "values that vary over the mesh (a distribution)",
+    "distribution table": "values that vary over the mesh (a distribution)", "rebar layer": "rebar layers",
+    "fail strain": "strain limits (failure is judged from the stress limits)", "plastic": "plasticity", "hyperelastic": "a hyperelastic material", "viscoelastic": "a viscoelastic material", "creep": "creep",
+    "damage initiation": "damage (Hashin or another damage model)", "damage evolution": "damage (Hashin or another damage model)",
+    "damage stabilization": "damage (Hashin or another damage model)", "user material": "a user material", "depvar": "a user material",
+    "dflux": "heat loads", "dsflux": "heat loads", "cflux": "heat loads", "film": "heat loads", "sfilm": "heat loads",
+    "temperature": "a temperature field", "initial conditions": "initial conditions", "field": "field variables",
+    "amplitude": "a load that follows an amplitude curve", "buckle": "a buckling step", "frequency": "a frequency step", "dynamic": "a dynamic step",
+    "heat transfer": "a heat transfer step", "coupled temperature-displacement": "a heat transfer step", "visco": "a time-dependent material step",
+    "steady state dynamics": "a dynamic step", "modal dynamic": "a dynamic step", "complex frequency": "a frequency step",
+    "include": "another file brought in by name", "parameter": "values computed by parameters", "system": "a local coordinate system for nodes",
+    "transform": "a local coordinate system for nodes", "submodel": "a submodel", "import": "results imported from another analysis",
+    "controls": "solution controls", "adaptive mesh": "adaptive meshing", "sradiate": "heat loads", "inertia relief": "inertia relief",
+    "base motion": "a dynamic step", "periodic": "periodic constraints", "pre-tension section": "bolt pretension", "kinematic coupling": "a kinematic coupling of the older form",
+}
+
+# An element type that is not read, by how its name starts (longest first where two fit), in an engineer's words.
+ELEMENT_WORDS = (
+    ("SC", "continuum shell elements"), ("STRI", "triangular shell elements"), ("S3", "triangular shell elements"), ("S8", "second-order shell elements"),
+    ("S9", "second-order shell elements"), ("SAX", "axisymmetric shell elements"), ("C3D", "solid elements"), ("CPS", "plane-stress elements"),
+    ("CPE", "plane-strain elements"), ("CAX", "axisymmetric elements"), ("M3D", "membrane elements"), ("R3D", "rigid elements"), ("COH", "cohesive elements"),
+    ("B2", "beam elements"), ("B3", "beam elements"), ("PIPE", "beam elements"), ("T2", "truss elements"), ("T3", "truss elements"),
+    ("SPRING", "springs"), ("DASHPOT", "dashpots"), ("MASS", "point masses"), ("CONN", "connectors"), ("DC", "heat transfer elements"), ("DS", "heat transfer elements"),
+)
+
+
+def unread(text: str) -> list[dict[str, Any]]:
+    """Every kind of thing a file holds that is not read, found before the reader stops at the first: keywords with no reading, element
+    types the kernels do not solve, a second step and large displacements. One entry per kind, in the order the
+    file meets them: `what` in an engineer's words, `keyword` as the file writes its first, and the `lines`. What a keyword's own
+    parameters or data hold (an instance turned out of the plane, a load label) is still the reader's to refuse, one at a time."""
+    try:
+        blocks = tokenize(text)
+    except DeckError:
+        return []  # the reader says what is wrong with the file's form
+    found: dict[str, dict[str, Any]] = {}
+
+    def note(what: str, keyword: str, line: int) -> None:
+        found.setdefault(what, {"what": what, "keyword": keyword, "lines": []})["lines"].append(line)
+
+    steps = 0
+    for block in blocks:
+        written = "*" + block.name.title()
+        if block.name == "element":
+            kind = (block.params.get("type") or "").upper()
+            if kind and kind not in SUPPORTED_ELEMENT_TYPES:
+                note(next((words for start, words in ELEMENT_WORDS if kind.startswith(start)), "elements of another type"), kind, block.line)
+        elif block.name == "step":
+            steps += 1
+            if steps > 1:
+                note("more than one step", written, block.line)
+            if (block.params.get("nlgeom") or "NO").upper() == "YES":
+                note("large displacements", written + ", nlgeom=YES", block.line)
+            if "perturbation" in block.params:
+                note("a perturbation step", written + ", perturbation", block.line)
+        elif block.name not in HANDLERS and block.name not in IGNORED_KEYWORDS and block.name not in UNUSED_KEYWORDS:
+            note(UNREAD_WORDS.get(block.name, f"the keyword {written}"), written, block.line)
+    return list(found.values())
+
+
+def unread_message(found: list[dict[str, Any]]) -> str:
+    """The survey in one sentence. One kind is said the way the reader says a refusal, its line first; several are listed, each once,
+    with the keyword the file writes and where it first is. Element types add what is read in their place."""
+    def keyword(entry: dict[str, Any]) -> str:
+        return "" if entry["keyword"] in entry["what"] else f"{entry['keyword']}, "
+
+    def times(entry: dict[str, Any]) -> str:
+        return f", {len(entry['lines'])} times" if len(entry["lines"]) > 1 else ""
+
+    shells = ". It reads flat four-node shells (" + ", ".join(SUPPORTED_ELEMENT_TYPES) + ")" if any(e["keyword"].isalnum() for e in found) else ""
+    if len(found) == 1:
+        entry = found[0]
+        named = keyword(entry).rstrip(", ")
+        return f"line {entry['lines'][0]}: this version does not read {entry['what']}" + (f" ({named}{times(entry)})" if named or times(entry) else "") + shells
+    kinds = "; ".join(f"{entry['what']} ({keyword(entry)}line {entry['lines'][0]}{times(entry)})" for entry in found)
+    return f"this file holds {len(found)} things that this version does not read: {kinds}" + shells
 
 
 def decoded(content: bytes) -> str:
@@ -76,6 +174,9 @@ def read_text(text: str, units: str, name: str | None = None) -> tuple[Deck, lis
     """The deck in SI, with the reader's notes, and the warnings the unit statement raised (a modulus far from any material's usually
     means the wrong system). Refuses, with the line, what the reader refuses."""
     unit_factors(units)  # refuses a system no coupon is stated in, before anything is read
+    outside = unread(text)
+    if outside:  # everything at once: an engineer deciding whether a model can be brought in should not learn its limits one upload at a time
+        raise ImportRefused(unread_message(outside), outside[0]["lines"][0], outside)
     try:
         deck = parse_deck(text, source_path=name)
         notes = validate_deck(deck)
@@ -120,13 +221,16 @@ def reading(deck: Deck, units: str, warned: list[str]) -> dict[str, Any]:
     return {
         "heading": deck.heading.strip(), "sha256": deck.source_sha256, "units": units, "unit_labels": UNIT_LABEL[units],
         "parts": len(deck.parts), "instances": len(deck.instances),
+        "moved": [{"instance": i.name, "by": [length(v) for v in i.translation[:2]], "turned_deg": float(i.rotation_deg), "about": [length(v) for v in i.rotation_about]}
+                  for i in deck.instances.values() if any(i.translation) or i.rotation_deg],
         "nodes": sum(len(deck.parts[i.part].nodes) for i in deck.instances.values()), "reference_nodes": len(deck.assembly_nodes),
         "elements": sum(types.values()), "element_types": types,
         "node_sets": len(deck.nsets), "element_sets": len(deck.elsets), "couplings": len(deck.couplings),
         "sections": sections, "layup": layup_words(deck), "materials": materials,
         "step": steps[0].name if steps else None,
         "boundaries": len(all_boundaries(deck)),
-        "concentrated_loads": sum(len(step.cloads) for step in steps), "pressures": sum(len(step.dloads) for step in steps),
+        "concentrated_loads": sum(load.edge is None for step in steps for load in step.cloads), "pressures": sum(len(step.dloads) for step in steps),
+        "edge_loads": sum(len(step.edge_loads) for step in steps),
         "skipped": list(deck.ignored_keywords), "notes": list(deck.notes), "warnings": warned,
     }
 
@@ -178,7 +282,21 @@ def model_preview(deck: Deck, mesh: Mesh, units: str, name: str, criteria: list[
         loads.append({"set": set_name, "through": through, "control": "displacement", "dof": dof, "direction": ("+" if value >= 0 else "-") + DOF_WORDS[dof],
                       "value": value, "unit": lab["length"] if dof <= 3 else lab["rotation"], "nodes": len(nodes)})
     for step in deck.steps:
+        for edge in step.edge_loads:  # a load along an edge is one load: its nodal forces are not listed one by one
+            forces = [load for load in step.cloads if load.edge == edge.tag]
+            nodes = sorted({mesh.node(load.target) for load in forces})
+            total = np.zeros(3)
+            for load in forces:
+                total[load.dof - 1] += load.value
+            dof = int(np.argmax(np.abs(total))) + 1  # the axis the whole edge is pushed along, for the arrow
+            set_name = edge.surface if node_sets.setdefault(edge.surface, nodes) == nodes else f"{edge.surface} (edge)"
+            node_sets.setdefault(set_name, nodes)
+            loads.append({"set": set_name, "through": None, "control": EDGE_WORDS[edge.label], "dof": dof, "direction": ("+" if total[dof - 1] >= 0 else "-") + DOF_WORDS[dof],
+                          "value": from_si(edge.value, "force", units) * unit_factors(units)["length"], "unit": lab["force"] + "/" + lab["length"], "nodes": len(nodes),
+                          "total_force": from_si(float(np.linalg.norm(total)), "force", units)})
         for load in step.cloads:
+            if load.edge is not None:
+                continue
             set_name, through, nodes = _through(deck, mesh, load.target, load.line)
             node_sets.setdefault(set_name, nodes)
             count = len(resolve_nodes(deck, load.target, load.line))  # the deck's value is per node of its target
@@ -251,16 +369,16 @@ def import_model(content: bytes, name: str, units: str) -> dict[str, Any]:
     try:
         deck, warned = read_text(decoded(content), units, name)
     except ImportRefused as exc:
-        return {"state": "refused", "name": name, "units": units, "problem": {"message": str(exc), "line": exc.line}}
+        return {"state": "refused", "name": name, "units": units, "problem": {"message": str(exc), "line": exc.line, "unread": exc.unread}}
     except ValueError as exc:  # the unit statement
-        return {"state": "refused", "name": name, "units": units, "problem": {"message": str(exc), "line": None}}
+        return {"state": "refused", "name": name, "units": units, "problem": {"message": str(exc), "line": None, "unread": []}}
     result: dict[str, Any] = {"state": "read", "name": name, "units": units, "problem": None, "reading": reading(deck, units, warned)}
     try:
         solution = solve_deck(deck)
         coupon = {"designation": Path(name).stem, "title": deck.heading.strip() or name, "kind": KIND, "test": TEST, "layup": layup_words(deck)}
         data = field_data(deck, solution, units, coupon=coupon)
     except (KernelError, DeckError) as exc:
-        result["problem"] = {"message": plain(str(exc)), "line": int(found.group(1)) if (found := _LINE.search(str(exc))) else None}
+        result["problem"] = {"message": plain(str(exc)), "line": int(found.group(1)) if (found := _LINE.search(str(exc))) else None, "unread": []}
         try:
             result["preview"] = model_preview(deck, mesh_from_deck(deck, shell=needs_shell(deck)), units, name, [])
         except (KernelError, DeckError):

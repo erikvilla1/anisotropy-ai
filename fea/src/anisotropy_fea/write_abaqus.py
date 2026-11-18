@@ -148,9 +148,10 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
         for load in model.loads:
             out.append(f"{load.target}, {load.dof}, {number(force(load.value))}")
     if model.pressures:
+        out.append("** On a shell element the P label of *Dload is positive along the element normal (+z here). The spec's pressure is positive against it, pressing on the top face, so it is written here with the opposite sign.")
         out.append("*Dload")
         for pressure in model.pressures:
-            out.append(f"{pressure.elset}, P, {number(stress(pressure.value))}")
+            out.append(f"{pressure.elset}, P, {number(stress(-pressure.value))}")
     requests = spec.output.abaqus
     out.append("*Restart, write, frequency=0")
     if requests.field_preselect:
