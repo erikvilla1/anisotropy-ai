@@ -9,11 +9,14 @@ const WORD: Record<PanelState, string> = { pass: "checked", warn: "warning", fai
  * A panel no checklist judges names its passed state itself (`word`: a laminate step is "complete" once stated, Solve "solved"), so
  * "checked" is said only where a check ran. Every panel opens by default; the engineer folds what is done. A numbered step shows its
  * number before its title, so the order to fill them in reads at a glance (ADR-0062 amendment 1). */
-export function StepPanel({ id, title, step, state = "none", word, open = true, note, children }: {
-  id: string; title: string; step?: number | null; state?: PanelState; word?: string; open?: boolean; note?: ReactNode; children: ReactNode;
+export function StepPanel({ id, title, step, state = "none", word, open = true, note, onToggle, children }: {
+  id: string; title: string; step?: number | null; state?: PanelState; word?: string; open?: boolean; note?: ReactNode;
+  /** told when the engineer opens or folds the panel: a tab of the model tree lights its part of the model while it is open (ADR-0111) */
+  onToggle?: (open: boolean) => void; children: ReactNode;
 }) {
   return (
-    <details className="ws-panel" open={open} id={`panel-${id}`} data-testid={`panel-${id}`} data-state={state}>
+    <details className="ws-panel" open={open} id={`panel-${id}`} data-testid={`panel-${id}`} data-state={state}
+      onToggle={onToggle ? (e) => onToggle((e.currentTarget as HTMLDetailsElement).open) : undefined}>
       <summary>
         {step ? <span className="ws-panel-step" aria-hidden="true">{step}</span> : null}
         <span className="ws-panel-title">{title}</span>
@@ -31,4 +34,17 @@ export function showPanel(id: string) {
   if (!element) return;
   (element as HTMLDetailsElement).open = true;
   element.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/** Opens a panel the assistant just changed and marks it for a moment, without moving the page more than it must (ADR-0111): the engineer
+ * sees which tab of the model a message changed. */
+export function revealPanel(id: string) {
+  const element = document.getElementById(`panel-${id}`);
+  if (!element) return;
+  (element as HTMLDetailsElement).open = true;
+  element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  element.classList.remove("ws-panel-changed");
+  void (element as HTMLElement).offsetWidth; // restart the mark when the same panel changes twice
+  element.classList.add("ws-panel-changed");
+  window.setTimeout(() => element.classList.remove("ws-panel-changed"), 1800);
 }

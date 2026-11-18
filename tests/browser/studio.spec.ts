@@ -26,6 +26,7 @@ const TENSION_BUILT = [
   { row: "length", value: 250, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
   { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric: gripped through emery cloth, with no tab length given; 56 mm is the software's choice" },
   { row: "strain_length", value: 25, reason: "25 mm, within ASTM D3039/D3039M-17 §7.3.2's 10 to 50 mm, centred on the coupon" },
+  { row: "grips", value: "nodal", reason: "every node of each tab is held; the top tab moves" },
   { row: "control", value: "displacement", reason: "the top grip moves; the bottom one is held" },
   { row: "value", value: 1, reason: "the model is linear, so R, the loading at first-ply failure, does not depend on it" },
 ];
@@ -33,7 +34,7 @@ const TENSION_BUILT = [
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[]; wakes?: number;
     reports?: number; reportReads?: string[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; plates?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
     report?: () => { status: number; body: unknown } } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
@@ -45,7 +46,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const path = url.pathname;
     // one workflow first (ADR-0089): the API says whether every test is offered. The scenarios below test the full panels, development's
     // view, so the switch is on unless a scenario turns it off for the tension screen (ADR-0090), the product's view
-    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true });
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true, plates: options.plates ?? false });
     if (path === "/v1/workspace/assistant" && options.writer === "model") return json(route, { proposes: false, provider: "anthropic", model: "claude-opus-5-5" });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) { // no project store, and the API says so: the browser keeps the project alone (ADR-0091 amendment 2)
@@ -478,23 +479,214 @@ test("the tension screen takes the material and the layup, builds the model, say
   expect(sent.library).toBe("im7-8552");
   expect([sent.ply_1, sent.ply_2, sent.ply_3, sent.ply_4, sent.symmetric]).toEqual([45, 0, -45, 90, "yes"]);
   for (const key of ["length", "width", "tab_length", "grips", "element_size", "G13", "G23", "test", "units"]) expect(sent[key], key).toBeUndefined(); // the package chooses them
-  const built = page.getByTestId("tension-built");
+  // what the software chose is said in the tab it belongs to (ADR-0111): the size under Geometry, the loading under Loads
+  const built = page.getByTestId("defaults-geometry");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
   await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is the software's choice");
-  // a blank field under Change settings shows the value in use, not nothing (ADR-0090 amendment 1)
+  await expect(page.getByTestId("panel-geometry").locator(".ws-panel-note")).toHaveText("250 × 25 mm, 56 mm tabs");
+  // a blank field of the tree shows the value in use, not nothing (ADR-0090 amendment 1)
   await expect(page.locator("#studio-width")).toHaveAttribute("placeholder", "25");
   await expect(page.locator("#studio-length")).toHaveAttribute("placeholder", "250");
   await expect(page.locator("#studio-tab_length")).toHaveAttribute("placeholder", "56");
   await expect(page.locator("#studio-width")).toHaveValue("");
-  await expect(built.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
-  await expect(built.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
+  const loading = page.getByTestId("defaults-loads");
+  await expect(loading.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
+  await expect(loading.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
   await expect(page.getByTestId("tension-files")).toContainText("Abaqus input file (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI
   await expect(page.getByTestId("tension-files")).toContainText("Report (PDF)");
   await expect(page.getByTestId("tension-files").locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45,0,-45,90]s_report.pdf");
   // a customer gets the report and the solver input, asked for by what it is; the team's package and reference files stay out (D4)
   await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveAttribute("href", /\/files\/solver_input\?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_solver\.inp$/);
   await expect(page.getByTestId("tension-files").locator("a[data-key=package], a[data-key=prepomax_deck], a[data-key=prepomax_results]")).toHaveCount(0);
-  await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Files.");
+  await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Results.");
+});
+
+test.describe("the model tree", () => {
+  test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 }); // its pictures are looked at by people
+
+  test("the setup is a model tree in the words of any finite element program; a tab lights its part of the model and a change in the chat opens its tab (ADR-0111)", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+    await mockApi(page, calls, { allTests: false }); // the product's view
+    await page.goto("/workspace/fea");
+    const screen = page.getByTestId("tension-screen");
+    await expect(screen.locator(".ws-panel-title")).toHaveText(["Test", "Geometry", "Material", "Layup", "Analysis step", "Boundary conditions", "Loads",
+      "Mesh", "Solve", "Results", "History"]);
+    const said = (await screen.innerText()).toLowerCase();
+    for (const word of ["abaqus", "ansys", "calculix", "change settings", "model settings"]) expect(said).not.toContain(word);
+    await expect(page.getByTestId("panel-step")).toContainText("Static, linear");
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+    await expect(page.getByTestId("panel-layup").locator(".ws-panel-note")).toHaveText("[45/0/-45/90]s, 8 plies");
+    // a change made by talking opens the tab it changed and marks it, so the engineer sees where it went
+    const mesh = page.getByTestId("panel-mesh");
+    await expect(mesh).not.toHaveAttribute("open", "");
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await message.fill("use 4 mm elements");
+    await message.press("Enter");
+    await expect(mesh).toHaveAttribute("open", "");
+    await expect(mesh).toHaveClass(/ws-panel-changed/);
+    await expect(page.locator("#studio-element_size")).toHaveValue("4");
+    await expect(mesh.locator(".ws-panel-note")).toContainText("4 mm elements"); // and the count once the preview has meshed it
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-chat-change.png" });
+    // the change is kept as a version, said to come from the assistant and the message (ADR-0113)
+    const history = page.getByTestId("panel-history");
+    await history.locator("summary").click();
+    const byChat = history.locator("li[data-by=assistant]").filter({ hasText: "use 4 mm elements" });
+    await expect(byChat).toContainText("→ 4");
+
+    await page.getByTestId("build-button").click();
+    await expect.poll(() => calls.solves.length).toBe(1);
+    expect((calls.checks.at(-1) as { values: Record<string, unknown> }).values.element_size).toBe(4);
+    // a tab of the model lights its part on the model while it is open, and lists it in the words under the model
+    const scene = page.getByTestId("studio-scene");
+    const conditions = page.getByTestId("panel-conditions");
+    await conditions.locator("summary").click();
+    await expect(scene).toHaveAttribute("data-emphasis", "conditions");
+    await expect(page.getByTestId("tree-conditions")).toContainText("Bottom grip: fixed (encastre)");
+    await expect(page.getByTestId("tree-conditions")).toContainText("Top grip: free to move along the coupon only");
+    await expect(page.getByTestId("defaults-conditions").locator("tr[data-row=grips]")).toContainText("Clamped");
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-boundary-conditions.png" });
+    await conditions.locator("summary").click();
+    await expect(scene).toHaveAttribute("data-emphasis", "");
+    await page.getByTestId("panel-loads").locator("summary").click();
+    await expect(scene).toHaveAttribute("data-emphasis", "loads");
+    await expect(page.getByTestId("tree-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
+    await expect(page.locator("#studio-control option[value='']")).toHaveText("displacement, chosen for you"); // a blank row says what stands for it
+    await expect(page.getByTestId("tension-files")).toContainText("Report (PDF)", { timeout: 45_000 });
+    await expect(page.getByTestId("panel-outputs")).toHaveAttribute("open", "");
+    await expect(page.getByTestId("chat-result-line")).toHaveText("Checked by a second solver"); // no counts for the customer to judge
+    // the Results tab says the answer in three lines and colours the model by a field and a ply, both ways with the viewer
+    const answer = page.getByTestId("tree-results-answer");
+    await expect(answer).toContainText("Reaction");
+    await expect(answer).toContainText("Largest displacement");
+    await expect(answer).toContainText("First-ply failure");
+    const tree = page.getByTestId("tree-results");
+    const viewer = page.getByTestId("field-controls");
+    await tree.locator("button[data-field=S11]").click();
+    await expect(viewer.getByLabel("Field", { exact: true })).toHaveValue("S11");
+    await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "true");
+    await page.getByLabel("Ply shown", { exact: true }).selectOption("2");
+    await expect(viewer.getByLabel("Ply", { exact: true })).toHaveValue("2");
+    await viewer.getByLabel("Field", { exact: true }).selectOption("u_mag");
+    await expect(tree.locator("button[data-field=u_mag]")).toHaveAttribute("aria-pressed", "true");
+    await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "false");
+    await tree.locator("button[data-field=S11]").click();
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-after-run.png" });
+    // the model's own view buttons: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
+    await expect(scene).toHaveAttribute("data-shown", "mesh conditions loads");
+    await page.getByTestId("show-conditions").click();
+    await expect(scene).toHaveAttribute("data-shown", "mesh loads");
+    await expect(page.getByTestId("show-conditions")).toHaveAttribute("aria-pressed", "false");
+    await page.getByTestId("show-conditions").click();
+    await page.getByTestId("view-top").click();
+    await expect(scene).toHaveAttribute("data-view", "top");
+    await page.getByTestId("view-fit").click();
+    await expect(scene).toHaveAttribute("data-view", "home");
+    // the run's answer is kept on the version it was made from; two versions compare; going back is a new version (ADR-0113)
+    await expect(history).toHaveAttribute("open", ""); // still open from the chat's change
+    await expect(byChat.locator("[data-testid^=version-run-]")).toContainText("Run: Holds, R =");
+    const ticks = history.locator("input[type=checkbox]");
+    await ticks.nth(0).check();
+    await ticks.nth(1).check();
+    await expect(page.getByTestId("history-compare")).toContainText("First-ply failure");
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-history.png" });
+    await page.getByTestId("history-undo").click();
+    await expect(page.locator("#studio-element_size")).toHaveValue("2"); // the blank form's own, before the message
+    await expect(history.locator("ol.ws-history > li").first()).toContainText("Back to version", { timeout: 5_000 });
+    expect(browserErrors).toEqual([]);
+  });
+
+  test("a founder sets up a plate on the tree: held and loaded by the chat, by a click on the model and on its tabs (ADR-0089 amendment 7, ADR-0111)", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+    await mockApi(page, calls, { allTests: false, plates: true }); // the product's view, as a founder's sign-in is offered it
+    await page.route(API, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+      if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+      // what the API's guard keeps of a model's reading (api/tests/test_plate_proposals.py): "fix" holds all six, "pull" is a force outward
+      return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [],
+        supports: [{ region: "Edge-Left", dofs: [1, 2, 3, 4, 5, 6], quote: "fix the left edge" }],
+        loads: [{ region: "Edge-Right", kind: "force", dof: 1, value: "10000", unit: "N", written_value: "10", written_unit: "kN", sense: "tension",
+          quote: "pull the right edge with 10 kN" }] });
+    });
+    await page.goto("/workspace/fea");
+    const screen = page.getByTestId("tension-screen");
+    await page.getByTestId("panel-test").locator("summary").click();
+    await screen.getByRole("radio", { name: "Plate", exact: true }).check();
+    await expect(page.getByTestId("panel-test").locator(".ws-panel-note")).toHaveText("Plate, held and loaded where you say");
+    await expect(page.getByTestId("tension-standard")).toHaveCount(0); // a plate follows no test standard
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+    await page.locator("#studio-length").fill("100");
+    await page.locator("#studio-width").fill("100");
+    await expect(page.getByTestId("tension-missing")).toHaveText("Still needed: a boundary condition, a load.");
+    await expect(page.getByTestId("panel-conditions")).toHaveAttribute("data-state", "missing");
+    // said in the chat: read into the plate's lists, applied, and the tab that holds them opened and marked
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await expect(message).toHaveAttribute("placeholder", /hold this edge/);
+    await message.fill("fix the left edge and pull the right edge with 10 kN");
+    await message.press("Enter");
+    const card = page.getByTestId("proposal-card").last();
+    await expect(card.locator("[data-key='support:0']")).toContainText("Edge-Left");
+    await card.getByTestId("proposal-apply").click();
+    const conditions = page.getByTestId("panel-conditions");
+    await expect(conditions).toHaveAttribute("open", "");
+    await expect(conditions).toHaveClass(/ws-panel-changed/);
+    await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Left holds x, y, z, tilt about x, tilt about y, rotation about z");
+    await expect(page.getByTestId("plate-supports")).toContainText("θx"); // the directions in no program's notation on the tree
+    await expect(page.getByTestId("plate-supports")).not.toContainText("UR1");
+    await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("1 on Edge-Right");
+    await expect(page.getByTestId("tension-missing")).toHaveCount(0);
+    await expect.poll(() => calls.checks.length).toBe(1); // applied, the setup is checked with the lists and the model appears
+    const first = (calls.checks[0] as { values: Record<string, unknown> }).values;
+    expect([first.test, first.supports, first.loads]).toEqual(["plate", [{ region: "Edge-Left", dofs: [1, 2, 3, 4, 5, 6] }], [{ region: "Edge-Right", dof: 1, total: 10000 }]]);
+    // a warning is said in the tab it is about, naming what is missing, and the chat's warning opens that tab (ADR-0111 amendment 2)
+    await expect(page.getByTestId("warnings-material")).toContainText("it needs F1t, F1c, F2t, F2c and F6");
+    await page.getByTestId("panel-material").locator("summary").click();
+    await expect(page.getByTestId("panel-material")).not.toHaveAttribute("open", "");
+    await page.getByTestId("chat-check").last().getByRole("button", { name: "Open Material" }).click();
+    await expect(page.getByTestId("panel-material")).toHaveAttribute("open", "");
+    // clicked on the model: the face is loaded from the click, and the Loads tab opens with its row to fill in
+    await expect(page.getByTestId("preview")).toBeVisible();
+    await expect(async () => { // the scene takes a click once it has drawn the new model
+      const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
+    }).toPass({ timeout: 20_000 });
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-plate-click.png" });
+    await page.getByTestId("picked-regions").getByRole("button", { name: "load" }).last().click();
+    const loads = page.getByTestId("panel-loads");
+    await expect(loads).toHaveAttribute("open", "");
+    await expect(page.getByTestId("plate-words-loads")).toContainText("Face under a pressure of ? MPa");
+    await page.getByLabel("Load 2 pressure", { exact: true }).fill("0.01");
+    await expect(page.getByTestId("plate-words-loads")).toContainText("Face under a pressure of 0.01 MPa");
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-plate.png" });
+    await page.getByTestId("build-button").click();
+    await expect.poll(() => calls.solves.length).toBe(1);
+    const sent = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+    expect(sent.loads).toEqual([{ region: "Edge-Right", dof: 1, total: 10000 }, { region: "Face", pressure: 0.01 }]);
+    expect(sent.input).toBeUndefined(); // every row is sent for a plate, not the tension screen's own
+    const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+    for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+    expect(browserErrors).toEqual([]);
+  });
+
+  test("a customer's tree offers no plate (ADR-0089 amendment 7)", async ({ page }) => {
+    const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+    await mockApi(page, calls, { allTests: false });
+    await page.goto("/workspace/fea");
+    await expect(page.getByTestId("tension-screen")).toBeVisible();
+    await expect(page.getByTestId("tree-kind")).toHaveCount(0);
+    await expect(page.getByTestId("chat-spec")).toHaveCount(0); // the tree says the setup: no summary strip above the model (ADR-0111)
+  });
 });
 
 test("a run ends without its PDF; Report (PDF) writes it when asked, says so, and downloads it when it is ready (ADR-0064 amendment 3)", async ({ page }) => {
@@ -1950,7 +2142,8 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await expect(run).toHaveAttribute("data-state", "running", { timeout: 30_000 });
   await expectNoBannedTerms(page, "running");
   phase = "result"; // solved and checked against the reference solver, the report still being written
-  await expect(run.getByTestId("job-message")).toHaveText("Verified against reference solver: 57 of 57 values agree", { timeout: 30_000 });
+  // the customer is told the second solver agrees, not asked to judge its counts (the founder, 2026-11-17; ADR-0111 amendment 2)
+  await expect(run.getByTestId("job-message")).toHaveText("Checked by a second solver", { timeout: 30_000 });
   await expectNoBannedTerms(page, "the result in, the report being written");
   phase = "done";
   await expect(run).toHaveAttribute("data-state", "done", { timeout: 30_000 });
@@ -2074,7 +2267,7 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await expectNoBannedWords(page, "the chooser");
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
-  await expect(page.getByTestId("chat-spec")).toContainText("1 mm displacement"); // the load the package will apply, before any check
+  await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("1 mm pull"); // the load the package will apply, before any check, on its tab
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-not-available").last()).toContainText("not offered yet");

@@ -28,7 +28,7 @@ export function Field({ field, value, units, error, disabled, onChange, words = 
     const blank = field.key !== "standard"; // the Standard row's "none" is its blank (ADR-0072); every other list keeps its blank choice
     control = (
       <select id={id} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={describedBy} onChange={(e) => onChange(e.target.value)}>
-        {blank ? <option value="">{field.required ? "choose one" : "(blank)"}</option> : null}
+        {blank ? <option value="">{placeholder ? `${placeholder}, chosen for you` : field.required ? "choose one" : "(blank)"}</option> : null}
         {words.map((word) => <option key={word} value={word}>{word}</option>)}
       </select>
     );

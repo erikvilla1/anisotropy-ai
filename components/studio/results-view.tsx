@@ -6,7 +6,7 @@ import { explainJob, sameResults, StudioError, type Convergence, type ExplainAns
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
 import { customerText, downloadable, setWords, shownSentence } from "@/lib/studio-copy";
-import { useAllTests, type Place } from "./project-context";
+import { useAllTests, type FieldView, type Place } from "./project-context";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { AbaqusCard } from "./abaqus-card";
@@ -556,14 +556,21 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null }: {
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null,
+  emphasis = null, view = null, onShown }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
   /** a plate's boundary conditions and loads proposed and not applied yet, drawn dashed (ADR-0110) */
   proposed?: ProposedInputs | null;
+  /** the tab of the model tree open on the left: its boundary conditions or its loads drawn bolder (ADR-0111) */
+  emphasis?: "conditions" | "loads" | null;
   /** told the element clicked on the model, so the assistant can read "here" (ADR-0099) */
   onPicked?: (element: number | null) => void;
   /** a place the assistant answered about: framed on the model once per `at` (ADR-0099) */
   place?: Place | null;
+  /** a field the model tree's Results tab asked for, and its ply: shown once per `at` (ADR-0111) */
+  view?: FieldView | null;
+  /** told the field and ply the model is coloured by, each time they change, so the Results tab shows which (ADR-0111) */
+  onShown?: (shown: { id: string; ply: number } | null) => void;
   /** our kernel's live answer (ADR-0086), shown with its seconds until a full run checks it; null for a full run's result */
   live?: { seconds: number; warm: boolean } | null;
   /** a newer live answer is on its way: the numbers shown are the last rows' */
@@ -612,6 +619,15 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   };
   useEffect(() => { onPicked?.(picked); }, [picked, onPicked]);
   useEffect(() => () => onPicked?.(null), [onPicked]); // the results gone, nothing is picked
+  const viewed = useRef(view?.at ?? 0); // a field asked for before these results were on the page is not asked again
+  useEffect(() => {
+    if (!view || view.at === viewed.current) return;
+    viewed.current = view.at;
+    if (!fieldOptions(fields).some((o) => o.id === view.id)) return;
+    setChoice((c) => ({ ...c, id: view.id, ply: view.ply ?? c.ply }));
+  }, [view?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onShown?.({ id: choice.id, ply: choice.ply }); }, [choice.id, choice.ply, onShown]);
+  useEffect(() => () => onShown?.(null), [onShown]); // the results gone, no field is shown
   const placed = useRef(place?.at ?? 0); // a place asked for before these results were on the page is not shown again
   useEffect(() => {
     // the place of an answer in the conversation: its element outlined and read, its ply (and face) on the model
@@ -634,7 +650,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
       <div className="studio-scene-block">
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={inputs.held} loads={inputs.loads} about={inputs.about} proposed={pending}
-          highlight={highlight} picked={picked}
+          highlight={highlight} picked={picked} emphasis={emphasis}
           wireframe={wireframe} onPick={setPicked} />
         <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} />
       </div>

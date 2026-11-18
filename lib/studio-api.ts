@@ -741,21 +741,23 @@ export async function answerResult(apiBase: string, question: string, facts: Rec
 }
 
 /** What the API offers this visitor (ADR-0089): `all`, every coupon test; `imports`, bringing a model in as a file (ADR-0105), which a
- * founder's sign-in is offered where the tests are not (amendment 6). */
-export type Offered = { all: boolean; imports: boolean };
+ * founder's sign-in is offered where the tests are not (amendment 6); `plates`, a plate set up on the model tree, held and loaded on any
+ * edge or face, offered where the import is (amendment 7). */
+export type Offered = { all: boolean; imports: boolean; plates: boolean };
+const NOTHING_MORE: Offered = { all: false, imports: false, plates: false };
 const couponTestAnswers = new Map<string, Promise<Offered>>();
 /** What is offered here, asked once per API address. Nothing but the unnotched tension coupon unless the API says more: before it
  * answers, when it does not (an older API) and with no API at all. Where every test is offered, so is the import. */
 export function offeredHere(apiBase: string): Promise<Offered> {
-  if (!apiBase) return Promise.resolve({ all: false, imports: false });
+  if (!apiBase) return Promise.resolve(NOTHING_MORE);
   const key = base(apiBase);
   if (!couponTestAnswers.has(key)) {
     couponTestAnswers.set(key, call(`${key}/v1/coupon-tests`, { method: "GET", headers }, "the tests offered")
       .then((payload) => {
         const all = isObject(payload) && payload.all === true;
-        return { all, imports: all || (isObject(payload) && payload.imports === true) };
+        return { all, imports: all || (isObject(payload) && payload.imports === true), plates: all || (isObject(payload) && payload.plates === true) };
       })
-      .catch(() => ({ all: false, imports: false })));
+      .catch(() => NOTHING_MORE));
   }
   return couponTestAnswers.get(key)!;
 }
