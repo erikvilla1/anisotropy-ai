@@ -23,7 +23,7 @@ const OWN = "own";
  * row, and "Model settings" says what and why; four things may be changed, folded under "Change settings". Run analysis runs the setup
  * check and, when it is ready, the full analysis; the report and the solver input appear under Files (ADR-0091 amendment 2). */
 export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, setForm, run: runner } = useProject();
+  const { form, setForm, run: runner, imports, imported } = useProject();
   const { checking, checked, job, fields, problem } = runner;
   const [layup, setLayup] = useState(() => layupNotation(form));
   const [layupError, setLayupError] = useState("");
@@ -134,6 +134,9 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             disabled={busy || !apiBaseUrl || missing.length > 0 || Boolean(layupError)}>
             {busy ? (checking ? "Checking…" : "Running…") : "Run analysis"}
           </button>
+          {/* a model built elsewhere, read and solved as it stands (ADR-0105): a founder's sign-in is offered it here, on the product's
+              own screen, and no other test with it (ADR-0089 amendment 6) */}
+          {imports && apiBaseUrl ? <button type="button" className="studio-text-button" onClick={imported.show} disabled={busy} data-testid="import-open">Import a model</button> : null}
         </div>
         {missing.length ? <p className="studio-hint" data-testid="tension-missing">Still needed: {missing.join(", ")}.</p> : null}
         {problems.length ? (

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
 import { takeRunToOpen } from "@/lib/run-history";
-import { allCouponTests, type TowAnswer } from "@/lib/studio-api";
+import { offeredHere, type TowAnswer } from "@/lib/studio-api";
 import type { StudioForm } from "@/lib/studio-form";
 import type { PlateLists } from "@/lib/studio-plate";
 import type { TowSpecimenRow } from "@/lib/studio-tow";
@@ -19,6 +19,8 @@ export type ProjectContextValue = {
   apiBaseUrl: string;
   /** Whether every coupon test is offered (ADR-0089): false, the unnotched tension coupon only, until the API says the switch is on. */
   allTests: boolean;
+  /** Whether a model may be brought in as a file (ADR-0105): where every test is offered, and for a founder's sign-in (ADR-0089 amendment 6). */
+  imports: boolean;
   project: CouponProject;
   form: StudioForm;
   plate: PlateLists;
@@ -44,7 +46,13 @@ export type ProjectContextValue = {
   /** A place the assistant asks the viewer to frame: the element and, when one is named, the ply, the face and the field. */
   place: Place | null;
   showPlace(place: Omit<Place, "at">): void;
+  /** A plate's boundary conditions and loads the assistant proposes and the engineer has not applied: drawn dashed on the model (ADR-0110). */
+  proposed: ProposedInputs | null;
+  setProposed(next: ProposedInputs | null): void;
 };
+
+/** What a proposal card holds for a plate (ADR-0101), as the model draws it before it is applied (ADR-0110). */
+export type ProposedInputs = { supports: { region: string; dofs: number[] }[]; loads: { region: string; kind: "force" | "pressure"; dof: number | null; value: string; unit: string }[] };
 
 /** A place on the results; `at` tells one request from the next, so the same place can be shown twice. */
 export type Place = { element: number; ply: number | null; face?: string | null; /** the viewer's field to colour the model by */ field?: string;
@@ -77,7 +85,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   if (start.current === null) start.current = initial();
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
   const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
-  const allTests = useAllTests(apiBaseUrl);
+  const { all: allTests, imports } = useOffered(apiBaseUrl);
   const imported = useImportedModel(apiBaseUrl);
   const past = usePastRun(apiBaseUrl);
   // a run picked from the list of past analyses is opened once, as the page arrives (ADR-0109)
@@ -104,28 +112,31 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [picked, setPicked] = useState<number | null>(null);
   const [place, setPlace] = useState<Place | null>(null);
   const showPlace = useCallback((next: Omit<Place, "at">) => setPlace((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
+  const [proposed, setProposed] = useState<ProposedInputs | null>(null);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
     (found) => { if (found.kind === "fea") replace(found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
-    apiBaseUrl, allTests, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
-    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace,
-  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace]);
+    apiBaseUrl, allTests, imports, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
+    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
+  }), [apiBaseUrl, allTests, imports, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
-/** Whether every coupon test is offered here (ADR-0089), asked once per API address; false until the API answers that it is. */
-export function useAllTests(apiBaseUrl: string): boolean {
-  const [all, setAll] = useState(false);
+/** What the API offers here (ADR-0089), asked once per API address; nothing more than the tension coupon until the API answers. */
+export function useOffered(apiBaseUrl: string): { all: boolean; imports: boolean } {
+  const [offered, setOffered] = useState({ all: false, imports: false });
   useEffect(() => {
     let current = true;
-    void allCouponTests(apiBaseUrl).then((answer) => { if (current) setAll(answer); });
+    void offeredHere(apiBaseUrl).then((answer) => { if (current) setOffered(answer); });
     return () => { current = false; };
   }, [apiBaseUrl]);
-  return all;
+  return offered;
 }
+/** Whether every coupon test is offered here (ADR-0089); false until the API answers that it is. */
+export const useAllTests = (apiBaseUrl: string): boolean => useOffered(apiBaseUrl).all;
 
 export function useProject(): ProjectContextValue {
   const value = useContext(ProjectContext);

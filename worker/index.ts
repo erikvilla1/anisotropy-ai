@@ -13,7 +13,7 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
-import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, movedLocation, solverEnvironment, type ContainerVariable } from "./routing";
+import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, leftOver, movedLocation, releaseOf, solverEnvironment, type ContainerVariable } from "./routing";
 import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, startJob, watchJob, type SolverCall, type StartVerdict,
          type Watch, type WatchStep } from "./solver-queue";
 
@@ -21,14 +21,54 @@ type WorkerEnv = Env & Partial<Record<ContainerVariable, string>>;
 /** What a job the API filed but the Worker could not queue answers: what happened and what to do, never the cause. */
 const NOT_QUEUED = "The analysis could not be queued. Start it again; if it keeps failing, contact us.";
 
+/** Where the API's container keeps the word for what it was started with (`releaseOf`). */
+const STARTED_WITH = "anisotropy:started-with";
+/** How long a container told to stop is waited for before it is ended outright. */
+const STOP_WAIT_MS = 10_000;
+
+/** The API's container. A deploy replaces this object, with the new code and the new variables, and leaves the container it manages
+ * running on the image and the variables it started with until it has been idle for `sleepAfter`; on 2026-11-17 the API answered
+ * with the code and the secrets of before a deploy for half an hour after it. So the first request this object sees asks whether the
+ * running container was started with what it would be started with now, and if not stops it; the request then starts it again, on
+ * the deployed image with the deployed variables (ADR-0056 amendment 10). */
 export class ApiContainer extends Container<WorkerEnv> {
   defaultPort = 8080;  // uvicorn in the image; a request waits until the API listens
   sleepAfter = "20m";  // idle this long, the container stops; the next request starts it again (a cold start, seconds)
   enableInternet = true;  // the database, the object store and, when switched on, the assistant's provider
+  private current: Promise<void> | null = null;  // the one look this object takes at what its container was started with
 
   constructor(ctx: DurableObject["ctx"], env: WorkerEnv) {
     super(ctx, env);
     this.envVars = apiEnvironment(env);
+  }
+
+  /** A container that has started leaves the word for what it was started with. */
+  override async onStart(): Promise<void> {
+    await this.ctx.storage.put(STARTED_WITH, await releaseOf(this.envVars ?? {}));
+  }
+
+  override async fetch(request: Request): Promise<Response> {
+    this.current ??= this.stopIfLeftOver();
+    await this.current;
+    return super.fetch(request);
+  }
+
+  /** Stops a container left over from before a deploy: it is told to stop, waited for, and ended outright if it has not stopped.
+   * Whatever goes wrong here is logged and the request goes on to the container as it is, as it did before this was written. */
+  private async stopIfLeftOver(): Promise<void> {
+    try {
+      const container = this.ctx.container;
+      if (container === undefined) return;
+      const release = await releaseOf(this.envVars ?? {});
+      const startedWith = (await this.ctx.storage.get<string>(STARTED_WITH)) ?? null;
+      if (!leftOver(container.running, startedWith, release)) return;
+      console.log("the API's container was started before this deploy: stopping it, to start it on what is deployed");
+      await this.stop();
+      for (const until = Date.now() + STOP_WAIT_MS; container.running && Date.now() < until;) await new Promise((done) => setTimeout(done, 200));
+      if (container.running) await this.destroy();
+    } catch (error) {
+      console.log(`the API's container could not be checked against this deploy: ${String(error)}`);
+    }
   }
 }
 

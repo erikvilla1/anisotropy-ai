@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { CONTAINER_VARIABLES, apiPath, containerEnvironment } from "../worker/routing";
+import { CONTAINER_VARIABLES, apiPath, containerEnvironment, leftOver, releaseOf } from "../worker/routing";
 
 test("the API's paths lose their /api prefix and everything else is the site's", () => {
   assert.equal(apiPath("/api/v1/coupon-jobs"), "/v1/coupon-jobs");
@@ -80,4 +80,30 @@ test("the pages that moved are sent to the workspace with a 301 that keeps the q
     assert.ok(existsSync(join("app", to, "page.tsx")), `${to} has a page`);
     assert.ok(existsSync(join("app", from, "page.tsx")), `${from} keeps its fallback page`);
   }
+});
+
+test("a container left over from before a deploy is told by what it was started with: a digest of its variables, never a value (ADR-0056 amendment 10)", async () => {
+  const variables = { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_GIT_COMMIT: "0123456789abcdef0123456789abcdef01234567", ANISOTROPY_FOUNDER_EMAILS: "a@example.com" };
+  const release = await releaseOf(variables);
+  assert.match(release, /^[0-9a-f]{64}$/);
+  for (const value of Object.values(variables)) assert.equal(release.includes(value), false);
+  // the same variables in another order are the same start; a new commit, a changed secret, a secret added or taken away are not
+  assert.equal(await releaseOf({ ANISOTROPY_FOUNDER_EMAILS: "a@example.com", ANISOTROPY_GIT_COMMIT: variables.ANISOTROPY_GIT_COMMIT, DATABASE_URL: variables.DATABASE_URL }), release);
+  const { ANISOTROPY_FOUNDER_EMAILS: _, ...fewer } = variables;
+  for (const other of [{ ...variables, ANISOTROPY_GIT_COMMIT: "f".repeat(40) }, { ...variables, ANISOTROPY_FOUNDER_EMAILS: "a@example.com,b@example.com" }, fewer,
+    { ...variables, ANISOTROPY_ASSISTANT_MODEL: "m" }]) {
+    assert.notEqual(await releaseOf(other), release);
+  }
+  // a name and a value cannot be run together into another set's digest
+  assert.notEqual(await releaseOf({ A: "B", C: "D" }), await releaseOf({ A: "B\",\"C", D: "" }));
+
+  assert.equal(leftOver(true, release, release), false);  // started with what is deployed
+  assert.equal(leftOver(true, await releaseOf({ ...variables, ANISOTROPY_GIT_COMMIT: "f".repeat(40) }), release), true);
+  assert.equal(leftOver(true, null, release), true);  // started before a word was kept
+  assert.equal(leftOver(false, null, release), false);  // nothing runs: the next request starts it on what is deployed
+  assert.equal(leftOver(false, "another", release), false);
+  // the API's container looks once per object and goes on to the container whatever happens
+  const worker = readFileSync("worker/index.ts", "utf8");
+  assert.match(worker, /this\.current \?\?= this\.stopIfLeftOver\(\)/);
+  assert.match(worker, /catch \(error\) \{\s*console\.log\(`the API's container could not be checked/);
 });

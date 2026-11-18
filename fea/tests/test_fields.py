@@ -252,6 +252,38 @@ def test_the_gauge_section_is_read_a_quarter_width_from_each_tab_line(solved, da
         assert min(found["xy"][1] - 56.0, 194.0 - found["xy"][1]) >= 6.25 - 1e-6
 
 
+def test_the_fields_name_the_gauge_centre_element(solved, data):
+    """ADR-0099 amendment 3: a question that names no place is answered at the gauge centre, so the fields name that element: the one
+    the hand check and the Verification table read (`report.gauge_element`), inside the gauge section as it is read, at the coupon's
+    middle in the fields' own length unit."""
+    from anisotropy_fea.report import gauge_element
+
+    deck, solution = solved
+    centre = gauge_element(deck, solution)
+    said = data["summary"]["gauge_centre"]
+    assert said == {"element": centre.index, "label": centre.name, "xy": pytest.approx([1000.0 * v for v in centre.xy]), "basis": centre.basis}
+    assert said["element"] in data["mesh"]["gauge_elements"] and data["mesh"]["element_labels"][said["element"]] == said["label"]
+    assert said["xy"] == pytest.approx([12.5, 125.0], abs=2.0)  # the 25 by 250 mm coupon's middle, within an element
+
+
+@pytest.mark.parametrize("fixture", ["studio", "studio-standards"])
+def test_the_page_fixtures_hold_the_packages_gauge_centre(fixture, tmp_path):
+    """`tests/fixtures/<fixture>/fields.json` is what the page's tests show; its gauge centre must be the package's answer to `values.json`
+    today (rewrite it from `uv run python tools/studio_tool.py live ../tests/fixtures/<fixture>/values.json --out <dir>`, `fields.json`'s
+    `summary.gauge_centre`)."""
+    import json
+    import subprocess
+    import sys
+
+    folder = paths.ROOT / "tests" / "fixtures" / fixture
+    done = subprocess.run([sys.executable, str(paths.ROOT / "fea" / "tools" / "studio_tool.py"), "--root", str(tmp_path / "none"), "live",
+                           str(folder / "values.json"), "--out", str(tmp_path / "out")], capture_output=True, text=True, timeout=300, check=False)
+    assert done.returncode == 0, done.stderr
+    today = json.loads((tmp_path / "out" / "fields.json").read_text(encoding="utf-8"))["summary"]["gauge_centre"]
+    kept = json.loads((folder / "fields.json").read_text(encoding="utf-8"))["summary"]["gauge_centre"]
+    assert today is not None and kept == {**today, "xy": pytest.approx(today["xy"])}
+
+
 def test_a_gauge_shorter_than_the_width_is_read_over_its_middle_half():
     """ADR-0108: the stand-off is a quarter of the smaller of the width and the gauge length, so a gauge shorter than the coupon is wide
     is still read, over its middle half, and the reading says which length set it."""

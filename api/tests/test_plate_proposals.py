@@ -165,3 +165,46 @@ def test_a_malformed_plate_offer_is_refused(change, where):
     assert answer.status_code == 422 and where in answer.text
     wrong_product = client.post("/v1/workspace/proposals", json={**REQUEST, "product": "laminate"})
     assert wrong_product.status_code == 422 and "only a coupon" in wrong_product.text
+
+
+@pytest.mark.parametrize("message, quote, model_wrote, dofs", [
+    ("encastre the left edge", "encastre the left edge", ["x"], [1, 2, 3, 4, 5, 6]),
+    ("pinned support on the right edge", "pinned support on the right edge", ["z"], [1, 2, 3]),
+    ("XSYMM on the left edge", "XSYMM on the left edge", ["x", "y", "z"], [1, 5, 6]),
+    ("apply a ysymm bc to the bottom edge", "ysymm bc to the bottom edge", ["y"], [2, 4, 6]),
+    ("ZSYMM on the face", "ZSYMM on the face", ["z"], [3, 4, 5]),
+    ("hold U1 and UR3 on the top edge", "hold U1 and UR3 on the top edge", ["x", "y", "z"], [1, 6]),
+    ("BC on the bottom edge: U2 = 0", "BC on the bottom edge: U2", ["x"], [2]),
+])
+def test_abaqus_names_and_codes_fix_the_directions_whatever_the_model_wrote(message, quote, model_wrote, dofs):
+    """ADR-0110: a named boundary condition or a direction code has one meaning, so the quoted words, not the model, set the directions."""
+    region = {"left": "Edge-Left", "right": "Edge-Right", "bottom": "Edge-Bottom", "top": "Edge-Top", "face": "Face"}[
+        next(side for side in ("left", "right", "bottom", "top", "face") if side in message.lower())]
+    kept = plate_guard({"supports": [support(region, model_wrote, quote)]}, message, offer())
+    assert kept.dropped == [] and kept.supports == [{"region": region, "dofs": dofs, "quote": quote}]
+
+
+def test_a_named_condition_stands_even_when_the_model_names_no_direction():
+    kept = plate_guard({"supports": [support("Edge-Left", [], "encastre the left edge")]}, "encastre the left edge", offer())
+    assert kept.supports[0]["dofs"] == [1, 2, 3, 4, 5, 6] and kept.dropped == []
+
+
+def test_a_roller_with_no_direction_written_is_dropped_and_one_with_a_direction_stands():
+    dropped = plate_guard({"supports": [support("Edge-Right", ["z"], "a roller on the right edge")]}, "a roller on the right edge", offer())
+    assert dropped.supports == [] and dropped.dropped == [{"key": "support on Edge-Right", "reason": "a roller holds one direction: say which, x, y or z"}]
+    kept = plate_guard({"supports": [support("Edge-Right", ["z"], "a roller on the right edge in z")]}, "a roller on the right edge in z", offer())
+    assert kept.supports == [{"region": "Edge-Right", "dofs": [3], "quote": "a roller on the right edge in z"}]
+
+
+@pytest.mark.parametrize("code, dof", [("CF1", 1), ("CF2", 2), ("cf3", 3)])
+def test_cf1_to_cf3_point_a_force_along_x_y_z_whatever_the_model_wrote(code, dof):
+    message = f"{code} = -500 N on the top edge"
+    for direction, sense in (("z", "as_signed"), (None, "tension")):
+        kept = plate_guard({"loads": [load("Edge-Top", "force", "-500", "N", message, direction=direction, sense=sense)]}, message, offer())
+        assert kept.dropped == [] and [(entry["dof"], entry["value"], entry["sense"]) for entry in kept.loads] == [(dof, "-500", "as_signed")]
+
+
+def test_the_plate_prompt_says_abaqus_words_with_the_meanings_the_guard_holds():
+    for words in ("boundary condition (BC) is a support", "encastre is all six", "pinned is x, y and z", "XSYMM is x, tilt_y and turn_z",
+                  "YSYMM is y, tilt_x and turn_z", "ZSYMM is z, tilt_x and tilt_y", "CF1, CF2 and CF3 are a force along x, y and z"):
+        assert words in PLATE_SYSTEM

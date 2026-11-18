@@ -57,11 +57,54 @@ export function failureLoading(answer: Answer, row: AnswerRow, print: (value: nu
   return `${print(Math.abs(row.applied))} ${answer.appliedUnit}${reaction}`;
 }
 
+/** The loading as applied, in the words of `failureLoading`: "1 mm, 22740 N". Null where several loads are scaled together. */
+export function appliedLoading(answer: Answer, print: (value: number) => string): string | null {
+  const now = answer.appliedNow;
+  if (!now) return null;
+  const reaction = answer.control !== "force" ? `, ${print(Math.abs(now.reaction))} ${answer.forceUnit}` : "";
+  return `${print(Math.abs(now.applied))} ${answer.appliedUnit}${reaction}`;
+}
+
+const CONFIRMS = /^\s*(?:so\b|then\b|does (?:it|this|that) mean\b|do you mean\b|you mean\b|meaning\b|in other words\b|is (?:it|that) (?:right|true|correct)\b|am i right\b|if i understand\b)/i;
+const NUMBER = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+
+const FAIL_WORD = /\b(?:fail\w*|break\w*|broke)\b/i;
+// a statement that denies, or says the failure has happened or lies on one side of a number, is not judged by its numbers alone
+const DENIES = /\b(?:not|no|never|none|already|before|below|under|less|has failed|have failed)\b|n't\b|n’t\b/i;
+const PLY_NAMED = /\b(?:ply|layer|lamina)\s*#?\s*(\d+)/gi;
+
+/** Whether a message states the answer back and asks if it is so ("does it mean that at 1 mm it carries 22740 N, but first ply failure
+ * is at 23450 N"), and states it right. The page reads no meaning, so the test is strict and of printed numbers alone: every number
+ * before the word of failure is the applied loading's, every number after it is the loading's at first-ply failure or the factor, at
+ * least one stands after it, a ply it names is the one that fails, and it denies nothing ("not", "already", "before"). Only then may the answer open with "Yes" (ADR-0099 amendment 3);
+ * anything else gets the answer with both loadings and no yes or no. */
+export function confirmsFailure(text: string, found: FailureAnswer, print: (value: number) => string): boolean {
+  if (!CONFIRMS.test(text) || DENIES.test(text)) return false;
+  const { answer, row } = found;
+  const now = answer.appliedNow;
+  if (!now || row.applied === null) return false;
+  const plies = new Set([row.ply, ...row.tied]);
+  for (const named of text.matchAll(PLY_NAMED)) if (!plies.has(Number(named[1]))) return false;
+  const bare = text.replace(PLY_NAMED, " ").replace(/\bfirst[- ]ply\b/gi, " ");
+  const at = bare.search(FAIL_WORD);
+  if (at < 0) return false;
+  const shown = (...values: (number | null)[]) => new Set(values.filter((v): v is number => v !== null).map((v) => Number(print(Math.abs(v)))));
+  const numbers = (part: string) => (part.match(NUMBER) ?? []).map((n) => Number(n.replace(/,/g, "")));
+  const [applied, failing] = [shown(now.applied, now.reaction), shown(row.factor, row.applied, row.reaction)];
+  const [before, after] = [numbers(bare.slice(0, at)), numbers(bare.slice(at))];
+  return after.length > 0 && before.every((n) => applied.has(n)) && after.every((n) => failing.has(n));
+}
+
 export type FailureLines = {
   /** The answer: "Ply 4 (90°) fails first". */
   headline: string;
   /** At what loading, and the verdict: "At 1.032 × the applied load (1.032 mm, 16740 N). The coupon holds." */
   loading: string;
+  /** The loading as applied, beside it, so the two states are read together: "Applied: 1 mm, 16210 N." Null where several loads are scaled. */
+  applied: string | null;
+  /** The same answer to a message that stated it back and asked if it is so (`confirmsFailure`): "At the applied 1 mm, 16210 N no ply
+   * has failed. Ply 4 (90°) fails first at 1.032 × that: 1.032 mm, 16740 N." Null where the two loadings are not both written. */
+  confirmed: string | null;
   /** What it rests on, as short labels: the criterion, the mode, the element, where it is read, the plies tied. */
   facts: string[];
 };
@@ -73,9 +116,13 @@ export function failureLines(found: FailureAnswer, print: (value: number) => str
   const at = failureLoading(answer, row, print);
   const facts = [row.name, modeWords(row.mode).replace(/^the /, ""), `element ${row.label.split(".").pop()}`, answer.basisWords.replace(/^the /, "")];
   if (row.tied.length) facts.push(`tied with ${row.tied.length > 1 ? "plies" : "ply"} ${row.tied.join(", ")}`);
+  const now = appliedLoading(answer, print);
+  const state = row.fails ? `${plyWords(row)} has already failed: it fails first` : `no ply has failed. ${plyWords(row).replace(/^p/, "P")} fails first`;
   return {
     headline: `${plyWords(row).replace(/^p/, "P")} fails first`,
     loading: `At ${print(row.factor)} × ${times}${at ? ` (${at})` : ""}. The coupon ${row.fails ? "fails" : "holds"}.`,
+    applied: now ? `Applied: ${now}.` : null,
+    confirmed: now && at ? `At the applied ${now} ${state} at ${print(row.factor)} × that: ${at}.` : null,
     facts,
   };
 }

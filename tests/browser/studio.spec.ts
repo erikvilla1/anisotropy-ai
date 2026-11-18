@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { printed } from "../../lib/studio-colors";
+import { probeTable } from "../../lib/studio-fields";
 import { ANALYSIS_UNAVAILABLE, bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
 import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 
@@ -672,6 +673,96 @@ test("the assistant answers a question about a ply's stress from the results on 
   expect(browserErrors).toEqual([]);
 });
 
+test("the assistant keeps the thread: a missing place is the gauge centre, a fragment follows the question before it, an element is explained, and a statement back gets a yes (ADR-0099 amendment 3)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+
+  const fields = fixture("fields");
+  const centre = fields.summary.gauge_centre;
+  const number = centre.label.split(".").pop();
+  // no element named and none clicked: the gauge centre, said in one line, never "Which element?"
+  await say("what is the stress at ply 7");
+  const first = page.getByTestId("chat-values").last();
+  await expect(first).toHaveAttribute("data-place", "gauge centre");
+  await expect(first).toHaveAttribute("data-element", number);
+  await expect(first.getByTestId("chat-values-table").locator("tr[data-ply='7'] td")).toHaveText((fields.element.ply.stress_12[centre.element][6] as number[]).map((v) => printed(v)));
+  await expect(first.getByTestId("chat-value-facts")).toHaveText("gauge centre");
+  await expect(first.getByTestId("chat-value-default")).toContainText("No element was named, so this is the gauge centre.");
+  await expect(page.getByTestId("probe")).toContainText(`Ply results at element ${number}`);
+
+  // a fragment keeps the place and the quantity of the question before it, then the ply
+  await say("now in ply 5");
+  const second = page.getByTestId("chat-values").last();
+  await expect(second).toHaveAttribute("data-element", number);
+  await expect(second.getByTestId("chat-values-table").locator("tr[data-ply='5'] td")).toHaveText((fields.element.ply.stress_12[centre.element][4] as number[]).map((v) => printed(v)));
+  await say("sigma 1");
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`σ₁ = ${printed(fields.element.ply.stress_12[centre.element][4][0])} MPa`);
+  await expect(page.getByTestId("chat-value-facts").last()).toContainText(`ply 5 (90°) · element ${number}`); // the place shown on the model stays the place
+  // a comparison measure typed loosely is read, for the same ply and place, and says what it is not
+  await say("von misses");
+  await expect(page.getByTestId("chat-value").last()).toHaveText(`Mises = ${printed(probeTable(fields, centre.element).rows[4].values[3])} MPa`);
+  await expect(page.getByTestId("chat-value-facts").last()).toContainText(`ply 5 (90°) · element ${number}`);
+  await expect(page.getByTestId("chat-value-caution").last()).toContainText("not composite failure criteria");
+  await say("and at element 125");
+  await expect(page.getByTestId("chat-values").last()).toHaveAttribute("data-element", "125");
+  await expect(page.getByTestId("chat-values").last()).toHaveAttribute("data-place", "named");
+  await expect(page.getByTestId("chat-value-facts").last()).toContainText("ply 5 (90°) · element 125");
+
+  // what an element is: the thing and where it sits, never a question about quantities; "it" is the element spoken of
+  await say("what does element 183 represent");
+  const what = page.getByTestId("chat-element").last();
+  await expect(what).toHaveAttribute("data-element", "183");
+  await expect(what).toHaveAttribute("data-where", "gauge");
+  await expect(what.locator("h4")).toHaveText("Element 183");
+  await expect(what.getByTestId("chat-element-what")).toContainText("One of the 250 small four-sided pieces the model is divided into");
+  await expect(what.getByTestId("chat-element-where")).toContainText("in the gauge section, where the answer is read");
+  await expect(page.getByTestId("probe")).toContainText("Ply results at element 183");
+  await say("what does it represent");
+  await expect(page.getByTestId("chat-element")).toHaveCount(2);
+  await expect(page.getByTestId("chat-element").last()).toHaveAttribute("data-element", "183");
+  await page.getByTestId("chat-element").last().getByTestId("chat-element-stress").click();
+  await expect(page.getByTestId("chat-values").last()).toHaveAttribute("data-element", "183");
+  await say("what is an element?");
+  await expect(page.getByTestId("chat-element").last().locator("h4")).toHaveText("An element");
+  await say("what does element 1212 represent");
+  await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
+
+  // the failure card shows the applied state beside the failure state; the same answer stated back, with the page's numbers, gets a yes
+  const s = fields.summary;
+  const row = s.fpf_gauge[s.verdict.earliest];
+  const now = `${printed(s.applied.value)} mm, ${printed(s.reaction.value)} N`;
+  const failing = `${printed(row.at_failure.applied)} mm, ${printed(row.at_failure.reaction)} N`;
+  await say("which ply fails first?");
+  const card = page.getByTestId("chat-failure").last();
+  await expect(card.getByTestId("chat-failure-ply")).toHaveText("Ply 4 (90°) fails first");
+  await expect(card.getByTestId("chat-failure-applied")).toHaveText(`Applied: ${now}.`);
+  await say(`does it mean that once it reaches ${printed(s.applied.value)} mm it got ${printed(s.reaction.value)} N, but for the first ply failure its ${printed(row.at_failure.reaction)} N`);
+  const yes = page.getByTestId("chat-failure").last();
+  await expect(yes.getByTestId("chat-failure-yes")).toHaveText("Yes");
+  await expect(yes.getByTestId("chat-failure-loading")).toHaveText(`At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${printed(row.factor)} × that: ${failing}.`);
+  // a statement with a number the page does not print gets the answer with both states, and no yes
+  await say("does it mean that it fails at 20000 N");
+  const plain = page.getByTestId("chat-failure").last();
+  await expect(plain.getByTestId("chat-failure-yes")).toHaveCount(0);
+  await expect(plain.getByTestId("chat-failure-applied")).toHaveText(`Applied: ${now}.`);
+
+  expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]);
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-chat-thread.png" });
+  expect(browserErrors).toEqual([]);
+});
+
 test("with a model on, a loose question about the results is read into a fixed request and answered with the solver's values; the model is sent no result (ADR-0100)", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -1293,10 +1384,14 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   const second = page.getByTestId("proposal-card").last();
   await expect(second.locator("[data-key='load:0']")).toContainText("Pressure on Face 0.01 MPa");
   await expect(second.getByTestId("proposal-dropped")).toContainText("it is not where you clicked");
+  // proposed and not applied: drawn dashed on the model and listed apart from what is applied (ADR-0110)
+  await expect(page.getByTestId("applied-proposed")).toContainText("Face: pressure 0.01 MPa");
+  await expect(page.getByTestId("applied-conditions")).toContainText("Edge-Bottom: held along z, rotation about y"); // the checked preview's own (the stand-in package's)
   expect(asked[1].plate?.here).toContain("Face");
   expect(asked[1].plate).toMatchObject({ held: ["Edge-Bottom"], loaded: ["Edge-Top"] });
   await second.getByTestId("proposal-apply").click();
   await expect(page.getByTestId("plate-words")).toContainText("Face under a pressure of 0.01 MPa");
+  await expect(page.getByTestId("applied-proposed")).toHaveCount(0);
   await expect.poll(() => calls.checks.length).toBe(2);
   expect((calls.checks[1] as { values: Record<string, unknown> }).values.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }, { region: "Face", pressure: 0.01 }]);
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
@@ -1375,6 +1470,51 @@ test("a plate with nothing held shows its shape, and the first hold is the edge 
   expect((calls.checks[0] as { values: Record<string, unknown> }).values.supports).toEqual([{ region: clicked, dofs: [1, 2, 3] }]);
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
   for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+  expect(browserErrors).toEqual([]);
+});
+
+test("what is applied is drawn and listed under the model before and after a run, and Abaqus's words are answered from the glossary (ADR-0110)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  // a word's meaning is answered before anything is solved: no result and no model is needed
+  await say("what is a BC?");
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "boundary-condition");
+  await expect(page.getByTestId("chat-term").last()).toContainText("Holds part of the model still");
+  // under the model: each boundary condition with what it holds, the load, and the model they act on
+  const applied = page.getByTestId("applied");
+  await expect(applied.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
+  await expect(applied.getByTestId("applied-conditions")).toContainText("Top grip: free to move along the coupon only");
+  await expect(applied.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
+  await expect(applied.getByTestId("applied-about")).toContainText("[45/0/-45/90]s, 8 plies");
+  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the canvas's clipped box
+  const bottom = applied.getByRole("button", { name: "Bottom grip: fixed (encastre)" });
+  await bottom.click();
+  await expect(bottom).toHaveAttribute("aria-pressed", "true"); // its set is framed on the model
+  await bottom.click();
+  await expect(bottom).toHaveAttribute("aria-pressed", "false");
+  // this model's own, in the same words; a request to add one where the test sets them; a name with one meaning
+  await say("what are the boundary conditions?");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("Bottom grip: fixed (encastre)");
+  await say("add a boundary condition on the left edge");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("set by its test");
+  await expect(page.getByTestId("chat-applied").last()).toContainText("Top grip: pulled 1 mm along the coupon");
+  await say("what does XSYMM mean?");
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "symmetry");
+  await expect(page.getByTestId("chat-term").last()).toContainText("XSYMM holds a face as a mirror across x");
+  expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
+  // after the run the model draws and lists the same, not the first load only
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
+  await expect(page.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
   expect(browserErrors).toEqual([]);
 });
 

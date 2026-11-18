@@ -56,6 +56,14 @@
 .studio-label-held { border-color: #9085e9; }
 .studio-label-loaded { border-color: #c98500; }
 .studio-scene-key { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.studio-scene-wrap { display: grid; gap: 8px; }
+.studio-applied { display: flex; flex-wrap: wrap; gap: 6px 28px; font-size: 12px; color: var(--muted); }
+.studio-applied h5 { margin: 0 0 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text); }
+.studio-applied ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.studio-applied-line { all: unset; cursor: pointer; border-radius: 3px; padding: 1px 4px; margin-left: -4px; }
+.studio-applied-line:hover, .studio-applied-line[aria-pressed="true"] { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.studio-applied-line:focus-visible { outline: 1px solid var(--text); }
+.studio-applied-about { flex-basis: 100%; margin: 0; }
 .studio-key-swatch { display: inline-block; width: 12px; height: 12px; border: 2px solid; border-radius: 2px; vertical-align: -2px; }
 .studio-legend { display: grid; gap: 4px; }
 .studio-legend-bar { height: 12px; border-radius: 3px; border: 1px solid var(--line); }

@@ -300,7 +300,9 @@ export function readMesh(text: string, form: StudioForm): { rows: StudioForm; un
   if (/^\s*(?:why|what|where|which|how|would|should|does|do|did|is|are|will)\b/i.test(text) || (/\?\s*$/.test(text) && !/^\s*(?:can|could|please)\b/i.test(text))) return null;
   const written = new RegExp(`\\belement\\s*(?:size|length)s?\\s*(?:of|=|:|is|to|at)?\\s*${NUM}`).exec(t)
     ?? new RegExp(`\\bmesh(?:\\s*size)?\\s*(?:of|=|:|is|to|at)?\\s*${NUM}`).exec(t)
-    ?? new RegExp(`${NUM}\\s*${L}\\s*(?:elements?|mesh)\\b`).exec(t);
+    ?? new RegExp(`${NUM}\\s*${L}\\s*(?:elements?|mesh)\\b`).exec(t)
+    // Abaqus's words for the same size (ADR-0110): "seed 2 mm", "global seed of 1.5", "approximate global size 3", "seed the part at 2"
+    ?? new RegExp(`\\b(?:approximate\\s+)?(?:global\\s+)?(?:seed(?:s|ing)?|global\\s+size)(?:\\s+(?:size|the\\s+(?:part|mesh|model|edges?|coupon|plate)))?\\s*(?:of|=|:|is|to|at|with)?\\s*${NUM}`).exec(t);
   if (written && Number(written[1]) > 0) {
     const size = String(Number(written[1]));
     return { rows: { element_size: size }, understood: [`element size ${size} ${u.length}`], note: null };

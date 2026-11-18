@@ -110950,6 +110950,15 @@
    "elements": 156,
    "left_out": 12
   },
+  "gauge_centre": {
+   "element": 146,
+   "label": "Strip-1.147",
+   "xy": [
+    10.416666666500001,
+    122.91666665000001
+   ],
+   "basis": "the centre probe"
+  },
   "fpf": {
    "max_stress": {
     "factor": 1.0190865389728707,

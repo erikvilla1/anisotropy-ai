@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { asksFailure, failureAnswer, failureLines, failureLoading } from "../lib/result-failure";
+import { appliedLoading, asksFailure, confirmsFailure, failureAnswer, failureLines, failureLoading } from "../lib/result-failure";
 import { readResultQuestion, questionFrom } from "../lib/result-question";
 import { asksWhy } from "../lib/result-why";
 import { asksWorking } from "../lib/result-working";
@@ -80,4 +80,55 @@ test("a model's reading of the kind failure is kept as read and is no question o
   assert.equal(reading.request?.kind, "failure");
   assert.equal(questionFrom(reading.request!), null);
   assert.throws(() => readResultReading({ run_id: null, writer: "anthropic", model: "m", request: { ...request, kind: "verdict" }, question: null, dropped: [], reason: null }));
+});
+
+test("the applied state stands beside the failure state, both the package's, so the two are read together (ADR-0099 amendment 3)", () => {
+  const found = failureAnswer(fields, "which ply fails first?")!;
+  const s = fields.summary;
+  const now = `${print(s.applied.value)} mm, ${print(s.reaction.value)} N`;
+  const row = s.fpf_gauge!.tsai_hill;
+  const failing = `${print(row.at_failure!.applied)} mm, ${print(row.at_failure!.reaction)} N`;
+  const lines = failureLines(found, print);
+  assert.equal(appliedLoading(found.answer, print), now);
+  assert.equal(lines.applied, `Applied: ${now}.`);
+  assert.equal(lines.confirmed, `At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${print(row.factor)} × that: ${failing}.`);
+  // a coupon that has failed at the applied load says so, with the same two loadings
+  const failed = failureLines({ ...found, row: { ...found.row, fails: true, factor: 0.9435 } }, print);
+  assert.match(failed.confirmed!, /^At the applied 1 mm, \d+ N ply 4 \(90°\) has already failed: it fails first at 0\.9435 × that: /);
+  // several loads scaled together have no one applied state to print: the line is left out, never made up
+  const several = { ...found, answer: { ...found.answer, appliedNow: null } };
+  assert.equal(failureLines(several, print).applied, null);
+  assert.equal(failureLines(several, print).confirmed, null);
+});
+
+test("a message that states the answer back gets a yes only when every number it states is the one the page prints, in its place (ADR-0099 amendment 3)", () => {
+  const found = failureAnswer(fields, "which ply fails first?")!;
+  const s = fields.summary;
+  const row = s.fpf_gauge!.tsai_hill;
+  const [mm, n] = [print(s.applied.value), print(s.reaction.value)];
+  const [mmF, nF, factor] = [print(row.at_failure!.applied), print(row.at_failure!.reaction), print(row.factor)];
+  for (const text of [
+    `does it mean that once it reaches ${mm} mm it got ${n} N, but for the first ply failure its ${nF} N`,
+    `so at ${mm} mm it carries ${n} N and first ply failure is at ${mmF} mm, ${nF} N?`,
+    `so ply 4 fails first at ${nF} N`,
+    `so ply 5 fails at ${factor} times the load?`,
+    `does this mean it fails at ${Number(nF).toLocaleString("en-US")} N`,
+  ]) {
+    assert.equal(asksFailure(text) || /^so\b/.test(text), true, text);
+    assert.equal(confirmsFailure(text, found, print), true, text);
+  }
+  for (const text of [
+    `does it mean that at ${mm} mm it fails at ${n} N`, // the applied reaction given as the failure load
+    `so at ${mmF} mm it carries ${n} N, and first ply failure is at ${nF} N`, // the failure displacement given as the applied one
+    `so ply 3 fails first at ${nF} N`, // another ply
+    `so it fails at 20000 N`, // a number the page does not print
+    `so it has already failed at ${nF} N`, // the numbers are right and the statement is not
+    `so it does not fail before ${nF} N`, // a denial is not judged by its numbers
+    `does it mean it fails first`, // no number to check
+    `which ply fails first at ${nF} N`, // a question, not a statement back
+  ]) {
+    assert.equal(confirmsFailure(text, found, print), false, text);
+  }
+  // with several loads scaled together there is no applied state to check a statement against
+  assert.equal(confirmsFailure(`so it fails at ${nF} N`, { ...found, answer: { ...found.answer, appliedNow: null } }, print), false);
 });

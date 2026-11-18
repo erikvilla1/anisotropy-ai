@@ -6,6 +6,8 @@ import type { StudioForm } from "@/lib/studio-form";
 type Props = { form: StudioForm; lists: PlateLists; errors: Record<string, string>; disabled: boolean; onChange: (lists: PlateLists) => void };
 
 const DOFS = [1, 2, 3, 4, 5, 6];
+/** Each direction as Abaqus names it (ADR-0110): U1 to U3 the moves along x, y, z, UR1 to UR3 the turns about them. Its words are the title. */
+const DOF_CODES: Record<number, string> = { 1: "U1", 2: "U2", 3: "U3", 4: "UR1", 5: "UR2", 6: "UR3" };
 
 /** The supports, loads and regions of a plate (ADR-0054): one row per entry, each region picked from what the plate offers; a click on
  * the model adds a row too (the studio page wires it). The API's check judges the rows and names the list that is wrong. */
@@ -22,17 +24,17 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
   const first = options[0]?.name ?? "Face";
   return (
     <fieldset className="studio-plate" data-testid="plate-panel" disabled={disabled}>
-      <legend>Supports and loads over the plate&apos;s regions</legend>
+      <legend>Boundary conditions and loads over the plate&apos;s regions</legend>
       <p className="studio-hint">Click a region on the model to hold or load it, or add a row here. Regions: the four edges, the face, the tabs when
         there are tabs, the hole&apos;s ring when there is a hole, and the boxes you draw below.</p>
-      <h4>Supports {errors.Supports ? <span className="studio-field-error">{errors.Supports}</span> : null}</h4>
+      <h4>Boundary conditions {errors.Supports ? <span className="studio-field-error">{errors.Supports}</span> : null}</h4>
       {lists.supports.map((s, i) => (
         <div className="studio-plate-row" key={`s${i}`} data-testid="support-row">
           {regionSelect(s.region, (region) => setSupport(i, { ...s, region }), `Support ${i + 1} region`)}
           <span className="studio-plate-dofs" role="group" aria-label={`Support ${i + 1} directions`}>
             {DOFS.map((d) => (
               <label key={d} title={DOF_WORDS[d]}><input type="checkbox" checked={s.dofs.includes(d)} aria-label={`Support ${i + 1} holds ${DOF_WORDS[d] ?? d}`}
-                onChange={(e) => setSupport(i, { ...s, dofs: e.target.checked ? [...s.dofs, d].sort((a, b) => a - b) : s.dofs.filter((x) => x !== d) })} />{d}</label>
+                onChange={(e) => setSupport(i, { ...s, dofs: e.target.checked ? [...s.dofs, d].sort((a, b) => a - b) : s.dofs.filter((x) => x !== d) })} />{DOF_CODES[d]}</label>
             ))}
           </span>
           <input type="text" inputMode="decimal" value={s.value} placeholder="travel (mm, rad)" aria-label={`Support ${i + 1} travel`} className="studio-plate-value"
@@ -40,7 +42,7 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
           <button type="button" className="studio-text-button" onClick={() => onChange({ ...lists, supports: lists.supports.filter((_, k) => k !== i) })}>remove</button>
         </div>
       ))}
-      <button type="button" className="studio-text-button" data-testid="add-support" onClick={() => onChange({ ...lists, supports: [...lists.supports, { region: first, dofs: [1, 2, 3], value: "" }] })}>+ support</button>
+      <button type="button" className="studio-text-button" data-testid="add-support" onClick={() => onChange({ ...lists, supports: [...lists.supports, { region: first, dofs: [1, 2, 3], value: "" }] })}>+ boundary condition</button>
       <h4>Loads {errors.Loads ? <span className="studio-field-error">{errors.Loads}</span> : null}</h4>
       {lists.loads.map((l, i) => (
         <div className="studio-plate-row" key={`l${i}`} data-testid="load-row">
@@ -80,7 +82,7 @@ export function PlatePanel({ form, lists, errors, disabled, onChange }: Props) {
       <button type="button" className="studio-text-button" data-testid="add-region" onClick={() => onChange({ ...lists, regions: [...lists.regions, { name: `Box-${lists.regions.length + 1}`, x0: "", x1: "", y0: "", y1: "" }] })}>+ box (x0, x1, y0, y1 in mm)</button>
       {lists.supports.length || lists.loads.length ? (
         <ul className="studio-plate-words" data-testid="plate-words">{plateWords(lists).map((w, i) => <li key={i}>{w}</li>)}</ul>
-      ) : <p className="studio-muted">No supports yet: a plate needs at least one, and a load or a support that moves.</p>}
+      ) : <p className="studio-muted">No boundary conditions yet: a plate needs at least one, and a load or a boundary condition that moves.</p>}
     </fieldset>
   );
 }

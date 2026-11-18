@@ -21,6 +21,9 @@ export type AnswerRow = {
 export type Answer = {
   basis: "gauge" | "whole"; basisWords: string; rows: AnswerRow[]; earliest: AnswerRow; outside: (OutsideEarlier & { name: string }) | null;
   control: string; appliedUnit: string; forceUnit: string; reactionSet: string; everyLoad: boolean;
+  /** The loading as it is applied, beside the loading at first-ply failure: the applied quantity and the reaction with it, as the package
+   * wrote them. Null where several loads are scaled together, since no one number is "the applied load" then. */
+  appliedNow: { applied: number; reaction: number } | null;
 };
 
 function rowOf(criterion: string, f: FirstPlyFailure, earliest: string): AnswerRow | null {
@@ -47,6 +50,7 @@ export function answerOf(fields: Fields): Answer | null {
     basis: verdict.basis, basisWords: BASIS_WORDS[verdict.basis], rows, earliest, outside, control: s.applied.control,
     appliedUnit: first?.unit ?? s.applied.unit, forceUnit: first?.reaction_unit ?? fields.labels.force ?? "", reactionSet: s.reaction.set,
     everyLoad: Boolean(first?.every_load),
+    appliedNow: first?.every_load ? null : { applied: s.applied.value, reaction: s.reaction.value },
   };
 }
 
