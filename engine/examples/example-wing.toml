@@ -1,0 +1,60 @@
+title = "Example straight wing"
+source = "An example made for the engine's tests and documents, not a design of ours or of anyone's. Every number is a round value chosen for the example; the material comes from the library."
+units = "SI"
+
+[geometry]
+half_span = 2.0          # m, root to tip of one side
+chord = 0.45             # m, constant
+airfoil = "naca-2412"
+front_spar = 0.25        # fraction of the chord
+rear_spar = 0.65
+
+[material]
+library = "im7-8552"     # ply thickness, density and strengths come from the library record
+
+[skin]
+half_stack = [0, 45, -45, 0]   # degrees from the span, outside ply first; the other half mirrors it
+core_thickness = 6.0     # mm of foam between the halves
+core_density = 48.0      # kg/m^3
+
+[spar]
+half_stack = [45, -45, 0]
+
+[aerodynamics]
+aerodynamic_center = 0.25
+pitching_moment_coefficient = -0.05
+
+[envelope]
+gross_weight = 3000.0    # N
+positive_load_factor = 3.8
+negative_load_factor = -1.52
+airspeed = "equivalent"  # the speeds below are equivalent airspeeds
+speed_unit = "m/s"
+altitudes = [0.0, 3000.0]  # m
+ultimate_factor = 1.5
+proof_factor = 1.25
+criterion = "max_stress"
+
+[envelope.speeds]
+stall_flaps = 20.0
+stall_clean = 23.0
+cruise = 50.0
+dive = 70.0
+flutter = 84.0
+positive_maneuver = 44.8
+negative_maneuver = 28.4
+
+[envelope.gust]
+cruise_gust_speed = 15.24   # 50 ft/s
+dive_gust_speed = 7.62      # 25 ft/s
+lift_curve_slope_per_rad = 5.0
+wing_area = 1.8             # m^2, both sides
+
+[envelope.aileron]
+span_start = 1.2         # m from the root
+span_end = 1.9
+down_delta_cl = 0.3
+down_delta_cm = -0.06
+up_delta_cl = -0.3
+up_delta_cm = 0.06
+roll_pull_up_fraction = 0.6667

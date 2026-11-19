@@ -1,0 +1,103 @@
+title = "Analytical check: a straight two-spar sandwich wing worked by hand"
+source = "Constructed analytical check, not a printed problem and not a design: a NACA 0012 wing (thickness formula of NACA Report 460), 1.8 m half span, 0.4 m chord, spars at 25 % and 65 %, AS4/3501-6 plies (Daniel & Ishai Table A.4, p. 377; density 1.60 g/cm^3 from the same table), round values for everything else. The closed form is validation/closed_forms.py `straight_sandwich_wing`: the box as four rectangles, Bredt-Batho torsion, Schrenk's lift integrated exactly at the root, standard atmosphere at 2000 m with true airspeeds, the gust load factor of 14 CFR 23.341(c) in consistent units, and the maximum stress criterion on each ply angle at the root."
+units = "SI"
+stations = 401  # the engine integrates the deflection and the twist numerically; the loads are exact at any number
+
+[geometry]
+half_span = 1.8
+chord = 0.4
+airfoil = "naca-0012"
+front_spar = 0.25
+rear_spar = 0.65
+
+[material]
+name = "AS4/3501-6"
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+F1t = 2280.0
+F1c = 1725.0
+F2t = 57.0
+F2c = 228.0
+F6 = 76.0
+ply_thickness = 0.125
+density = 1600.0
+
+[skin]
+half_stack = [0, 45, -45, 90]
+core_thickness = 4.0
+core_density = 50.0
+
+[spar]
+half_stack = [45, -45, 0]
+
+[aerodynamics]
+aerodynamic_center = 0.25
+pitching_moment_coefficient = -0.04
+
+[envelope]
+gross_weight = 1200.0
+positive_load_factor = 3.8
+negative_load_factor = -1.52
+airspeed = "true"
+speed_unit = "m/s"
+altitudes = [2000.0]
+ultimate_factor = 1.5
+criterion = "max_stress"
+
+[envelope.speeds]
+cruise = 55.0
+positive_maneuver = 48.0
+
+[envelope.gust]
+cruise_gust_speed = 15.0
+dive_gust_speed = 7.5
+lift_curve_slope_per_rad = 5.2
+wing_area = 1.44
+
+[envelope.aileron]
+span_start = 1.1
+span_end = 1.7
+down_delta_cl = 0.35
+down_delta_cm = -0.07
+up_delta_cl = -0.25
+up_delta_cm = 0.05
+roll_pull_up_fraction = 0.75
+
+[expected]
+tolerance = 1e-5  # the deflection and the twist are integrated by the trapezoid rule; everything else is exact
+
+[expected.design]
+bending_stiffness = 8146.6199576276595
+torsion_stiffness = 9209.694489004165
+shear_center = 0.15216912317778125
+skin_buckling_load = 496320.65889681055
+mass = 1.2108741983047129
+first_bending_frequency = 19.006464646103353
+skin_modulus = 58.17982159531342
+spar_modulus = 65.53732261476019
+
+[expected.cases.6]
+dynamic_pressure = 1159.476592276919
+root_shear = 2280.0
+root_moment = 1896.8958485988514
+root_torque = 105.58843050231114
+skin_plies = 1.2730141254086749
+spar_plies = 1.1782807617184663
+skin_buckling = 1.8184580091411036
+load_factor = 3.8
+tip_deflection = 180.9347317500112
+tip_twist = 0.5408623532723239
+
+[expected.cases.10]
+load_factor = 3.361009641558578
+root_moment = 1677.7592726771527
+skin_plies = 1.4392858671805908
+
+[expected.cases.16]
+load_factor = 2.8499999999999996
+root_shear = 1807.396033751261
+root_moment = 1559.026333700904
+root_torque = 73.14141327267181
+spar_plies = 1.4336357488471048

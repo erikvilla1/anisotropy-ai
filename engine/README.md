@@ -44,6 +44,8 @@ The equations behind each module, and the function that computes each one, are i
 | `library.py` | Loads a cited dataset of the website's material library (`data/material-library.json`) as a `Lamina` in SI with the page of every value used (ADR-0020) |
 | `cases.py` | Reads cases (one material, or several named materials per ply), solves them with `solve_case`, and compares expected values with engine results |
 | `course_excel.py` | Reads the course Excel input template into a case |
+| `sandwich.py` | Stiffness of a panel of two laminated faces on a core that carries no in-plane load |
+| `wing/` | A straight two-spar composite wing worked as a beam (ADR-0115): `description.py` (the wing and its flight envelope), `airfoil.py`, `atmosphere.py`, `loads.py` (seventeen flight cases, Schrenk's lift, shear, moment, torque), `section.py` (the box between the spars), `analysis.py` (every case at every station, ply checks, buckling, margins) and `wing_file.py` (a wing as a file, in SI or US units) |
 
 For a one-page guide to writing a case and reading the printout, see [docs/engine-cheat-sheet.md](../docs/engine-cheat-sheet.md).
 
@@ -66,3 +68,7 @@ For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_
 Failure checks always include maximum stress when all five strengths are supplied. A temperature change stays fixed while the mechanical loads scale; a `[failure]` table holds chosen loads fixed as well. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
 
 For required moments under a curvature constraint, run `uv run python examples/laminate_calculator.py validation/cases/constructed-flat-cross-ply.toml`. The new `forces_curvature` case mode accepts known force resultants and prescribed curvature; zero curvature requests flatness. See the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md) for the matching API operation and numerical verification policy.
+
+## A wing
+
+`anisotropy_engine.wing` works one side of a straight two-spar composite wing as a beam (ADR-0115): `uv run python examples/wing_calculator.py examples/example-wing.toml` prints the design summary and the margins of seventeen flight cases at each altitude. A wing file states its units, "SI" or "US", and its speed unit; the table of what each quantity is entered in is at the top of `src/anisotropy_engine/wing/wing_file.py`. A speed, the gust entry, the aileron or the proof factor may be left out: the cases that need it are listed as not run, with what each needs. The equations are in `docs/theory.md` Sections 12 and 13, with what the calculation leaves out. Wings checked against a closed form are in `validation/wing_cases/`; a wing of your own, or one built to someone else's requirements, belongs in the repository's ignored `.local/` directory.
