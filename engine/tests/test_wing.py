@@ -207,7 +207,7 @@ def test_a_symmetric_airfoil_puts_the_centroid_on_the_chord_line():
 
 
 def test_ribs_raise_the_skins_buckling_load_and_far_apart_they_leave_the_long_panel():
-    long_panel = box_section(wing_from_dict(example())[0])
+    long_panel = box_section(wing_from_dict(example(**{"geometry.rib_spacing": None, "rib": None}))[0])
     assert long_panel.skin_buckling_load == pytest.approx(long_plate_buckling_load(long_panel.skin.D, long_panel.skin_width_m))
     close = box_section(wing_from_dict(example(**{"geometry.rib_spacing": 0.1}))[0])
     far = box_section(wing_from_dict(example(**{"geometry.rib_spacing": 2.0}))[0])

@@ -112,7 +112,7 @@ def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
 
 def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     """The wing and its envelope in SI from a wing file's contents."""
-    _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"}, {"source"})
+    _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"}, {"source", "rib"})
     if data["units"] not in WING_UNITS:
         raise ValueError(f"units must be one of {tuple(WING_UNITS)}")
     system = WING_UNITS[data["units"]]
@@ -126,7 +126,7 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     if not isinstance(data["material"], dict):
         raise ValueError("[material] must be a table")
     material = _material(data["material"], si)
-    aero = _table(data, "aerodynamics", {"aerodynamic_center", "pitching_moment_coefficient"})
+    aero = _table(data, "aerodynamics", {"aerodynamic_center", "pitching_moment_coefficient"}, {"lift_curve_slope"})
     wing = Wing(
         name=data["title"],
         geometry=WingGeometry(half_span_m=si(geometry["half_span"], "length"), chord_m=si(geometry["chord"], "length"),
@@ -135,7 +135,9 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
         skin=_layup(_table(data, "skin", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "skin"),
         spar=_layup(_table(data, "spar", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "spar"),
         aerodynamics=Aerodynamics(aerodynamic_center=aero["aerodynamic_center"],
-                                  pitching_moment_coefficient=aero["pitching_moment_coefficient"]),
+                                  pitching_moment_coefficient=aero["pitching_moment_coefficient"],
+                                  lift_curve_slope_per_rad=aero.get("lift_curve_slope")),
+        rib=_layup(_table(data, "rib", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "rib") if "rib" in data else None,
     )
 
     env = _table(data, "envelope", {"gross_weight", "positive_load_factor", "negative_load_factor", "airspeed", "speed_unit", "altitudes",
@@ -238,5 +240,17 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
                 "station": _number(check.station_m, length), "member": check.member, "ply_angle": check.ply_angle_deg, "mode": check.mode,
             } for check in r.checks},
         } for r in result.cases],
+        "aeroelastic": None if result.aeroelastic is None else {
+            "divergence_speed": _number(result.aeroelastic.divergence_speed_m_s, SPEED_UNITS[speed_unit]),
+            "divergence_dynamic_pressure": _number(result.aeroelastic.divergence_dynamic_pressure_Pa, PSI if units == "US" else 1.0),
+            "reversal_speed": _number(result.aeroelastic.reversal_speed_m_s, SPEED_UNITS[speed_unit]),
+            "reversal_dynamic_pressure": _number(result.aeroelastic.reversal_dynamic_pressure_Pa, PSI if units == "US" else 1.0),
+            "dive_speed": _number(result.aeroelastic.dive_speed_m_s, SPEED_UNITS[speed_unit]),
+            "divergence_over_dive": _number(result.aeroelastic.divergence_over_dive),
+            "reversal_over_dive": _number(result.aeroelastic.reversal_over_dive),
+            # a check that ran and found no speed at all: the wing never diverges, or the aileron never reverses before it does
+            "divergence_never": result.aeroelastic.divergence_speed_m_s == math.inf,
+            "reversal_never": result.aeroelastic.reversal_speed_m_s == math.inf,
+            "needs": list(result.aeroelastic.needs)},
         "not_run": [{"number": n.number, "label": n.label, "altitude": n.altitude_m / u["altitude"][0], "needs": n.needs} for n in result.not_run],
     }

@@ -23,6 +23,8 @@ from typing import Literal
 import numpy as np
 
 from ..failure import check_criterion, scaled_strength_ratios
+from .aeroelastic import Aeroelastic, divergence_dynamic_pressure, equivalent_airspeed, reversal_dynamic_pressure
+from .atmosphere import density_ratio
 from .description import FlightEnvelope, Wing
 from .loads import CaseNotRun, LoadCase, flight_cases, span_loads
 from .section import BoxSection, MemberLaminate, box_section
@@ -90,6 +92,7 @@ class WingResult:
     cases: tuple[CaseResult, ...]
     not_run: tuple[CaseNotRun, ...]
     seconds: float  # time the calculation took
+    aeroelastic: Aeroelastic | None = None  # divergence and aileron reversal
 
     @property
     def governing(self) -> tuple[CaseResult, Check] | None:
@@ -140,6 +143,37 @@ def _ply_check(name: CheckName, labels, member: MemberLaminate, ratio, weakest, 
     return Check(name, value, *_margins(value, envelope), float(y[s]), labels[k], float(member.angles_deg[weakest[k, s]]), modes[k, s])
 
 
+def aeroelastic_checks(wing: Wing, envelope: FlightEnvelope, section: BoxSection) -> Aeroelastic:
+    """Divergence and aileron reversal of the uniform wing (aeroelastic.py), with the dive speed they are read against."""
+    g = wing.geometry
+    torque_arm = section.shear_center_m - wing.aerodynamics.aerodynamic_center * g.chord_m
+    slope = wing.aerodynamics.lift_curve_slope_per_rad
+    needs = []
+    dive = envelope.speeds.dive
+    if dive is not None and envelope.airspeed == "true":
+        dive = max(dive * math.sqrt(density_ratio(h)) for h in envelope.altitudes_m)  # the highest equivalent airspeed
+    q_divergence = q_reversal = None
+    if slope is None:
+        needs.append("the section's lift curve slope, for divergence and reversal")
+    else:
+        q_divergence = divergence_dynamic_pressure(section.GJ, g.half_span_m, g.chord_m, torque_arm, slope)
+        aileron = envelope.aileron
+        if aileron is None:
+            needs.append("the aileron, for reversal")
+        else:
+            down = aileron.down_delta_cl != 0
+            q_reversal = reversal_dynamic_pressure(
+                section.GJ, g.half_span_m, g.chord_m, torque_arm, slope,
+                aileron.down_delta_cl if down else aileron.up_delta_cl, aileron.down_delta_cm if down else aileron.up_delta_cm,
+                aileron.span_start_m, min(aileron.span_end_m, g.half_span_m))
+    return Aeroelastic(
+        divergence_dynamic_pressure_Pa=q_divergence,
+        divergence_speed_m_s=None if q_divergence is None else equivalent_airspeed(q_divergence),
+        reversal_dynamic_pressure_Pa=q_reversal,
+        reversal_speed_m_s=None if q_reversal is None else equivalent_airspeed(q_reversal),
+        dive_speed_m_s=dive, needs=tuple(needs))
+
+
 def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> WingResult:
     """Run every load case the envelope states on the wing, at `stations` equally spaced stations from root to tip."""
     started = time.perf_counter()
@@ -151,8 +185,9 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
     section = box_section(wing)
     cases, not_run = flight_cases(envelope, g.chord_m)
     y = np.linspace(0.0, g.half_span_m, stations)
+    aeroelastic = aeroelastic_checks(wing, envelope, section)
     if not cases:
-        return WingResult(wing, envelope, section, (), tuple(not_run), time.perf_counter() - started)
+        return WingResult(wing, envelope, section, (), tuple(not_run), time.perf_counter() - started, aeroelastic)
 
     torque_arm = section.shear_center_m - wing.aerodynamics.aerodynamic_center * g.chord_m
     loads = span_loads(y, g.half_span_m, g.chord_m, cases, envelope, torque_arm, wing.aerodynamics.pitching_moment_coefficient)
@@ -205,4 +240,4 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
         results.append(CaseResult(case=case, root_shear=float(loads.shear[c, 0]), root_moment=float(loads.moment[c, 0]),
                                   root_torque=float(loads.torque[c, 0]), tip_deflection=float(deflection[c, -1]),
                                   tip_twist=float(twist[c, -1]), checks=checks, stations=span))
-    return WingResult(wing, envelope, section, tuple(results), tuple(not_run), time.perf_counter() - started)
+    return WingResult(wing, envelope, section, tuple(results), tuple(not_run), time.perf_counter() - started, aeroelastic)

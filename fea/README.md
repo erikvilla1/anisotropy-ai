@@ -108,6 +108,16 @@ checks/              proofs that are not team models: cases/, decks/ (tiny fixtu
 examples/             deck_summary.py, solve_deck.py
 ```
 
+## A wing's shape and STEP file
+
+`anisotropy_fea.wing_shape` builds a wing file's parts (the engine's wing description, ADR-0115) as surfaces at their mid-thickness in Gmsh's OpenCASCADE, writes them as a STEP file in millimetres with every part named, and meshes them with four-node shells (ADR-0116). It needs the optional extra `mesh`:
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape engine/examples/example-wing.toml wing.step --mesh 20
+```
+
+prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid.
+
 ## Abaqus field reports
 
 The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/<coupon>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.

@@ -34,6 +34,18 @@ def main() -> None:
           f"shear center {d['shear_center']:.4g} {u['length']} from the leading edge")
 
     proof = envelope.proof_factor is not None
+    a = report["aeroelastic"]
+    print("\nAeroelastic (the uniform wing, strip theory), equivalent airspeeds")
+    for label, key in (("divergence", "divergence"), ("aileron reversal", "reversal")):
+        if a[f"{key}_never"]:
+            print(f"  {label}: none at any speed" + (" below divergence" if key == "reversal" else " (the aerodynamic center is not ahead of the shear center)"))
+        elif a[f"{key}_speed"] is None:
+            continue
+        else:
+            ratio = a[f"{key}_over_dive"]
+            print(f"  {label} at {a[f'{key}_speed']:.4g} {u['speed']}" + ("" if ratio is None else f", {ratio:.2f} x the dive speed"))
+    for need in a["needs"]:
+        print(f"  not run: needs {need}")
     print(f"\nMargins at ultimate load ({envelope.ultimate_factor:g} x limit)" + (f" and at proof load ({envelope.proof_factor:g} x limit)" if proof else ""))
     header = f"{'case':>4} {'':32} {'alt ' + u['altitude']:>8} {'V ' + u['speed']:>8} {'n':>6} {'M root ' + u['moment']:>14} {'tip ' + u['deflection']:>9} | {'skin':>8} {'spar':>8} {'buckling':>8}"
     print(header + (f" | {'proof, lowest':>13}" if proof else ""))

@@ -8,6 +8,7 @@ chord = 0.45             # m, constant
 airfoil = "naca-2412"
 front_spar = 0.25        # fraction of the chord
 rear_spar = 0.65
+rib_spacing = 0.5        # m: ribs at the root, every 0.5 m, and at the tip
 
 [material]
 library = "im7-8552"     # ply thickness, density and strengths come from the library record
@@ -20,9 +21,13 @@ core_density = 48.0      # kg/m^3
 [spar]
 half_stack = [45, -45, 0]
 
+[rib]
+half_stack = [45, -45]   # the ribs' layup: the shape and the finite element model use it, the hand calculation does not
+
 [aerodynamics]
 aerodynamic_center = 0.25
 pitching_moment_coefficient = -0.05
+lift_curve_slope = 6.0   # per radian, the section's: divergence and aileron reversal use it
 
 [envelope]
 gross_weight = 3000.0    # N

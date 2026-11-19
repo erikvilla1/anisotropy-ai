@@ -107,6 +107,7 @@ class Aerodynamics(BaseModel):
 
     aerodynamic_center: PositiveFloat  # fraction of the chord
     pitching_moment_coefficient: float
+    lift_curve_slope_per_rad: PositiveFloat | None = None  # the section's; the divergence and reversal checks need it
 
     @model_validator(mode="after")
     def _checked(self) -> "Aerodynamics":
@@ -116,7 +117,7 @@ class Aerodynamics(BaseModel):
 
 
 class Wing(BaseModel):
-    """One wing: its shape, the skin and spar layups and its section aerodynamics."""
+    """One wing: its shape, the skin, spar and rib layups and its section aerodynamics."""
 
     model_config = _FROZEN
 
@@ -125,6 +126,13 @@ class Wing(BaseModel):
     skin: Layup
     spar: Layup
     aerodynamics: Aerodynamics
+    rib: Layup | None = None  # the ribs' layup, when the geometry has ribs; the hand calculation does not use it
+
+    @model_validator(mode="after")
+    def _checked(self) -> "Wing":
+        if self.rib is not None and self.geometry.rib_spacing_m is None:
+            raise ValueError("A rib layup was given but no rib spacing")
+        return self
 
 
 class Speeds(BaseModel):

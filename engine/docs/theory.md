@@ -912,6 +912,41 @@ MS = \frac{R}{FS} - 1
 
 Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing worked by hand in `engine/validation/closed_forms.py` without the engine; the ply check against `first_ply_failure` of the whole laminate; the gust formula against the regulation's printed form. No finite element model or test of a wing has been compared yet.
 
+### Divergence and aileron reversal
+
+The wing's static aeroelastic checks treat it as a uniform cantilever in torsion with strip-theory lift: lift acts at the aerodynamic center, a distance $`e`$ ahead of the shear center, with the section's lift slope $`a`$. The elastic twist $`\theta(y)`$, nose up, obeys
+
+```math
+GJ\,\theta'' + q\,c\,e\,a\,\theta = -m(y), \qquad \theta(0) = 0, \quad \theta'(L) = 0
+```
+
+where $`m`$ is the moment per unit span of every other load about the shear center. The dynamic pressure at which the wing diverges, the lowest at which the equation has a solution with no load, $`\lambda L = \pi/2`$ with $`\lambda^2 = q c e a / GJ`$, is computed by `divergence_dynamic_pressure`:
+
+```math
+q_D = \left(\frac{\pi}{2L}\right)^2 \frac{GJ}{c\,e\,a}
+```
+
+A wing whose aerodynamic center is not ahead of its shear center ($`e \le 0`$) does not diverge. An aileron over $`[y_1, y_2]`$ adds $`q c\,\Delta c_l`$ of lift per unit span at the aerodynamic center and $`q c^2 \Delta c_m`$ of moment about it. The lift it adds to the flexible wing is computed by `aileron_lift`:
+
+```math
+\frac{\Delta L}{q c} = \Delta c_l\,(y_2 - y_1) - \frac{a\,q\,c\,(e\,\Delta c_l + c\,\Delta c_m)}{GJ}\int_{y_1}^{y_2}\psi\,dy
+```
+
+with $`\psi'' + \lambda^2\psi = 1`$, $`\psi(0) = 0`$, $`\psi'(L) = 0`$ the twist under a unit moment per unit span; by reciprocity of the torsion equation, the lift lost to the twist of a moment over $`[y_1, y_2]`$ is its integral there, computed by `twist_influence`:
+
+```math
+\int_{y_1}^{y_2}\psi\,dy = \frac{1}{\lambda^2}\left[y_2 - y_1 + g(y_2) - g(y_1)\right], \qquad g(y) = \frac{\sin\lambda(L - y)}{\lambda\cos\lambda L}
+```
+
+with $`\sin`$ and $`\cos`$ becoming $`\sinh`$ and $`\cosh`$ when $`\lambda^2 < 0`$, and a two-term series in $`\lambda^2`$ when $`|\lambda^2| L^2 < 10^{-6}`$. The reversal dynamic pressure, the lowest at which the aileron adds no lift, is computed by `reversal_dynamic_pressure`; it depends only on the ratio $`\Delta c_l / \Delta c_m`$, and does not occur below divergence when $`e\,\Delta c_l + c\,\Delta c_m`$ has the sign of $`\Delta c_l`$. Both are reported as equivalent airspeeds, $`V = \sqrt{2q/\rho_0}`$, beside the envelope's dive speed. Bisplinghoff, Ashley and Halfman, Aeroelasticity (1955), chapter 8; Hodges and Pierce, Introduction to Structural Dynamics and Aeroelasticity, 2nd ed. (2011), chapter 5. Not modeled: flutter, which needs the wing's mass and its bending and torsion frequencies (the finite element model), sweep, taper, the lift's drop toward the tip, and compressibility.
+
+<!-- code: divergence_dynamic_pressure -->
+<!-- code: aileron_lift -->
+<!-- code: twist_influence -->
+<!-- code: reversal_dynamic_pressure -->
+
+Checks: `engine/tests/test_wing_aeroelastic.py` solves the same torsion equation by finite differences, written without these formulas: its lowest eigenvalue against $`q_D`$, its twist integral against `twist_influence` for $`\lambda^2`$ of both signs and near zero, and its aileron lift against `aileron_lift`, changing sign at the reversal dynamic pressure.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -920,4 +955,4 @@ Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, 
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
-- For a wing: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; web buckling and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; aeroelastic effects
+- For a wing: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; web buckling and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter, and divergence and reversal of a swept or tapered wing
