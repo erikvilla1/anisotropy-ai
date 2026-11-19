@@ -39,6 +39,18 @@ class WingMaterial(BaseModel):
         return self
 
 
+class CoreMaterial(BaseModel):
+    """A sandwich core's stiffness and strength. The hand calculation reads only the core's density (sandwich.py takes its in-plane
+    stiffness as zero and its shear stiffness as infinite); the finite element model reads these (ADR-0117)."""
+
+    model_config = _FROZEN
+
+    name: str
+    modulus_Pa: PositiveFloat  # through the thickness, in compression
+    shear_modulus_Pa: PositiveFloat  # transverse shear, the same in both directions
+    shear_strength_Pa: PositiveFloat | None = None
+
+
 class Layup(BaseModel):
     """A symmetric laminate by its outer half, with an optional core between the halves."""
 
@@ -48,11 +60,14 @@ class Layup(BaseModel):
     half_stack_deg: tuple[float, ...]
     core_thickness_m: NonNegativeFloat = 0.0  # no core: a solid laminate
     core_density_kg_m3: PositiveFloat | None = None
+    core: CoreMaterial | None = None  # the core's stiffness, which the finite element model needs and the hand calculation does not
 
     @model_validator(mode="after")
     def _checked(self) -> "Layup":
         if not self.half_stack_deg:
             raise ValueError("A layup needs at least one ply in its half stack")
+        if self.core_thickness_m == 0 and self.core is not None:
+            raise ValueError("A core material was given without a core thickness")
         if self.core_thickness_m > 0 and self.core_density_kg_m3 is None:
             raise ValueError("A core needs its density")
         if self.core_thickness_m == 0 and self.core_density_kg_m3 is not None:

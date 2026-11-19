@@ -216,7 +216,7 @@ def test_ribs_raise_the_skins_buckling_load_and_far_apart_they_leave_the_long_pa
 
 
 def test_a_core_adds_buckling_load_and_core_mass_only():
-    solid = box_section(wing_from_dict(example(**{"skin.core_thickness": None, "skin.core_density": None}))[0])
+    solid = box_section(wing_from_dict(example(**{"skin.core_thickness": None, "skin.core": None}))[0])
     cored = box_section(wing_from_dict(example())[0])
     assert cored.EI == solid.EI and cored.GJ == solid.GJ and cored.mass_skins_kg == solid.mass_skins_kg
     assert solid.mass_core_kg == 0 and cored.mass_core_kg == pytest.approx(2 * 0.18 * 0.006 * 2.0 * 48.0)
@@ -311,8 +311,9 @@ def test_the_example_wing_passes_and_reports_in_its_own_units():
 
 def test_a_wing_in_us_units_is_the_same_wing():
     si = run()
-    data = example(**{"units": "US", "geometry.half_span": 2.0 / 0.0254, "geometry.chord": 0.45 / 0.0254, "skin.core_thickness": 6.0 / 25.4,
-                      "skin.core_density": 48.0 / (0.45359237 / 0.0254**3), "envelope.gross_weight": 3000.0 / LBF,
+    data = example(**{"units": "US", "geometry.half_span": 2.0 / 0.0254, "geometry.chord": 0.45 / 0.0254, "geometry.rib_spacing": 0.5 / 0.0254,
+                      "skin.core_thickness": 6.0 / 25.4,
+                      "envelope.gross_weight": 3000.0 / LBF,
                       "envelope.altitudes": [0.0, 3000.0 / FOOT], "envelope.aileron.span_start": 1.2 / 0.0254,
                       "envelope.aileron.span_end": 1.9 / 0.0254, "envelope.gust.wing_area": 1.8 / 0.0254**2})
     us = analyze_wing(*wing_from_dict(data))
@@ -330,7 +331,11 @@ def test_a_wing_in_us_units_is_the_same_wing():
     ({"envelope.negative_load_factor": 0.5}, "below zero"),
     ({"envelope.altitudes": [20000.0]}, "between 0 and 11000"),
     ({"envelope.proof_factor": 1.6}, "between 1 and the ultimate factor"),
-    ({"skin.core_density": None}, "A core needs its density"),
+    ({"skin.core": None}, "A core needs its density"),
+    ({"skin.core_density": 48.0}, "core names a library core, which gives its stiffness and density; remove core_density or the core"),
+    ({"skin.core": "im7-8552"}, "is not a sandwich core in the library"),
+    ({"skin.core": None, "skin.core_density": 48.0, "skin.core_modulus": 50.0}, "a typed core needs both core_modulus and core_shear_modulus"),
+    ({"spar.core": "divinycell-h45"}, "A core material was given without a core thickness"),
     ({"skin.half_stack": []}, "at least one ply"),
     ({"material.library": "no-such-material"}, "unknown library material"),
     ({"envelope.speeds.cruise": -50.0}, "greater than 0"),
@@ -341,8 +346,52 @@ def test_a_wing_file_that_is_wrong_is_refused_by_name(changes, message):
         wing_from_dict(example(**changes))
 
 
+def test_a_core_comes_from_the_library_or_is_typed_in_the_stress_unit():
+    wing, _ = wing_from_dict(example())
+    core = wing.skin.core
+    assert (core.name, core.modulus_Pa, core.shear_modulus_Pa, core.shear_strength_Pa) == ("Divinycell H45", 50e6, 15e6, 0.56e6)
+    assert wing.skin.core_density_kg_m3 == 48.0  # the library's, which the hand calculation reads
+    typed, _ = wing_from_dict(example(**{"skin.core": None, "skin.core_density": 48.0, "skin.core_modulus": 50.0, "skin.core_shear_modulus": 15.0}))
+    assert (typed.skin.core.name, typed.skin.core.modulus_Pa, typed.skin.core.shear_modulus_Pa, typed.skin.core.shear_strength_Pa) == (
+        "skin core", 50e6, 15e6, None)
+    bare, _ = wing_from_dict(example(**{"skin.core": None, "skin.core_density": 48.0}))
+    assert bare.skin.core is None and box_section(bare).EI == box_section(wing).EI  # the hand calculation does not read the core's stiffness
+
+
 def test_a_library_material_without_a_ply_thickness_asks_for_one():
     with pytest.raises(ValueError, match="no ply thickness; give ply_thickness"):
         wing_from_dict(example(**{"material.library": "as4-8552"}))
     wing, _ = wing_from_dict(example(**{"material": {"library": "as4-8552", "ply_thickness": 0.19}}))
     assert wing.skin.material.ply_thickness_m == pytest.approx(0.19e-3)
+
+
+# ----------------------------------------------------------------------------------------------- web buckling
+
+def test_a_web_bay_buckles_in_shear_as_a_plate_and_the_weaker_direction_counts():
+    from anisotropy_engine.buckling import ritz_buckling
+    from anisotropy_engine.wing.section import WEB_PANEL_ASPECT, WEB_RITZ_TERMS, web_shear_buckling_load
+    E, nu, t, b = 70e9, 0.3, 1e-3, 0.1
+    D0 = E * t**3 / (12 * (1 - nu**2))
+    isotropic = np.array([[D0, nu * D0, 0], [nu * D0, D0, 0], [0, 0, (1 - nu) / 2 * D0]])
+    k_s = web_shear_buckling_load(isotropic, 3 * b, b) * b**2 / (math.pi**2 * D0)
+    assert k_s == pytest.approx(5.35 + 4 / 3**2, rel=0.02)  # Timoshenko and Gere's fit for a simply supported plate in shear
+    assert web_shear_buckling_load(isotropic, 50 * b, b) == web_shear_buckling_load(isotropic, WEB_PANEL_ASPECT * b, b)
+    web = run().section.spar.D
+    both = [ritz_buckling(web, 0.25, 0.05, [0, 0, sign], WEB_RITZ_TERMS).load_factor for sign in (1.0, -1.0)]
+    assert max(both) > 1.3 * min(both)  # a [45/-45/0/0]s web is not alike in the two directions
+    assert web_shear_buckling_load(web, 0.25, 0.05) == min(both)
+
+
+def test_the_web_buckling_check_divides_the_bays_load_by_the_webs_shear_flow():
+    result = run()
+    section = result.section
+    for case in result.cases:
+        check = case.checks[3]
+        assert check.name == "web buckling" and check.mode == "shear buckling"
+        stations = case.stations
+        with np.errstate(divide="ignore"):  # no shear flow at the tip: the ratio is infinite there
+            expected = np.array(section.web_buckling_loads)[:, None] / stations.web_shear_flow
+        assert stations.web_buckling_ratio == pytest.approx(expected)
+        assert check.strength_ratio == pytest.approx(stations.web_buckling_ratio.min())
+    thin = run(**{"spar.half_stack": [45, -45, 0]})
+    assert thin.section.web_buckling_loads[0] < 0.5 * section.web_buckling_loads[0]  # bending stiffness grows as the cube of thickness

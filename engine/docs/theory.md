@@ -896,7 +896,7 @@ The box carries the torque as a constant shear flow, and each web adds its share
 q_T = \frac{T}{2A_c}, \qquad q_{web,i} = \frac{s_i\,|V|}{h_i} + |q_T|
 ```
 
-Each skin is checked under $`(N_x, q_T)`$ and each web under $`(N_x, q_{web})`$ at its top and at its bottom. The strength ratio $`R`$ of the weakest ply angle follows Section 5 by the criterion the envelope names; the skin's buckling ratio is $`N_{cr}`$ over the larger compression of the two skins. Deflection and twist are integrated along the span by the trapezoid rule:
+Each skin is checked under $`(N_x, q_T)`$ and each web under $`(N_x, q_{web})`$ at its top and at its bottom. The strength ratio $`R`$ of the weakest ply angle follows Section 5 by the criterion the envelope names; the skin's buckling ratio is $`N_{cr}`$ over the larger compression of the two skins, and each web's buckling ratio is its bay's buckling shear flow over $`q_{web,i}`$. Deflection and twist are integrated along the span by the trapezoid rule:
 
 ```math
 \delta(y) = \int_0^y\!\!\int_0^{s} \kappa\,dr\,ds, \qquad \phi(y) = \int_0^y \frac{T}{GJ}\,ds
@@ -910,7 +910,17 @@ MS = \frac{R}{FS} - 1
 
 <!-- code: analyze_wing -->
 
-Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing worked by hand in `engine/validation/closed_forms.py` without the engine; the ply check against `first_ply_failure` of the whole laminate; the gust formula against the regulation's printed form. No finite element model or test of a wing has been compared yet.
+A web bay between two ribs (the whole span without ribs) buckles in shear as a plate simply supported on its four edges, the web's height $`h`$ wide and the rib spacing long, but never taken longer than $`5h`$, beyond which an isotropic plate's load is within 3 % of the infinitely long one's. Its buckling shear flow is the lower of the two directions of the shear, computed by `web_shear_buckling_load`:
+
+```math
+q_{cr} = \min_{\pm}\,\lambda\!\left(\mathbf{D}_{web},\ \min(s, 5h),\ h,\ (0, 0, \pm 1)\right)
+```
+
+with $`\lambda`$ the Ritz double sine series of Section 7 (`ritz_buckling`, 14 terms a direction). A web's $`+45`$ and $`-45`$ plies are not alike in bending ($`D_{16}, D_{26} \ne 0`$), so one direction of the shear buckles the bay sooner, by about two on a $`[45/-45/0]_s`$ web, and the beam does not follow the shear's sign. Two things move a real web's buckle from this one, in opposite directions: the skins hold its top and bottom edges harder than simple supports, which raises it, and its own bending stress, spanwise compression along one edge in a lift case, is left out, which lowers it. On the example wing's former $`[45/-45/0]_s`$ web this check put the root bay's buckle at 1.09 times limit load and a large-deflection solution of the finite element model at about 1.6 (ADR-0115 amendment 2).
+
+<!-- code: web_shear_buckling_load -->
+
+Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing worked by hand in `engine/validation/closed_forms.py` without the engine; the ply check against `first_ply_failure` of the whole laminate; the gust formula against the regulation's printed form; the web's buckling shear flow against Timoshenko and Gere's $`k_s = 5.35 + 4(b/a)^2`$ for an isotropic plate within 2 %, and on one $`[45/-45/0]_s`$ web against CalculiX's buckling of the same flat plate within 1.2 % in both directions (ADR-0117). The finite element model of the same description is compared case by case in ADR-0117.
 
 ### Divergence and aileron reversal
 
@@ -938,7 +948,7 @@ with $`\psi'' + \lambda^2\psi = 1`$, $`\psi(0) = 0`$, $`\psi'(L) = 0`$ the twist
 \int_{y_1}^{y_2}\psi\,dy = \frac{1}{\lambda^2}\left[y_2 - y_1 + g(y_2) - g(y_1)\right], \qquad g(y) = \frac{\sin\lambda(L - y)}{\lambda\cos\lambda L}
 ```
 
-with $`\sin`$ and $`\cos`$ becoming $`\sinh`$ and $`\cosh`$ when $`\lambda^2 < 0`$, and a two-term series in $`\lambda^2`$ when $`|\lambda^2| L^2 < 10^{-6}`$. The reversal dynamic pressure, the lowest at which the aileron adds no lift, is computed by `reversal_dynamic_pressure`; it depends only on the ratio $`\Delta c_l / \Delta c_m`$, and does not occur below divergence when $`e\,\Delta c_l + c\,\Delta c_m`$ has the sign of $`\Delta c_l`$. Both are reported as equivalent airspeeds, $`V = \sqrt{2q/\rho_0}`$, beside the envelope's dive speed. Bisplinghoff, Ashley and Halfman, Aeroelasticity (1955), chapter 8; Hodges and Pierce, Introduction to Structural Dynamics and Aeroelasticity, 2nd ed. (2011), chapter 5. Not modeled: flutter, which needs the wing's mass and its bending and torsion frequencies (the finite element model), sweep, taper, the lift's drop toward the tip, and compressibility.
+with $`\sin`$ and $`\cos`$ becoming $`\sinh`$ and $`\cosh`$ when $`\lambda^2 < 0`$, and a two-term series in $`\lambda^2`$ when $`|\lambda^2| L^2 < 10^{-6}`$. The reversal dynamic pressure, the lowest at which the aileron adds no lift, is computed by `reversal_dynamic_pressure`; it depends only on the ratio $`\Delta c_l / \Delta c_m`$, and does not occur below divergence when $`e\,\Delta c_l + c\,\Delta c_m`$ has the sign of $`\Delta c_l`$. Both are reported as equivalent airspeeds, $`V = \sqrt{2q/\rho_0}`$, beside the envelope's dive speed. Bisplinghoff, Ashley and Halfman, Aeroelasticity (1955), chapter 8; Hodges and Pierce, Introduction to Structural Dynamics and Aeroelasticity, 2nd ed. (2011), chapter 5. Not modeled: sweep, taper, the lift's drop toward the tip, and compressibility; flutter follows.
 
 <!-- code: divergence_dynamic_pressure -->
 <!-- code: aileron_lift -->
@@ -946,6 +956,42 @@ with $`\sin`$ and $`\cos`$ becoming $`\sinh`$ and $`\cosh`$ when $`\lambda^2 < 0
 <!-- code: reversal_dynamic_pressure -->
 
 Checks: `engine/tests/test_wing_aeroelastic.py` solves the same torsion equation by finite differences, written without these formulas: its lowest eigenvalue against $`q_D`$, its twist integral against `twist_influence` for $`\lambda^2`$ of both signs and near zero, and its aileron lift against `aileron_lift`, changing sign at the reversal dynamic pressure.
+
+### Flutter estimate
+
+Flutter is estimated on the typical section: one strip of the wing that plunges ($`h`$, down positive) and pitches ($`\theta`$, nose up) about its elastic axis, $`a\,b`$ aft of mid-chord with $`b`$ the semichord. Its mass per unit span $`m`$ has its center $`x_\theta b`$ aft of the axis and radius of gyration $`r b`$ about it; its springs are set by the wing's first bending and first torsion frequencies $`\omega_h`$ and $`\omega_\theta`$:
+
+```math
+m\ddot h + m b x_\theta \ddot\theta + k_h h = -L, \qquad m b x_\theta \ddot h + m b^2 r^2 \ddot\theta + k_\theta \theta = M
+```
+
+For harmonic motion at the reduced frequency $`k = \omega b / U`$, Theodorsen's lift and moment about the elastic axis, divided by $`\pi\rho b^3\omega^2`$ and $`\pi\rho b^4\omega^2`$ per unit $`h/b`$ and per unit $`\theta`$, are computed by `airload`:
+
+```math
+\begin{aligned}
+\hat L_h &= -1 + \tfrac{2iC}{k}, & \hat L_\theta &= a + \tfrac{i}{k} + \tfrac{2C}{k^2} + \tfrac{iC(1 - 2a)}{k},\\
+\hat M_h &= -a + \tfrac{2i(a + \frac12)C}{k}, & \hat M_\theta &= \tfrac18 + a^2 - \tfrac{i(\frac12 - a)}{k} + \tfrac{2(a + \frac12)C}{k^2} + \tfrac{i(a + \frac12)(1 - 2a)C}{k}
+\end{aligned}
+```
+
+with Theodorsen's function $`C(k)`$ by R. T. Jones's approximation, computed by `theodorsen`, within 0.02 of the exact function:
+
+```math
+C(k) \approx 1 - \frac{0.165}{1 - 0.0455\,i/k} - \frac{0.335}{1 - 0.3\,i/k}
+```
+
+The k method gives both springs a structural damping, $`k(1 + ig)`$, and for each reduced frequency solves for $`Z = (\omega_\theta/\omega)^2(1 + ig)`$, with $`\mu = m/(\pi\rho b^2)`$ and $`\sigma = \omega_h/\omega_\theta`$:
+
+```math
+\begin{bmatrix} 1 - \hat L_h/\mu & x_\theta - \hat L_\theta/\mu \\ x_\theta + \hat M_h/\mu & r^2 + \hat M_\theta/\mu \end{bmatrix}
+\begin{bmatrix} h/b \\ \theta \end{bmatrix} = Z \begin{bmatrix} \sigma^2 & 0 \\ 0 & r^2 \end{bmatrix} \begin{bmatrix} h/b \\ \theta \end{bmatrix}
+```
+
+Each root gives $`\omega = \omega_\theta/\sqrt{\operatorname{Re} Z}`$, the speed $`U = \omega b/k`$ and the damping $`g = \operatorname{Im} Z/\operatorname{Re} Z`$ the strip would need to hold that motion; the sweep runs $`k`$ from 4 down to 0.01, follows each root from one $`k`$ to the next, and the flutter speed, computed by `flutter_speed`, is the lowest at which a root's $`g`$ rises through zero. It is a true airspeed at the density given; the finite element model reads it at each altitude of the envelope as the envelope's kind of airspeed. Theodorsen, NACA Report 496 (1935); R. T. Jones, NACA Report 681 (1940); Bisplinghoff, Ashley and Halfman (1955), chapters 5 and 9; Hodges and Pierce (2011), chapter 5. An estimate only: two-dimensional air on one strip, the first bending and torsion modes alone, no compressibility, sweep or control surface, and only the mass the description holds.
+
+<!-- code: theodorsen, airload, flutter_speed -->
+
+Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against the exact function at three reduced frequencies; the strip $`a = -1/5`$, $`x_\theta = 1/10`$, $`r^2 = 6/25`$, $`\sigma = 2/5`$, $`\mu = 20`$ flutters at $`U/(b\omega_\theta) = 2.170`$; mass moved forward, a heavier strip and thinner air each raise the speed. `fea/tests/test_wing_model.py` solves the same strip by the p-k method with the exact $`C(k)`$ from the Hankel functions, written without this module: 2.184, within 1 %.
 
 ## Not modeled yet
 
@@ -955,4 +1001,4 @@ Checks: `engine/tests/test_wing_aeroelastic.py` solves the same torsion equation
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
-- For a wing: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; web buckling and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter, and divergence and reversal of a swept or tapered wing
+- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; the skins' curve and their mid-thickness (the beam lays them flat at the outer surface); a closed box's shear center; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing

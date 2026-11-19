@@ -38,9 +38,10 @@ GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
 ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics", "summary", "tow",
-                  "sandwich", "wing.airfoil", "wing.atmosphere", "wing.loads", "wing.section", "wing.analysis", "wing.aeroelastic",
+                  "sandwich", "wing.airfoil", "wing.atmosphere", "wing.loads", "wing.section", "wing.analysis", "wing.aeroelastic", "wing.flutter",
                   "cases")  # the case runner last: its listing is printed once, in the verification section
-FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working")
+FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",
+               "wing_model")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
 # Unit labels for finite element case results, by the deck's unit system and result group.

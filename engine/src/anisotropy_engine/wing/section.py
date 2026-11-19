@@ -1,4 +1,4 @@
-"""The wing's cross-section as a two-spar box: stiffness, shear split, skin buckling load and mass.
+"""The wing's cross-section as a two-spar box: stiffness, shear split, skin and web buckling loads and mass.
 
 The box is the part of the section between the two spars. Each skin is a flat panel between the
 spar tops (or bottoms) at their mean height; each spar web is a rectangle of the airfoil's height
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..buckling import navier_buckling
+from ..buckling import navier_buckling, ritz_buckling
 from ..engineering import engineering_constants
 from ..laminate import abd_matrices
 from ..rotation import stress_transformation, transformed_reduced_stiffness
@@ -21,6 +21,8 @@ from ..sandwich import sandwich_abd
 from .description import Layup, Wing
 
 FIRST_CANTILEVER_ROOT = 1.8751040687119611  # first root of 1 + cos(x) cosh(x) = 0
+WEB_PANEL_ASPECT = 5.0  # a web bay longer than this many heights buckles as one this long (an isotropic plate's load is then within 3 % of the infinite one's)
+WEB_RITZ_TERMS = 14  # sine terms per direction: k_s of an isotropic plate settles to 0.1 % at aspect 5
 SYMMETRY_TOLERANCE = 1e-9
 
 
@@ -56,6 +58,16 @@ def member_laminate(layup: Layup) -> MemberLaminate:
                           angles_deg=angles, stress_per_load=stress_per_load)
 
 
+def web_shear_buckling_load(D: np.ndarray, length_m: float, height_m: float) -> float:
+    """The shear flow at which a web bay buckles, simply supported on all four edges, the lower of the two directions of the
+    shear: a web's +45 and -45 plies are not alike in bending (D16, D26), so one direction buckles it sooner, by up to about
+    two on a [45/-45/0]s web, and the hand calculation does not follow the shear's sign. Ritz double sine series
+    (buckling.ritz_buckling; Whitney 1987, Sections 6.5 and 6.6). The skins hold a real web's edges harder than simple supports,
+    so this is the lower bound."""
+    length = min(length_m, WEB_PANEL_ASPECT * height_m)
+    return min(ritz_buckling(D, length, height_m, [0.0, 0.0, sign], WEB_RITZ_TERMS).load_factor for sign in (1.0, -1.0))
+
+
 def long_plate_buckling_load(D: np.ndarray, width_m: float) -> float:
     """Compression per unit width at which a long, simply supported, specially orthotropic plate buckles:
     2 pi^2 [sqrt(D11 D22) + D12 + 2 D66] / b^2, the lowest value of the closed form of buckling.navier_buckling over the
@@ -82,6 +94,7 @@ class BoxSection:
     shear_shares: tuple[float, float]  # the part of the vertical shear each web carries
     shear_center_m: float  # from the leading edge
     skin_buckling_load: float  # N/m of compression along the span
+    web_buckling_loads: tuple[float, float]  # N/m of shear flow at which each web's bay buckles
     mass_skins_kg: float
     mass_spars_kg: float
     mass_core_kg: float
@@ -129,6 +142,9 @@ def box_section(wing: Wing) -> BoxSection:
         buckling_load = navier_buckling(orthotropic, g.rib_spacing_m, width, [-1.0, 0.0, 0.0], max_half_waves=(half_waves, 1)).load_factor
         buckling_load = float(buckling_load)
 
+    bay = g.rib_spacing_m if g.rib_spacing_m is not None else g.half_span_m
+    web_buckling = tuple(web_shear_buckling_load(spar.D, bay, h) for h in heights)
+
     density = wing.skin.material.density_kg_m3
     mass_skins = 2 * width * skin.thickness_m * g.half_span_m * density
     mass_spars = sum(spar.thickness_m * h for h in heights) * g.half_span_m * wing.spar.material.density_kg_m3
@@ -142,4 +158,5 @@ def box_section(wing: Wing) -> BoxSection:
         centroid_m=centroid, skin_z_m=(skin_heights[0] - centroid, skin_heights[1] - centroid),
         spar_top_z_m=tuple(top - centroid for top in tops), spar_bottom_z_m=tuple(bottom - centroid for bottom in bottoms),
         EI=float(EI), GJ=float(GJ), shear_shares=shares, shear_center_m=shear_center, skin_buckling_load=buckling_load,
+        web_buckling_loads=web_buckling,
         mass_skins_kg=mass_skins, mass_spars_kg=mass_spars, mass_core_kg=mass_core, first_bending_frequency_Hz=frequency)

@@ -16,10 +16,10 @@ library = "im7-8552"     # ply thickness, density and strengths come from the li
 [skin]
 half_stack = [0, 45, -45, 0]   # degrees from the span, outside ply first; the other half mirrors it
 core_thickness = 6.0     # mm of foam between the halves
-core_density = 48.0      # kg/m^3
+core = "divinycell-h45"  # the library core: its density for the hand calculation, its stiffness for the finite element model
 
 [spar]
-half_stack = [45, -45, 0]
+half_stack = [45, -45, 0, 0]   # the web: four plies a side keep it from buckling in shear before ultimate load
 
 [rib]
 half_stack = [45, -45]   # the ribs' layup: the shape and the finite element model use it, the hand calculation does not

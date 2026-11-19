@@ -312,6 +312,81 @@ ASTM D638 reduces the same record by the same formulas in its own words, the sta
 
 <!-- code: gross_area, net_area, engineering_stress, extensometer_strain, chord_modulus, poisson_ratio, reduction_of, method_summary -->
 
+## 10. The wing in CalculiX (`wing_model.py`)
+
+The wing generator's finite element check (ADR-0117) builds a CalculiX model of a whole half wing from the same description as its hand calculation (the engine's theory, "Wing analysis"). CalculiX solves it; this package writes the deck, puts the loads on and reads the plies' stresses back through the engine's strength ratios, so every margin is still the engine's (ADR-0001, ADR-0067).
+
+### 10.1 The model
+
+The shape's quadrilateral shell mesh (ADR-0116) becomes eight-node S8R shells, CalculiX's only composite shell (ADR-0030), each carrying its part's whole layup as layers: the face plies, the core, the face plies again. A skin's and a web's 0 degree direction is the span and a rib's is the chord; a ply at $`\theta`$ turns from it about the element's normal. The skins are curved, so the elements are grouped by the direction of their normal in steps of 2 degrees and each group gets its own orientation, which keeps every fibre within one degree of where it should lie; the groups are computed by `orientation_groups`. The ply's out-of-plane constants follow ADR-0090 ($`E_3 = E_2`$, $`G_{13} = G_{12}`$, $`G_{23} = E_2/3`$, $`\nu_{13} = \nu_{23} = 0`$); the core's in-plane modulus is its through-thickness one, a thousand times below the faces', so it does not change the answer.
+
+The skins run round the whole airfoil, as the shape draws them, or only between the spars (`skins = "box"`), the hand calculation's box. The root is clamped: every node at $`y = 0`$ in all six freedoms.
+
+### 10.2 The loads by superposition
+
+The model is solved once for each of four load patterns: the hand calculation's spanwise lift for 1 N on the half wing, a uniform pitching moment of 1 N·m per metre, and the aileron's lift and moment of 1 N and 1 N·m per metre over its span. The spanwise lift is Schrenk's, the mean of a uniform and an elliptical load, computed by `schrenk_lift`:
+
+```math
+\ell(y) = \frac12\left(\frac{4}{\pi L}\sqrt{1 - (y/L)^2} + \frac1L\right) ,
+```
+
+with $`L`$ the half span. Across the chord, the load on a strip from $`x_0`$ to $`x_1`$ (the airfoil's ends, or the spars' for the box) is linear, with its resultant $`\ell`$ at the aerodynamic center $`x_{ac}`$ and its moment $`m`$ about it, nose up positive; with $`w = x_1 - x_0`$ and $`\bar x = (x_0 + x_1)/2`$, computed by `strip_pressure`:
+
+```math
+p(x) = \frac{\ell}{w} + \beta\,(x - \bar x), \qquad \beta = \frac{12\left[\ell\,(x_{ac} - \bar x) - m\right]}{w^3} .
+```
+
+Half of it goes on each skin, as consistent nodal forces $`f_i = \tfrac12\int N_i\,p\,dA`$ over each element's plan area with a three-point Gauss rule (twelve by twelve cells where an element straddles the aileron's end), computed by `load_patterns`. A flight case is then the sum of the four solutions with the hand calculation's factors, computed by `case_factors`:
+
+```math
+\mathbf{u} = \tfrac12 n W\,\mathbf{u}_{\ell} + q c^2 c_m\,\mathbf{u}_m + q c\,\Delta c_l\,\mathbf{u}_{a\ell} + q c^2\,\Delta c_m\,\mathbf{u}_{am} ,
+```
+
+and the stresses likewise. The wing's own weight is left out, as in the hand calculation.
+
+<!-- code: orientation_groups, schrenk_lift, strip_pressure, load_patterns, case_factors -->
+
+### 10.3 Margins, deflection and twist
+
+The tip twist is the difference of the two webs' vertical displacements at the tip over their distance, $`\theta = (w_f - w_r)/(x_r - x_f)`$, and the tip deflection is read at the shear center between them. Each ply's stresses at every integration point, printed by CalculiX in the ply's own axes, go through the engine's strength ratio by the envelope's criterion, and a core's transverse shear stress $`\sqrt{\tau_{13}^2 + \tau_{23}^2}`$ is set against its shear strength. The clamp is singular: it stops the plies' Poisson contraction and the box's warping, and the root's stresses keep rising as the mesh is refined (Saint-Venant). The checks are therefore read outboard of a root zone one web height long, the deeper web's, computed by `root_zone`, and the root's own values are kept beside them; the cases' tip deflection, twist and lowest ratios of the skins', webs' and ribs' plies and of the core are computed by `fe_cases`.
+
+<!-- code: root_zone, fe_cases -->
+
+### 10.4 Panel buckling
+
+Each skin and web panel between two ribs buckles as a flat plate simply supported on its four edges, under the mean of its in-plane loads in the model. Each element's resultants in the ply axes of its layup ($`x`$ the 0 degree direction) are every layer's stress turned from its fibre axes at $`\theta_k`$ and summed over the layers' thicknesses $`t_k`$, with $`c = \cos\theta_k`$ and $`s = \sin\theta_k`$, computed by `element_loads`:
+
+```math
+\begin{aligned}
+N_x &= \sum_k t_k\,(\sigma_1 c^2 + \sigma_2 s^2 - 2\tau_{12} s c), \qquad N_y = \sum_k t_k\,(\sigma_1 s^2 + \sigma_2 c^2 + 2\tau_{12} s c),\\
+N_{xy} &= \sum_k t_k\,\big[(\sigma_1 - \sigma_2)\,s c + \tau_{12}\,(c^2 - s^2)\big] .
+\end{aligned}
+```
+
+A panel's load is the area-weighted mean over its elements, and its buckling factor is the engine's Ritz double sine series with the laminate's $`D_{16}`$ and $`D_{26}`$ kept (engine theory, Section 7); a web panel is taken no longer than five times its height, as in the hand calculation. Under each of the cases that bend the wing hardest up and down, the panel that buckles first is computed by `panel_buckling`, and its margin is the factor over the ultimate factor less one.
+
+CalculiX's own eigenvalue buckling (`*BUCKLE`) is not used for the wing. On a flat plate alone it gives the closed form within 1 %, but on the joined skins, webs and ribs of the example wing with a $`[45/-45/0]_s`$ web its first four modes, from 2.26 times limit load, were each mostly the wing's own static deflection and none a web buckle, while a large-deflection static solution of the same model (`NLGEOM`) buckled the root bay's front web at about 1.6 (ADR-0117).
+
+The panel check is not a lower bound for a web. The mean load leaves out the web's own bending stress, spanwise compression along one edge in a lift case, and on that wing it put the root bay's web at 1.82 times limit load, 8 to 14 % above the large-deflection solution's 1.60 to 1.68; the skins' firmer hold on the web's edges, which the simple supports leave out, did not make up for it. A web's margin therefore stands on the hand calculation's check (engine theory, Section 13, "Checks of every case"), which put the same web at 1.09.
+
+<!-- code: element_loads, panel_buckling -->
+
+### 10.5 The wing as a beam, and flutter
+
+Two of the static solutions give the wing's torsion stiffness and shear center. A uniform moment of 1 N·m per metre twists the tip by $`\theta_m = L^2/(2GJ)`$. The lift pattern acts at the aerodynamic center, a distance $`e`$ ahead of the shear center, so it twists the tip nose up by $`\theta_\ell = e\,M_{root}/GJ`$, with $`M_{root} = \int_0^L \ell\,y\,dy`$ its root bending moment. Hence
+
+```math
+GJ = \frac{L^2}{2\,\theta_m}, \qquad x_{sc} = x_{ac} + \frac{\theta_\ell\,GJ}{M_{root}} .
+```
+
+The mass per unit span, its center $`x_{cg}`$ and its moment of inertia about the shear center come from every element's area times its layup's areal mass, $`\rho_A = t_f\,\rho_f + t_c\,\rho_c`$ (the structure only: no fuel, systems or paint); together with $`GJ`$ and $`x_{sc}`$ they are computed by `fe_section`. The vibration modes are CalculiX's `*FREQUENCY` step on the same model; a mode is called bending, torsion or fore and aft by what its two webs do at the tip, and local when the tip hardly moves. The first bending and first torsion modes, the shear center as the elastic axis and the mass properties make the typical section of the engine's flutter estimate (engine theory, "Flutter estimate"), computed by `typical_section`:
+
+```math
+a = \frac{x_{sc} - b}{b}, \qquad x_\theta = \frac{x_{cg} - x_{sc}}{b}, \qquad r^2 = \frac{I_{sc}}{m\,b^2}, \qquad b = \frac c2 .
+```
+
+<!-- code: fe_section, typical_section -->
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -329,6 +404,8 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - The shell reproduces the membrane on a symmetric in-plane deck, and through a kinematic coupling on the gripped coupon, to 1e-12 and 1e-10; the dispatch sends the in-plane decks to the membrane and a bending, pressure or unsymmetric deck to the shell; a plate free to move out of its plane and a load on the drilling rotation are refused by name; an unsymmetric layup under tension is refused by the membrane and solved, bending, by the shell (`test_shell_solve.py`).
 - Closed forms (cases `plate-ss-isotropic-uniform-pressure-navier`, `plate-ss-isotropic-thin-no-locking`, `plate-ss-cross-ply-sinusoidal-navier`, `strip-cantilever-tip-load-timoshenko`): the simply supported isotropic square plate under uniform pressure reproduces Whitney's Navier series with transverse shear deformation within 0.5 % on 16 by 16 elements, and does so unchanged when the plate is a thousand times thinner than wide, where a displacement-based bilinear element would lock; the simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure reproduces the one-term solution, both faces of every ply included, within 1 % on 32 by 32 elements; the cantilever strip with $`\nu = 0`$ reproduces the Timoshenko beam's tip deflection, shear part included, within 0.02 % and its tip rotation, root moment and shear force to 1e-9 (`test_fe_validation_cases.py`; the closed forms themselves are checked in `test_plate_closed_forms.py` against the tabulated 0.00406 coefficient, the Kirchhoff limit and the plate equation).
 
+- The wing in CalculiX: each load pattern sums to its stated lift and moment, and a strip's linear load has its resultant and its moment about the aerodynamic center; the box keeps only what lies between the spars, and every orientation group holds one layup whose elements face its normal; on a coarse box the bending and torsion stiffness meet an independent thin-walled beam of the same walls within 5 % and 7 % (1.5 % and 4 % at 40 mm elements), the shear center lies between the spars, every case deflects the way the hand calculation's does, the panel that buckles is the compressed skin within 35 % of the hand calculation's skin buckling, the first mode is bending within 15 % of the hand calculation's frequency and a torsion mode follows; the k method of the flutter estimate meets an independent p-k solution with Theodorsen's exact function, written in the test, within 1 % (`test_wing_model.py`).
+
 - The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
 
 ## Not modeled yet
@@ -338,4 +415,4 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Distributed loads other than a uniform pressure per element (surface tractions, gravity, line loads by `*Dload`); thermal strain
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)
 - Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
-- Finite element buckling
+- Eigenvalue buckling of joined shells (CalculiX's `*BUCKLE` misses a wing web's buckle; the wing's panels are flat Ritz plates on the model's mean loads, Section 10.4); a web panel's buckling under its own bending stress; buckling of a curved panel; the load after buckling

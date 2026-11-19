@@ -228,3 +228,47 @@ def library_material(material_id: str, dataset_id: str | None = None) -> Library
                            lamina=lamina, ply_thickness_m=ply_thickness_m, values=tuple(cited),
                            not_provided=tuple(not_provided), authors=source.get("authors"),
                            density_kg_per_m3=extras["density"], fiber_volume_fraction=extras["Vf"], extra_values=tuple(extra_values))
+
+
+_CORE_FAMILY = "Sandwich cores"
+_CORE_KEYS = {"modulus": ("compression-modulus-nominal",), "shear_modulus": ("shear-modulus-nominal",),
+              "shear_strength": ("shear-strength-nominal",), "density": ("density",)}
+
+
+@dataclass(frozen=True)
+class LibraryCore:
+    """A library sandwich core resolved to the values a model of it needs, each with its citation (ADR-0117).
+
+    Only a core whose record gives one shear modulus is read: a honeycomb's two ribbon directions are not modeled yet."""
+
+    material_id: str
+    name: str
+    dataset_id: str
+    citation: str
+    rights: str
+    modulus_Pa: float  # through the thickness, in compression, nominal
+    shear_modulus_Pa: float  # nominal
+    shear_strength_Pa: float | None  # nominal
+    density_kg_m3: float
+    values: tuple[CitedValue, ...]
+
+
+def library_core(material_id: str, dataset_id: str | None = None) -> LibraryCore:
+    """A sandwich core from the library: its nominal compression and shear moduli, shear strength and density, in SI."""
+    d = find_dataset(material_id, dataset_id)
+    if d.get("family") != _CORE_FAMILY:
+        raise ValueError(f"{material_id!r} is not a sandwich core in the library (its family is {d.get('family')!r})")
+    props = {p["key"]: p for p in d["properties"]}
+    found = {role: _first(props, keys) for role, keys in _CORE_KEYS.items()}
+    missing = [role for role in ("modulus", "shear_modulus", "density") if found[role] is None]
+    if missing:
+        raise ValueError(f"the library record of {material_id!r} gives no single {', '.join(missing)}: "
+                         "only a core with one compression modulus and one shear modulus is read")
+    cited = {role: _cite(role, prop, d, _DENSITY_UNITS if role == "density" else _MODULUS_UNITS)
+             for role, prop in found.items() if prop is not None}
+    source = d["source"]
+    citation = f"{source['title']} · {source['revision']} · {source['publisher']}" + (f" · {source['date']}" if source["date"] else "")
+    return LibraryCore(material_id=d["materialId"], name=d["name"], dataset_id=d["datasetId"], citation=citation, rights=source["rights"],
+                       modulus_Pa=cited["modulus"].value, shear_modulus_Pa=cited["shear_modulus"].value,
+                       shear_strength_Pa=cited["shear_strength"].value if "shear_strength" in cited else None,
+                       density_kg_m3=cited["density"].value, values=tuple(cited.values()))

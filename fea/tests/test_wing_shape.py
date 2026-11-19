@@ -188,7 +188,7 @@ def test_a_wing_without_ribs_has_skins_and_webs_only_and_a_rib_without_a_layup_h
 
 @needs_gmsh
 def test_an_open_trailing_edge_gets_a_strip_of_skin():
-    wing = example(**{"skin.core_thickness": 0.0, "skin.core_density": None, "skin.half_stack": [0]})
+    wing = example(**{"skin.core_thickness": 0.0, "skin.core": None, "skin.half_stack": [0]})
     section = mid_surface_section(wing)
     assert not section.trailing_edge_closed
     shape = build_wing_shape(wing, element_size_m=0.03)

@@ -1,17 +1,17 @@
-"""The wing's hand calculation: every load case, at every station, checked ply by ply and for skin buckling.
+"""The wing's hand calculation: every load case, at every station, checked ply by ply and for skin and web buckling.
 
 One call runs the chain an engineer would work by hand for a two-spar composite wing:
 section stiffness, the loads of each flight case along the span, the in-plane load in each skin
 and web, the stress in every ply angle, the strength ratio by the chosen failure criterion, the
-skin's buckling ratio, deflection, twist and the margins at proof and at ultimate load. It is
+skin's and each web's buckling ratio, deflection, twist and the margins at proof and at ultimate load. It is
 written on arrays over cases and stations, so every case of the envelope costs about the same as
 one.
 
 Beam theory with the section of section.py: plane sections stay plane, each skin carries the
 bending as an in-plane load at its own height, the closed box carries the torque as a constant
 shear flow, and each web adds its share of the vertical shear. Not modeled: shear lag, taper,
-sweep, ribs as load paths, the leading and trailing edge skins, web buckling, the interaction of
-shear with compression in skin buckling, and everything sandwich.py lists. The finite element
+sweep, ribs as load paths, the leading and trailing edge skins, the interaction of shear with
+compression in skin buckling and of the web's bending stress with its shear in web buckling, and everything sandwich.py lists. The finite element
 model of the same description is the check on all of these (ADR-0115).
 """
 
@@ -29,7 +29,7 @@ from .description import FlightEnvelope, Wing
 from .loads import CaseNotRun, LoadCase, flight_cases, span_loads
 from .section import BoxSection, MemberLaminate, box_section
 
-CheckName = Literal["skin plies", "spar plies", "skin buckling"]
+CheckName = Literal["skin plies", "spar plies", "skin buckling", "web buckling"]
 SKINS = ("upper skin", "lower skin")
 SPARS = ("front spar", "rear spar")
 
@@ -65,6 +65,7 @@ class SpanStations:
     skin_ratio: np.ndarray  # (2, stations): strength ratio of the upper and lower skin's plies
     spar_ratio: np.ndarray  # (2, stations): of the front and rear web's plies
     buckling_ratio: np.ndarray  # (stations,): buckling load over the larger skin compression
+    web_buckling_ratio: np.ndarray  # (2, stations): each web's buckling shear flow over its shear flow
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ class CaseResult:
     root_torque: float
     tip_deflection: float
     tip_twist: float
-    checks: tuple[Check, Check, Check]
+    checks: tuple[Check, Check, Check, Check]
     stations: SpanStations
 
     @property
@@ -216,6 +217,10 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
     worse = np.argmin(edge_ratio, axis=0)[None]
     spar_ratio, spar_weakest, spar_modes = (np.take_along_axis(a, worse, axis=0)[0] for a in (edge_ratio, edge_weakest, edge_modes))
 
+    # Webs in shear buckling: the bay's buckling shear flow over the web's shear flow, the same flow the ply check uses.
+    with np.errstate(divide="ignore"):
+        web_buckling_ratio = np.where(web_flow > 0, np.array(section.web_buckling_loads)[:, None, None] / web_flow, math.inf)
+
     deflection = cumulative_trapezoid(cumulative_trapezoid(curvature, y), y)
     twist = cumulative_trapezoid(loads.torque / section.GJ, y)
 
@@ -228,15 +233,22 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
             buckling_check = Check("skin buckling", buckling, *_margins(buckling, envelope), float(y[s]), member, None, "compression buckling")
         else:
             buckling_check = Check("skin buckling", math.inf, *_margins(math.inf, envelope), None, None, None, None)
+        web = float(web_buckling_ratio[:, c].min())
+        if math.isfinite(web):
+            w, s = np.unravel_index(int(np.argmin(web_buckling_ratio[:, c])), web_buckling_ratio[:, c].shape)
+            web_check = Check("web buckling", web, *_margins(web, envelope), float(y[s]), SPARS[int(w)], None, "shear buckling")
+        else:
+            web_check = Check("web buckling", math.inf, *_margins(math.inf, envelope), None, None, None, None)
         checks = (
             _ply_check("skin plies", SKINS, skin, skin_ratio[:, c], skin_weakest[:, c], skin_modes[:, c], y, envelope),
             _ply_check("spar plies", SPARS, spar, spar_ratio[:, c], spar_weakest[:, c], spar_modes[:, c], y, envelope),
             buckling_check,
+            web_check,
         )
         span = SpanStations(y=y, running_lift=loads.running_lift[c], shear=loads.shear[c], moment=loads.moment[c], torque=loads.torque[c],
                             deflection=deflection[c], twist=twist[c], skin_load=skin_load[:, c], shear_flow=shear_flow[c],
                             web_shear_flow=web_flow[:, c], skin_ratio=skin_ratio[:, c], spar_ratio=spar_ratio[:, c],
-                            buckling_ratio=buckling_ratio[c])
+                            buckling_ratio=buckling_ratio[c], web_buckling_ratio=web_buckling_ratio[:, c])
         results.append(CaseResult(case=case, root_shear=float(loads.shear[c, 0]), root_moment=float(loads.moment[c, 0]),
                                   root_torque=float(loads.torque[c, 0]), tip_deflection=float(deflection[c, -1]),
                                   tip_twist=float(twist[c, -1]), checks=checks, stations=span))

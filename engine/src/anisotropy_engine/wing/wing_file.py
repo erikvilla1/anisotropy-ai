@@ -26,12 +26,12 @@ import tomllib
 from pathlib import Path
 
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
-from ..library import library_material
+from ..library import library_core, library_material
 from ..units import FOOT, INCH, LBF, POUND_MASS, PSI
 from .airfoil import Airfoil, naca4
 from .analysis import WingResult
 from .description import (
-    Aerodynamics, Aileron, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, Speeds, Wing, WingGeometry, WingMaterial,
+    Aerodynamics, Aileron, CoreMaterial, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, Speeds, Wing, WingGeometry, WingMaterial,
 )
 
 KNOT = 1852 / 3600  # m/s, exact
@@ -103,11 +103,34 @@ def _airfoil(value) -> Airfoil:
                    lower=tuple(tuple(point) for point in value["lower"]))
 
 
+LAYUP_KEYS = {"core_thickness", "core_density", "core", "core_modulus", "core_shear_modulus", "core_shear_strength"}
+
+
+def _core(table: dict, si, name: str) -> tuple[CoreMaterial | None, float | None]:
+    """The core's stiffness, from the library by its id or typed (moduli and strength in the stress unit), and its density."""
+    typed = [key for key in ("core_modulus", "core_shear_modulus", "core_shear_strength") if key in table]
+    density = si(table["core_density"], "density") if "core_density" in table else None
+    if "core" in table:
+        if typed or density is not None:
+            raise ValueError(f"[{name}]: core names a library core, which gives its stiffness and density; "
+                             f"remove {', '.join(typed + (['core_density'] if density is not None else []))} or the core")
+        record = library_core(table["core"])
+        return (CoreMaterial(name=record.name, modulus_Pa=record.modulus_Pa, shear_modulus_Pa=record.shear_modulus_Pa,
+                             shear_strength_Pa=record.shear_strength_Pa), record.density_kg_m3)
+    if not typed:
+        return None, density
+    if "core_modulus" not in table or "core_shear_modulus" not in table:
+        raise ValueError(f"[{name}]: a typed core needs both core_modulus and core_shear_modulus")
+    return (CoreMaterial(name=f"{name} core", modulus_Pa=si(table["core_modulus"], "stress"),
+                         shear_modulus_Pa=si(table["core_shear_modulus"], "stress"),
+                         shear_strength_Pa=si(table["core_shear_strength"], "stress") if "core_shear_strength" in table else None), density)
+
+
 def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
-    _keys(table, f"[{name}]", {"half_stack"}, {"core_thickness", "core_density"})
+    _keys(table, f"[{name}]", {"half_stack"}, LAYUP_KEYS)
+    core, density = _core(table, si, name)
     return Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
-                 core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"),
-                 core_density_kg_m3=si(table["core_density"], "density") if "core_density" in table else None)
+                 core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core)
 
 
 def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
@@ -132,12 +155,12 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
         geometry=WingGeometry(half_span_m=si(geometry["half_span"], "length"), chord_m=si(geometry["chord"], "length"),
                               airfoil=_airfoil(geometry["airfoil"]), front_spar=geometry["front_spar"], rear_spar=geometry["rear_spar"],
                               rib_spacing_m=si(geometry["rib_spacing"], "length") if "rib_spacing" in geometry else None),
-        skin=_layup(_table(data, "skin", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "skin"),
-        spar=_layup(_table(data, "spar", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "spar"),
+        skin=_layup(_table(data, "skin", {"half_stack"}, LAYUP_KEYS), material, si, "skin"),
+        spar=_layup(_table(data, "spar", {"half_stack"}, LAYUP_KEYS), material, si, "spar"),
         aerodynamics=Aerodynamics(aerodynamic_center=aero["aerodynamic_center"],
                                   pitching_moment_coefficient=aero["pitching_moment_coefficient"],
                                   lift_curve_slope_per_rad=aero.get("lift_curve_slope")),
-        rib=_layup(_table(data, "rib", {"half_stack"}, {"core_thickness", "core_density"}), material, si, "rib") if "rib" in data else None,
+        rib=_layup(_table(data, "rib", {"half_stack"}, LAYUP_KEYS), material, si, "rib") if "rib" in data else None,
     )
 
     env = _table(data, "envelope", {"gross_weight", "positive_load_factor", "negative_load_factor", "airspeed", "speed_unit", "altitudes",
@@ -171,7 +194,8 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
         lamina = material.lamina.model_copy(update={"strain_limits": strain_limits_from_strengths(material.lamina)})
         material = material.model_copy(update={"lamina": lamina})
         wing = wing.model_copy(update={"skin": wing.skin.model_copy(update={"material": material}),
-                                       "spar": wing.spar.model_copy(update={"material": material})})
+                                       "spar": wing.spar.model_copy(update={"material": material}),
+                                       "rib": None if wing.rib is None else wing.rib.model_copy(update={"material": material})})
     envelope = FlightEnvelope(
         gross_weight_N=si(env["gross_weight"], "force"), positive_load_factor=env["positive_load_factor"],
         negative_load_factor=env["negative_load_factor"], airspeed=env["airspeed"],

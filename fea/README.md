@@ -118,6 +118,16 @@ uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape engine/exa
 
 prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid.
 
+## A wing in CalculiX
+
+`anisotropy_fea.wing_model` checks the same wing file with finite elements (ADR-0117): the shape's mesh as S8R composite shells carrying every ply and the core, the root clamped, every flight case of the envelope as a sum of four solved load patterns, each ply's strength ratio by the engine's criterion outboard of a root zone one web height long, each skin and web panel between ribs buckling as the engine's Ritz plate under its loads in the model, the first six vibration modes, the box's shear center and torsion stiffness, and a flutter estimate on that section (`anisotropy_engine.wing.flutter`). `--skins box` keeps only the skins between the spars, the hand calculation's box:
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_model engine/examples/example-wing.toml --mesh 40 --skins box --modes
+```
+
+prints every case beside the hand calculation, in about 20 s at 40 mm. The equations are in `docs/theory.md` Section 10.
+
 ## Abaqus field reports
 
 The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/<coupon>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.
