@@ -192,52 +192,87 @@ CASES = {
 # ----------------------------------------------------------------------------------------- the wing cases
 
 def straight_sandwich_wing(case: dict) -> dict:
-    """A straight two-spar wing with a symmetric NACA airfoil, by hand (ADR-0115): the box between the spars as four
-    rectangles, thin-walled beam theory, Schrenk's lift and its exact integrals at the root, and the plies of the skins
-    and webs at the root by the maximum stress criterion. SI wing file units: m, mm of ply and core, N, GPa, MPa, kg/m^3,
-    speeds in m/s; the answers in the report's units (N, N*m, N/m, N*m^2, kg, GPa, mm of deflection, degrees of twist).
+    """A straight two-spar wing whose airfoil is straight-sided between the spars, by hand (ADR-0115 amendment 3): the box
+    between the spars as one closed thin-walled cell of four flat walls at their mid-thickness, symmetric about the chord
+    line; its shear flow worked wall by wall in closed form, Bredt-Batho torsion, Schrenk's lift and its exact integrals at
+    the root, and every face of every ply of the skins and webs at the root by the maximum stress criterion, along each wall.
+    SI wing file units: m, mm of ply and core, N, GPa, MPa, kg/m^3, speeds in m/s; the answers in the report's units (N, N*m,
+    N/m, N*m^2, kg, GPa, mm of deflection, degrees of twist).
 
-    The NACA thickness formula, the standard atmosphere's constants and the first root of the cantilever's frequency
-    equation are written out here again, so nothing is shared with the engine.
+    The standard atmosphere's constants and the first root of the cantilever's frequency equation are written out here
+    again, so nothing is shared with the engine.
     """
     g, m, env = case["geometry"], case["material"], case["envelope"]
     assert case["units"] == "SI" and env["speed_unit"] == "m/s" and env["criterion"] == "max_stress"
-    assert g["airfoil"].startswith("naca-00"), "the closed form is for a symmetric airfoil: the centroid is on the chord line"
-    L, c, thickness = g["half_span"], g["chord"], int(g["airfoil"][-2:]) / 100
+    upper, lower = g["airfoil"]["upper"], g["airfoil"]["lower"]
+    assert lower == [[x, -z] for x, z in upper], "the closed form is for a section symmetric about the chord line"
+    L, c = g["half_span"], g["chord"]
+    (x0, z0), (x1, z1) = [p for p in upper if p[0] <= g["front_spar"]][-1], [p for p in upper if p[0] >= g["rear_spar"]][0]
+    assert not [p for p in upper if x0 < p[0] < x1], "the upper surface is one straight line from before the front spar to past the rear"
+    slope = (z1 - z0) / (x1 - x0)
 
-    def height(x):  # the airfoil's full height at chord fraction x
-        return 2 * 5 * thickness * (0.2969 * math.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4) * c
-
-    x_f, x_r = g["front_spar"] * c, g["rear_spar"] * c
-    h_f, h_r, b = height(g["front_spar"]), height(g["rear_spar"]), x_r - x_f
     q = q_on_axis(m["E1"] * 1e9, m["E2"] * 1e9, m["G12"] * 1e9, m["nu12"])
     strengths = {name: m[name] * 1e6 for name in ("F1t", "F1c", "F2t", "F2c", "F6")}
     t_ply = m["ply_thickness"] * 1e-3
 
-    def laminate(half):  # membrane stiffness, thickness, Ex and Gxy of half + mirrored half
+    def laminate(half, core):  # A, thickness of the plies, Ex, Gxy, and D with the core between the halves, of half + mirrored half
         A = 2 * t_ply * sum(q_bar(q, angle) for angle in half)
         t = 2 * len(half) * t_ply
         a = np.linalg.inv(A)
-        return A, t, 1 / (a[0, 0] * t), 1 / (a[2, 2] * t)
+        outside = core / 2 + len(half) * t_ply  # each ply of a face by its own z, outside ply first, twice for the two faces
+        D = sum(2 * q_bar(q, angle) * ((outside - i * t_ply) ** 3 - (outside - (i + 1) * t_ply) ** 3) / 3 for i, angle in enumerate(half))
+        faces = [(outside - (i + 1) * t_ply, outside - i * t_ply, angle) for i, angle in enumerate(half)]
+        return A, t, 1 / (a[0, 0] * t), 1 / (a[2, 2] * t), D, faces
 
     skin_half, web_half = case["skin"]["half_stack"], case["spar"]["half_stack"]
-    A_s, t_s, E_s, G_s = laminate(skin_half)
-    A_w, t_w, E_w, G_w = laminate(web_half)
-
-    # Skin bending stiffness: each ply of a face by its own z, outside ply first, twice for the two faces.
     core = case["skin"]["core_thickness"] * 1e-3
-    outside = core / 2 + len(skin_half) * t_ply
-    D = sum(2 * q_bar(q, angle) * ((outside - i * t_ply) ** 3 - (outside - (i + 1) * t_ply) ** 3) / 3 for i, angle in enumerate(skin_half))
-    N_cr = 2 * math.pi**2 * (math.sqrt(D[0, 0] * D[1, 1]) + D[0, 1] + 2 * D[2, 2]) / b**2
+    A_s, t_s, E_s, G_s, D_s, faces_s = laminate(skin_half, core)
+    A_w, t_w, E_w, G_w, D_w, faces_w = laminate(web_half, 0.0)
 
-    z_s = (h_f + h_r) / 4  # the skins sit at the mean of the spar half heights, above and below the chord line
-    EI = 2 * E_s * (b * t_s**3 / 12 + b * t_s * z_s**2) + E_w * t_w * (h_f**3 + h_r**3) / 12
-    area = b * (h_f + h_r) / 2
-    GJ = 4 * area**2 / (2 * b / (G_s * t_s) + (h_f + h_r) / (G_w * t_w))
-    share_f, share_r = h_f**2 / (h_f**2 + h_r**2), h_r**2 / (h_f**2 + h_r**2)
-    x_sc = share_f * x_f + share_r * x_r
-    mass = m["density"] * L * (2 * b * t_s + t_w * (h_f + h_r)) + case["skin"]["core_density"] * 2 * b * core * L
+    # The walls at their mid-thickness: the upper surface moved down by half the skin's thickness along its normal, which is
+    # a vertical drop of half * sqrt(1 + slope^2) for a straight surface; the lower surface mirrored.
+    half = (2 * len(skin_half) * t_ply + core) / 2
+    x_f, x_r = g["front_spar"] * c, g["rear_spar"] * c
+    a_f = (z0 + slope * (g["front_spar"] - x0)) * c - half * math.sqrt(1 + slope**2)  # half the front web's height
+    a_r = (z0 + slope * (g["rear_spar"] - x0)) * c - half * math.sqrt(1 + slope**2)
+    b = x_r - x_f
+    l = math.hypot(b, a_f - a_r)  # each skin's width round the section
+    Et_s, Et_w, Gt_s, Gt_w = E_s * t_s, E_w * t_w, G_s * t_s, G_w * t_w
+
+    # Symmetric about the chord line: the centroid is on it and the product of inertia is zero, so the lift's moment bends
+    # the box about the chord line alone. Skins: z runs linearly from a_r to a_f along l. Webs: heights 2 a.
+    EI = 2 * Et_s * l * (a_f**2 + a_f * a_r + a_r**2) / 3 + Et_w * ((2 * a_f) ** 3 + (2 * a_r) ** 3) / 12
+    area = b * (a_f + a_r)
+    GJ = 4 * area**2 / (2 * l / Gt_s + 2 * (a_f + a_r) / Gt_w)
+
+    # Shear flow of a unit upward shear, dq/ds = -(Et / EI) z, with the cell cut where the upper skin meets the rear web and
+    # the walls taken in turn: upper skin aft to fore (s from 0 to l), front web down, lower skin fore to aft, rear web up.
+    # Each wall's flow at s and its integral along the wall, before the closing flow:
+    def upper_flow(s):
+        return -Et_s / EI * (a_r * s + (a_f - a_r) * s**2 / (2 * l))
+    q1 = upper_flow(l)
+
+    def front_flow(s):
+        return q1 - Et_w / EI * (a_f * s - s**2 / 2)
+
+    def lower_flow(s):
+        return q1 + Et_s / EI * (a_f * s + (a_r - a_f) * s**2 / (2 * l))
+
+    def rear_flow(s):
+        return -Et_w / EI * (-a_r * s + s**2 / 2)
+
+    integrals = [-Et_s / EI * l**2 * (2 * a_r + a_f) / 6, 2 * a_f * q1 - Et_w / EI * 2 * a_f**3 / 3,
+                 q1 * l + Et_s / EI * l**2 * (2 * a_f + a_r) / 6, Et_w / EI * 2 * a_r**3 / 3]
+    lengths, stiffness = [l, 2 * a_f, l, 2 * a_r], [Gt_s, Gt_w, Gt_s, Gt_w]
+    closing = -sum(i / k for i, k in zip(integrals, stiffness)) / sum(n / k for n, k in zip(lengths, stiffness))
+    # Moment about the leading edge's chord point of the flow on each straight wall: (z e_x - x e_z) times its integral.
+    levers = [(a_r * (x_f - x_r) - x_r * (a_f - a_r)) / l, x_f, (-a_f * b - x_f * (a_f - a_r)) / l, -x_r]
+    x_sc = -sum(lever * (i + closing * n) for lever, i, n in zip(levers, integrals, lengths))
+    share_f, share_r = -(integrals[1] + closing * lengths[1]), integrals[3] + closing * lengths[3]  # the webs' upward forces
+
+    mass = m["density"] * L * (2 * l * t_s + t_w * 2 * (a_f + a_r)) + case["skin"]["core_density"] * 2 * l * core * L
     f1 = 1.8751040687119611**2 / (2 * math.pi) * math.sqrt(EI / (mass / L * L**4))
+    N_cr = 2 * math.pi**2 * (math.sqrt(D_s[0, 0] * D_s[1, 1]) + D_s[0, 1] + 2 * D_s[2, 2]) / l**2  # a long panel l wide
 
     # Standard atmosphere and dynamic pressure at the one altitude, for true or equivalent airspeeds.
     (altitude,) = env["altitudes"]
@@ -252,9 +287,17 @@ def straight_sandwich_wing(case: dict) -> dict:
     arm = x_sc - case["aerodynamics"]["aerodynamic_center"] * c
     centroid_arm = L * (1 / 4 + 2 / (3 * math.pi))  # the lift of one side acts here: mean of L/2 (uniform) and 4L/(3 pi) (elliptical)
 
-    def weakest(Nx, Nxy, A, half):  # smallest maximum-stress ratio over the ply angles of a laminate under Nx and Nxy
+    def weakest(Nx, Nxy, kx, A, D, faces):
+        """Smallest maximum-stress ratio over every face of every ply of a wall under Nx, Nxy and its own spanwise curvature
+        kx with its other moments free: strain eps0 + zeta * k, both halves."""
         eps0 = np.linalg.solve(A, np.array([Nx, 0.0, Nxy]))
-        return min(max_stress_ratio(np.zeros(3), q @ to_fiber_axes(eps0, angle), strengths) for angle in half)
+        d = np.linalg.inv(D)
+        k = d[:, 0] / d[0, 0] * kx
+        return min(max_stress_ratio(np.zeros(3), q @ to_fiber_axes(eps0 + zeta * k, angle), strengths)
+                   for bottom, top, angle in faces for zeta in (bottom, top, -bottom, -top))
+
+    along = np.linspace(0.0, 1.0, 401)  # where along each wall the plies are checked, as a share of its length
+    n_z = b / l  # the upper skin's outward normal points up by this much (the lower skin's down)
 
     def root(n, speed, delta_cl=0.0, delta_cm=0.0):
         """Loads and checks at the root for a load factor, a speed and an aileron change over its span."""
@@ -264,12 +307,16 @@ def straight_sandwich_wing(case: dict) -> dict:
         shear = side + extra * (y2 - y1)
         moment = side * centroid_arm + extra * (y2**2 - y1**2) / 2
         torque = arm * shear + qd * c**2 * cm * L + qd * c**2 * delta_cm * (y2 - y1)
-        kappa, flow = moment / EI, torque / (2 * area)
-        skins = min(weakest(-kappa * z * E_s * t_s, flow, A_s, skin_half) for z in (z_s, -z_s))
-        webs = min(weakest(-kappa * z * E_w * t_w, share * abs(shear) / h + abs(flow), A_w, web_half)
-                   for share, h in ((share_f, h_f), (share_r, h_r)) for z in (h / 2, -h / 2))
+        kappa, flow = moment / EI, -torque / (2 * area)  # the torque's flow along the walls' axis
+        skins = min(min(weakest(-kappa * z * Et_s, shear * (wall(s) + closing) + flow, -kappa * sign * n_z, A_s, D_s, faces_s)
+                        for z, s in zip(z_of, l * along))
+                    for wall, z_of, sign in ((upper_flow, a_r + (a_f - a_r) * along, 1), (lower_flow, -a_f + (a_f - a_r) * along, -1)))
+        webs = min(min(weakest(-kappa * z * Et_w, shear * (wall(s) + closing) + flow, 0.0, A_w, D_w, faces_w)
+                       for z, s in zip(z_of, h * along))
+                   for wall, z_of, h in ((front_flow, a_f - 2 * a_f * along, 2 * a_f), (rear_flow, -a_r + 2 * a_r * along, 2 * a_r)))
+        mean_compression = kappa * Et_s * (a_f + a_r) / 2  # of the upper skin across its width
         return {"dynamic_pressure": qd, "root_shear": shear, "root_moment": moment, "root_torque": torque,
-                "skin_plies": skins, "spar_plies": webs, "skin_buckling": N_cr / abs(kappa * z_s * E_s * t_s)}
+                "skin_plies": skins, "spar_plies": webs, "skin_buckling": N_cr / mean_compression}
 
     speeds, n_pos = env["speeds"], env["positive_load_factor"]
     maneuver = root(n_pos, speeds["positive_maneuver"])
@@ -295,7 +342,8 @@ def straight_sandwich_wing(case: dict) -> dict:
     roll = root(n_roll, speeds["positive_maneuver"], aileron["down_delta_cl"], aileron["down_delta_cm"])
 
     return {
-        "design": {"bending_stiffness": EI, "torsion_stiffness": GJ, "shear_center": x_sc, "skin_buckling_load": N_cr, "mass": mass,
+        "design": {"bending_stiffness": EI, "torsion_stiffness": GJ, "shear_center": x_sc, "shear_shares": [float(share_f), float(share_r)],
+                   "skin_buckling_load": N_cr, "mass": mass,
                    "first_bending_frequency": f1, "skin_modulus": E_s / 1e9, "spar_modulus": E_w / 1e9},
         "cases": {
             "6": maneuver,

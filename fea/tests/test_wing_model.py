@@ -194,6 +194,10 @@ def test_the_box_bends_and_twists_as_a_thin_walled_beam_of_the_same_walls(box_mo
     assert np.trapezoid(moment * (L - y), y) / w == pytest.approx(EI, rel=0.05)  # 1.5 % at 40 mm; the clamped root stiffens a little
     assert section.torsion_stiffness == pytest.approx(GJ, rel=0.07)  # 4 % at 40 mm, the root's warping held
     assert model.section.spar_x_m[0] < section.shear_center_m < model.section.spar_x_m[1]
+    # The hand calculation works the same thin-walled box (ADR-0115 amendment 3), without the core's own small stiffness.
+    hand = box_section(model.wing)
+    assert hand.EI == pytest.approx(EI, rel=0.01) and hand.GJ == pytest.approx(GJ, rel=0.01)
+    assert section.shear_center_m == pytest.approx(hand.shear_center_m, rel=0.02)  # 0.2 % at 40 mm
 
 
 @needs_gmsh
@@ -207,7 +211,7 @@ def test_the_cases_and_their_checks_follow_the_hand_calculation_in_kind(box_mode
         assert c.applied_lift_N == pytest.approx(c.factors["lift"] + c.factors.get("aileron lift", 0.0)
                                                  * (model.envelope.aileron.span_end_m - model.envelope.aileron.span_start_m), rel=1e-3)
         assert np.sign(c.tip_deflection_m) == np.sign(h.tip_deflection)
-        assert c.tip_deflection_m == pytest.approx(h.tip_deflection, rel=0.35)  # the box at mid-thickness bends about 20 % more
+        assert c.tip_deflection_m == pytest.approx(h.tip_deflection, rel=0.1)  # 2 % at 40 mm: both at mid-thickness
         assert {check.name for check in c.checks} == {"skin plies", "spar plies", "rib plies", "core shear"}
         assert min(check.margin_ultimate for check in c.root_checks) <= c.governing.margin_ultimate
 
@@ -238,7 +242,7 @@ def test_the_first_modes_and_the_flutter_strip(box_model, solved, tmp_path):
     modes = run_modes(model, tmp_path)
     assert modes.modes[0].kind == "bending"
     hand = box_section(model.wing).first_bending_frequency_Hz
-    assert modes.modes[0].frequency_Hz == pytest.approx(hand, rel=0.15)  # the box at mid-thickness, ribs' mass included
+    assert modes.modes[0].frequency_Hz == pytest.approx(hand, rel=0.05)  # 0.3 % at 40 mm; the model has the ribs' mass too
     assert any(mode.kind == "torsion" for mode in modes.modes)
     strip = typical_section(model, fe_section(model, solved), modes)
     assert isinstance(strip, TypicalSection) and -1 < strip.elastic_axis < 1

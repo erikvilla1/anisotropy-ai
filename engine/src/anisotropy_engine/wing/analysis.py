@@ -7,12 +7,13 @@ skin's and each web's buckling ratio, deflection, twist and the margins at proof
 written on arrays over cases and stations, so every case of the envelope costs about the same as
 one.
 
-Beam theory with the section of section.py: plane sections stay plane, each skin carries the
-bending as an in-plane load at its own height, the closed box carries the torque as a constant
-shear flow, and each web adds its share of the vertical shear. Not modeled: shear lag, taper,
-sweep, ribs as load paths, the leading and trailing edge skins, the interaction of shear with
-compression in skin buckling and of the web's bending stress with its shear in web buckling, and everything sandwich.py lists. The finite element
-model of the same description is the check on all of these (ADR-0115).
+Beam theory with the thin-walled section of section.py: plane sections stay plane, so the lift's moment puts an in-plane
+load at every point of the skins and webs in proportion to its distance from the inclined neutral axis; the vertical shear,
+acting at the shear center, and the torque about it each put a shear flow round the closed box, and the two are added with
+their signs. Every ply angle is checked at every point. Not modeled: shear lag, taper, sweep, ribs as load paths, the leading
+and trailing edge skins, the interaction of shear with compression in skin buckling and of the web's bending stress with its
+shear in web buckling, and everything sandwich.py lists. The finite element model of the same description is the check on
+all of these (ADR-0115, ADR-0117).
 """
 
 import math
@@ -27,7 +28,7 @@ from .aeroelastic import Aeroelastic, divergence_dynamic_pressure, equivalent_ai
 from .atmosphere import density_ratio
 from .description import FlightEnvelope, Wing
 from .loads import CaseNotRun, LoadCase, flight_cases, span_loads
-from .section import BoxSection, MemberLaminate, box_section
+from .section import BoxSection, MemberLaminate, WallPoints, box_section
 
 CheckName = Literal["skin plies", "spar plies", "skin buckling", "web buckling"]
 SKINS = ("upper skin", "lower skin")
@@ -46,6 +47,7 @@ class Check:
     member: str | None
     ply_angle_deg: float | None
     mode: str | None
+    point_m: tuple[float, float] | None = None  # (x from the leading edge, z up from the chord line) of the governing ply's point
 
 
 @dataclass(frozen=True)
@@ -59,12 +61,12 @@ class SpanStations:
     torque: np.ndarray
     deflection: np.ndarray  # m, up positive
     twist: np.ndarray  # rad, nose up positive
-    skin_load: np.ndarray  # (2, stations): Nx of the upper and lower skin, N/m, tension positive
-    shear_flow: np.ndarray  # the box's torsion shear flow, N/m
-    web_shear_flow: np.ndarray  # (2, stations): front and rear web, N/m
+    skin_load: np.ndarray  # (2, stations): the mean Nx of the upper and lower skin across the chord, N/m, tension positive
+    shear_flow: np.ndarray  # the torque's shear flow round the box, N/m, along the walls' axis (section.WallPoints)
+    web_shear_flow: np.ndarray  # (2, stations): the size of the front and rear web's mean shear flow, N/m
     skin_ratio: np.ndarray  # (2, stations): strength ratio of the upper and lower skin's plies
     spar_ratio: np.ndarray  # (2, stations): of the front and rear web's plies
-    buckling_ratio: np.ndarray  # (stations,): buckling load over the larger skin compression
+    buckling_ratio: np.ndarray  # (stations,): the lower of the two skins' buckling load over their mean compression
     web_buckling_ratio: np.ndarray  # (2, stations): each web's buckling shear flow over its shear flow
 
 
@@ -118,16 +120,13 @@ def cumulative_trapezoid(values: np.ndarray, y: np.ndarray) -> np.ndarray:
     return np.concatenate([np.zeros(values.shape[:-1] + (1,)), np.cumsum(steps, axis=-1)], axis=-1)
 
 
-def _ply_ratios(member: MemberLaminate, Nx: np.ndarray, Nxy: np.ndarray, criterion: str, f12_star: float | None):
-    """Strength ratio of the weakest ply at every entry of Nx and Nxy (same shape), with its angle index and mode."""
+def _ply_stress(member: MemberLaminate, Nx: np.ndarray, Nxy: np.ndarray, curvature: np.ndarray) -> np.ndarray:
+    """[sigma1, sigma2, tau12] of each ply angle's outermost ply, at its outer face on the outward side and on the inward side, at
+    every entry of Nx, Nxy and the wall's own spanwise curvature (same shape): (..., 2 * angles, 3), outward side first."""
     per_load = member.stress_per_load  # (angles, 3, 3)
     stress = Nx[..., None, None] * per_load[:, :, 0] + Nxy[..., None, None] * per_load[:, :, 2]  # (..., angles, 3)
-    ratios, modes = scaled_strength_ratios(criterion, member.layup.material.lamina, stress.reshape(-1, 3), f12_star)
-    ratios = ratios.reshape(stress.shape[:-1])
-    weakest = np.argmin(ratios, axis=-1)
-    modes = np.array(modes, dtype=object).reshape(stress.shape[:-1])
-    return (np.take_along_axis(ratios, weakest[..., None], axis=-1)[..., 0], weakest,
-            np.take_along_axis(modes, weakest[..., None], axis=-1)[..., 0])
+    bending = curvature[..., None, None] * member.stress_per_curvature
+    return np.concatenate([stress + bending, stress - bending], axis=-2)
 
 
 def _margins(ratio: float, envelope: FlightEnvelope) -> tuple[float, float | None]:
@@ -135,13 +134,34 @@ def _margins(ratio: float, envelope: FlightEnvelope) -> tuple[float, float | Non
     return ratio / envelope.ultimate_factor - 1, proof
 
 
-def _ply_check(name: CheckName, labels, member: MemberLaminate, ratio, weakest, modes, y, envelope) -> Check:
+def _wall_ratios(member: MemberLaminate, walls: WallPoints, moment: np.ndarray, shear: np.ndarray, torsion_flow: np.ndarray,
+                 criterion: str, f12_star: float | None):
+    """The weakest ply of two walls at every case and station, over every point of each wall: ratio, angle index and mode,
+    each (2, cases, stations), and the index of the point. Every state's ratio is found first and only the weakest named."""
+    Nx = walls.load_per_moment[:, :, None, None] * moment  # (2, points, cases, stations)
+    Nxy = walls.flow_per_shear[:, :, None, None] * shear + torsion_flow
+    curvature = walls.curvature_per_moment[:, :, None, None] * moment
+    stress = _ply_stress(member, Nx, Nxy, curvature)  # (2, points, cases, stations, 2 * angles, 3)
+    lamina = member.layup.material.lamina
+    ratios, _ = scaled_strength_ratios(criterion, lamina, stress.reshape(-1, 3), f12_star, with_modes=False)
+    ratios = ratios.reshape(stress.shape[:-1])
+    ply = np.argmin(ratios, axis=-1)
+    ratio = np.take_along_axis(ratios, ply[..., None], axis=-1)[..., 0]  # (2, points, cases, stations)
+    point = np.argmin(ratio, axis=1)
+    ply = np.take_along_axis(ply, point[:, None], axis=1)[:, 0]  # (2, cases, stations)
+    weakest = stress[np.arange(2)[:, None, None], point, np.arange(ratio.shape[2])[:, None], np.arange(ratio.shape[3]), ply]
+    chosen, modes = scaled_strength_ratios(criterion, lamina, weakest.reshape(-1, 3), f12_star)
+    return chosen.reshape(ply.shape), ply % len(member.angles_deg), np.array(modes, dtype=object).reshape(ply.shape), point
+
+
+def _ply_check(name: CheckName, labels, member: MemberLaminate, walls: WallPoints, ratio, weakest, modes, point, y, envelope) -> Check:
     """The governing entry of a (members, stations) set of ply ratios for one case."""
     if not np.isfinite(ratio).any():
         return Check(name, math.inf, *_margins(math.inf, envelope), None, None, None, None)
     k, s = np.unravel_index(np.argmin(ratio), ratio.shape)
-    value = float(ratio[k, s])
-    return Check(name, value, *_margins(value, envelope), float(y[s]), labels[k], float(member.angles_deg[weakest[k, s]]), modes[k, s])
+    value, j = float(ratio[k, s]), int(point[k, s])
+    return Check(name, value, *_margins(value, envelope), float(y[s]), labels[k], float(member.angles_deg[weakest[k, s]]), modes[k, s],
+                 (float(walls.x_m[k, j]), float(walls.z_m[k, j])))
 
 
 def aeroelastic_checks(wing: Wing, envelope: FlightEnvelope, section: BoxSection) -> Aeroelastic:
@@ -193,31 +213,28 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
     torque_arm = section.shear_center_m - wing.aerodynamics.aerodynamic_center * g.chord_m
     loads = span_loads(y, g.half_span_m, g.chord_m, cases, envelope, torque_arm, wing.aerodynamics.pitching_moment_coefficient)
     curvature = loads.moment / section.EI  # (cases, stations)
-    shear_flow = loads.torque / (2 * section.enclosed_area_m2)
+    shear_flow = loads.torque * section.flow_per_torque  # the torque's flow round the box, along the walls' axis
     criterion, f12_star = envelope.criterion, envelope.f12_star
 
-    # Skins: bending as an in-plane load at the skin's height, with the box's torsion shear flow.
-    skin = section.skin
-    skin_z = np.array(section.skin_z_m)[:, None, None]  # (2, 1, 1)
-    skin_load = -curvature * skin_z * skin.Ex * skin.thickness_m  # (2, cases, stations)
-    skin_ratio, skin_weakest, skin_modes = _ply_ratios(skin, skin_load, np.broadcast_to(shear_flow, skin_load.shape), criterion, f12_star)
-    compression = np.clip(-skin_load, 0, None).max(axis=0)  # the larger of the two skins
+    # Skins and webs: at every point of each wall, the bending load there and the shear flow of the shear and the torque.
+    skin, spar = section.skin, section.spar
+    # A case whose loads repeat another's (the same corner at another altitude in equivalent airspeed) is checked once.
+    _, first, again = np.unique(np.concatenate([loads.moment, loads.shear, loads.torque], axis=1), axis=0,
+                                return_index=True, return_inverse=True)
+    distinct = (loads.moment[first], loads.shear[first], shear_flow[first])
+    skin_ratio, skin_weakest, skin_modes, skin_point = (a[:, again.reshape(-1)] for a in _wall_ratios(
+        skin, section.skins, *distinct, criterion, f12_star))
+    spar_ratio, spar_weakest, spar_modes, spar_point = (a[:, again.reshape(-1)] for a in _wall_ratios(
+        spar, section.webs, *distinct, criterion, f12_star))
+
+    # Skin buckling: each skin panel's buckling load over its mean compression across the chord.
+    skin_load = section.skins.mean_load_per_moment[:, None, None] * loads.moment  # (2, cases, stations)
     with np.errstate(divide="ignore"):
-        buckling_ratio = np.where(compression > 0, section.skin_buckling_load / compression, math.inf)
+        skin_buckling = np.where(skin_load < 0, np.array(section.skin_buckling_loads)[:, None, None] / -np.minimum(skin_load, 0), math.inf)
+    buckling_ratio = skin_buckling.min(axis=0)
 
-    # Webs: each web's share of the vertical shear plus the torsion flow, added whatever their signs, with the bending
-    # strain at the web's top and at its bottom.
-    spar = section.spar
-    shares = np.array(section.shear_shares)[:, None, None]
-    heights = np.array(section.spar_heights_m)[:, None, None]
-    web_flow = shares * np.abs(loads.shear) / heights + np.abs(shear_flow)  # (2, cases, stations)
-    web_z = np.array([section.spar_top_z_m, section.spar_bottom_z_m])[:, :, None, None]  # (top/bottom, 2, 1, 1)
-    web_load = -curvature * web_z * spar.Ex * spar.thickness_m  # (2, 2, cases, stations)
-    edge_ratio, edge_weakest, edge_modes = _ply_ratios(spar, web_load, np.broadcast_to(web_flow, web_load.shape), criterion, f12_star)
-    worse = np.argmin(edge_ratio, axis=0)[None]
-    spar_ratio, spar_weakest, spar_modes = (np.take_along_axis(a, worse, axis=0)[0] for a in (edge_ratio, edge_weakest, edge_modes))
-
-    # Webs in shear buckling: the bay's buckling shear flow over the web's shear flow, the same flow the ply check uses.
+    # Webs in shear buckling: the bay's buckling shear flow over the size of the web's mean shear flow.
+    web_flow = np.abs(section.webs.mean_flow_per_shear[:, None, None] * loads.shear + shear_flow)  # (2, cases, stations)
     with np.errstate(divide="ignore"):
         web_buckling_ratio = np.where(web_flow > 0, np.array(section.web_buckling_loads)[:, None, None] / web_flow, math.inf)
 
@@ -229,7 +246,7 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
         buckling = float(buckling_ratio[c].min())
         if math.isfinite(buckling):
             s = int(np.argmin(buckling_ratio[c]))
-            member = SKINS[int(np.argmax(-skin_load[:, c, s]))]
+            member = SKINS[int(np.argmin(skin_buckling[:, c, s]))]
             buckling_check = Check("skin buckling", buckling, *_margins(buckling, envelope), float(y[s]), member, None, "compression buckling")
         else:
             buckling_check = Check("skin buckling", math.inf, *_margins(math.inf, envelope), None, None, None, None)
@@ -240,8 +257,8 @@ def analyze_wing(wing: Wing, envelope: FlightEnvelope, stations: int = 51) -> Wi
         else:
             web_check = Check("web buckling", math.inf, *_margins(math.inf, envelope), None, None, None, None)
         checks = (
-            _ply_check("skin plies", SKINS, skin, skin_ratio[:, c], skin_weakest[:, c], skin_modes[:, c], y, envelope),
-            _ply_check("spar plies", SPARS, spar, spar_ratio[:, c], spar_weakest[:, c], spar_modes[:, c], y, envelope),
+            _ply_check("skin plies", SKINS, skin, section.skins, skin_ratio[:, c], skin_weakest[:, c], skin_modes[:, c], skin_point[:, c], y, envelope),
+            _ply_check("spar plies", SPARS, spar, section.webs, spar_ratio[:, c], spar_weakest[:, c], spar_modes[:, c], spar_point[:, c], y, envelope),
             buckling_check,
             web_check,
         )

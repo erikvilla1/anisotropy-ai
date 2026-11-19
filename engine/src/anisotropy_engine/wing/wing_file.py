@@ -244,9 +244,10 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "skin_modulus": section.skin.Ex / u["modulus"][0], "spar_modulus": section.spar.Ex / u["modulus"][0],
             "skin_shear_modulus": section.skin.Gxy / u["modulus"][0], "spar_shear_modulus": section.spar.Gxy / u["modulus"][0],
             "skin_thickness": section.skin.thickness_m / u["thickness"][0], "spar_thickness": section.spar.thickness_m / u["thickness"][0],
-            "skin_buckling_load": section.skin_buckling_load / load, "skin_width": section.skin_width_m / length,
+            "skin_buckling_load": section.skin_buckling_load / load, "skin_widths": [w / length for w in section.skin_widths_m],
             "spar_heights": [h / length for h in section.spar_heights_m], "shear_center": section.shear_center_m / length,
-            "shear_shares": list(section.shear_shares),
+            "shear_shares": list(section.shear_shares), "centroid": [section.centroid_x_m / length, section.centroid_m / length],
+            "enclosed_area": section.enclosed_area_m2 / length**2,
         },
         "governing": None if governing is None else {
             "case": governing[0].case.number, "label": governing[0].case.label,
@@ -262,6 +263,7 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
                 "strength_ratio": _number(check.strength_ratio), "margin_ultimate": _number(check.margin_ultimate),
                 "margin_proof": _number(check.margin_proof),
                 "station": _number(check.station_m, length), "member": check.member, "ply_angle": check.ply_angle_deg, "mode": check.mode,
+                "point": None if check.point_m is None else [v / length for v in check.point_m],
             } for check in r.checks},
         } for r in result.cases],
         "aeroelastic": None if result.aeroelastic is None else {

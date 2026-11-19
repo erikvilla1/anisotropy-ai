@@ -69,7 +69,9 @@ class Airfoil(BaseModel):
         xp = x
         for _ in range(60):
             _, slope = _naca_camber(xp, m, p)
-            xp = min(max(x + side * _naca_thickness(xp, t) * math.sin(math.atan(slope)), 0.0), 1.0)
+            previous, xp = xp, min(max(x + side * _naca_thickness(xp, t) * math.sin(math.atan(slope)), 0.0), 1.0)
+            if xp == previous:  # settled: the next step would give the same point
+                break
         yc, slope = _naca_camber(xp, m, p)
         return yc + side * _naca_thickness(xp, t) * math.cos(math.atan(slope))
 

@@ -32,6 +32,7 @@ def main() -> None:
     print(f"  first bending frequency {d['first_bending_frequency']:.4g} Hz, skin buckling load {d['skin_buckling_load']:.4g} {u['running_load']}")
     print(f"  skin Ex {d['skin_modulus']:.4g} {u['modulus']}, spar Ex {d['spar_modulus']:.4g} {u['modulus']}, "
           f"shear center {d['shear_center']:.4g} {u['length']} from the leading edge")
+    print(f"  the webs carry {d['shear_shares'][0]:.0%} and {d['shear_shares'][1]:.0%} of the shear, the curved skins the rest")
 
     proof = envelope.proof_factor is not None
     a = report["aeroelastic"]
@@ -47,7 +48,7 @@ def main() -> None:
     for need in a["needs"]:
         print(f"  not run: needs {need}")
     print(f"\nMargins at ultimate load ({envelope.ultimate_factor:g} x limit)" + (f" and at proof load ({envelope.proof_factor:g} x limit)" if proof else ""))
-    header = f"{'case':>4} {'':32} {'alt ' + u['altitude']:>8} {'V ' + u['speed']:>8} {'n':>6} {'M root ' + u['moment']:>14} {'tip ' + u['deflection']:>9} | {'skin':>8} {'spar':>8} {'buckling':>8}"
+    header = f"{'case':>4} {'':32} {'alt ' + u['altitude']:>8} {'V ' + u['speed']:>8} {'n':>6} {'M root ' + u['moment']:>14} {'tip ' + u['deflection']:>9} | {'skin':>8} {'spar':>8} {'skin buc':>8} {'web buc':>8}"
     print(header + (f" | {'proof, lowest':>13}" if proof else ""))
     for c in report["cases"]:
         checks = c["checks"]
@@ -66,6 +67,8 @@ def main() -> None:
         where = f"{check['member']}, {check['station']:.3g} {u['length']} from the root"
         if check["ply_angle"] is not None:
             where += f", {check['ply_angle']:g} degree ply, {check['mode']}"
+        if check["point"] is not None:
+            where += f", at {check['point'][0]:.3g} {u['length']} from the leading edge and {check['point'][1]:.3g} {u['length']} above the chord line"
         print(f"\nLowest margin at ultimate: {g['margin_ultimate']:+.3f}, case {g['case']} ({g['label']}) at {g['altitude']:.0f} {u['altitude']}, "
               f"{g['check']}: {where}")
         print("Every case that ran has margins of zero or more." if report["passes"] else "At least one margin is below zero.")

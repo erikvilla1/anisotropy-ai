@@ -265,7 +265,7 @@ def _finite_states(value, name: str) -> np.ndarray:
     return states
 
 
-def _limit_ratios(fixed: np.ndarray, variable: np.ndarray, bounds, modes) -> tuple[np.ndarray, list[str]]:
+def _limit_ratios(fixed: np.ndarray, variable: np.ndarray, bounds, modes, with_modes: bool = True) -> tuple[np.ndarray, list[str] | None]:
     """`max_stress_ratio_combined` or `max_strain_ratio_combined` for n states at once: per component, 0 when the held value is at or
     past a limit (tension first), else (tension - fixed) / v when v > 0 and (-compression - fixed) / v when v < 0; a component with
     neither sets no limit. The smallest governs, the earlier component on a tie."""
@@ -282,9 +282,11 @@ def _limit_ratios(fixed: np.ndarray, variable: np.ndarray, bounds, modes) -> tup
                                     np.where(v > 0, (tension - f) / v, np.where(v < 0, (-limit - f) / v, math.inf)))
             compression[:, j] = past_compression | (~past_tension & (v < 0))
             present[:, j] = past_tension | past_compression | (v != 0)
-    first_present = np.argmax(present, axis=1)
     j = np.argmin(ratios, axis=1)
     ratio = ratios[np.arange(n), j]
+    if not with_modes:
+        return ratio, None
+    first_present = np.argmax(present, axis=1)
     j = np.where(np.isfinite(ratio), j, first_present)  # every limit overflowed: the scalar function keeps the first present one
     names = np.array([name for pair in modes for name in pair] + ["none"], dtype=object)
     index = np.where(present.any(axis=1), 2 * j + compression[np.arange(n), j], len(names) - 1)
@@ -350,7 +352,7 @@ def _tsai_wu_ratios(s: np.ndarray, v: np.ndarray, st: Strengths, f12_star: float
 
 
 def combined_strength_ratios(criterion: str, material: Lamina, held_12: np.ndarray, scaled_12: np.ndarray,
-                             f12_star: float | None) -> tuple[np.ndarray, list[str]]:
+                             f12_star: float | None, with_modes: bool = True) -> tuple[np.ndarray, list[str] | None]:
     """`face_strength_ratio` for n ply states of one material at once: failure at held + R * scaled, the held part (a temperature
     change's residual stress, a load held fixed) staying as it is, by the same equations operation by operation, so a finite element
     kernel can check every element's plies without a Python call per ply (ADR-0073 amendment 1). `held_12` and `scaled_12` are (n, 3),
@@ -362,25 +364,27 @@ def combined_strength_ratios(criterion: str, material: Lamina, held_12: np.ndarr
         raise ValueError("fixed_12 and variable_12 must have the same shape")
     if criterion == "max_stress":
         st = material.strengths
-        return _limit_ratios(held, scaled, ((st.F1t, st.F1c), (st.F2t, st.F2c), (st.F6, st.F6)), STRESS_MODES)
+        return _limit_ratios(held, scaled, ((st.F1t, st.F1c), (st.F2t, st.F2c), (st.F6, st.F6)), STRESS_MODES, with_modes)
     if criterion == "max_strain":
         lim = material.strain_limits
         compliance = reduced_compliance(material)
         strain = lambda stress: (compliance @ stress[:, :, None])[:, :, 0]  # noqa: E731  `_mechanical_strain_12` row by row
         return _limit_ratios(strain(held), strain(scaled), ((lim.eps1t, lim.eps1c), (lim.eps2t, lim.eps2c), (lim.gamma12, lim.gamma12)),
-                             STRAIN_MODES)
+                             STRAIN_MODES, with_modes)
     if criterion == "tsai_hill":
-        return _tsai_hill_ratios(held, scaled, material.strengths), ["interactive"] * scaled.shape[0]
+        return _tsai_hill_ratios(held, scaled, material.strengths), ["interactive"] * scaled.shape[0] if with_modes else None
     if criterion == "tsai_wu":
-        return _tsai_wu_ratios(held, scaled, material.strengths, f12_star), ["interactive"] * scaled.shape[0]
+        return _tsai_wu_ratios(held, scaled, material.strengths, f12_star), ["interactive"] * scaled.shape[0] if with_modes else None
     raise ValueError(f"Unknown criterion {criterion!r}; use one of {CRITERIA}")
 
 
-def scaled_strength_ratios(criterion: str, material: Lamina, stress_12: np.ndarray, f12_star: float | None) -> tuple[np.ndarray, list[str]]:
+def scaled_strength_ratios(criterion: str, material: Lamina, stress_12: np.ndarray, f12_star: float | None,
+                           with_modes: bool = True) -> tuple[np.ndarray, list[str] | None]:
     """`combined_strength_ratios` with nothing held (ADR-0073): `face_strength_ratio` of an unloaded held face for n ply states of one
-    material. `stress_12` is (n, 3), [sigma1, sigma2, tau12] per row; the result is each row's ratio and governing mode."""
+    material. `stress_12` is (n, 3), [sigma1, sigma2, tau12] per row; the result is each row's ratio and governing mode (None
+    without `with_modes`, which saves naming a mode for every row when only the weakest is wanted)."""
     stress = _finite_states(stress_12, "variable_12")
-    return combined_strength_ratios(criterion, material, np.zeros_like(stress), stress, f12_star)
+    return combined_strength_ratios(criterion, material, np.zeros_like(stress), stress, f12_star, with_modes)
 
 
 # Earlier names, kept so nothing that imported them breaks.

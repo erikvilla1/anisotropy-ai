@@ -196,46 +196,179 @@ def test_an_aileron_past_the_tip_is_refused():
 
 # ------------------------------------------------------------------------------------------------- section
 
+def flat_sided(upper_front=0.06, upper_rear=0.06) -> dict:
+    """An airfoil of straight lines (fractions of the chord), symmetric about the chord line, straight from 15 % to 75 % of the
+    chord, so the box between the spars at 25 % and 65 % has flat skins and its section can be worked by hand."""
+    slope = (upper_rear - upper_front) / 0.4
+    upper = [[0.0, 0.0], [0.15, upper_front - 0.1 * slope], [0.75, upper_rear + 0.1 * slope], [1.0, 0.0]]
+    return {"name": "flat sided", "upper": upper, "lower": [[x, -z] for x, z in upper]}
+
+
+def along_walls(walls, f, g):
+    """The integral along each of two walls of f times g, both given at its points and linear along each straight piece
+    between them, so the rule is exact."""
+    length = np.hypot(np.diff(walls.x_m), np.diff(walls.z_m))
+    a0, a1, b0, b1 = f[:, :-1], f[:, 1:], g[:, :-1], g[:, 1:]
+    return (length * (2 * a0 * b0 + a0 * b1 + a1 * b0 + 2 * a1 * b1) / 6).sum(axis=1)
+
+
+def flow_resultant(walls, flow):
+    """The force (x, z) of a shear flow on each of two walls, and its moment about the leading edge's chord point, by the
+    trapezoid rule on each piece (the flow is quadratic along a piece, so this is close, not exact)."""
+    dx, dz = np.diff(walls.x_m), np.diff(walls.z_m)
+    mean = (flow[:, 1:] + flow[:, :-1]) / 2
+    return (mean * dx).sum(axis=1), (mean * dz).sum(axis=1), float((mean * (walls.z_m[:, :-1] * dx - walls.x_m[:, :-1] * dz)).sum())
+
+
 def test_a_symmetric_airfoil_puts_the_centroid_on_the_chord_line():
     wing, _ = wing_from_dict(example(**{"geometry.airfoil": "naca-0012"}))
     section = box_section(wing)
-    assert section.centroid_m == pytest.approx(0, abs=1e-15)
-    assert section.skin_z_m[0] == pytest.approx(-section.skin_z_m[1])
-    assert sum(section.shear_shares) == pytest.approx(1)
+    assert section.centroid_m == pytest.approx(0, abs=1e-12) and section.EI_product == pytest.approx(0, abs=1e-12 * section.EI)
+    assert section.skins.z_m[0][::-1] == pytest.approx(-section.skins.z_m[1])  # the upper skin's points run aft to fore
     assert section.shear_shares[0] > section.shear_shares[1]  # the front web is the taller one
+    assert 0.8 < sum(section.shear_shares) < 1  # the curved skins carry the rest of the shear
     assert section.spar_x_m[0] < section.shear_center_m < section.spar_x_m[1]
+
+
+def test_the_skins_sit_at_their_mid_thickness_inside_the_airfoil():
+    wing, _ = wing_from_dict(example(**{"geometry.airfoil": flat_sided()}))
+    section = box_section(wing)
+    half = (wing.skin.fiber_thickness_m + wing.skin.core_thickness_m) / 2
+    assert section.skins.z_m == pytest.approx(np.array([[0.06 * 0.45 - half] * 33, [-0.06 * 0.45 + half] * 33]), rel=1e-12)
+    assert section.spar_heights_m == pytest.approx((0.12 * 0.45 - 2 * half,) * 2, rel=1e-12)
+    curved_wing, _ = wing_from_dict(example())
+    curved = box_section(curved_wing)
+    top = np.array([0.45 * curved_wing.geometry.airfoil.surface_heights(x / 0.45)[0] for x in curved.skins.x_m[0]])
+    # Moved half the thickness along the normal: a little more than half straight down where the surface slopes.
+    assert np.all(top - curved.skins.z_m[0] > half * 0.9999) and np.all(top - curved.skins.z_m[0] < half * 1.05)
+
+
+def test_a_rectangular_box_shares_the_shear_between_its_webs_and_twists_by_bredt():
+    wing, _ = wing_from_dict(example(**{"geometry.airfoil": flat_sided()}))
+    section = box_section(wing)
+    assert section.shear_shares == pytest.approx((0.5, 0.5), rel=1e-12)  # flat skins carry no vertical shear
+    assert section.shear_center_m == pytest.approx(0.45 * 0.45, rel=1e-12)  # midway between the spars
+    b, h = 0.4 * 0.45, section.spar_heights_m[0]
+    skin_gt, web_gt = section.skin.Gxy * section.skin.thickness_m, section.spar.Gxy * section.spar.thickness_m
+    assert section.enclosed_area_m2 == pytest.approx(b * h, rel=1e-12)
+    assert section.GJ == pytest.approx(4 * (b * h) ** 2 / (2 * b / skin_gt + 2 * h / web_gt), rel=1e-12)
+    skin_et, web_et = section.skin.Ex * section.skin.thickness_m, section.spar.Ex * section.spar.thickness_m
+    assert section.EI == pytest.approx(2 * skin_et * b * (h / 2) ** 2 + 2 * web_et * h**3 / 12, rel=1e-12)
+    # Bending strains the skin's outer face more than its mid-surface: the upper skin's outward normal points up.
+    assert section.skins.curvature_per_moment == pytest.approx(np.array([[-1.0], [1.0]]) / section.EI * np.ones((2, 33)), rel=1e-12)
+    assert section.webs.curvature_per_moment == pytest.approx(np.zeros((2, 9)), abs=1e-12 / section.EI)
+
+
+def test_a_tapered_box_puts_the_shear_center_toward_the_taller_web():
+    section = box_section(wing_from_dict(example(**{"geometry.airfoil": flat_sided(0.07, 0.05)}))[0])
+    assert section.shear_shares[0] > section.shear_shares[1]
+    assert 0.25 * 0.45 < section.shear_center_m < 0.45 * 0.45
+
+
+@pytest.mark.parametrize("airfoil", ["naca-2412", "naca-0012"])
+def test_the_shear_flow_carries_the_shear_at_the_shear_center_and_the_torque_round_the_box(airfoil):
+    section = box_section(wing_from_dict(example(**{"geometry.airfoil": airfoil}))[0])
+    skins, webs = (flow_resultant(walls, walls.flow_per_shear) for walls in (section.skins, section.webs))
+    # The trapezoid rule on a flow that is quadratic along each piece: about 0.1 % here.
+    assert skins[0].sum() + webs[0].sum() == pytest.approx(0.0, abs=2e-3)
+    assert skins[1].sum() + webs[1].sum() == pytest.approx(1.0, abs=2e-3)
+    assert -(skins[2] + webs[2]) == pytest.approx(section.shear_center_m, rel=2e-3)  # a unit upward force there
+    assert tuple(webs[1]) == pytest.approx(section.shear_shares, rel=2e-3)
+    assert section.flow_per_torque * -2 * section.enclosed_area_m2 == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("airfoil", ["naca-2412", "naca-0012"])
+def test_the_bending_load_sums_to_the_moment_and_to_no_force(airfoil):
+    section = box_section(wing_from_dict(example(**{"geometry.airfoil": airfoil}))[0])
+    force = moment_z = moment_x = 0.0
+    for walls in (section.skins, section.webs):
+        load, one = walls.load_per_moment, np.ones_like(walls.x_m)
+        force += along_walls(walls, load, one).sum()
+        moment_z += along_walls(walls, load, walls.z_m - section.centroid_m).sum()
+        moment_x += along_walls(walls, load, walls.x_m - section.centroid_x_m).sum()
+    assert force == pytest.approx(0, abs=1e-9)
+    assert moment_z == pytest.approx(-1, rel=1e-12)  # the upper skin in compression under a positive moment
+    assert moment_x == pytest.approx(0, abs=1e-12)  # no chordwise moment: the neutral axis tilts instead
 
 
 def test_ribs_raise_the_skins_buckling_load_and_far_apart_they_leave_the_long_panel():
     long_panel = box_section(wing_from_dict(example(**{"geometry.rib_spacing": None, "rib": None}))[0])
-    assert long_panel.skin_buckling_load == pytest.approx(long_plate_buckling_load(long_panel.skin.D, long_panel.skin_width_m))
+    for load, width in zip(long_panel.skin_buckling_loads, long_panel.skin_widths_m):
+        assert load == pytest.approx(long_plate_buckling_load(long_panel.skin.D, width))
+    assert 0.4 * 0.45 < min(long_panel.skin_widths_m)  # each skin's width is its length round the curve
     close = box_section(wing_from_dict(example(**{"geometry.rib_spacing": 0.1}))[0])
     far = box_section(wing_from_dict(example(**{"geometry.rib_spacing": 2.0}))[0])
     assert close.skin_buckling_load > 1.2 * long_panel.skin_buckling_load
     assert long_panel.skin_buckling_load <= far.skin_buckling_load < 1.02 * long_panel.skin_buckling_load
 
 
-def test_a_core_adds_buckling_load_and_core_mass_only():
+def test_a_core_adds_buckling_load_and_core_mass_and_moves_the_skins_inward():
     solid = box_section(wing_from_dict(example(**{"skin.core_thickness": None, "skin.core": None}))[0])
     cored = box_section(wing_from_dict(example())[0])
-    assert cored.EI == solid.EI and cored.GJ == solid.GJ and cored.mass_skins_kg == solid.mass_skins_kg
-    assert solid.mass_core_kg == 0 and cored.mass_core_kg == pytest.approx(2 * 0.18 * 0.006 * 2.0 * 48.0)
+    assert 0.7 * solid.EI < cored.EI < solid.EI and 0.7 * solid.GJ < cored.GJ < solid.GJ  # the skins' mid-surface is 3 mm further in
+    assert solid.mass_core_kg == 0 and cored.mass_core_kg == pytest.approx(sum(cored.skin_widths_m) * 0.006 * 2.0 * 48.0)
     assert cored.skin_buckling_load > 50 * solid.skin_buckling_load
 
 
 # ------------------------------------------------------------------------------------------------ analysis
 
-def test_the_ply_check_is_the_engines_first_ply_failure_of_the_whole_laminate():
-    # The calculation checks one stress state per ply angle; the engine's laminate functions check every face of every ply.
-    result = run()
-    case = result.cases[5]
-    for layup, loads, ratios in ((result.wing.skin, (case.stations.skin_load[:, 0], [case.stations.shear_flow[0]] * 2), case.stations.skin_ratio[:, 0]),):
-        for Nx, Nxy, ratio in zip(*loads, ratios):
-            whole = first_ply_failure(layup.plies(), Loads(Nx=float(Nx), Nxy=float(Nxy)), "max_stress")
-            assert ratio == pytest.approx(whole.strength_ratio, rel=1e-12)
+@pytest.mark.parametrize("cored", [False, True])
+def test_the_ply_check_is_the_engines_first_ply_failure_of_the_whole_laminate(cored):
+    # The calculation checks one stress state per ply angle on each side at each point; the engine's laminate functions check
+    # every face of every ply under the wall's in-plane loads and its own spanwise moment. At the root of the pull-up case, every
+    # point of every wall.
+    from anisotropy_engine.laminate import abd_matrices
+    from anisotropy_engine.sandwich import sandwich_abd
+    result = run() if cored else run(**{"skin.core_thickness": None, "skin.core": None})
+    case, section = result.cases[5], result.section
+    st = case.stations
+    for layup, walls, ratios in ((result.wing.skin, section.skins, st.skin_ratio), (result.wing.spar, section.webs, st.spar_ratio)):
+        D = sandwich_abd(layup.face(), layup.core_thickness_m, layup.face()[::-1])[2] if layup.core_thickness_m else abd_matrices(layup.plies())[2]
+        stiffness = 1 / np.linalg.inv(D)[0, 0]  # moment per unit spanwise curvature, the other moments free
+        for k in range(2):
+            loads = [Loads(Nx=float(walls.load_per_moment[k, j] * st.moment[0]),
+                           Nxy=float(walls.flow_per_shear[k, j] * st.shear[0] + st.shear_flow[0]),
+                           Mx=float(walls.curvature_per_moment[k, j] * st.moment[0] * stiffness)) for j in range(walls.x_m.shape[1])]
+            if layup.core_thickness_m:  # the faces with the core between them: a sandwich's plies, by their own z
+                whole = [sandwich_ratio(layup, load) for load in loads]
+            else:
+                whole = [first_ply_failure(layup.plies(), load, "max_stress").strength_ratio for load in loads]
+            assert ratios[k, 0] == pytest.approx(min(whole), rel=1e-12)
     check = case.checks[0]
-    assert check.strength_ratio == pytest.approx(case.stations.skin_ratio.min())
+    assert check.strength_ratio == pytest.approx(st.skin_ratio.min())
     assert check.station_m == 0.0 and check.member in ("upper skin", "lower skin")
+    k = ("upper skin", "lower skin").index(check.member)
+    assert check.point_m in list(zip(section.skins.x_m[k], section.skins.z_m[k]))
+
+
+def sandwich_ratio(layup, loads: Loads) -> float:
+    """Maximum stress ratio of the weakest face of any ply of a sandwich under in-plane loads and moments, worked ply by ply."""
+    from anisotropy_engine.failure import max_stress_ratio
+    from anisotropy_engine.rotation import stress_transformation, transformed_reduced_stiffness
+    from anisotropy_engine.sandwich import sandwich_abd, sandwich_interfaces
+    face = layup.face()
+    lower, upper = face[::-1], face
+    A, _, D = sandwich_abd(lower, layup.core_thickness_m, upper)
+    strain = np.linalg.solve(A, [loads.Nx, loads.Ny, loads.Nxy])
+    curvature = np.linalg.solve(D, [loads.Mx, loads.My, loads.Mxy])
+    z_lower, z_upper = sandwich_interfaces(lower, layup.core_thickness_m, upper)
+    ratios = []
+    for plies, z in ((lower, z_lower), (upper, z_upper)):
+        for i, ply in enumerate(plies):
+            for zeta in (z[i], z[i + 1]):
+                stress = stress_transformation(ply.angle_deg) @ transformed_reduced_stiffness(ply.material, ply.angle_deg) @ (strain + zeta * curvature)
+                ratios.append(max_stress_ratio(stress, ply.material.strengths)[0])
+    return min(ratios)
+
+
+def test_the_skin_buckling_check_divides_each_skins_load_by_its_mean_compression():
+    result = run()
+    section = result.section
+    case = result.cases[5]
+    mean = section.skins.mean_load_per_moment[:, None] * case.stations.moment
+    assert case.stations.skin_load == pytest.approx(mean)
+    assert case.stations.buckling_ratio[0] == pytest.approx(section.skin_buckling_loads[0] / -mean[0, 0])
+    assert mean[0, 0] < 0 < mean[1, 0]  # pull-up: the upper skin in compression, the lower in tension
 
 
 def test_margins_follow_the_strength_ratio_and_the_two_factors():

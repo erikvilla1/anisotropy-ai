@@ -839,34 +839,49 @@ Roll acceleration, the change of angle of attack in a roll and the wing's elasti
 
 ### Section
 
-A symmetric layup under in-plane load strains alike through its thickness, so each ply angle has one stress state. The membrane moduli of a layup of thickness $`t`$ (Section 6, with $`\mathbf{a} = \mathbf{A}^{-1}`$), its bending stiffness with the core (Section 12) and the stress in each ply angle per unit load are computed by `member_laminate`:
+A symmetric layup under in-plane load strains alike through its thickness, so each ply angle has one stress state. A wall's own spanwise curvature $`k_x`$, its other moments free, adds a strain that grows through the thickness: with $`\mathbf{d} = \mathbf{D}^{-1}`$ (the core between the halves, Section 12), a point at $`\zeta`$ from the wall's mid-surface strains by $`\zeta\,\mathbf{d}_{\cdot 1} k_x / d_{11}`$, largest at the outer face of each angle's outermost ply, $`\zeta_\theta`$, on either side. The membrane moduli of a layup of plies of thickness $`t`$ (Section 6, with $`\mathbf{a} = \mathbf{A}^{-1}`$) and the stress in each ply angle are computed by `member_laminate`:
 
 ```math
 E_x = \frac{1}{t\,a_{11}}, \qquad G_{xy} = \frac{1}{t\,a_{66}}, \qquad
-\boldsymbol{\sigma}_{12}^{\theta} = \mathbf{T}_\sigma(\theta)\,\bar{\mathbf{Q}}(\theta)\,\mathbf{a}\,\begin{bmatrix}N_x & 0 & N_{xy}\end{bmatrix}^T
+\boldsymbol{\sigma}_{12}^{\theta} = \mathbf{T}_\sigma(\theta)\,\bar{\mathbf{Q}}(\theta)\left(\mathbf{a}\begin{bmatrix}N_x & 0 & N_{xy}\end{bmatrix}^T \pm \zeta_\theta\,\frac{\mathbf{d}_{\cdot 1}}{d_{11}}\,k_x\right)
 ```
 
 <!-- code: member_laminate -->
 
-The box is the part of the section between the spars: each skin a flat panel of width $`b`$ between the spar tops or bottoms at their mean height, each web a rectangle of the airfoil's height $`h_i`$ at its chord position. Its properties are computed by `box_section`. Centroid and bending stiffness by the parallel axis theorem, over the two skins and two webs, each of area $`A_i`$, own second moment $`I_i`$, height $`z_i`$ and modulus $`E_i`$:
+The box is the part of the section between the spars, drawn as the shell model draws it (ADR-0116): each skin is the airfoil's surface moved inward along its outward normal $`\mathbf{n}`$ by half the skin's whole thickness $`h`$, plies and core, and each web is a straight wall at its chord position from the lower skin's mid-surface to the upper's. The skins' mid-surface heights are computed by `mid_surface_heights`:
 
 ```math
-\bar{z} = \frac{\sum E_i A_i z_i}{\sum E_i A_i}, \qquad EI = \sum E_i\left[I_i + A_i\,(z_i - \bar{z})^2\right]
+\begin{bmatrix}x_m \\ z_m\end{bmatrix} = \begin{bmatrix}x \\ z\end{bmatrix} - \frac{h}{2}\,\mathbf{n}
 ```
 
-Torsion stiffness of the single closed cell of enclosed area $`A_c = b\,(h_1 + h_2)/2`$ (Bredt-Batho):
+<!-- code: mid_surface_heights -->
+
+The walls are cut into straight pieces, 32 on each skin and 8 on each web, and worked as one closed thin-walled cell (Megson, *Aircraft Structures for Engineering Students*, 4th ed., 2007, Chapters 16 to 18); its properties are computed by `box_section`. Each wall carries load in proportion to its stiffness per unit length, $`E_x t`$ and $`G_{xy} t`$ of its plies. The centroid and the second moments are taken round the cell, $`x`$ along the chord and $`z`$ up, from the modulus-weighted centroid:
 
 ```math
-GJ = \frac{4A_c^2}{\oint \dfrac{ds}{G\,t}} = \frac{4A_c^2}{\dfrac{2b}{G_s t_s} + \dfrac{h_1 + h_2}{G_w t_w}}
+\bar{x} = \frac{\oint E t\,x\,ds}{\oint E t\,ds}, \quad \bar{z} = \frac{\oint E t\,z\,ds}{\oint E t\,ds}, \qquad
+EI_{zz} = \oint E t\,(z - \bar{z})^2 ds, \quad EI_{xx} = \oint E t\,(x - \bar{x})^2 ds, \quad EI_{xz} = \oint E t\,(x - \bar{x})(z - \bar{z})\,ds
 ```
 
-Each web is given the part of the vertical shear in proportion to $`t\,h^2`$, and the shear center is placed at the same weighted chord position. This is an approximation for a box whose skins carry the bending, not the solution of the closed section's shear flow:
+The lift's moment $`M`$ acts with no chordwise moment, so a cambered box bends about an inclined axis. With $`r = EI_{xz}/EI_{xx}`$, its curvature and the strain of a point are:
 
 ```math
-s_i = \frac{t_i h_i^2}{\sum_j t_j h_j^2}, \qquad x_{sc} = \sum_i s_i\,x_i
+\kappa = \frac{M}{EI}, \quad EI = EI_{zz} - \frac{EI_{xz}^2}{EI_{xx}}, \qquad \varepsilon = -\kappa\left[(z - \bar{z}) - r\,(x - \bar{x})\right], \qquad N_x = E_x t\,\varepsilon, \quad k_x = -\kappa\,(n_z - r\,n_x)
 ```
 
-Mass is that of the box of one side, $`\rho L\,(2bt_s + t_w(h_1 + h_2))`$ plus the core's; the skin ahead of the front spar and behind the rear spar is in neither the stiffness nor the mass. The first bending frequency is that of a uniform cantilever of mass per length $`m'`$ (Blevins, *Formulas for Natural Frequency and Mode Shape*, 1979, Table 8-1), with $`\beta_1 = 1.8751`$ the first root of $`1 + \cos\beta\cosh\beta = 0`$:
+The walls' axis $`s`$ runs round the cell forward along the upper skin, down the front web, aft along the lower skin and up the rear web; it is the second axis of each wall's laminate, whose first is the span and whose third is the outward normal. Spanwise equilibrium of a wall, $`\partial N_x/\partial y + \partial q/\partial s = 0`$ with $`dM/dy = -V`$, gives the shear flow of a vertical shear $`V`$ in the cell cut where the upper skin meets the rear web, and the constant flow $`q_0`$ that closes the cell with no twist, so that the shear acts at the shear center $`x_{sc}`$:
+
+```math
+q_b(s) = -\frac{V}{EI}\int_0^s E t\left[(z - \bar{z}) - r\,(x - \bar{x})\right]ds, \qquad q = q_b + q_0, \quad q_0 = -\frac{\oint q_b\,ds/(G t)}{\oint ds/(G t)}, \qquad V x_{sc} = -\oint q\,(z\,e_x - x\,e_z)\,ds
+```
+
+with $`\mathbf{e}`$ the direction of $`s`$. The flow is quadratic along a straight piece and is integrated exactly by Simpson's rule. Part of the shear is carried by the skins where they slope; each web's share is the vertical force of its own flow. A torque $`T`$ about the shear center, nose up, adds a constant flow round the cell of enclosed area $`A_c`$ (inside the mid-surfaces) and twists it by $`T/GJ`$ (Bredt-Batho):
+
+```math
+q_T = -\frac{T}{2A_c}, \qquad GJ = \frac{4A_c^2}{\oint \dfrac{ds}{G\,t}}
+```
+
+The walls' own bending about their mid-surface is left out of $`EI`$: for a sandwich skin it is about $`(c/2)^2/z^2`$ of the skin's part, $`c`$ the core and $`z`$ the skin's height, 2 % on the example wing, and leaving it out raises the strains by as much. Mass is that of the walls of one side, their lengths round the cell times the plies' and the core's mass per area; the skin ahead of the front spar and behind the rear spar is in neither the stiffness nor the mass. The first bending frequency is that of a uniform cantilever of mass per length $`m'`$ (Blevins, *Formulas for Natural Frequency and Mode Shape*, 1979, Table 8-1), with $`\beta_1 = 1.8751`$ the first root of $`1 + \cos\beta\cosh\beta = 0`$:
 
 ```math
 f_1 = \frac{\beta_1^2}{2\pi}\sqrt{\frac{EI}{m' L^4}}
@@ -874,29 +889,25 @@ f_1 = \frac{\beta_1^2}{2\pi}\sqrt{\frac{EI}{m' L^4}}
 
 <!-- code: box_section -->
 
-The compression per unit width at which the skin between the spars buckles as a long, simply supported plate is computed by `long_plate_buckling_load`. It is the lowest value of the closed form of Section 8 over the length of a half-wave (Whitney Eq. 5.80); with ribs, the closed form of Section 8 is used with the rib spacing as the panel's length. $`D_{16}`$ and $`D_{26}`$ are dropped, which overstates the load of a skin with angle plies away from its mid-plane, and the shear in the skin is not combined with the compression:
+Each skin buckles as a flat, simply supported plate as wide as its length $`b`$ round the curve between the spars, computed by `skin_buckling_load` and `long_plate_buckling_load`: without ribs as a long plate, the lowest value of the closed form of Section 8 over the length of a half-wave (Whitney Eq. 5.80); with ribs, by the closed form of Section 8 with the rib spacing as the panel's length. $`D_{16}`$ and $`D_{26}`$ are dropped, which overstates the load of a skin with angle plies away from its mid-plane; the skin's curve, which raises the load, and the shear in the skin, which lowers it, are left out:
 
 ```math
 N_{cr} = \frac{2\pi^2}{b^2}\left[\sqrt{D_{11}D_{22}} + D_{12} + 2D_{66}\right]
 ```
 
-<!-- code: long_plate_buckling_load -->
+<!-- code: skin_buckling_load, long_plate_buckling_load -->
+
+The load set against it is the skin's mean compression across the chord. For an isotropic plate whose compression falls linearly across its width to $`\psi`$ times its largest, the buckling coefficient of the largest is $`k_\sigma = 8.2/(1.05 + \psi)`$ (EN 1993-1-5, Table 4.1), so the mean compression at buckling, $`k_\sigma (1 + \psi)/2`$, stays between 3.9 and 4.0 for $`\psi`$ from 0 to 1: the mean of a varying compression buckles a plate as a uniform compression of the same size does, within 2.5 %.
 
 ### Checks of every case
 
-The checks of every case at every station are computed by `analyze_wing`, on arrays over cases and stations. Plane sections stay plane, so with the curvature $`\kappa = M/EI`$ a member at height $`z`$ above the centroid carries the in-plane load
+The checks of every case at every station are computed by `analyze_wing`, on arrays over cases and stations; a case whose loads repeat another's is checked once. At every point of every wall, the corners and 31 points between them on each skin and 7 on each web, a wall carries the $`N_x`$ and $`k_x`$ of the moment, and the shear flow $`q(s)`$ of the shear and $`q_T`$ of the torque, added with their signs:
 
 ```math
-N_x = -\kappa\,z\,E_x t
+N_{xy} = q(s) + q_T
 ```
 
-The box carries the torque as a constant shear flow, and each web adds its share of the vertical shear; the two are added whatever their signs:
-
-```math
-q_T = \frac{T}{2A_c}, \qquad q_{web,i} = \frac{s_i\,|V|}{h_i} + |q_T|
-```
-
-Each skin is checked under $`(N_x, q_T)`$ and each web under $`(N_x, q_{web})`$ at its top and at its bottom. The strength ratio $`R`$ of the weakest ply angle follows Section 5 by the criterion the envelope names; the skin's buckling ratio is $`N_{cr}`$ over the larger compression of the two skins, and each web's buckling ratio is its bay's buckling shear flow over $`q_{web,i}`$. Deflection and twist are integrated along the span by the trapezoid rule:
+Every ply angle is checked at the outer face of its outermost ply on both sides of the wall. The strength ratio $`R`$ of the weakest follows Section 5 by the criterion the envelope names. A skin's buckling ratio is its $`N_{cr}`$ over its mean compression; each web's buckling ratio is its bay's buckling shear flow over the size of the web's mean shear flow. Deflection and twist are integrated along the span by the trapezoid rule:
 
 ```math
 \delta(y) = \int_0^y\!\!\int_0^{s} \kappa\,dr\,ds, \qquad \phi(y) = \int_0^y \frac{T}{GJ}\,ds
@@ -920,7 +931,7 @@ with $`\lambda`$ the Ritz double sine series of Section 7 (`ritz_buckling`, 14 t
 
 <!-- code: web_shear_buckling_load -->
 
-Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing worked by hand in `engine/validation/closed_forms.py` without the engine; the ply check against `first_ply_failure` of the whole laminate; the gust formula against the regulation's printed form; the web's buckling shear flow against Timoshenko and Gere's $`k_s = 5.35 + 4(b/a)^2`$ for an isotropic plate within 2 %, and on one $`[45/-45/0]_s`$ web against CalculiX's buckling of the same flat plate within 1.2 % in both directions (ADR-0117). The finite element model of the same description is compared case by case in ADR-0117.
+Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing with a straight-sided airfoil worked by hand in `engine/validation/closed_forms.py` without the engine, its box one closed cell of four flat walls whose shear flow is integrated wall by wall in closed form, every face of every ply checked along each wall; the section's own sums in `engine/tests/test_wing.py` (the shear flow carries the shear at the shear center and the torque round the box, the bending load sums to the moment and to no force, a rectangular box shares the shear equally between its webs); the ply check against `first_ply_failure` of the whole laminate and, for a sandwich, ply by ply with the core between the faces; the gust formula against the regulation's printed form; the web's buckling shear flow against Timoshenko and Gere's $`k_s = 5.35 + 4(b/a)^2`$ for an isotropic plate within 2 %, and on one $`[45/-45/0]_s`$ web against CalculiX's buckling of the same flat plate within 1.2 % in both directions (ADR-0117). The finite element model of the same description is compared case by case in ADR-0117 and ADR-0115 amendment 3: on the example wing the section's bending and torsion stiffness are within 2 % and 4 % of the shell model's, its shear center within 0.3 mm, and the lowest skin margin outboard of the root +0.154 against +0.146.
 
 ### Divergence and aileron reversal
 
@@ -1001,4 +1012,4 @@ Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against 
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
-- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; the skins' curve and their mid-thickness (the beam lays them flat at the outer surface); a closed box's shear center; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing
+- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; the walls' own bending stiffness and the core's in-plane stiffness; a skin's curve in its buckling; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing
