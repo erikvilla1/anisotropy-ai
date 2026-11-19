@@ -217,10 +217,12 @@ def test_the_cases_and_their_checks_follow_the_hand_calculation_in_kind(box_mode
 def test_panel_buckling_takes_each_bays_own_loads(box_model, solved):
     model, results = box_model, solved
     cases = buckling_cases(model)
-    assert [c.number for c in cases] == [6, 8]
-    up, down = panel_buckling(model, results, cases)
+    assert [c.number for c in cases] == [6, 7, 8, 9]  # the maneuver corners, two at each load factor with the same root moment
+    found = panel_buckling(model, results, cases)
+    assert [b.case.number for b in found] == [6, 7, 8, 9]
+    up, down = found[0], found[2]
     assert up.part == "Upper skin" and down.part == "Lower skin"
-    assert up.loads[0] < 0 and down.loads[0] < 0  # the bay that buckles is the one in compression
+    assert all(b.loads[0] < 0 for b in found)  # the bay that buckles is the one in compression
     hand = analyze_wing(model.wing, model.envelope).cases[5]
     skin = next(check for check in hand.checks if check.name == "skin buckling")
     assert up.factor == pytest.approx(skin.strength_ratio, rel=0.35)

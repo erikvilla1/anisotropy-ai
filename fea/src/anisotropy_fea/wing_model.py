@@ -645,17 +645,29 @@ def case_load(model: WingModel, case: LoadCase) -> np.ndarray:
     return sum(factors[name] * force for name, force in model.patterns.items())
 
 
+TIE = 1e-9  # root moments this close, relative to the largest, are the same moment (two corners at one load factor)
+
+
 def buckling_cases(model: WingModel) -> list[LoadCase]:
-    """The cases with the largest upward and the largest downward root bending moment, those that load each skin hardest in compression."""
+    """The cases with the largest upward and the largest downward root bending moment, those that load each skin hardest in
+    compression. Corners at the same load factor have the same moment and differ in torsion, so all of a tie are taken: picking
+    one by the last digit would change with the machine. A case whose loads repeat one already taken (the same corner at another
+    altitude) is left out."""
     cases, _ = flight_cases(model.envelope, model.wing.geometry.chord_m)
     if not cases:
         return []
     y = model.mesh.nodes[:, 1]
-    moment = [float(case_load(model, case) @ y) for case in cases]
-    chosen = [cases[int(np.argmax(moment))]]
-    if min(moment) < 0:
-        chosen.append(cases[int(np.argmin(moment))])
-    return chosen
+    loads = [case_load(model, case) for case in cases]
+    moment = np.array([float(load @ y) for load in loads])
+    tie = TIE * np.abs(moment).max()
+    keep = moment >= moment.max() - tie
+    if moment.min() < 0:
+        keep |= moment <= moment.min() + tie
+    chosen: list[int] = []
+    for k in np.nonzero(keep)[0]:
+        if not any(np.allclose(loads[k], loads[j], rtol=TIE, atol=TIE * np.abs(loads[j]).max()) for j in chosen):
+            chosen.append(int(k))
+    return [cases[k] for k in chosen]
 
 
 def write_modes_deck(model: WingModel) -> str:

@@ -363,7 +363,7 @@ N_{xy} &= \sum_k t_k\,\big[(\sigma_1 - \sigma_2)\,s c + \tau_{12}\,(c^2 - s^2)\b
 \end{aligned}
 ```
 
-A panel's load is the area-weighted mean over its elements, and its buckling factor is the engine's Ritz double sine series with the laminate's $`D_{16}`$ and $`D_{26}`$ kept (engine theory, Section 7); a web panel is taken no longer than five times its height, as in the hand calculation. Under each of the cases that bend the wing hardest up and down, the panel that buckles first is computed by `panel_buckling`, and its margin is the factor over the ultimate factor less one.
+A panel's load is the area-weighted mean over its elements, and its buckling factor is the engine's Ritz double sine series with the laminate's $`D_{16}`$ and $`D_{26}`$ kept (engine theory, Section 7); a web panel is taken no longer than five times its height, as in the hand calculation. Under each of the cases that bend the wing hardest up and down (both maneuver corners at a load factor bend it equally and differ in torsion, so both are taken), the panel that buckles first is computed by `panel_buckling`, and its margin is the factor over the ultimate factor less one.
 
 CalculiX's own eigenvalue buckling (`*BUCKLE`) is not used for the wing. On a flat plate alone it gives the closed form within 1 %, but on the joined skins, webs and ribs of the example wing with a $`[45/-45/0]_s`$ web its first four modes, from 2.26 times limit load, were each mostly the wing's own static deflection and none a web buckle, while a large-deflection static solution of the same model (`NLGEOM`) buckled the root bay's front web at about 1.6 (ADR-0117).
 
