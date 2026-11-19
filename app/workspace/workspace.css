@@ -219,6 +219,7 @@
 .wing-fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 4px; margin: 0 0 12px; }
 .wing-fieldset legend { font-size: 13px; color: var(--heading); padding: 0 4px; }
 .wing-stage { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wing-stage > .studio-panel + .studio-panel { margin-top: 0; } /* the column's gap spaces the panels */
 .wing-stage[data-state="stale"] .wing-views { opacity: 0.75; transition: opacity 0.2s; }
 .wing-answer h2 { margin: 0 0 6px; font-size: 22px; }
 .wing-answer[data-passes="false"] h2 { color: #e66767; }
@@ -247,7 +248,8 @@
 .wing-legend { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0; }
 .wing-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 4px; }
 .wing-table-wrap { overflow-x: auto; }
-.wing-cases td, .wing-cases th { white-space: nowrap; }
+.wing-cases td { white-space: nowrap; }
+.wing-cases th { white-space: normal; vertical-align: bottom; } /* headers wrap, so every column fits the centre */
 .wing-cases tr[data-selected="true"] td { background: rgba(255, 255, 255, 0.05); }
 .wing-cases tr[data-governing="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .wing-cases tr { cursor: pointer; }
@@ -260,5 +262,6 @@
 .wing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; align-items: start; }
 .wing-swatch-line { width: 16px; height: 0; border-top: 2px dashed #9085e9; border-radius: 0; vertical-align: 3px; }
 .wing-swatch-ring { border: 2px solid #f2f2f2; border-radius: 50%; background: transparent; }
-.wing-case-line { display: block; color: var(--muted); font-size: 12px; }
-.wing-cases td:first-child { white-space: normal; min-width: 18ch; }
+.wing-case-line { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.wing-cases td:first-child { white-space: normal; min-width: 20ch; }
+.wing-cases .chat-link { text-align: left; }
