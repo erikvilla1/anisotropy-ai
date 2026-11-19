@@ -2272,7 +2272,7 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await page.goto("/workspace");
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "browser"); // the stand-in keeps no projects, and says so
   await expect(page.getByTestId("projects-source")).toHaveText("Projects are saved in this browser only; clearing its site data removes them.");
-  await expect(page.getByTestId("workspace-tiles").locator("[data-workspace]")).toHaveCount(2); // no CAD tile (D5)
+  await expect(page.getByTestId("workspace-tiles").locator("[data-workspace]")).toHaveCount(3); // FEA, laminate and wing (ADR-0118); no CAD tile (D5)
   await expectNoBannedWords(page, "the chooser");
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
@@ -2284,6 +2284,8 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await expectNoBannedWords(page, "the coupon workspace, a hidden test named");
   await page.goto("/workspace/laminate");
   await expectNoBannedWords(page, "the laminate workspace");
+  await page.goto("/workspace/wing");
+  await expectNoBannedWords(page, "the wing workspace");
   await page.goto("/workspace/fea/view");
   await expectNoBannedWords(page, "the viewer with no job");
   await page.goto("/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");

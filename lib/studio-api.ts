@@ -2,7 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
-import type { WingAnswer, WingDescription } from "./wing";
+import type { WingAnswer, WingDescription, WingShape } from "./wing";
 import type { Checklist, StudioValues } from "./studio-form";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
@@ -628,6 +628,16 @@ export async function analyzeWing(apiBaseUrl: string, request: { wing: WingDescr
     throw unreadable("the wing calculation: not a wing answer");
   }
   return payload as unknown as WingAnswer;
+}
+
+/** The wing's shape for a CAD program (ADR-0116, ADR-0118): its STEP file's text and the part table, built from the description as it
+ * stands. The engine reads the description first, so a wing the calculation refuses is refused here in the same words. */
+export async function shapeWing(apiBaseUrl: string, request: { wing: WingDescription } | { toml: string }, signal?: AbortSignal): Promise<WingShape> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/shape`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing's shape");
+  if (!isObject(payload) || typeof payload.step !== "string" || !isObject(payload.parts) || !Array.isArray(payload.parts.parts)) {
+    throw unreadable("the wing's shape: not a shape");
+  }
+  return payload as unknown as WingShape;
 }
 
 // ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)

@@ -32,10 +32,14 @@ Step 4 of the wing generator is the page: a wing's inputs on the left, its answe
    - (c) Nowhere. Rejected: a reload would lose the work.
 6. **What is recorded.** Every call is a run record (ADR-0026): the description as the inputs and a summary (passes, the governing check, the design, the cases run and waiting) as the result. The drawings are not kept: they are the engine's to redraw from the description.
 7. **Units.** The answer is in the wing file's own units, SI or US, as the engine reports it; no toggle on the page yet.
+8. **The STEP file.**
+   - (a) A second API address, `POST /v1/wings/shape`, that reads the description by the engine's rules and runs the fea package's `wing_shape` (ADR-0116) in a process of its own, as the coupon tools run. Chosen: the hosted image already holds the fea environment with Gmsh, and the example builds in under half a second.
+   - (b) A job in the queue, like a coupon run. Rejected: a job is for minutes of work; this is less than a second.
+   - (c) The shape built in the browser (OpenCASCADE compiled to WebAssembly). Rejected: tens of megabytes to download, and a second builder to keep equal to the first.
 
 ## Decision
 
-The wing workspace at `/workspace/wing`, the third tile of `/workspace`, sends the wing file's description to `POST /v1/wings/analyze` once the typing settles (350 ms) and shows what comes back: the report of ADR-0115 and the engine's drawing data. The page computes nothing. A value that is not a number is not sent, and an input the engine refuses keeps the last answer on the page, marked as the last wing that could be worked. The wing is kept in this browser and saved and opened as a wing file; the file is read by the engine, not by the page. The STEP download, the CalculiX check, a saved wing project and the chat input are later slices.
+The wing workspace at `/workspace/wing`, the third tile of `/workspace`, sends the wing file's description to `POST /v1/wings/analyze` once the typing settles (350 ms) and shows what comes back: the report of ADR-0115 and the engine's drawing data. The page computes nothing. A value that is not a number is not sent, and an input the engine refuses keeps the last answer on the page, marked as the last wing that could be worked. The wing is kept in this browser and saved and opened as a wing file; the file is read by the engine, not by the page. Download STEP, in the last panel, sends the same description to `POST /v1/wings/shape`, saves the STEP file and lists each part's thickness, which a STEP file cannot hold. The finite element check, a saved wing project and the chat input are later slices.
 
 ## As built (2026-11-19)
 
@@ -48,6 +52,7 @@ The wing workspace at `/workspace/wing`, the third tile of `/workspace`, sends t
   - `wing-rail.tsx`: Wing file, Geometry, Material, Layup, Loads, Aerodynamics, Boundary conditions and Solve.
   - `wing-stage.tsx`: the answer, the wing from above coloured by margin, the margins along the span, the section coloured by shear flow or spanwise load, the design and the cases.
   - `wing-assistant.tsx`: what governs and what usually raises it, in words with no number.
+- The STEP file: `wing_shape_endpoint` in `api/src/anisotropy_api/main.py` runs `wing_shape_command()` (`coupon_jobs.py`) on the description written as JSON; `anisotropy_fea.wing_shape` reads a `.json` description, writes the part table with `--parts` in the file's units, and ends a refusal with status 2 and its reason. The page's Shape for CAD panel (`ShapePanel` in `wing-rail.tsx`) saves the file and lists the parts. A second STEP file written in one process names its products `… 2.<k>`; `name_step_products` now reads any counter.
 - The tile shows for every signed-in person; it is not hidden for founders only.
 
 ## Why (evidence)
@@ -56,6 +61,7 @@ The wing workspace at `/workspace/wing`, the third tile of `/workspace`, sends t
 - `cd api && TEST_DATABASE_URL=… uv run pytest tests/test_wings_api.py`: 14 passed (2026-11-19). The API's results equal the engine's; JSON and TOML give the same answer; refusals are 422 and recorded; the browser tests' answer is the API's; the file the page saves reads back as the example.
 - `npx tsx --test tests/wing.test.ts`: 4 passed; `npm test`: 430 passed, 1 skipped (2026-11-19).
 - `npx playwright test --config playwright.studio.config.ts wing.spec.ts workspace.spec.ts`: 7 passed on Chromium (2026-11-19).
+- The STEP file: `cd api && uv run pytest tests/test_wings_api.py`: 19 passed, one of them building the example's shape through the fea package; `cd fea && uv run --extra mesh pytest tests/test_wing_shape.py`: 15 passed; the browser's Download STEP and a check that the page names no tool: `wing.spec.ts` 6 passed (2026-11-19). On the local page the example's STEP file, 9 parts named, came back in 0.48 s.
 - Timing on a development machine, 12 calls with the example wing: the engine 0.12 s, the whole request 0.15 s median, 0.17 s at most; the answer is 174 kB.
 - A private wing file opened in the page gave the same margins as the command-line calculator (numbers kept off the repository, ADR-0042).
 - The hosted request time is not measured yet: UNVERIFIED.

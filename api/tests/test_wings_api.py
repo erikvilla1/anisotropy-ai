@@ -149,3 +149,78 @@ def test_the_wing_file_the_page_saves_reads_back_as_the_example():
     saved = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "wing" / "example-saved.toml"
     assert tomllib.loads(saved.read_text(encoding="utf-8")) == example()
     assert client.post(ENDPOINT, json={"toml": saved.read_text(encoding="utf-8")}).status_code == 200
+
+
+# ---- the shape for a CAD program (ADR-0116, ADR-0118)
+
+SHAPE = "/v1/wings/shape"
+FAKE_SHAPE = '''
+import json, sys
+wing, step, parts = sys.argv[1], sys.argv[2], sys.argv[4]
+data = json.load(open(wing, encoding="utf-8"))
+mode = data["title"]
+if mode == "refuse":
+    print("warning: a uv line first", file=sys.stderr)
+    print("The front spar web has no height", file=sys.stderr)
+    sys.exit(2)
+if mode == "crash":
+    print("Traceback (most recent call last): secret/path.py", file=sys.stderr)
+    sys.exit(1)
+open(step, "w", encoding="ascii").write("ISO-10303-21;\\nEND-ISO-10303-21;\\n")
+json.dump({"wing": mode, "units": {"thickness": "mm", "area": "m^2", "mass": "kg", "step": "mm"},
+           "parts": [{"name": "Upper skin", "layup": "skin", "thickness": 7.46, "area": 0.87, "mass": 2.2}], "mass": 2.2},
+          open(parts, "w", encoding="utf-8"))
+'''
+
+
+def fake_shape(monkeypatch, tmp_path):
+    import sys
+    import anisotropy_api.main as main_module
+    script = tmp_path / "fake_shape.py"
+    script.write_text(FAKE_SHAPE, encoding="utf-8")
+    monkeypatch.setattr(main_module, "wing_shape_command", lambda: [sys.executable, str(script)])
+
+
+def test_the_shape_comes_back_as_the_step_files_text_and_the_part_table(monkeypatch, tmp_path):
+    fake_shape(monkeypatch, tmp_path)
+    answer = client.post(SHAPE, json={"wing": example()})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    assert body["step"].startswith("ISO-10303-21;")
+    assert body["parts"]["parts"][0]["name"] == "Upper skin" and body["parts"]["units"]["step"] == "mm"
+
+
+def test_a_wing_the_engine_refuses_is_refused_before_the_shape_is_built(monkeypatch, tmp_path):
+    fake_shape(monkeypatch, tmp_path)
+    wing = example()
+    wing["geometry"]["chord"] = -1
+    answer = client.post(SHAPE, json={"wing": wing})
+    assert answer.status_code == 422
+    assert answer.json()["detail"] == client.post(ENDPOINT, json={"wing": wing}).json()["detail"]  # the same words as the calculation's
+
+
+def test_the_shapes_own_refusal_is_its_last_line_and_a_crash_says_nothing_of_the_tool(monkeypatch, tmp_path):
+    fake_shape(monkeypatch, tmp_path)
+    refused = client.post(SHAPE, json={"wing": example() | {"title": "refuse"}})
+    assert refused.status_code == 422 and refused.json()["detail"] == "The front spar web has no height"
+    crashed = client.post(SHAPE, json={"wing": example() | {"title": "crash"}})
+    assert crashed.status_code == 503 and crashed.json()["detail"] == "The shape could not be built"
+
+
+def test_without_the_shape_builder_the_answer_is_unavailable(monkeypatch):
+    import anisotropy_api.main as main_module
+    monkeypatch.setattr(main_module, "wing_shape_command", lambda: None)
+    assert client.post(SHAPE, json={"wing": example()}).status_code == 503
+
+
+FEA_GMSH = list((Path(__file__).resolve().parents[2] / "fea" / ".venv").glob("lib/python*/site-packages/gmsh*"))
+
+
+@pytest.mark.skipif(not FEA_GMSH, reason="the fea environment with Gmsh is not installed here (uv sync --project fea --extra mesh)")
+def test_the_example_wings_shape_is_built_by_the_fea_package():
+    answer = client.post(SHAPE, json={"toml": EXAMPLE.read_text(encoding="utf-8")})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    assert body["step"].startswith("ISO-10303-21;") and "PRODUCT('Front spar'" in body["step"]
+    assert [p["name"] for p in body["parts"]["parts"]][:4] == ["Upper skin", "Lower skin", "Front spar", "Rear spar"]
+    assert body["parts"]["wing"] == "Example straight wing" and body["parts"]["mass"] > 0

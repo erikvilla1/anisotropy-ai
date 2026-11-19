@@ -116,7 +116,7 @@ examples/             deck_summary.py, solve_deck.py
 uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape engine/examples/example-wing.toml wing.step --mesh 20
 ```
 
-prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid.
+prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid. The wing file may also be the same description as JSON, and `--parts parts.json` writes the part table in the file's units: that is how the wing workspace's Download STEP calls it through the API (ADR-0118). A description the engine or the shape refuses ends with status 2 and its reason on stderr.
 
 ## A wing in CalculiX
 

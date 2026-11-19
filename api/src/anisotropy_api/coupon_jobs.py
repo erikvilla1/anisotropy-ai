@@ -175,6 +175,13 @@ def studio_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", str(STUDIO)]
 
 
+def wing_shape_command() -> list[str] | None:
+    """`uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape`, the wing's STEP file and part table (ADR-0116,
+    ADR-0118), or None when uv is not on PATH."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "--extra", "mesh", "python", "-m", "anisotropy_fea.wing_shape"]
+
+
 def typesetter() -> str | None:
     """Tectonic, which typesets a report's LaTeX (docs/manual/build.py finds it the same way), or None when it is not on PATH."""
     return shutil.which("tectonic")

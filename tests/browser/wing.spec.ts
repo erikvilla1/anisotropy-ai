@@ -1,20 +1,29 @@
 import { readFileSync } from "node:fs";
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { bannedIn } from "../../lib/studio-copy";
 
 /** The wing workspace (ADR-0118), with the API played from the engine's own answer to the example wing
  * (tests/fixtures/wing/example-answer.json, written by scripts/wing-choices.py and checked against the API by
  * api/tests/test_wings_api.py). What the page sends is recorded, so each test can say what the engine was asked. */
 const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf-8"));
-const WINGS = /\/v1\/wings\/analyze$/;
+const WINGS = /\/v1\/wings\/(analyze|shape)$/;
+const SHAPE = { run_id: null, step: "ISO-10303-21;\nEND-ISO-10303-21;\n", parts: { wing: "Example straight wing", units: { thickness: "mm", area: "m^2", mass: "kg", step: "mm" },
+  parts: [{ name: "Upper skin", layup: "skin", thickness: 7.463, area: 0.8652, mass: 2.249 }, { name: "Front spar", layup: "spar", thickness: 1.463, area: 0.09204, mass: 0.2128 }], mass: 2.462 } };
 
 type Sent = { wing?: Record<string, unknown>; toml?: string };
+const shapes: Sent[] = []; // what Download STEP sent, in the test that runs
 
 async function playWings(page: Page, answer: (body: Sent) => { status: number; body: unknown } = () => ({ status: 200, body: ANSWER })) {
   const sent: Sent[] = [];
+  shapes.length = 0;
   await page.route(/\/v1\/.*/, (route: Route) => {
     const request = route.request();
     if (!WINGS.test(new URL(request.url()).pathname)) return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: "not in this scenario" }) });
     const body = request.postDataJSON() as Sent;
+    if (new URL(request.url()).pathname.endsWith("/shape")) {
+      shapes.push(body);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SHAPE) });
+    }
     sent.push(body);
     const reply = answer(body);
     return route.fulfill({ status: reply.status, contentType: "application/json", body: JSON.stringify(reply.body) });
@@ -100,4 +109,40 @@ test("missing speeds leave their cases out, listed with what they need, and the 
   await expect(page.getByTestId("wing-answer").getByRole("heading", { level: 2 })).toHaveText("Passes the 1 case run");
   await expect(page.getByTestId("wing-not-run")).toContainText("3 Cruise at 0 m: needs the cruise speed");
   await expect(page.getByTestId("wing-assistant")).toContainText("1 case wait for inputs");
+});
+
+test("Download STEP saves the shape the API built from the wing as it stands, and lists each part's thickness (ADR-0116, ADR-0118)", async ({ page }) => {
+  await playWings(page);
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  await page.getByTestId("panel-wing-shape").locator("summary").click();
+  const download = page.waitForEvent("download");
+  await page.getByTestId("wing-step").click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("example-straight-wing.step");
+  expect(readFileSync(await file.path(), "utf-8")).toBe(SHAPE.step);
+  expect(shapes.at(-1)?.wing).toEqual(ANSWER.wing);
+  await expect(page.getByTestId("wing-step-note")).toHaveText("example-straight-wing.step saved: 2 parts, in millimetres.");
+  await expect(page.getByTestId("wing-parts").locator("tbody tr")).toHaveCount(2);
+  await expect(page.getByTestId("wing-parts")).toContainText("Front spar1.4630.213");
+});
+
+test("the wing workspace names no tool, no machinery and no record, with every panel open and the shape built (ADR-0091, ADR-0118)", async ({ page }) => {
+  await playWings(page);
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  const folded = page.locator("details.ws-panel:not([open]) > summary");
+  while (await folded.count()) await folded.first().click(); // every folded panel opened, one at a time
+  const download = page.waitForEvent("download");
+  await page.getByTestId("wing-step").click();
+  await download;
+  await expect(page.getByTestId("wing-parts")).toBeVisible();
+  const words = await page.evaluate(() => {
+    const main = document.querySelector("main") ?? document.body;
+    const attributes = [...main.querySelectorAll("[aria-label], [title], [placeholder]")]
+      .flatMap((el) => ["aria-label", "title", "placeholder"].map((name) => el.getAttribute(name) ?? ""));
+    const hrefs = [...main.querySelectorAll("a[href]")].map((a) => a.getAttribute("href") ?? "");
+    return [document.title, main.textContent ?? "", ...attributes, ...hrefs].join("\n");
+  });
+  expect(bannedIn(words)).toEqual([]);
 });

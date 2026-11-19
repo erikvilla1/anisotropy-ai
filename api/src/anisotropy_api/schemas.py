@@ -1377,3 +1377,12 @@ class WingAnswer(Contract):
     wing: dict[str, Any]
     report: dict[str, Any]
     views: dict[str, Any]
+
+
+class WingShapeAnswer(Contract):
+    """A wing's shape for a CAD program (ADR-0116, ADR-0118): its STEP file's text, in millimetres with every part named, and the
+    part table in the wing file's units: each part's layup, the thickness to thicken it to, its area and mass."""
+
+    run_id: str | None = None
+    step: str
+    parts: dict[str, Any]

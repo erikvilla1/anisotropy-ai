@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import subprocess
 import tempfile
 import tomllib
 import uuid
@@ -42,8 +43,8 @@ from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_
 from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
+from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
+                          SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command, wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
@@ -57,7 +58,7 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingRequest,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingRequest, WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1561,6 +1562,9 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
 
 
 WINGS = "/v1/wings/analyze"
+WING_SHAPE = "/v1/wings/shape"
+WING_SHAPE_TIMEOUT_S = 90.0  # Gmsh builds the example in under a second; a cold start of the fea environment takes a few
+SHAPE_REFUSED = 2  # anisotropy_fea.wing_shape.REFUSED: the description was refused, the reason on stderr
 
 
 def _finite(value) -> bool:
@@ -1597,6 +1601,48 @@ def analyze_wing_endpoint(problem: WingRequest, actor: Actor, request: Request, 
         response.headers[RUN_ID_HEADER] = str(run_id)
     return WingAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), wing=data,
                       report=report, views=views)
+
+
+@app.post(WING_SHAPE, response_model=WingShapeAnswer)
+def wing_shape_endpoint(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingShapeAnswer:
+    """A wing's shape for a CAD program (ADR-0116), from the wing workspace's Download STEP (ADR-0118): the engine reads the
+    description first, so a wing the page could not work is refused in the same words, then the fea package's `wing_shape` builds
+    the parts in Gmsh's OpenCASCADE in a process of its own (the API depends on the engine alone, ADR-0051) and writes the STEP file
+    and the part table. Recorded with its actor: the description and a summary, never the file."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing_from_dict(data)
+    except (ValueError, TypeError, KeyError) as exc:
+        detail = str(exc) or exc.__class__.__name__
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    command = wing_shape_command()
+    if command is None:
+        raise HTTPException(status_code=503, detail="The shape builder is not installed here")
+    with tempfile.TemporaryDirectory(prefix="wing-shape-") as folder:
+        wing_json, step_path, parts_path = Path(folder) / "wing.json", Path(folder) / "wing.step", Path(folder) / "parts.json"
+        wing_json.write_text(json.dumps(data), encoding="utf-8")
+        try:
+            done = subprocess.run([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", cwd=FEA, timeout=WING_SHAPE_TIMEOUT_S, check=False)
+        except subprocess.TimeoutExpired as exc:
+            run_id = _record(request, actor, problem, error="the shape took longer than the time allowed")
+            raise HTTPException(status_code=504, detail="The shape took too long to build", headers=_run_header(run_id)) from exc
+        reason = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
+        if done.returncode == SHAPE_REFUSED and reason:
+            run_id = _record(request, actor, problem, error=reason)
+            raise HTTPException(status_code=422, detail=reason, headers=_run_header(run_id))
+        if done.returncode != 0 or not step_path.exists() or not parts_path.exists():
+            print(f"the wing shape stopped with status {done.returncode}: {reason}", flush=True)  # the tool's own words stay in the log
+            run_id = _record(request, actor, problem, error=f"the shape builder stopped with status {done.returncode}")
+            raise HTTPException(status_code=503, detail="The shape could not be built", headers=_run_header(run_id))
+        step = step_path.read_text(encoding="ascii", errors="replace")
+        parts = json.loads(parts_path.read_text(encoding="utf-8"))
+    run_id = _record(request, actor, problem, response={"wing": parts.get("wing"), "parts": len(parts.get("parts", [])), "mass": parts.get("mass"),
+                                                        "step_bytes": len(step)})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingShapeAnswer(run_id=None if run_id is None else str(run_id), step=step, parts=parts)
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

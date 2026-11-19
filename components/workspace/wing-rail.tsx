@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AERO_FIELDS, AILERON_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
-  readNumber, readNumbers, SPEED_FIELDS, unitLabel, unitsOf, valueAt, WING_CORES, WING_MATERIALS, wingFileName, wingToml,
-  type WingDescription, type WingField, type WingValue,
+  readNumber, readNumbers, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName, wingToml,
+  type WingDescription, type WingField, type WingShape, type WingValue,
 } from "@/lib/wing";
+import { shapeWing, StudioError } from "@/lib/studio-api";
 import { useWing } from "./wing-context";
 import { StepPanel } from "./panels/step-panel";
 
@@ -94,6 +95,16 @@ function WingChoice({ path, label, options, hint }: { path: string; label: strin
 }
 
 /** The wing as a whole: where it comes from, its name, and its file. */
+/** Hands the browser a file to save, made from text. */
+function download(text: string, name: string, type: string) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = name;
+  document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function WingFilePanel() {
   const { wing, replace, openFile } = useWing();
   const [note, setNote] = useState("");
@@ -105,14 +116,7 @@ function WingFilePanel() {
     setNote(refused ? `${file.name} was not opened: ${refused}` : `${file.name} opened.`);
     if (input.current) input.current.value = "";
   }
-  function save() {
-    const blob = new Blob([wingToml(wing)], { type: "application/toml" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = wingFileName(wing);
-    document.body.appendChild(link); link.click(); link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+  function save() { download(wingToml(wing), wingFileName(wing), "application/toml"); }
   const units = unitsOf(wing);
   return (
     <StepPanel id="wing" step={1} title="Wing" note={units === "US" ? "in · lb" : "m · N"}>
@@ -273,6 +277,51 @@ function LoadsPanel() {
 
 /** The left column of the wing workspace (ADR-0118): the description's tables as the steps of an FEA setup, in the general words of
  * the model tree (ADR-0111). Every change is worked at once; the Solve step says how the last calculation went. */
+/** The wing's shape for a CAD program (ADR-0116, ADR-0118): built on request, from the description as it stands, by the engine's
+ * reading and the fea package's shape builder; the page saves the STEP file and lists each part's thickness, which a STEP file
+ * cannot hold. */
+function ShapePanel() {
+  const { apiBaseUrl, wing } = useWing();
+  const [building, setBuilding] = useState(false);
+  const [note, setNote] = useState("");
+  const [shape, setShape] = useState<WingShape | null>(null);
+  async function build() {
+    setBuilding(true); setNote("Building the shape…"); setShape(null);
+    try {
+      const found = await shapeWing(apiBaseUrl, { wing });
+      const name = wingFileName(wing, "step");
+      download(found.step, name, "application/step");
+      setShape(found);
+      setNote(`${name} saved: ${found.parts.parts.length} parts, in millimetres.`);
+    } catch (error) {
+      setNote(error instanceof StudioError ? error.message : "The shape could not be built.");
+    } finally {
+      setBuilding(false);
+    }
+  }
+  const table = shape?.parts;
+  return (
+    <StepPanel id="wing-shape" step={9} title="Shape for CAD" note="STEP" open={false}>
+      <p className="studio-hint">The skins, spar webs and ribs as surfaces at their mid-thickness, every part named, in millimetres. Any CAD program that reads STEP files opens it.</p>
+      <div className="studio-buttons">
+        <button type="button" className="studio-button" onClick={() => void build()} disabled={building || !apiBaseUrl} data-testid="wing-step">Download STEP</button>
+      </div>
+      {note ? <p className="studio-status" role="status" data-testid="wing-step-note">{note}</p> : null}
+      {table ? (
+        <>
+          <p className="studio-hint">A STEP file holds no thickness. In the CAD program, thicken each part on both sides of its surface, half on each side, to the whole thickness below.</p>
+          <table className="studio-table" data-testid="wing-parts">
+            <thead><tr><th>Part</th><th>Thickness, {unitText(table.units.thickness)}</th><th>Mass, {unitText(table.units.mass)}</th></tr></thead>
+            <tbody>{table.parts.map((p) => <tr key={p.name}><td>{p.name}</td><td>{p.thickness === null ? "not given" : shown(p.thickness, 4)}</td><td>{shown(p.mass, 3)}</td></tr>)}</tbody>
+            {table.mass !== null ? <tfoot><tr><td>Whole wing, one side</td><td /><td>{shown(table.mass, 3)}</td></tr></tfoot> : null}
+          </table>
+          <p className="studio-hint">The skins here run round the whole airfoil, so this mass is more than the hand calculation&apos;s, which counts the box between the spars.</p>
+        </>
+      ) : null}
+    </StepPanel>
+  );
+}
+
 export function WingRail() {
   const { wing, answer, stale, working, problem } = useWing();
   const status = problem ? "" : working || stale ? "Working the wing…"
@@ -297,10 +346,11 @@ export function WingRail() {
         <p className="studio-hint">The wing is a cantilever clamped at the root. The hand calculation works it as a beam with a thin-walled box section between the spars.</p>
       </StepPanel>
       <StepPanel id="wing-solve" step={8} title="Solve" note="Hand calculation" state={answer && !stale && !problem ? "pass" : "none"} word="solved">
-        <p className="studio-hint">Worked by the engine on every change, in a fraction of a second.</p>
+        <p className="studio-hint">Worked again on every change, in a fraction of a second.</p>
         {problem ? <p className="studio-alert" role="alert" data-testid="wing-problem">{problem}</p> : null}
         <p className="studio-status" role="status" data-testid="wing-status">{status}</p>
       </StepPanel>
+      <ShapePanel />
     </div>
   );
 }

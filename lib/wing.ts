@@ -112,10 +112,10 @@ export function wingToml(wing: WingDescription): string {
 }
 
 /** The file name a wing is saved under: its title in lower case with hyphens, or "wing". */
-export function wingFileName(wing: WingDescription): string {
+export function wingFileName(wing: WingDescription, extension = "toml"): string {
   const title = typeof wing.title === "string" ? wing.title : "";
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-  return `${slug || "wing"}.toml`;
+  return `${slug || "wing"}.${extension}`;
 }
 
 // ----------------------------------------------------------------------------------------------- the fields of each tab
@@ -252,6 +252,14 @@ export type WingViews = {
   }[];
 };
 export type WingAnswer = { run_id: string | null; engine_version: string; wing: WingDescription; report: WingReport; views: WingViews };
+/** A part of the wing's shape for a CAD program (ADR-0116): the thickness to thicken its surface to, in the file's units. */
+export type WingShapePart = { name: string; layup: string; thickness: number | null; area: number; mass: number | null };
+/** The wing's STEP file and its part table (ADR-0118), as the API sends them. */
+export type WingShape = {
+  run_id: string | null;
+  step: string;
+  parts: { wing: string; units: { thickness: string; area: string; mass: string; step: string }; parts: WingShapePart[]; mass: number | null };
+};
 
 /** A margin as the page prints it: a sign and three decimals, or a dash for a check nothing loads. */
 export function marginText(margin: number | null | undefined): string {

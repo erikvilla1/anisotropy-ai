@@ -214,3 +214,37 @@ def test_the_command_line_writes_the_step_file_and_prints_the_part_table(tmp_pat
     out = capsys.readouterr().out
     assert step.exists() and "9 parts written" in out and "Rib 5" in out and "whole wing, one side" in out
     assert math.isfinite(float(out.splitlines()[-2].split()[-1]))
+
+
+@needs_gmsh
+def test_the_api_s_call_reads_the_description_as_json_and_writes_the_part_table_in_its_units(tmp_path, capsys):
+    """The wing page's Download STEP (ADR-0118): the API writes the description it holds as JSON and reads the part table back."""
+    import json
+
+    data = tomllib.loads(EXAMPLE.read_text(encoding="utf-8"))
+    wing_json = tmp_path / "wing.json"
+    wing_json.write_text(json.dumps(data), encoding="utf-8")
+    step, parts = tmp_path / "wing.step", tmp_path / "parts.json"
+    main([str(wing_json), str(step), "--parts", str(parts)])
+    table = json.loads(parts.read_text(encoding="utf-8"))
+    shape = build_wing_shape(wing_from_dict(data)[0])
+    assert table["wing"] == "Example straight wing" and table["units"] == {"thickness": "mm", "area": "m^2", "mass": "kg", "step": "mm"}
+    assert [p["name"] for p in table["parts"]] == [p.name for p in shape.parts]
+    assert table["parts"][0]["thickness"] == pytest.approx(shape.parts[0].thickness_m * 1e3)
+    assert table["mass"] == pytest.approx(shape.mass_kg)
+    assert step.read_text(encoding="ascii").startswith("ISO-10303-21;")
+    capsys.readouterr()
+
+
+def test_a_description_the_engine_refuses_ends_with_status_2_and_its_reason(tmp_path, capsys):
+    import json
+
+    data = tomllib.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["geometry"]["chord"] = -1
+    wing_json = tmp_path / "wing.json"
+    wing_json.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(SystemExit) as stop:
+        main([str(wing_json), str(tmp_path / "wing.step")])
+    assert stop.value.code == 2
+    assert capsys.readouterr().err.strip()  # the engine's reason, one line
+    assert not (tmp_path / "wing.step").exists()

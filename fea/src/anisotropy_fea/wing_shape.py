@@ -182,12 +182,12 @@ def _step_string(text: str) -> str:
 def name_step_products(path: Path, assembly: str, names: list[str]) -> None:
     """Give the products of a STEP file Gmsh wrote their parts' names.
 
-    Gmsh's OpenCASCADE writer names the products "Open CASCADE STEP translator <version> 1" (the assembly) and "... 1.<k>" for
-    the k-th top-level shape, in the order of the shapes. The names are replaced in place; a file with another number of
-    products than names is refused rather than half named.
+    Gmsh's OpenCASCADE writer names the products "Open CASCADE STEP translator <version> <n>" (the assembly) and "... <n>.<k>" for
+    the k-th top-level shape, in the order of the shapes, where n counts the files written in this process (1 for the first). The
+    names are replaced in place; a file with another number of products than names is refused rather than half named.
     """
     text = path.read_text(encoding="ascii")
-    pattern = re.compile(r"PRODUCT\('(Open CASCADE STEP translator [0-9.]+ 1(?:\.(\d+))?)',\s*'\1'")
+    pattern = re.compile(r"PRODUCT\('(Open CASCADE STEP translator [0-9.]+ \d+(?:\.(\d+))?)',\s*'\1'")
     found = pattern.findall(text)
     numbers = sorted(int(k) for _, k in found if k)
     if numbers != list(range(1, len(names) + 1)) or sum(1 for _, k in found if not k) != 1:
@@ -393,21 +393,56 @@ def build_wing_shape(wing: Wing, step_path: Path | str | None = None, element_si
     return WingShape(wing_name=wing.name, section=section, rib_stations_m=stations, parts=tuple(parts), mesh=mesh)
 
 
+def part_table(shape: WingShape, units: str) -> dict:
+    """The part table in a wing file's units (SI or US): what a CAD user needs beside the STEP file, which holds no thickness."""
+    from anisotropy_engine.wing.wing_file import WING_UNITS
+
+    u = WING_UNITS[units]
+    (length, length_unit), (thickness, thickness_unit), (mass, mass_unit) = u["length"], u["thickness"], u["mass"]
+    return {
+        "wing": shape.wing_name,
+        "units": {"thickness": thickness_unit, "area": f"{length_unit}^2", "mass": mass_unit, "step": "mm"},
+        "parts": [{"name": part.name, "layup": part.layup,
+                   "thickness": None if part.thickness_m is None else part.thickness_m / thickness,
+                   "area": part.area_m2 / length**2,
+                   "mass": None if part.mass_kg is None else part.mass_kg / mass} for part in shape.parts],
+        "mass": None if shape.mass_kg is None else shape.mass_kg / mass,
+    }
+
+
+REFUSED = 2  # the exit status of a description the engine or the shape refuses; its reason is the last line on stderr
+
+
 def main(argv: list[str] | None = None) -> None:
     """Write a wing file's STEP file and print its part table:
-    `uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape <wing file> <step file> [--mesh SIZE_MM]`."""
+    `uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape <wing file> <step file> [--mesh SIZE_MM] [--parts JSON]`.
+    The wing file is TOML, or JSON of the same description (what the API holds, ADR-0118); `--parts` also writes the part table as JSON
+    in the file's units. A description the engine or the shape refuses ends with status 2 and its reason on stderr."""
     import argparse
+    import json
+    import sys
 
     from anisotropy_engine.wing import load_wing
-    from anisotropy_engine.wing.wing_file import WING_UNITS
+    from anisotropy_engine.wing.wing_file import WING_UNITS, wing_from_dict
 
     parser = argparse.ArgumentParser(description="Write a wing's shape as a STEP file, each part a surface at its mid-thickness.")
     parser.add_argument("wing_file", type=Path)
     parser.add_argument("step_file", type=Path)
     parser.add_argument("--mesh", type=float, metavar="SIZE_MM", help="also mesh it with elements of about this size, in mm")
+    parser.add_argument("--parts", type=Path, metavar="JSON", help="also write the part table as JSON, in the wing file's units")
     args = parser.parse_args(argv)
-    data, wing, _ = load_wing(args.wing_file)
-    shape = build_wing_shape(wing, args.step_file, None if args.mesh is None else args.mesh * MM)
+    try:
+        if args.wing_file.suffix.lower() == ".json":
+            data = json.loads(args.wing_file.read_text(encoding="utf-8"))
+            wing, _ = wing_from_dict(data)
+        else:
+            data, wing, _ = load_wing(args.wing_file)
+        shape = build_wing_shape(wing, args.step_file, None if args.mesh is None else args.mesh * MM)
+    except (ValueError, TypeError, KeyError) as exc:  # ShapeError is a ValueError
+        print(str(exc) or exc.__class__.__name__, file=sys.stderr)
+        raise SystemExit(REFUSED) from exc
+    if args.parts is not None:
+        args.parts.write_text(json.dumps(part_table(shape, data["units"])), encoding="utf-8")
     units = WING_UNITS[data["units"]]
     length, thickness, mass = units["length"], units["thickness"], units["mass"]
     area = (length[0] ** 2, f"{length[1]}^2")
