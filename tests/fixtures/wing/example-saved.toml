@@ -1,0 +1,65 @@
+title = "Example straight wing"
+source = "An example made for the engine's tests and documents, not a design of ours or of anyone's. Every number is a round value chosen for the example; the material comes from the library."
+units = "SI"
+
+[geometry]
+half_span = 2
+chord = 0.45
+airfoil = "naca-2412"
+front_spar = 0.25
+rear_spar = 0.65
+rib_spacing = 0.5
+
+[material]
+library = "im7-8552"
+
+[skin]
+half_stack = [0, 45, -45, 0]
+core_thickness = 6
+core = "divinycell-h45"
+
+[spar]
+half_stack = [45, -45, 0, 0]
+
+[rib]
+half_stack = [45, -45]
+
+[aerodynamics]
+aerodynamic_center = 0.25
+pitching_moment_coefficient = -0.05
+lift_curve_slope = 6
+
+[envelope]
+gross_weight = 3000
+positive_load_factor = 3.8
+negative_load_factor = -1.52
+airspeed = "equivalent"
+speed_unit = "m/s"
+altitudes = [0, 3000]
+ultimate_factor = 1.5
+proof_factor = 1.25
+criterion = "max_stress"
+
+[envelope.speeds]
+stall_flaps = 20
+stall_clean = 23
+cruise = 50
+dive = 70
+flutter = 84
+positive_maneuver = 44.8
+negative_maneuver = 28.4
+
+[envelope.gust]
+cruise_gust_speed = 15.24
+dive_gust_speed = 7.62
+lift_curve_slope_per_rad = 5
+wing_area = 1.8
+
+[envelope.aileron]
+span_start = 1.2
+span_end = 1.9
+down_delta_cl = 0.3
+down_delta_cm = -0.06
+up_delta_cl = -0.3
+up_delta_cm = 0.06
+roll_pull_up_fraction = 0.6667

@@ -28,6 +28,8 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
+from anisotropy_engine.wing.analysis import analyze_wing
+from anisotropy_engine.wing.wing_file import wing_from_dict, wing_report, wing_views
 
 from .abaqus_coupon import NotABuildScript, coupon_data
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
@@ -55,7 +57,7 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingRequest,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1556,6 +1558,45 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
         )
 
     return _deliver(request, response, actor, problem, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+WINGS = "/v1/wings/analyze"
+
+
+def _finite(value) -> bool:
+    """Whether a JSON-like value holds only finite numbers (None stands for an unloaded check and is fine)."""
+    if isinstance(value, dict):
+        return all(_finite(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return all(_finite(v) for v in value)
+    return not isinstance(value, float) or math.isfinite(value)
+
+
+@app.post(WINGS, response_model=WingAnswer)
+def analyze_wing_endpoint(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingAnswer:
+    """A wing worked by hand (ADR-0115) for the wing workspace (ADR-0118): the description read by the engine's own rules, every
+    flight case that its values allow, the results in the file's units and what the page draws. Recorded with its actor (ADR-0026):
+    the record keeps the description, the verdict, the governing check and the design summary, not the drawings, which follow from
+    them. Answers in well under a second, so the page asks again on every change."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing, envelope = wing_from_dict(data)
+        result = analyze_wing(wing, envelope)
+        report = wing_report(result, data["units"], data["envelope"]["speed_unit"])
+        views = wing_views(result, data["units"])
+        if not (_finite(report) and _finite(views)):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else "These values do not give a finite, solvable wing. Check the values and their units."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    summary = {key: report[key] for key in ("wing", "passes", "seconds", "design", "governing", "aeroelastic")}
+    run_id = _record(request, actor, problem, response=summary | {"cases_run": len(report["cases"]), "cases_not_run": len(report["not_run"])})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), wing=data,
+                      report=report, views=views)
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

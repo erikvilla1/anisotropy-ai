@@ -11,7 +11,9 @@ import pytest
 from anisotropy_engine.failure import first_ply_failure
 from anisotropy_engine.response import Loads
 from anisotropy_engine.units import FOOT, LBF
-from anisotropy_engine.wing import Airfoil, analyze_wing, box_section, flight_cases, load_wing, naca4, span_loads, wing_from_dict, wing_report
+from anisotropy_engine.wing import (
+    Airfoil, analyze_wing, box_section, flight_cases, load_wing, naca4, span_loads, wing_from_dict, wing_report, wing_views,
+)
 from anisotropy_engine.wing.atmosphere import SEA_LEVEL_DENSITY, air_density, density_ratio
 from anisotropy_engine.wing.loads import CASE_TABLE, gust_load_factor_increment
 from anisotropy_engine.wing.section import long_plate_buckling_load
@@ -440,6 +442,37 @@ def test_the_example_wing_passes_and_reports_in_its_own_units():
     assert us["design"]["mass"] == pytest.approx(report["design"]["mass"] / 0.45359237)
     assert us["cases"][5]["root_moment"] == pytest.approx(report["cases"][5]["root_moment"] / (LBF * 0.0254))
     assert us["cases"][5]["tip_deflection"] == pytest.approx(report["cases"][5]["tip_deflection"] / 25.4)
+
+
+def test_the_page_draws_the_engines_section_ribs_and_margins_rounded_only_for_drawing():
+    result = run()
+    views = wing_views(result, "SI")
+    section, case = result.section, result.cases[5]
+    assert views["ribs"] == pytest.approx([0.0, 0.5, 1.0, 1.5, 2.0]) and views["shear_center"] == section.shear_center_m
+    assert views["walls"][0]["x"] == pytest.approx(section.skins.x_m[0], rel=1e-3)
+    assert views["walls"][3]["z"] == pytest.approx(section.webs.z_m[1], rel=1e-3)
+    upper, lower = result.wing.geometry.airfoil.surface_heights(0.3)
+    x = np.array(views["airfoil"]["x"])
+    assert np.interp(0.3 * 0.45, x, views["airfoil"]["upper"]) == pytest.approx(upper * 0.45, rel=2e-3)
+    assert np.interp(0.3 * 0.45, x, views["airfoil"]["lower"]) == pytest.approx(lower * 0.45, rel=2e-3)
+    drawn = views["cases"][5]
+    assert drawn["number"] == case.case.number
+    lowest = min(min(v for v in values if v is not None) for values in drawn["margins"].values())
+    assert lowest == pytest.approx(case.governing.margin_ultimate, rel=1e-3), "the margins along the span hold the case's governing one"
+    assert drawn["deflection"][-1] == pytest.approx(case.tip_deflection * 1e3, rel=1e-3)
+    moment, shear = case.stations.moment[0], case.stations.shear[0]
+    flow = section.skins.flow_per_shear[1] * shear + case.stations.shear_flow[0]
+    assert drawn["root"][1]["shear_flow"] == pytest.approx(flow, rel=1e-3)
+    assert drawn["root"][0]["load"] == pytest.approx(section.skins.load_per_moment[0] * moment, rel=1e-3)
+    us = wing_views(result, "US")
+    assert us["half_span"] == pytest.approx(2.0 / 0.0254) and us["cases"][5]["deflection"][-1] == pytest.approx(case.tip_deflection / 0.0254, rel=1e-3)
+    with pytest.raises(ValueError, match="units must be one of"):
+        wing_views(result, "imperial")
+
+
+def test_a_wing_without_ribs_draws_none_and_the_last_bay_ends_at_the_tip():
+    assert wing_views(run(**{"geometry.rib_spacing": None, "rib": None}), "SI")["ribs"] == []
+    assert wing_views(run(**{"geometry.rib_spacing": 0.6}), "SI")["ribs"] == pytest.approx([0.0, 0.6, 1.2, 1.8, 2.0])
 
 
 def test_a_wing_in_us_units_is_the_same_wing():

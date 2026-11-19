@@ -31,12 +31,12 @@ async function quietApi(page: import("@playwright/test").Page, store: Record<str
   });
 }
 
-test("the workspace opens on two tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
+test("the workspace opens on three tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
   const store: Record<string, Record<string, unknown>> = {};
   await quietApi(page, store);
   await page.goto("/workspace");
   const tiles = page.getByTestId("workspace-tiles");
-  await expect(tiles.locator("[data-workspace]")).toHaveCount(2); // the CAD tile is gone (decision D5)
+  await expect(tiles.locator("[data-workspace]")).toHaveCount(3); // FEA, laminate and wing (ADR-0118); the CAD tile is gone (decision D5)
   await expect(tiles.locator("[data-workspace=cad]")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Start a project");
   await expect(tiles.locator("[data-workspace=fea] h3")).toHaveText("New Coupon FEA project"); // the workspace's one name, as written

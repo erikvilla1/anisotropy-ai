@@ -109,17 +109,9 @@ def _areal_mass(layup) -> float:
 
 
 def rib_stations(wing: Wing) -> tuple[float, ...]:
-    """Where the ribs stand, metres from the root: the root, every rib spacing outboard, and the tip; none without a spacing."""
-    g = wing.geometry
-    if g.rib_spacing_m is None:
-        return ()
-    count = math.floor(g.half_span_m / g.rib_spacing_m + 1e-9)
-    stations = [k * g.rib_spacing_m for k in range(count + 1)]
-    if g.half_span_m - stations[-1] > 1e-6 * g.half_span_m:
-        stations.append(g.half_span_m)
-    else:
-        stations[-1] = g.half_span_m
-    return tuple(stations)
+    """Where the ribs stand, metres from the root: the root, every rib spacing outboard, and the tip; none without a spacing.
+    The engine's geometry holds the rule (`WingGeometry.rib_stations_m`), so the page draws the ribs where the shape builds them."""
+    return wing.geometry.rib_stations_m
 
 
 def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Section:

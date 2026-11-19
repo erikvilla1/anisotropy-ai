@@ -2,6 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
+import type { WingAnswer, WingDescription } from "./wing";
 import type { Checklist, StudioValues } from "./studio-form";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
@@ -616,6 +617,17 @@ export function readLaminateAnswer(payload: unknown): LaminateAnswer {
 export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal?: AbortSignal): Promise<LaminateAnswer> {
   const payload = await call(`${base(apiBaseUrl)}/v1/laminates/solve`, { method: "POST", headers, body: JSON.stringify(problem), signal }, "the laminate solve");
   return readLaminateAnswer(payload);
+}
+
+/** The wing workspace's hand calculation (ADR-0118): the description as it stands, or a wing file's text; the engine reads it, works
+ * every case its values allow and answers with the report and what the page draws. A refusal names the value that is wrong. */
+export async function analyzeWing(apiBaseUrl: string, request: { wing: WingDescription } | { toml: string }, signal?: AbortSignal): Promise<WingAnswer> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/analyze`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing calculation");
+  if (!isObject(payload) || !isObject(payload.wing) || !isObject(payload.report) || !isObject(payload.views)
+    || !Array.isArray(payload.report.cases) || !Array.isArray(payload.views.cases) || !Array.isArray(payload.views.walls)) {
+    throw unreadable("the wing calculation: not a wing answer");
+  }
+  return payload as unknown as WingAnswer;
 }
 
 // ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)

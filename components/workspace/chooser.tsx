@@ -102,6 +102,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function create(id: WorkspaceId) {
     if (id === "fea") open(newProject());
     else if (id === "laminate") open(newLaminateProject());
+    else router.push(workspace(id).href); // the wing keeps its one wing in this browser and its file (ADR-0118)
   }
 
   return (
@@ -109,7 +110,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
       <div className="studio-heading">
         <span className="eyebrow">WORKSPACE</span>
         <h1>Start a project</h1>
-        <p>Set up and solve a coupon test, or work out a laminate&apos;s response to loads.</p>
+        <p>Set up and solve a coupon test, work out a laminate&apos;s response to loads, or design a wing.</p>
       </div>
       <div className="ws-tiles" data-testid="workspace-tiles">
         {WORKSPACES.map((w) => (

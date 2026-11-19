@@ -4,7 +4,7 @@
  * until geometry from a file exists (decision D5, ADR-0091 amendment 2). */
 import { chatTool } from "./chat-tools";
 
-export type WorkspaceId = "fea" | "laminate";
+export type WorkspaceId = "fea" | "laminate" | "wing";
 
 export type Workspace = {
   id: WorkspaceId;
@@ -20,6 +20,8 @@ export const WORKSPACE_ROOT = "/workspace";
 export const WORKSPACES: readonly Workspace[] = [
   { id: "fea", title: chatTool("coupon").title, eyebrow: "FINITE ELEMENTS", detail: chatTool("coupon").detail, href: `${WORKSPACE_ROOT}/fea` },
   { id: "laminate", title: chatTool("laminate").title, eyebrow: "LAMINATE", detail: chatTool("laminate").detail, href: `${WORKSPACE_ROOT}/laminate` },
+  // the wing is a workspace of its own, not yet a chat tool or a saved project kind: it lives in this browser and in its wing file (ADR-0118)
+  { id: "wing", title: "Wing design", eyebrow: "WING", detail: "A composite wing over its flight envelope: every case's margins, stiffness and mass as you change it.", href: `${WORKSPACE_ROOT}/wing` },
 ];
 
 export function workspace(id: WorkspaceId): Workspace {

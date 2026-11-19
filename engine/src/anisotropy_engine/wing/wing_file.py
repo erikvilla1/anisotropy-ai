@@ -25,6 +25,8 @@ import re
 import tomllib
 from pathlib import Path
 
+import numpy as np
+
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
 from ..library import library_core, library_material
 from ..units import FOOT, INCH, LBF, POUND_MASS, PSI
@@ -279,4 +281,59 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "reversal_never": result.aeroelastic.reversal_speed_m_s == math.inf,
             "needs": list(result.aeroelastic.needs)},
         "not_run": [{"number": n.number, "label": n.label, "altitude": n.altitude_m / u["altitude"][0], "needs": n.needs} for n in result.not_run],
+    }
+
+
+VIEW_DIGITS = 4  # significant digits of what a page draws; the numbers it states come from wing_report in full
+AIRFOIL_POINTS = 61
+
+
+def _drawn(values) -> list:
+    """Values to draw, to VIEW_DIGITS significant digits; infinity and NaN (an unloaded check) as None."""
+    return [None if not math.isfinite(v) else float(f"{v:.{VIEW_DIGITS}g}") for v in np.asarray(values, dtype=float).ravel()]
+
+
+def wing_views(result: WingResult, units: str) -> dict:
+    """What a page draws of a worked wing, in a reporting system: the airfoil at the root and the box's walls where the hand
+    calculation puts them, the spars, the ribs, the shear center and the centroid; for every case, the lowest margin at ultimate
+    load of each check along the span, the deflection and twist along it, and the spanwise load and shear flow at every point of
+    the walls at the root. Every value is the engine's, rounded to VIEW_DIGITS significant digits for drawing; the numbers a page
+    states come from `wing_report`."""
+    if units not in WING_UNITS:
+        raise ValueError(f"units must be one of {tuple(WING_UNITS)}")
+    u = WING_UNITS[units]
+    length, load, deflection = u["length"][0], u["running_load"][0], u["deflection"][0]
+    wing, section, envelope = result.wing, result.section, result.envelope
+    g = wing.geometry
+    chord = g.chord_m
+    x = (1 - np.cos(np.linspace(0.0, math.pi, AIRFOIL_POINTS))) / 2  # closer at the leading edge, where the outline turns
+    heights = np.array([g.airfoil.surface_heights(float(xi)) for xi in x])
+    walls = [(name, points, k) for name, points, k in (("upper skin", section.skins, 0), ("lower skin", section.skins, 1),
+                                                         ("front web", section.webs, 0), ("rear web", section.webs, 1))]
+
+    def margins(ratio: np.ndarray) -> list:
+        return _drawn(ratio / envelope.ultimate_factor - 1)
+
+    cases = []
+    for r in result.cases:
+        s = r.stations
+        moment, shear, torque_flow = float(s.moment[0]), float(s.shear[0]), float(s.shear_flow[0])
+        cases.append({
+            "number": r.case.number, "altitude": r.case.altitude_m / u["altitude"][0],
+            "margins": {"skin plies": margins(s.skin_ratio.min(axis=0)), "spar plies": margins(s.spar_ratio.min(axis=0)),
+                        "skin buckling": margins(s.buckling_ratio), "web buckling": margins(s.web_buckling_ratio.min(axis=0))},
+            "deflection": _drawn(s.deflection / deflection), "twist": _drawn(np.degrees(s.twist)),
+            "root": [{"name": name, "load": _drawn(points.load_per_moment[k] * moment / load),
+                      "shear_flow": _drawn((points.flow_per_shear[k] * shear + torque_flow) / load)} for name, points, k in walls],
+        })
+    return {
+        "half_span": g.half_span_m / length, "chord": chord / length,
+        "airfoil": {"name": g.airfoil.name, "x": _drawn(x * chord / length), "upper": _drawn(heights[:, 0] * chord / length),
+                    "lower": _drawn(heights[:, 1] * chord / length)},
+        "walls": [{"name": name, "x": _drawn(points.x_m[k] / length), "z": _drawn(points.z_m[k] / length)} for name, points, k in walls],
+        "spars": [v / length for v in section.spar_x_m], "spar_heights": [v / length for v in section.spar_heights_m],
+        "shear_center": section.shear_center_m / length, "centroid": [section.centroid_x_m / length, section.centroid_m / length],
+        "ribs": [v / length for v in g.rib_stations_m],
+        "stations": _drawn(result.cases[0].stations.y / length) if result.cases else [],
+        "cases": cases,
     }

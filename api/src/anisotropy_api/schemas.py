@@ -1352,3 +1352,28 @@ class UploadOutput(Contract):
                    coupon=row.coupon, in_scope=row.in_scope, may_train=row.may_train, job_id=None if row.job_id is None else str(row.job_id),
                    verdict=row.verdict, compared_at=None if row.compared_at is None else row.compared_at.isoformat(), not_compared=row.not_compared,
                    facts=dict(row.facts) if full else None, comparison=dict(row.comparison) if full and row.comparison is not None else None)
+
+
+class WingRequest(Contract):
+    """A wing to work by hand (ADR-0115, ADR-0118): its description as the JSON object of a wing file, or the file's TOML text, in
+    the file's own units. The engine reads it with the same rules as a file on disk and refuses anything unknown or missing."""
+
+    wing: dict[str, Any] | None = None
+    toml: Annotated[str, Field(min_length=1, max_length=200_000)] | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_form(self) -> Self:
+        if (self.wing is None) == (self.toml is None):
+            raise ValueError("Give exactly one of wing (a JSON object) or toml (the wing file's text)")
+        return self
+
+
+class WingAnswer(Contract):
+    """The hand calculation of a wing (ADR-0118): the description as the engine read it, the results in the file's units as
+    `wing_report` gives them, and what a page draws (`wing_views`)."""
+
+    run_id: str | None = None
+    engine_version: str
+    wing: dict[str, Any]
+    report: dict[str, Any]
+    views: dict[str, Any]

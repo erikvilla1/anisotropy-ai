@@ -9,6 +9,7 @@ degree direction is the span. Layups are given as half of a symmetric laminate, 
 first; the other half mirrors it, with the core, when there is one, between the halves.
 """
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, NonNegativeFloat, PositiveFloat, model_validator
@@ -113,6 +114,20 @@ class WingGeometry(BaseModel):
         if self.rib_spacing_m is not None and self.rib_spacing_m > self.half_span_m:
             raise ValueError("The rib spacing is longer than the half span")
         return self
+
+    @property
+    def rib_stations_m(self) -> tuple[float, ...]:
+        """Where the ribs stand, metres from the root: the root, every rib spacing outboard, and the tip; none without a spacing.
+        The shape, the finite element model and the page draw them here."""
+        if self.rib_spacing_m is None:
+            return ()
+        count = math.floor(self.half_span_m / self.rib_spacing_m + 1e-9)
+        stations = [k * self.rib_spacing_m for k in range(count + 1)]
+        if self.half_span_m - stations[-1] > 1e-6 * self.half_span_m:
+            stations.append(self.half_span_m)
+        else:
+            stations[-1] = self.half_span_m
+        return tuple(stations)
 
 
 class Aerodynamics(BaseModel):
