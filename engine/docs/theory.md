@@ -1008,7 +1008,7 @@ Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against 
 
 Four rules a designer checks on a stack before any load (ADR-0123). They are rules of practice, not physics: a rule not met is a warning, nothing else in the engine reads the result, and no number of an analysis changes with it. Plies are counted, not weighed by thickness, as the rules are stated, and a fiber at $`\theta`$ is the fiber at $`\theta + 180°`$, so $`135°`$ counts as $`-45°`$ and $`-90°`$ as $`90°`$. The limits are the designer's: the least share $`s_{\min}`$ (default 10 %, at most 25 %, since four directions cannot each hold more) and the most plies of one angle in a row $`r_{\max}`$ (default 4).
 
-The 10 % rule asks that the laminate be carried by its fibers in every direction (MIL-HDBK-17-3F, Volume 3). With $`n`$ plies and $`n_d`$ of them in direction $`d`$, it is met when
+The 10 % rule asks that the laminate be carried by its fibers in every direction (MIL-HDBK-17-3F, Volume 3, Section 5.6.5.2.1, p. 5-69). With $`n`$ plies and $`n_d`$ of them in direction $`d`$, it is met when
 
 ```math
 \frac{n_d}{n} \ge s_{\min} \qquad \text{for each } d \in \{0°, +45°, -45°, 90°\},
@@ -1018,7 +1018,7 @@ a ply at any other angle counting only in $`n`$. It is checked by `ten_percent_r
 
 <!-- code: ten_percent_rule -->
 
-Plies of one angle next to each other act as one thick ply, which cracks between plies more readily; the run counts across the middle of a solid laminate, where the two middle plies touch, but not across a core. The longest run, its angle and its first and last ply are computed by `in_a_row_rule`, and the rule is met when that run is at most $`r_{\max}`$. Thicker plies usually call for a smaller $`r_{\max}`$.
+Plies of one angle next to each other act as one thick ply, which cracks between plies more readily; the run counts across the middle of a solid laminate, where the two middle plies touch, but not across a core. The longest run, its angle and its first and last ply are computed by `in_a_row_rule`, and the rule is met when that run is at most $`r_{\max}`$. The default of four is the handbook's for tape (MIL-HDBK-17-3F, Volume 3, Section 5.6.5.2.1, p. 5-69); thicker plies call for a smaller $`r_{\max}`$.
 
 <!-- code: in_a_row_rule -->
 

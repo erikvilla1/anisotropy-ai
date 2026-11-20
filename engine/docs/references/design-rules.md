@@ -2,7 +2,7 @@
 
 What the common rules for stacking a laminate ask, why, and how the wing checks them (ADR-0123, ADR-0125). The wing's assistant answers a question about a rule from these sections, and takes the limit and the result from the wing's own check, never from this page (ADR-0127).
 
-Status: a draft of 2026-11-20, not yet reviewed by the founder. Written in our own words. Each section ends with its sources; a source marked UNVERIFIED was seen only in a search excerpt, not read at its section and page.
+Status: a draft of 2026-11-20. The founder kept the four default limits on 2026-11-20 (ADR-0123 amendment 1). Written in our own words. Each section ends with its sources; MIL-HDBK-17-3F, Volume 3 (2002, public release) was read at the sections and pages named; a source marked UNVERIFIED was seen only in a search excerpt, not read at its section and page.
 
 The rules are rules of practice, not physics. A rule not met is a warning: no margin and no verdict changes with it. The limits are the designer's to set in the Design rules box of the Layup step; the defaults are the common ones named below.
 
@@ -16,7 +16,7 @@ The wing counts plies, not thickness, as the rule is stated. A ply at any other 
 
 The default is 10 %, set per wing up to 25 %, since four directions cannot each hold more than a quarter.
 
-Sources: MIL-HDBK-17-3F, Volume 3 (2002), public domain, states the rule for fibre-dominated, balanced and symmetric laminates; seen in a search excerpt as Chapter 12, Lessons learned, not read at its page: UNVERIFIED. Laminate theory, design rules of a stack.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: at least 10 % of the plies at each of 0°, +45°, −45° and 90°, section 4.4.1.1 item 5 (p. 4-7); at least four ply angles with 10 % of the plies at each, section 5.6.5.2.1 strong recommendation 2 (p. 5-69); 10 % of the fibres in each direction, section 12.3.1 lesson A-18 (p. 12-13). Laminate theory, design rules of a stack.
 
 ## Plies of one angle in a row
 
@@ -24,9 +24,9 @@ Sources: MIL-HDBK-17-3F, Volume 3 (2002), public domain, states the rule for fib
 
 No more than a few plies of the same angle should lie next to each other. Plies of one angle together act as one thick ply. A crack in the matrix across a thick ply opens wider and releases more energy than one in a thin ply, so a block of plies cracks earlier and starts delaminations more readily, and the stresses between plies at a free edge grow with the block's thickness.
 
-The wing counts the run across the middle of a solid laminate, where the two middle plies touch, since they act together there; it does not count across a sandwich core, which keeps the two faces apart. The default is 4 plies. Thicker plies usually call for fewer in a row, so a fabric or a heavy tape may need 2 or 3.
+The wing counts the run across the middle of a solid laminate, where the two middle plies touch, since they act together there; it does not count across a sandwich core, which keeps the two faces apart. The default is 4 plies, the handbook's number for tape, which it also states as a group no thicker than 0.8 mm. Thicker plies call for fewer in a row, so a fabric or a heavy tape may need 2 or 3.
 
-Sources: a DLR report on laminate design rules (DLR-IB-FA-BS-2016-173) gives at most 4 plies of one angle together for thin tape and fewer for thicker plies; seen in a search excerpt: UNVERIFIED. Whether MIL-HDBK-17-3F states a number was not checked.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: for tape, no more than four plies of one orientation together, a group no thicker than 0.03 in (0.8 mm), and 0.015 in (0.38 mm) for plies running across a free edge, section 5.6.5.2.1 strong recommendation 3 (p. 5-69); no more than 4 plies of one orientation grouped, section 12.3.1 lesson A-21 (p. 12-13). A DLR report on laminate design rules (DLR-IB-FA-BS-2016-173) gives fewer for thicker plies; seen in a search excerpt: UNVERIFIED.
 
 ## Balance
 
@@ -36,7 +36,7 @@ A balanced laminate has a −θ ply for every +θ ply, of the same material and 
 
 Plies at 0° and 90° need no partner. The pair need not sit next to each other for balance; placing them near each other also keeps the bending-twist coupling small.
 
-Sources: Laminate theory, stiffness of a laminate and design rules of a stack; MIL-HDBK-17-3F, Volume 3, lists balance among its laminate guidelines (search excerpt: UNVERIFIED).
+Sources: Laminate theory, stiffness of a laminate and design rules of a stack; MIL-HDBK-17-3F, Volume 3 (2002), public release: balanced and symmetric where possible, any imbalance near the middle, section 5.6.5.2.1 strong recommendation 4 (p. 5-70), and section 12.3.1 lesson A-17 (p. 12-12); a +θ and −θ pair as close as possible, section 5.6.5.2.2 recommendation 5 (p. 5-70).
 
 ## Symmetry
 
@@ -46,7 +46,7 @@ A symmetric laminate mirrors about its middle surface: the ply at a given distan
 
 In a sandwich, the core must sit in the middle with matching faces on each side. The wing checks every layup this way, the core included.
 
-Sources: Laminate theory, stiffness of a laminate and design rules of a stack; MIL-HDBK-17-3F, Volume 3, lists symmetry among its laminate guidelines (search excerpt: UNVERIFIED).
+Sources: Laminate theory, stiffness of a laminate and design rules of a stack; MIL-HDBK-17-3F, Volume 3 (2002), public release: symmetric where possible, plies at equal distances above and below the middle identical in material, thickness and angle, section 5.6.5.2.1 strong recommendation 4 (p. 5-70), and section 12.3.1 lesson A-17 (p. 12-12).
 
 ## Ply drops
 
@@ -64,15 +64,15 @@ Sources: each rule below names its own.
 
 The thickness that ends should taper over a run-out many times its height. The wing asks for 20 to 1 by default: dropping 0.5 mm of plies needs 10 mm of run-out, and that length must fit in the thicker side's stretch before the next change. A drop across the main load can be steeper than one along it; some guides allow 10 to 1 there.
 
-Sources: a NASA contractor report of composite laminate design guidelines (contract NAS1-19347, 1997) gives at least 20 to 1 along the primary load and 10 to 1 across it; seen in a search excerpt, not read: UNVERIFIED. MIL-HDBK-17-3F, Volume 3, gives 20 to 1 in the load direction according to a secondary source: UNVERIFIED.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: each drop no thicker than 0.010 in (0.25 mm), drops at least 0.20 in apart in the major load direction, which is 20 to 1, section 12.3.1 lesson A-26 (p. 12-13); the millimetres the handbook prints beside the spacing, 0.51 mm, are a slip by a factor of ten, since 0.20 in is about 5 mm. A NASA contractor report of composite laminate design guidelines (contract NAS1-19347, 1997) gives 10 to 1 across the load; seen in a search excerpt, not read: UNVERIFIED.
 
 ### How many plies end at one place
 
 <!-- also: plies dropped, dropped at once, plies per drop, at one station, same place, staggering, stagger distance -->
 
-End only a few plies at one place, and stagger the next ones a little further along. A large step concentrates the load the dropped plies shed. The wing allows 2 plies at one place by default, both halves of the laminate counted, which is one ply each side for a symmetric drop. Where the stack drops more, end them in steps, each with its own run-out.
+End only a few plies at one place, and stagger the next ones a little further along. A large step concentrates the load the dropped plies shed. The wing allows 2 plies at one place by default, both halves of the laminate counted, which is one ply each side for a symmetric drop. Where the stack drops more, end them in steps, each with its own run-out. The handbook also asks that two plies dropped at one place do not lie next to each other; the wing does not check that yet.
 
-Sources: the NASA contractor report above and secondary summaries of MIL-HDBK-17-3F advise no more than two plies per step: UNVERIFIED.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: avoid abrupt ply ends, drop no more than 2 plies per step, and not two plies that lie next to each other, section 12.3.1 lesson A-25 (p. 12-13).
 
 ### The outside ply runs on
 
@@ -80,7 +80,7 @@ Sources: the NASA contractor report above and secondary summaries of MIL-HDBK-17
 
 The thinner stack should be the thicker one with plies taken out from inside, and the outside ply of each face should run on over the ends of the dropped plies. A ply that runs over the drop holds the ends down, protects them from peeling, and keeps the surface smooth. An end on the outside is exposed to peel and to damage. Angle pairs, a +θ with its −θ, are usually dropped together so the thinner stack stays balanced.
 
-Sources: the NASA contractor report above (outer plies cover all drops; angle pairs dropped together): UNVERIFIED.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: when plies are added, the outside plies should be continuous, section 12.3.1 lesson A-15 (p. 12-12); drops symmetric about the middle, with the shortest ply nearest the outside faces, lesson A-26 (p. 12-13). The NASA contractor report above (angle pairs dropped together): UNVERIFIED.
 
 ## Spar caps and webs
 
@@ -102,9 +102,9 @@ Sources: Laminate theory, the wing as a thin-walled box and spar caps and layups
 
 Many designers put a ±45° pair on each face of a skin. The outer plies set most of the laminate's bending stiffness, and ±45° plies there raise the twist stiffness D66 that resists buckling under shear and compression. They also shield the 0° plies, which carry the main load, from impact and surface damage, and an outer ±45° ply splits along its fibres without cutting the load path.
 
-The price is a larger bending-twist coupling, D16 and D26, which keeping the + and − plies close together reduces. The wing does not check this rule: no primary source for it was read (ADR-0123).
+The price is a larger bending-twist coupling, D16 and D26, which keeping the + and − plies close together reduces. The wing does not check this rule yet (ADR-0123).
 
-Sources: common practice; not read in a primary source.
+Sources: MIL-HDBK-17-3F, Volume 3 (2002), public release: at least one ±45° pair at each surface, section 12.3.1 lesson A-24 (p. 12-13); 90° and ±45° plies towards the outside where buckling is critical, lesson A-14 (p. 12-12); shield the main load plies from the surface, section 5.6.5.2.2 recommendation 6 (p. 5-70).
 
 ## The angle between neighbouring plies
 
@@ -112,4 +112,4 @@ Sources: common practice; not read in a primary source.
 
 Some guides limit how far the angle of one ply may differ from the next, often to 45° or 60°, because the stresses between two plies grow with the difference between them, and a 0° ply on a 90° ply is the worst case at a free edge. The wing does not check this rule: the plan named 60°, one secondary source names 45°, and no primary source was read (ADR-0123).
 
-Sources: common practice; not read in a primary source.
+Sources: common practice; not read in a primary source. MIL-HDBK-17-3F, Volume 3, names no such limit in its laminate guidelines (section 5.6.5.2) or its lessons learned on design (section 12.3.1).
