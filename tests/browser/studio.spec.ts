@@ -39,7 +39,7 @@ const TENSION_BUILT = [
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[]; wakes?: number;
     reports?: number; reportReads?: string[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; plates?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; plates?: boolean; ansysModel?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
     report?: () => { status: number; body: unknown } } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
@@ -51,7 +51,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const path = url.pathname;
     // one workflow first (ADR-0089): the API says whether every test is offered. The scenarios below test the full panels, development's
     // view, so the switch is on unless a scenario turns it off for the tension screen (ADR-0090), the product's view
-    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true, plates: options.plates ?? false });
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true, plates: options.plates ?? false, ansys_model: options.ansysModel ?? true });
     if (path === "/v1/workspace/assistant" && options.writer === "model") return json(route, { proposes: false, provider: "anthropic", model: "claude-opus-5-5" });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) { // no project store, and the API says so: the browser keeps the project alone (ADR-0091 amendment 2)
@@ -1910,6 +1910,140 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
   for (const word of ["claude", "anthropic", "chatgpt", "abaqus"]) expect(said).not.toContain(word);
   expect(browserErrors).toEqual([]);
+});
+
+/** The model's file, played: the API answers with the text the fea package would write and the file's name in a header (ADR-0129). */
+async function mockModelFile(page: Page, asked: { program: string | null; values: Record<string, unknown> }[], answer: () => { status: number; detail?: string } = () => ({ status: 200 })) {
+  await page.route(API, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname !== "/v1/coupon-jobs/model" || request.method() !== "POST") return route.fallback();
+    const program = url.searchParams.get("program");
+    asked.push({ program, values: (request.postDataJSON() as { values: Record<string, unknown> }).values });
+    const said = answer();
+    if (said.status !== 200) return route.fulfill({ status: said.status, contentType: "application/json", body: JSON.stringify({ detail: said.detail }) });
+    const name = program === "ansys" ? "IM7-UNT-L1-ansys.cdb" : "IM7-UNT-L1-abaqus.inp";
+    // the page and the API are on two origins in CI, so the header must be exposed to be read, as the API's CORS layer does (main.py)
+    return route.fulfill({ status: 200, contentType: "text/plain; charset=utf-8", body: program === "ansys" ? "! IM7-UNT-L1\n/PREP7\n" : "** IM7-UNT-L1\n*Heading\n",
+      headers: { "Content-Disposition": `attachment; filename="${name}"`, "X-Anisotropy-Model-File": name, "Access-Control-Expose-Headers": "X-Anisotropy-Model-File" } });
+  });
+}
+
+test("the model downloads as a file for the engineer's own program, from the menu over the model and by asking the assistant (ADR-0129)", async ({ page, browserName }) => {
+  // the file is saved from text the page holds; the file's name is checked where the engine reports such a save (WebKit is left to the
+  // request and the page's own word, as for the other files a scenario saves, ADR-0114)
+  const saving = () => (browserName === "webkit" ? null : page.waitForEvent("download"));
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls); // every test offered, and the Ansys file with it: the founders' view
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  let refuse = false;
+  await mockModelFile(page, asked, () => (refuse ? { status: 422, detail: "The setup is not complete, so there is no model to write yet. Geometry: Length (mm): required" } : { status: 200 }));
+  await page.goto("/workspace/fea?for=coupon");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  const heading = () => page.getByTestId("coupon-chat").locator("h4").last();
+  await expect(page.getByTestId("model-download")).toHaveCount(0); // no model yet, so no file of it
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  // the menu over the model: one item per file, named as the program's own file
+  const menu = page.getByTestId("model-download");
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  const fromMenu = saving();
+  await menu.getByTestId("model-download-ansys").click();
+  if (fromMenu) expect((await fromMenu).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Ansys input file (.cdb).");
+  await expect(menu.getByRole("menuitem")).toHaveCount(0); // the menu closes once a file is picked
+  expect(asked).toHaveLength(1);
+  expect(asked[0].program).toBe("ansys");
+  expect(asked[0].values).toMatchObject({ width: 25, length: 250 }); // the rows of the setup, as the check sent them
+  // asked of the assistant, in the founder's own words (2026-11-20): the same download as a button, and nothing changes
+  await say("Download abaqus model");
+  await expect(heading()).toHaveText("Download the model");
+  const card = page.getByTestId("chat-model-file").last();
+  await expect(card).toHaveAttribute("data-offers", "abaqus");
+  const fromChat = saving();
+  await card.getByTestId("chat-model-file-abaqus").click();
+  if (fromChat) expect((await fromChat).suggestedFilename()).toBe("IM7-UNT-L1-abaqus.inp");
+  await expect(card.getByRole("status")).toHaveText("Saved the Abaqus input file (.inp).");
+  expect(asked.map((a) => a.program)).toEqual(["ansys", "abaqus"]);
+  await say("donwload ansys modle"); // typed fast
+  await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
+  await say("export the model"); // no program named: every file offered
+  await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus ansys");
+  // a setup the package cannot write is said in its own words, and nothing is saved
+  refuse = true;
+  await page.getByTestId("chat-model-file").last().getByTestId("chat-model-file-ansys").click();
+  await expect(page.getByTestId("chat-model-file").last().getByTestId("chat-model-file-problem")).toContainText("The setup is not complete, so there is no model to write yet.");
+  expect(calls.checks).toHaveLength(1); // asking for a file checked and changed nothing
+  expect(calls.solves).toHaveLength(0);
+  expect(browserErrors).toEqual([]);
+});
+
+test("where the Ansys file is closed, a customer is offered the Abaqus file alone and an Ansys file asked for is said to be not offered yet (ADR-0129, ADR-0091)", async ({ page, browserName }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false, ansysModel: false }); // the API can close the Ansys file again; it is everyone's since amendment 3
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  await mockModelFile(page, asked);
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await expect(menu).toHaveCount(0); // nothing built yet
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 }); // the model is built and checked
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)"]);
+  await expectNoBannedTerms(page, "the download menu open");
+  const file = browserName === "webkit" ? null : page.waitForEvent("download");
+  await menu.getByTestId("model-download-abaqus").click();
+  if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1-abaqus.inp");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Abaqus input file (.inp).");
+  expect(asked[0].values).toMatchObject({ input: "tension" }); // the tension screen's rows: the package chooses the rest, as for the check
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("can i get this as an ansys file?");
+  await message.press("Enter");
+  await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Not as an Ansys file yet");
+  await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus");
+  await expect(page.getByTestId("chat-model-file").last().getByRole("button")).toHaveText(["Abaqus input file (.inp)"]);
+  await expectNoBannedTerms(page, "the assistant's answer about the file");
+});
+
+test("a customer is offered both files, by the menu and by asking (ADR-0129 amendment 3, ADR-0091)", async ({ page, browserName }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // a customer's sign-in: one test, and the Ansys file as the API offers it to everyone
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  await mockModelFile(page, asked);
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expectNoBannedTerms(page, "the download menu open, both files");
+  const file = browserName === "webkit" ? null : page.waitForEvent("download");
+  await menu.getByTestId("model-download-ansys").click();
+  if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Ansys input file (.cdb).");
+  expect(asked[0]).toMatchObject({ program: "ansys" });
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("can i get this as an ansys file?");
+  await message.press("Enter");
+  await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Download the model");
+  await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
+  await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
 });
 
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {

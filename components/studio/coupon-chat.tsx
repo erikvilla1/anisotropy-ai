@@ -27,6 +27,9 @@ import {
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { ASKING, asksUnread, modelAsksResults, routeMessage, type SectionAsked } from "@/lib/chat-route";
 import { aboutAnswer, checkTitle, unreadWords, type AboutTopic } from "@/lib/chat-about";
+import { modelFileAnswer } from "@/lib/model-file";
+import type { ModelProgram } from "@/lib/studio-api";
+import { ModelFileButtons } from "./model-download";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
@@ -147,7 +150,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   /** Opens another section with the message carried (ADR-0124): Laminate, a stack under loads per unit width (ADR-0060), or CAD. */
   onSwitch?: (target: Switchable, carried: string) => void;
 }) {
-  const { project, form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { project, form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, ansysModel, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
   const projectRef = useRef(project);
   projectRef.current = project;
   const lastSaid = useRef<string | null>(null); // the engineer's last message: the reason a change it led to is kept with its version (ADR-0113)
@@ -570,6 +573,18 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     ) });
   }
 
+  /** The model as a file for the engineer's own program (ADR-0129): the menu's own downloads as buttons, in fixed words. The file is
+   * written from the rows as they stand when a button is pressed; nothing changes. */
+  function answerModelFile(text: string, program: ModelProgram | null) {
+    const said = modelFileAnswer(program, { ansys: ansysModel, readOnly: shown.readOnly });
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: said.title, body: (
+      <div data-testid="chat-model-file" data-offers={said.offers.join(" ")}>
+        {said.lines.map((line) => <p key={line}>{line}</p>)}
+        <ModelFileButtons offers={said.offers} />
+      </div>
+    ) });
+  }
+
   /** A question of why, answered in words (ADR-0102): the API puts the shown result's fact sheet beside the sections of our theory pages
    * the question finds, and keeps a model's answer only when every number in it is the results' or the question's. No row changes. */
   async function answerWhy(text: string, facts: Record<string, unknown>, preview: boolean) {
@@ -704,6 +719,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     });
     switch (routed.route) {
       case "start-over": add({ role: "user", text }); startOver(); return;
+      case "model-file": answerModelFile(text, routed.program); return;
       case "term": answerTerm(text, routed.term); return;
       case "about": answerAbout(text, routed.topic); return;
       case "working": showWorking(text); return;

@@ -24,15 +24,15 @@ def test_any_other_word_is_refused_at_startup(value):
 def test_the_page_is_told_whether_every_test_is_offered(monkeypatch):
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     monkeypatch.setattr(app.state, "settings", None, raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False, "ansys_model": True}
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")
-    assert client.get("/v1/coupon-tests").json() == {"all": True, "imports": True, "plates": True}  # where every test is offered, so are the import and the plate
+    assert client.get("/v1/coupon-tests").json() == {"all": True, "imports": True, "plates": True, "ansys_model": True}  # where every test is offered, so are the import and the plate
 
 
 def test_the_startup_settings_answer_when_they_are_there(monkeypatch):
     monkeypatch.setenv(ALL_TESTS_VARIABLE, "on")  # the settings read at startup win over a later change of the environment
     monkeypatch.setattr(app.state, "settings", load_settings({RECORDING_VARIABLE: "off"}), raising=False)
-    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False}
+    assert client.get("/v1/coupon-tests").json() == {"all": False, "imports": False, "plates": False, "ansys_model": True}
 
 
 # --------------------------------------------------------------------------------------------- part 2: a stored coupon of a hidden test
@@ -140,7 +140,7 @@ def test_the_tools_are_started_with_the_option_where_every_test_is_offered_and_w
     monkeypatch.setattr("anisotropy_api.main._every_test", lambda request: founder)
     state = "ready" if founder else "blocked"
     values = {"values": {"form_version": "0.9", "test": "plate"}}
-    assert client.get("/v1/coupon-tests").json() == {"all": founder, "imports": founder, "plates": founder}
+    assert client.get("/v1/coupon-tests").json() == {"all": founder, "imports": founder, "plates": founder, "ansys_model": True}
     assert client.post("/v1/coupon-jobs/check", json=values).json()["state"] == state
     assert client.post("/v1/coupon-jobs/live", json=values).json()["state"] == state
     reopened = client.get("/v1/coupons/NOM-PLT-L1/values")
@@ -182,9 +182,9 @@ def test_behind_access_the_founders_sign_in_is_offered_the_import_alone_and_anot
     monkeypatch.delenv(ALL_TESTS_VARIABLE, raising=False)
     with TestClient(app, headers={"X-Anisotropy-Actor": "browser"}) as hosted:
         app.state.access_verifier = access.verifier(AccessSettings(TEAM, AUDIENCE), key_for=key_for)
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": False, "imports": True, "plates": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": False, "imports": True, "plates": True}
-        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False, "imports": False, "plates": False}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER)}).json() == {"all": False, "imports": True, "plates": True, "ansys_model": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=FOUNDER.upper())}).json() == {"all": False, "imports": True, "plates": True, "ansys_model": True}
+        assert hosted.get("/v1/coupon-tests", headers={access.HEADER: token(email=EMAIL)}).json() == {"all": False, "imports": False, "plates": False, "ansys_model": True}
 
 
 # ------------------------------------------- amendment 7: a founder's sign-in may set up a plate on the model tree, and nothing else hidden

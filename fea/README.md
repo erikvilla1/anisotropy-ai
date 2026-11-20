@@ -90,6 +90,14 @@ A deck our reader has read, such as the team's Abaqus coupon, converts to Calcul
 
 How CalculiX reports composite results (layer order, integration points, axes, shear strain) was detected by running it and is recorded in `checks/calculix-conventions.toml`; the tests repeat the detection whenever the solver is present. `tools/record_from_dat.py` turns a run into a comparison record in the test's `records/` folder (numbers with provenance and both deck digests), and `tests/test_records.py` checks that the kernel reproduces every committed record within its tolerance and floor. The first record and its numbers: [the comparison note](../docs/evaluations/fea/2026-10-15-calculix-first-comparison.md).
 
+## The model for Ansys
+
+```powershell
+uv run python tools/studio_tool.py model <values>.json --program ansys --out <folder>
+```
+
+writes the model the rows state as a Mechanical APDL input file, `<designation>-ansys.cdb` (`write_ansys`, ADR-0129; `--program abaqus` writes the Abaqus file the same way): the nodes, elements and components as `NBLOCK`, `EBLOCK` and `CMBLOCK`, layered `SHELL181` or `SHELL281` elements, the material and its strength limits, one `SECDATA` line per ply with the angle as the coupon states it (every element points at coordinate system 11, the global one turned 90 degrees about z), the supports, the grips, the loads and one linear static solution. A grip tied to a reference point is written as supports and a coupled set on the grip's own nodes; one whose reference point may turn is refused in words. The tests read every file back command by command (`tests/test_write_ansys.py`) and the open-source `mapdl-archive` reader finds the same mesh. One coupon's file has run in Mechanical APDL 2026 R1 on the founder's machine (2026-11-20, ADR-0129 amendment 2): an unnotched tension strip, pulled by a displacement and by a force, read in with no warning and gave our reaction, our grip movement and our ply stresses to within 0.01 %. A pressure, the eight-node shell, a file in metres and Workbench's External Model have not been run there.
+
 ## Ply stresses and first-ply failure
 
 `recovery.py` pushes each element's strain through its plies with the engine's `ply_surfaces` (zero curvature), giving every ply's strain and stress in laminate and material axes, and checks each ply with the engine's criterion dispatch (`face_strength_ratio`): maximum stress, Tsai-Hill, Tsai-Wu (the deck's `*Fail Stress` sixth value is the interaction term; refused without it) and maximum strain (refused: a deck carries no strain limits). The smallest ratio over the mesh is the first-ply-failure factor on the applied displacement or load; ties between identical plies resolve to the first element in deck order and the bottom-most ply. A deck without `*Fail Stress` is refused by name.

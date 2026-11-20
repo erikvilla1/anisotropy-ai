@@ -594,6 +594,17 @@ class CouponCheckRequest(Contract):
                                   **({"project_id": self.project_id} if self.project_id is not None else {}))
 
 
+ModelProgram = Literal["abaqus", "ansys"]  # the programs a model is written for on request (ADR-0129)
+
+
+class CouponModelReceipt(Contract):
+    """What the run record keeps of a model written as a file (ADR-0129): the values' digest and version, and the program asked for."""
+
+    values: dict[str, str | int]
+    program: str
+    project_id: str | None = None
+
+
 class CouponCheckResponse(Contract):
     """What the check found: the checklist as fea/src/anisotropy_fea/checks.py writes it, and the model to draw when the inputs build
     one. Recorded as a run, since it reaches the engine (ADR-0026)."""
@@ -1162,6 +1173,7 @@ class CouponTests(Contract):
     all: bool
     imports: bool = False
     plates: bool = False
+    ansys_model: bool = False  # whether the model may be downloaded as an Ansys file (ADR-0129): everyone's since amendment 3
 
 
 class AssistantInfo(Contract):

@@ -61,7 +61,7 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
+    CouponModelReceipt, ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelProgram, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
     WingRequest, WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -77,6 +77,8 @@ RECORDS_HEADER = "X-Anisotropy-Records"
 # drops the header, so a browser never sees it.
 ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
+MODEL_PROGRAM_NAMES = {"abaqus": "Abaqus", "ansys": "Ansys"}  # as a refusal names them (ADR-0129)
+MODEL_NAME_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
 WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
 WAKE_HEADER = "X-Anisotropy-Wake"  # what the Worker reads on the answer to start a solver (worker/routing.ts)
 SOLVER_STATE = "/v1/solver/state"  # whether a solver container runs a job: the wake-up's question (ADR-0056 amendment 11)
@@ -180,7 +182,7 @@ app.add_middleware(
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
-    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, "Location"],
+    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_NAME_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -642,6 +644,45 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     for name in ("checklist", "preview", "fields", "explanation"):
         parts.append(f'"{name}":'.encode("utf-8") + (found.raw[name].strip() if name in found.raw else b"null"))
     return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
+
+
+@app.post(COUPON_JOBS + "/model", response_model=None, responses={200: {"content": {"text/plain": {}}, "description": "The model file"}})
+def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, program: ModelProgram) -> Response:
+    """The model the rows build, as a file another program reads (ADR-0129): `program=abaqus` gives the Abaqus input deck a run writes,
+    `program=ansys` a Mechanical APDL input file of the same model. The fea package judges the rows as a live solve does and writes the
+    file; nothing is solved and nothing is kept. The answer is the file, named in `Content-Disposition`. The Abaqus file is everyone's;
+    the Ansys file is too since ADR-0129 amendment 3 (403 if it is closed again, `_ansys_model`). 422 when the setup check stops the model, with its first reason, or the program's writer cannot state it; 429, 504 and
+    503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256."""
+    if program == "ansys" and not _ansys_model(request):
+        raise HTTPException(status_code=403, detail="The Ansys model is not offered yet.")
+    receipt = CouponModelReceipt(**problem.receipt().model_dump(exclude_none=True), program=program)
+    live: LiveSolver = request.app.state.live
+    try:
+        email = _email(request)
+        found = live.model_file(problem.values_bytes(), program, every=_every_for(request, problem.values_bytes),
+                                root=None if email is None else _coupon_jobs(request).root_of(email))
+    except LiveBusy as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except LiveTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LiveRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if found.state != "written" or found.content is None:
+        if found.state == "refused":
+            detail = f"This model cannot be written for {MODEL_PROGRAM_NAMES[program]} yet: {found.head.get('problem', 'no reason given')}"
+        else:
+            reasons = [f"{item.get('label', item.get('id'))}: {item.get('message')}" for item in found.checklist.get("items", [])
+                       if item.get("state") in ("fail", "missing") and item.get("message")]
+            detail = "The setup is not complete, so there is no model to write yet." + (f" {reasons[0]}" if reasons else "")
+        run_id = _record(request, actor, receipt, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
+    name = Path(str(found.head["name"])).name
+    run_id = _record(request, actor, receipt, response={
+        "state": found.state, "designation": found.checklist.get("designation"), "program": program, "name": name, "units": found.head.get("units"),
+        "bytes": len(found.content), "sha256": hashlib.sha256(found.content).hexdigest(), "nodes": found.head.get("nodes"),
+        "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3)})
+    headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_NAME_HEADER: name, **(_run_header(run_id) or {})}
+    return Response(content=found.content, media_type="text/plain; charset=utf-8", headers=headers)
 
 
 async def _read_model(request: Request) -> bytes:
@@ -1797,7 +1838,7 @@ def coupon_tests(request: Request) -> CouponTests:
     """What is offered to the requester (ADR-0089); the page asks once. `all`: every coupon test, by the machine's switch alone; the
     page offers the unnotched tension coupon only unless this says so. `imports`: bringing a model in as a file (ADR-0105), by the
     switch or a founder's sign-in (amendment 6). Not a run: nothing is computed or recorded."""
-    return CouponTests(all=_every_test(request), imports=_imports(request), plates=_plates(request))
+    return CouponTests(all=_every_test(request), imports=_imports(request), plates=_plates(request), ansys_model=_ansys_model(request))
 
 
 def _every_test(request: Request) -> bool:
@@ -1830,6 +1871,13 @@ def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> 
     except (ValueError, AttributeError):
         return False
     return isinstance(test, str) and test.strip().lower() == PLATE_WORD
+
+
+def _ansys_model(request: Request) -> bool:
+    """Whether the model may be downloaded as an Ansys file by this request (ADR-0129): everyone's since amendment 3, on the founder's
+    word after one coupon's file ran in Ansys and agreed with ours (amendment 2). It was offered where the import is until then; a
+    False here closes it again, and the route answers 403."""
+    return True
 
 
 def _imports(request: Request) -> bool:

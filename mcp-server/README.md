@@ -73,7 +73,7 @@ The hosted site sits behind a sign-in, which this server does not carry: it reac
 | `result_values` | Stresses and strains of one element, ply by ply, and what each criterion says there | nothing: read from the result the server holds |
 | `result_extreme` | Where a quantity is largest, per ply and overall, with the plies tied | nothing |
 | `explain_result` | The result's fact sheet, the package's sentences and the theory sections a question finds | `POST /v1/workspace/theory-sections` (the question alone) |
-| `show_working` | The formulas with the numbers put in, for the first ply to fail | nothing |
+| `show_working` | The formulas with the numbers put in, for the first ply to fail; one step alone with `step` (strain, stress, criterion, loading) | nothing |
 
 The server keeps the last 8 solves of a session in memory and forgets them when the client closes it.
 

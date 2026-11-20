@@ -1069,12 +1069,72 @@ The plies that end are found by matching the thinner stack to the thicker one pl
 
 Checks: `engine/tests/test_wing_caps.py`: a flat-sided box with caps summed by hand strip by strip (its $`EI`$, $`GJ`$ by Bredt-Batho with the steps in the loop, its enclosed area and its mass, each within $`10^{-12}`$); on NACA 2412 and 0012 boxes with caps, the shear flow with the steps put back carries a unit shear at the shear center and is nothing at every flange's free edge, and the bending load sums to the moment and to no force; zones in order, merged where alike, and the span cut where any part changes; the stations doubled at a change; the beam against the closed form; the same wing in US units. `engine/tests/test_layup_rules.py`: ply drops counted by hand, the run-out on whichever side is thicker, the outside ply ending, and a change of angle that is not a drop.
 
+## 16. Stepped lap bond (`repair/step_lap.py`)
+
+How a bonded patch takes up the load of the laminate it covers, worked along one line (ADR-0130). Two adherends are bonded along a lap made of steps: the outer one (the patch) starts at its tip carrying nothing, and the inner one (the parent laminate) ends at the last step, at the cut or the hole, where the outer one carries the whole load $`T`$ per unit width. In a step each adherend has one thickness and one modulus along the load, and its stiffness is $`S = E t`$. The adherends only stretch and the adhesive only shears, with a shear strain uniform through its thickness $`\eta`$: a shear-lag model, Volkersen's (1938), as Hart-Smith applied it to stepped laps (NASA CR-112237, 1973). $`x`$ runs along the lap, and $`N`$ is the outer adherend's force per unit width.
+
+The adhesive's shear stress is what changes the outer adherend's force, and its shear strain is the difference of the two displacements over $`\eta`$:
+
+```math
+\tau = \frac{dN}{dx}, \qquad \tau = \frac{G}{\eta}\,(u_o - u_i), \qquad \frac{du_o}{dx} = \frac{N}{S_o}, \qquad \frac{du_i}{dx} = \frac{T - N}{S_i}
+```
+
+Differentiating the second with the last two gives one equation for $`N`$ in a step, with the constants computed by `step_constants`:
+
+```math
+\frac{d^2N}{dx^2} = \lambda^2\,(N - P), \qquad \lambda^2 = \frac{G}{\eta}\left(\frac{1}{S_o} + \frac{1}{S_i}\right), \qquad P = T\,\frac{S_o}{S_o + S_i}
+```
+
+$`P`$ is the force the outer adherend carries where both strain alike, and $`1/\lambda`$ is the length over which the adhesive hands load across: a step much longer than a few $`1/\lambda`$ has a middle that carries no shear.
+
+<!-- code: step_constants -->
+
+With $`x`$ from the middle of a step of length $`2c`$, and $`N_a`$, $`N_b`$ the force at its start and its end, the solution and its slope are
+
+```math
+N(x) = P + \left(\frac{N_a + N_b}{2} - P\right)\frac{\cosh\lambda x}{\cosh\lambda c} + \frac{N_b - N_a}{2}\,\frac{\sinh\lambda x}{\sinh\lambda c}, \qquad
+\tau(x) = \lambda\left[\left(\frac{N_a + N_b}{2} - P\right)\frac{\sinh\lambda x}{\cosh\lambda c} + \frac{N_b - N_a}{2}\,\frac{\cosh\lambda x}{\sinh\lambda c}\right]
+```
+
+They are the methods `outer_force` and `shear` of `StepLap`. For one step, $`N_a = 0`$ and $`N_b = T`$, this is Volkersen's solution for unlike adherends. Because $`\tau'' = \lambda^2\tau`$, the shear stress has no largest value in size inside a step: the peak is at an end of a step.
+
+Both displacements are continuous from one step to the next, so the shear stress is too. Writing $`\tau`$ at the end of step $`k`$ and at the start of step $`k+1`$ with $`\alpha = \tfrac{\lambda}{2}\tanh\lambda c`$ and $`\beta = \tfrac{\lambda}{2}\coth\lambda c`$ gives one equation for each boundary between steps, three unknown forces in each, computed by `boundary_forces`; the lap under its load, solved, is computed by `step_lap`:
+
+```math
+(\alpha_k - \beta_k)\,N_{k-1} + (\alpha_k + \beta_k + \alpha_{k+1} + \beta_{k+1})\,N_k + (\alpha_{k+1} - \beta_{k+1})\,N_{k+1} = 2\alpha_k P_k + 2\alpha_{k+1} P_{k+1}, \qquad N_0 = 0, \quad N_m = T
+```
+
+<!-- code: boundary_forces, step_lap -->
+
+The model is linear, so the load at which the largest shear stress reaches the adhesive's shear strength $`\tau_p`$ is the applied load scaled, computed by `elastic_limit_load`. For a ductile adhesive this is where yielding starts, not failure. The largest stress of an adherend in a step is its largest force over its thickness, the force taken at the step's ends and where $`\tau = 0`$ inside it.
+
+```math
+T_e = |T|\,\frac{\tau_p}{\max|\tau|}
+```
+
+<!-- code: elastic_limit_load -->
+
+An adhesive that yields carries more. For one bondline between two uniform adherends $`a`$ and $`b`$, with a shear stress that rises to $`\tau_p`$ at the strain $`\gamma_e = \tau_p/G`$ and stays there until the strain $`\gamma_e + \gamma_p`$, multiplying the equation for the shear strain by its slope and integrating from deep inside a long overlap, where the strain dies away, to an end gives the load that end can take; the weaker end governs (Hart-Smith, NASA CR-112235, 1973). It is computed by `long_overlap_strength`:
+
+```math
+T_{\max} = \min_{\text{ends}}\sqrt{2\,\eta\,\tau_p\left(\tfrac{1}{2}\gamma_e + \gamma_p\right) S_a\left(1 + \frac{S_a}{S_b}\right)}
+```
+
+where $`a`$ is the adherend that carries the whole load at that end. The strength does not grow with the overlap's length: it is set by the adhesive's strain energy to failure and the adherends' stiffness. A double lap has two bondlines, each between half the inner adherend and one outer adherend, and its strength is computed by `double_lap_strength`; with the inner adherend as stiff as the two outer ones together it is $`4\sqrt{\eta\,\tau_p(\gamma_e/2 + \gamma_p)\,E_o t_o}`$. With $`\gamma_p = 0`$ the formula is the elastic limit of a long step.
+
+<!-- code: long_overlap_strength, double_lap_strength -->
+
+Not covered: peel stresses and the bending of an eccentric load path; the variation of stress through the adhesive's thickness; residual stress from cure and a difference in thermal expansion; an adhesive that yields in a stepped lap, and its progressive failure; an adherend that fails between its plies; anything that changes across the width. A lap's file and its answer in a unit system are read and written by `repair/lap_file.py`.
+
+Checks: `engine/tests/test_step_lap.py`. The cases of `engine/validation/repair_cases/` are worked without the engine in `engine/validation/closed_forms.py` by another route, the general solution of every step with its two constants from one linear system, and agree within $`10^{-9}`$; the yielding double lap is worked there zone by zone. One step equals Volkersen's formula; the shear stress integrates to the load and is the slope of the force; a uniform step cut in five gives the same answer; matching adherends give the same stresses from both ends; a step two metres long neither overflows nor loads its middle, and its elastic limit is the long overlap's; and the yielding bond's equation, marched inward by Runge-Kutta from the governing end, holds at 0.999 of the strength and fails at 1.001.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
 - Progressive ply failure and ultimate laminate strength
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
+- For a bonded lap: peel and bending, a yielding adhesive in a stepped lap and the bond's progressive failure, thermal mismatch (Section 16)
 - Hashin failure criteria
 - Ply drops in the stiffness: a change of layup is a step in the section, with no taper over the run-out; a drop's own stresses
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates

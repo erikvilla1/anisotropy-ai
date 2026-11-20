@@ -1,0 +1,28 @@
+{
+  "feature": "model-downloads",
+  "title": "Asking for the model as a file for Abaqus or Ansys",
+  "records": ["ADR-0129"],
+  "watches": ["lib/model-file.ts", "components/studio/model-download.tsx", "lib/chat-about.ts"],
+  "questions": [
+    {"ask": "download abaqus model", "kind": "command", "style": "terse", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)", "as it is set up now"], "never": ["Ansys"]}, "source": "the founder, 2026-11-20: \"Download abaqus model, or download ansys model\""},
+    {"ask": "download ansys model", "kind": "command", "style": "terse", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Ansys input file (.cdb)", "was checked in Ansys on one tension coupon"]}, "source": "the founder, 2026-11-20"},
+    {"ask": "download ansys model", "kind": "command", "style": "terse", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "heading": "Not as an Ansys file yet", "says": ["being checked in Ansys", "Abaqus input file (.inp)"], "never": ["Ansys input file (.cdb)"]}},
+    {"ask": "can I get this as an ansys file?", "kind": "yes-no", "style": "plain", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "export the model", "kind": "command", "style": "plain", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)", "Ansys input file (.cdb)"]}},
+    {"ask": "export the model", "kind": "command", "style": "plain", "page": "results", "route": "model-file", "answer": {"kind": "model-file", "says": ["Abaqus input file (.inp)"], "never": ["Ansys"]}},
+    {"ask": "give me the inp", "kind": "command", "style": "jargon", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "says": ["Abaqus input file (.inp)"]}},
+    {"ask": "donwload ansys modle", "kind": "command", "style": "typo", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"], "never": ["Abaqus"]}},
+    {"ask": "i need the model for ansys mechanical", "kind": "command", "style": "loose", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "how do i get the abaqus file", "kind": "what-is", "style": "plain", "page": "results", "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)"]}},
+    {"ask": "cdb please", "kind": "command", "style": "terse", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "export to abaqus", "kind": "command", "style": "jargon", "page": "imported", "route": "model-file", "answer": {"kind": "model-file", "heading": "Set up a coupon to download its model", "never": ["(.inp)"]}},
+    {"ask": "download the model", "kind": "command", "style": "plain", "page": "past", "route": "model-file", "answer": {"kind": "model-file", "heading": "Set up a coupon to download its model"}},
+    {"ask": "can you run this in ansys", "kind": "off-topic", "style": "jargon", "page": "results", "ansys": true, "route": "about", "answer": {"kind": "about", "heading": "Solved here"}},
+    {"ask": "import an ansys model", "kind": "command", "style": "plain", "page": "ready", "route": "about", "answer": {"kind": "about", "heading": "An Ansys model cannot be brought in yet", "says": ["Set the coupon up here instead", "download the model"], "never": ["(.inp)", "(.cdb)"]}, "source": "the real-model run 44818448757, 2026-11-20: \"not something you can set here yet\", with nothing to ask instead"},
+    {"ask": "can i upload a nastran file?", "kind": "yes-no", "style": "plain", "page": "ready", "route": "about", "answer": {"kind": "about", "heading": "A model from that program cannot be brought in yet", "never": ["Nastran", "(.inp)"]}},
+    {"ask": "what is an abaqus input file", "kind": "what-is", "style": "plain", "page": "results", "route": "about", "answer": {"kind": "about", "heading": "A text file that holds the whole model", "says": ["the mesh, the layup, the material, the supports and the loads", "download the model"], "never": ["(.inp)", "(.cdb)"]}, "source": "the real-model run 44818448757, 2026-11-20: \"Not a question I can read yet\""},
+    {"ask": "whats a cdb file", "kind": "what-is", "style": "terse", "page": "ready", "ansys": true, "route": "about", "answer": {"kind": "about", "heading": "A text file that holds the whole model"}},
+    {"ask": "download the report", "kind": "command", "style": "plain", "page": "results", "route": "about", "answer": {"kind": "about", "heading": "The report is under Files", "says": ["Report (PDF)"], "never": ["(.inp)", "(.cdb)", "no result yet"]}, "source": "the real-model run 44818448757, 2026-11-20: \"Read, but nothing to enter\""},
+    {"ask": "where is the pdf", "kind": "which", "style": "terse", "page": "ready", "route": "about", "answer": {"kind": "about", "heading": "The report is under Files", "says": ["There is no result yet"]}}
+  ]
+}
