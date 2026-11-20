@@ -1,6 +1,6 @@
 # ADR-0116: A wing's shape is built by Gmsh's OpenCASCADE from the same description, as surfaces at mid-thickness in millimetres, and its STEP file names every part
 
-- Status: Proposed
+- Status: Proposed; with spar caps or zones the skins' faces lie on one reference surface, cut at every cap and zone edge, each with its offset, by [ADR-0125](ADR-0125-a-spar-cap-is-a-strip-of-each-skin-over-each-web-with-its-own-layup-any-layup-may-change-in-zones-along-the-span-and-the-hand-calculation-works-a-section-per-stretch.md) amendment 1
 - Date: 2026-11-19
 - Decided by: Founder, 2026-11-18 ("Wing generator first"; "the same way we have it for abaqus right now", on SolidWorks models going both ways; "please continue with building the software", after step 1) | Drafted by: Claude Code
 - Related: [ADR-0115](ADR-0115-a-wing-is-one-description-worked-first-as-a-beam-by-the-engine-over-every-flight-case-at-once-and-the-finite-element-model-of-the-same-description-is-its-check.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md), `fea/src/anisotropy_fea/wing_shape.py`, `fea/tests/test_wing_shape.py`

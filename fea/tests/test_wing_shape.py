@@ -1,5 +1,6 @@
 """The wing's shape, STEP file and shell mesh (ADR-0116): mid-surfaces, part names and areas through a STEP round trip,
-conforming parts, element normals, and the refusals.
+conforming parts, element normals, and the refusals; with spar caps and zones along the span (ADR-0125), a face per layup on one
+reference surface, each with its offset.
 
 Every test that builds the shape skips with a reason when Gmsh is not installed (`uv sync --extra mesh`).
 """
@@ -14,7 +15,7 @@ import pytest
 from anisotropy_engine.wing import wing_from_dict
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.wing_shape import (
-    ShapeError, build_wing_shape, layup_thickness, main, mid_surface_section, name_step_products, rib_stations,
+    ShapeError, build_wing_shape, layup_thickness, main, mid_surface_section, name_step_products, part_table, reference_depth, rib_stations,
 )
 
 EXAMPLE = Path(__file__).parents[2] / "engine" / "examples" / "example-wing.toml"
@@ -91,12 +92,120 @@ def test_ribs_stand_at_the_root_every_spacing_and_the_tip():
     assert rib_stations(example(**{"geometry.rib_spacing": None, "rib": None})) == ()
 
 
-@pytest.mark.parametrize("changes", [{"spar_caps": {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0]}},
-                                     {"spar.zones": [{"start": 0.5, "end": 1, "half_stack": [45, -45, 0]}]}])
-def test_spar_caps_and_zones_along_the_span_are_refused_until_the_shape_draws_them(changes, tmp_path):
-    with pytest.raises(ShapeError, match="does not draw spar caps or zones along the span yet"):
-        build_wing_shape(example(**changes), tmp_path / "wing.step")
-    assert not (tmp_path / "wing.step").exists()
+# The example with spar caps whose zone from the root to 40 % adds a 0 degree ply a side, and a thinner skin from 70 % to the tip.
+CAPS = {"spar_caps": {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0],
+                      "zones": [{"start": 0, "end": 0.4, "half_stack": [0, 0, 0, 45, -45, 0]}]},
+        "skin.zones": [{"start": 0.7, "end": 1, "half_stack": [0, 45, -45]}]}
+CAPPED_NAMES = [f"{side} {piece}, {stretch}" for side in ("Upper", "Lower") for piece, stretches in (
+    ("skin, nose", ("root to 70 %", "70 % to tip")), ("front spar cap", ("root to 40 %", "40 % to tip")),
+    ("skin, between the caps", ("root to 70 %", "70 % to tip")), ("rear spar cap", ("root to 40 %", "40 % to tip")),
+    ("skin, aft", ("root to 70 %", "70 % to tip"))) for stretch in stretches] + ["Front spar", "Rear spar"] + [f"Rib {k}" for k in range(1, 6)]
+
+
+@pytest.fixture(scope="module")
+def capped(tmp_path_factory):
+    if gmsh_available() is None:
+        pytest.skip("Gmsh is not available")
+    step = tmp_path_factory.mktemp("capped") / "capped.step"
+    wing = example(**CAPS)
+    return wing, build_wing_shape(wing, step, element_size_m=0.03), step
+
+
+def test_with_caps_the_skins_reference_surface_is_the_caps_mid_surface_at_the_root():
+    wing = example(**CAPS)
+    root_cap = wing.spar_caps.layup.stretches()[0][2]
+    assert reference_depth(wing) == pytest.approx(layup_thickness(root_cap) / 2)
+    assert reference_depth(example()) == pytest.approx(layup_thickness(example().skin) / 2)  # no caps: the skin's mid-surface
+    zoned = example(**{"skin.zones": [{"start": 0, "end": 0.3, "half_stack": [0, 0, 45, -45, 0]}]})
+    assert reference_depth(zoned) == pytest.approx(layup_thickness(zoned.skin.stretches()[0][2]) / 2)  # the root's stretch
+    section = mid_surface_section(wing)
+    c = wing.geometry.chord_m
+    x = np.linspace(0.0, 1.0, 2001)
+    oml = outline(wing, x)
+    points = np.c_[x * c, oml[:, 0]]
+    for p in section.upper[1:-1]:
+        assert np.min(np.linalg.norm(points - p, axis=1)) == pytest.approx(reference_depth(wing), rel=0.02)
+
+
+def test_a_cap_reaching_where_the_skins_meet_or_round_the_nose_is_refused():
+    with pytest.raises(ShapeError, match="rear spar cap reaches"):
+        mid_surface_section(example(**{"geometry.rear_spar": 0.85, "spar_caps": {"front_width": 0.04, "rear_width": 0.1, "half_stack": [0] * 16}}))
+    with pytest.raises(ShapeError, match="front spar cap reaches round the leading edge"):
+        mid_surface_section(example(**{"geometry.front_spar": 0.05, "spar_caps": {"front_width": 0.044, "rear_width": 0.04, "half_stack": [0, 0]}}))
+
+
+@needs_gmsh
+def test_caps_and_zones_cut_the_skins_and_webs_into_faces_of_one_layup(capped):
+    """Each skin is cut at the caps' four edges and each face again where its own stack changes: the skin at 70 %, the caps at
+    40 %; the webs, whose layup has no zone, stay whole. A face's offset puts its mid-surface half its thickness inside the airfoil."""
+    wing, shape, _ = capped
+    assert [p.name for p in shape.parts] == CAPPED_NAMES
+    parts = {p.name: p for p in shape.parts}
+    depth, span = reference_depth(wing), wing.geometry.half_span_m
+    for part in shape.parts:
+        if part.layup in ("skin", "cap"):
+            assert part.offset_m == pytest.approx(part.thickness_m / 2 - depth)
+        else:
+            assert part.offset_m == 0.0
+    root_cap, outer_cap = (stack for _, _, stack in wing.spar_caps.layup.stretches())
+    assert parts["Upper front spar cap, root to 40 %"].stack == root_cap and parts["Upper front spar cap, root to 40 %"].offset_m == 0.0
+    assert parts["Lower rear spar cap, 40 % to tip"].stack == outer_cap and parts["Lower rear spar cap, 40 % to tip"].offset_m < 0
+    assert parts["Upper skin, aft, 70 % to tip"].stack.half_stack_deg == (0, 45, -45)
+    assert parts["Upper skin, aft, 70 % to tip"].span_m == pytest.approx((0.7 * span, span))
+    # A cap's face is as wide as the reference curve between its edges and as long as its stretch.
+    edges = wing.cap_edges_m
+
+    def across(curve, x0, x1):
+        xs = np.linspace(x0, x1, 2001)
+        return float(np.sum(np.hypot(np.diff(xs), np.diff(np.interp(xs, *curve.T)))))
+    assert parts["Upper front spar cap, root to 40 %"].area_m2 == pytest.approx(across(shape.section.upper, *edges[:2]) * 0.4 * span, rel=1e-4)
+    assert parts["Lower rear spar cap, 40 % to tip"].area_m2 == pytest.approx(across(shape.section.lower, *edges[2:]) * 0.6 * span, rel=1e-4)
+    assert parts["Front spar"].stack == wing.spar and parts["Front spar"].span_m == pytest.approx((0.0, span))
+    assert shape.mass_kg == pytest.approx(sum(p.mass_kg for p in shape.parts))
+    table = part_table(shape, "SI")
+    assert [row["offset"] for row in table["parts"]] == pytest.approx([p.offset_m * 1e3 for p in shape.parts])
+
+
+@needs_gmsh
+def test_the_capped_step_file_reads_back_each_face_with_its_name_where_the_cuts_put_it(capped):
+    import gmsh
+
+    wing, shape, step = capped
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        entities = gmsh.model.occ.importShapes(str(step))
+        gmsh.model.occ.synchronize()
+        read = {gmsh.model.getEntityName(d, t).rsplit("/", 1)[-1]: (gmsh.model.occ.getMass(d, t) * 1e-6, gmsh.model.occ.getBoundingBox(d, t))
+                for d, t in entities}
+    finally:
+        gmsh.finalize()
+    assert {name: area for name, (area, _) in read.items()} == pytest.approx({p.name: p.area_m2 for p in shape.parts}, rel=1e-9)
+    edges = [e * 1e3 for e in wing.cap_edges_m]
+    span = wing.geometry.half_span_m * 1e3
+    _, box = read["Upper front spar cap, root to 40 %"]
+    assert (box[0], box[3], box[1], box[4]) == pytest.approx((edges[0], edges[1], 0.0, 0.4 * span), abs=1e-3)
+    _, box = read["Lower skin, between the caps, 70 % to tip"]
+    assert (box[0], box[3], box[1], box[4]) == pytest.approx((edges[1], edges[2], 0.7 * span, span), abs=1e-3)
+
+
+@needs_gmsh
+def test_the_webs_join_the_caps_and_every_face_is_meshed(capped):
+    wing, shape, _ = capped
+    mesh = shape.mesh
+    assert set(mesh.element_sets) == {p.name for p in shape.parts}
+    nodes_of = {name: set(np.unique(mesh.elements[e]).tolist()) for name, e in mesh.element_sets.items()}
+    top = np.array(sorted(nodes_of["Front spar"] & (nodes_of["Upper front spar cap, root to 40 %"] | nodes_of["Upper front spar cap, 40 % to tip"])))
+    points = mesh.nodes[top]
+    assert np.allclose(points[:, 0], shape.section.spar_x_m[0], atol=1e-9) and np.allclose(points[:, 2], shape.section.spar_top_m[0], atol=1e-6)
+    assert points[:, 1].min() == pytest.approx(0.0, abs=1e-12) and points[:, 1].max() == pytest.approx(wing.geometry.half_span_m)
+    # The cap and the skin beside it share the line of the cap's edge; the two stretches of a cap share the line at 40 %.
+    assert nodes_of["Upper front spar cap, root to 40 %"] & nodes_of["Upper skin, between the caps, root to 70 %"]
+    assert nodes_of["Upper front spar cap, root to 40 %"] & nodes_of["Upper front spar cap, 40 % to tip"]
+    p = mesh.nodes[mesh.elements]
+    normal = np.cross(p[:, 2] - p[:, 0], p[:, 3] - p[:, 1])
+    cap = mesh.element_sets["Lower rear spar cap, root to 40 %"]
+    assert (normal[cap, 2] < 0).all()  # out of the wing, as the skin's
 
 
 def test_a_skin_thicker_than_the_airfoil_or_a_spar_aft_of_the_skins_meeting_is_refused():

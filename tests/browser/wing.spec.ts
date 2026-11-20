@@ -25,6 +25,11 @@ const checkAt = (look: Partial<typeof LOOKS[number]> & { state: string; message?
 const SHAPE = { run_id: null, step: "ISO-10303-21;\nEND-ISO-10303-21;\n", parts: { wing: "Example straight wing", units: { thickness: "mm", area: "m^2", mass: "kg", step: "mm" },
   parts: [{ name: "Upper skin", layup: "skin", thickness: 7.463, area: 0.8652, mass: 2.249 }, { name: "Front spar", layup: "spar", thickness: 1.463, area: 0.09204, mass: 0.2128 }], mass: 2.462 } };
 
+/** The part table of a wing with spar caps (ADR-0125): the skin's face offset inward to its mid-surface, the cap's at the reference. */
+const CAPPED_SHAPE = { ...SHAPE, parts: { ...SHAPE.parts, parts: [
+  { name: "Upper skin, between the caps", layup: "skin", thickness: 7.463, offset: 3.08, area: 0.3757, mass: 0.9766 },
+  { name: "Upper front spar cap", layup: "cap", thickness: 1.829, offset: 0, area: 0.09017, mass: 0.2607 }], mass: 1.237 } };
+
 type Sent = { wing?: Record<string, unknown>; toml?: string };
 const shapes: Sent[] = []; // what Download STEP sent, in the test that runs
 const checks: Sent[] = []; // what the finite element check was started with
@@ -52,7 +57,7 @@ async function playWings(page: Page, answer: (body: Sent) => { status: number; b
     const body = request.postDataJSON() as Sent;
     if (new URL(request.url()).pathname.endsWith("/shape")) {
       shapes.push(body);
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SHAPE) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body.wing?.spar_caps ? CAPPED_SHAPE : SHAPE) });
     }
     sent.push(body);
     const reply = answer(body);
@@ -155,6 +160,22 @@ test("Download STEP saves the shape the API built from the wing as it stands, an
   await expect(page.getByTestId("wing-step-note")).toHaveText("example-straight-wing.step saved: 2 parts, in millimetres.");
   await expect(page.getByTestId("wing-parts").locator("tbody tr")).toHaveCount(2);
   await expect(page.getByTestId("wing-parts")).toContainText("Front spar1.4630.213");
+  await expect(page.getByTestId("wing-parts")).not.toContainText("Offset");
+});
+
+test("with spar caps the part table gives each face's offset to its mid-surface and says how to use it (ADR-0125)", async ({ page }) => {
+  const sent = await playWings(page, (body) => ({ status: 200, body: body.wing?.spar_caps ? CAPS : ANSWER }));
+  await page.goto("/workspace/wing");
+  await page.getByTestId("wing-spar_caps").getByTestId("wing-add-caps").click();
+  await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toBeDefined();
+  await page.getByTestId("panel-wing-shape").locator("summary").click();
+  const download = page.waitForEvent("download");
+  await page.getByTestId("wing-step").click();
+  await download;
+  expect(shapes.at(-1)?.wing?.spar_caps).toEqual({ front_width: 0.045, rear_width: 0.045, half_stack: [0, 0, 45, -45, 0] });
+  await expect(page.getByTestId("wing-parts").locator("thead")).toContainText("Offset inward, mm");
+  await expect(page.getByTestId("wing-parts")).toContainText("Upper skin, between the caps7.4633.08");
+  await expect(page.getByTestId("wing-parts-hint")).toContainText("move each part inward by its offset");
 });
 
 test("the finite element check runs in the background, shows its stage, then sets the model beside the hand calculation (ADR-0119)", async ({ page }) => {

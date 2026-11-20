@@ -482,20 +482,23 @@ function ShapePanel() {
     }
   }
   const table = shape?.parts;
+  const offsets = table ? table.parts.some((p) => (p.offset ?? 0) !== 0) : false;
   return (
     <StepPanel id="wing-shape" step={10} title="Shape for CAD" note="STEP" open={false}>
-      <p className="studio-hint">The skins, spar webs and ribs as surfaces at their mid-thickness, every part named, in millimetres. Any CAD program that reads STEP files opens it.</p>
+      <p className="studio-hint">The skins, spar caps, spar webs and ribs as surfaces, every part named and cut where its layup changes, in millimetres. Any CAD program that reads STEP files opens it.</p>
       <div className="studio-buttons">
         <button type="button" className="studio-button" onClick={() => void build()} disabled={building || !apiBaseUrl} data-testid="wing-step">Download STEP</button>
       </div>
       {note ? <p className="studio-status" role="status" data-testid="wing-step-note">{note}</p> : null}
       {table ? (
         <>
-          <p className="studio-hint">A STEP file holds no thickness. In the CAD program, thicken each part on both sides of its surface, half on each side, to the whole thickness below.</p>
+          <p className="studio-hint" data-testid="wing-parts-hint">{offsets
+            ? "A STEP file holds no thickness. The skin and cap faces lie on one surface: in the CAD program, move each part inward by its offset (outward when it is negative), then thicken it on both sides, half on each side, to the whole thickness below."
+            : "A STEP file holds no thickness. In the CAD program, thicken each part on both sides of its surface, half on each side, to the whole thickness below."}</p>
           <table className="studio-table" data-testid="wing-parts">
-            <thead><tr><th>Part</th><th>Thickness, {unitText(table.units.thickness)}</th><th>Mass, {unitText(table.units.mass)}</th></tr></thead>
-            <tbody>{table.parts.map((p) => <tr key={p.name}><td>{p.name}</td><td>{p.thickness === null ? "not given" : shown(p.thickness, 4)}</td><td>{shown(p.mass, 3)}</td></tr>)}</tbody>
-            {table.mass !== null ? <tfoot><tr><td>Whole wing, one side</td><td /><td>{shown(table.mass, 3)}</td></tr></tfoot> : null}
+            <thead><tr><th>Part</th><th>Thickness, {unitText(table.units.thickness)}</th>{offsets ? <th>Offset inward, {unitText(table.units.thickness)}</th> : null}<th>Mass, {unitText(table.units.mass)}</th></tr></thead>
+            <tbody>{table.parts.map((p) => <tr key={p.name}><td>{p.name}</td><td>{p.thickness === null ? "not given" : shown(p.thickness, 4)}</td>{offsets ? <td>{shown(p.offset ?? 0, 3)}</td> : null}<td>{shown(p.mass, 3)}</td></tr>)}</tbody>
+            {table.mass !== null ? <tfoot><tr><td>Whole wing, one side</td><td />{offsets ? <td /> : null}<td>{shown(table.mass, 3)}</td></tr></tfoot> : null}
           </table>
           <p className="studio-hint">The skins here run round the whole airfoil, so this mass is more than the hand calculation&apos;s, which counts the box between the spars.</p>
         </>

@@ -7,6 +7,12 @@ from it about the element's normal (outward on the skins, aft on the webs, towar
 the curved skins: elements are grouped by the direction of their normal in steps of ANGLE_STEP_DEG, and each group gets its
 own orientations.
 
+Spar caps and zones along the span (ADR-0125): every face of the shape carries one layup, the zone's where it lies in one, and
+the shells of a face whose mid-surface is not the skins' reference surface (a skin thicker than the caps, a zone of another
+thickness) are offset to it with CalculiX's OFFSET, in thicknesses along the normal, as in Abaqus. Where two faces of different
+offset or thickness meet, CalculiX joins their shells with a knot that keeps the step between their mid-surfaces; within one face
+the offset changes nothing. A cap counts with the skins in the checks, as in the hand calculation.
+
 The ply's out-of-plane constants follow the rule the workspace writes for a tape (ADR-0090): E3 = E2, G13 = G12, G23 = E2 / 3,
 and nu13 = nu23 = 0, the plane stress our engine assumes. The core's in-plane modulus is taken as its through-thickness one and
 its Poisson ratios as zero; the faces are about a thousand times stiffer in the plane, so neither matters to the result.
@@ -20,9 +26,9 @@ function against it over the element's plan area). Every flight case of the enve
 with the factors the hand calculation uses: the lift n W / 2, the moment q c^2 c_m, the aileron's q c Delta c_l and
 q c^2 Delta c_m.
 
-The skins run round the whole airfoil, as the shape draws them, or, with skins="box", only between the spars: the hand
-calculation's box, whose nose and tail then carry no load and the airload goes on the box's skins with the same resultant and
-moment. Until the wing description says whether the skin ahead of and behind the box is structure or a fairing, both are run.
+The skins run round the whole airfoil, as the shape draws them, or, with skins="box", only between the spars (with caps, each cap
+whole, its outer half too): the hand calculation's box, whose nose and tail then carry no load and the airload goes on the box's
+skins and caps with the same resultant and moment. Until the wing description says whether the skin ahead of and behind the box is structure or a fairing, both are run.
 
 The root is clamped (every node at y = 0, all six freedoms). No real root is that stiff: the clamp stops the plies' Poisson
 contraction and the box's warping there, which raises the stresses within about a box height of it (Saint-Venant). The checks
@@ -36,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import sys
 import tempfile
 import time
@@ -52,7 +59,7 @@ from anisotropy_engine.wing.flutter import FlutterResult, TypicalSection, flutte
 from anisotropy_engine.wing.loads import LoadCase, flight_cases
 
 from .calculix import run_calculix
-from .wing_shape import Section, ShapeError, ShellMesh, build_wing_shape, mid_surface_section, rib_stations
+from .wing_shape import Part, Section, ShapeError, ShellMesh, build_wing_shape, rib_stations
 
 ANGLE_STEP_DEG = 2.0  # the fibre axes of a curved skin follow its normal to within half of this
 PARALLEL_TOLERANCE = math.sin(math.radians(2.0))  # how far an element's normal may lean toward its 0 degree direction
@@ -62,8 +69,9 @@ POINTS_PER_LAYER = 2  # ... and 2 through each layer, numbered by level from the
 # of 14 layers or more, and solves 13 (tried 2026-11-20 on the D3039 check's deck and on the wing's, ADR-0117 amendment 1).
 MAX_LAYERS = 13
 PATTERNS = ("lift", "moment", "aileron lift", "aileron moment")
-SKINS = ("Upper skin", "Lower skin")
+SKINS = ("Upper skin", "Lower skin")  # the skins' names on a wing without caps or zones
 WEBS = ("Front spar", "Rear spar")
+SKIN_KINDS = ("skin", "cap")  # the faces the airload goes on and whose plies the skin check reads
 SKIN_EXTENTS = ("airfoil", "box")  # the skins round the whole airfoil, or only between the spars
 MM = 1e-3
 MPA = 1e6
@@ -93,11 +101,21 @@ class Layer:
 
 
 @dataclass(frozen=True)
+class ShellSection:
+    """The layers of one face's layup and where its mid-surface lies from its shells' nodes."""
+
+    kind: str  # "skin", "cap", "spar" or "rib": the part that carries it, whose core it is
+    layup: Layup
+    offset: float  # CalculiX's OFFSET: the nodes lie this many thicknesses from the mid-surface along the normal
+    layers: tuple[Layer, ...]
+
+
+@dataclass(frozen=True)
 class Group:
-    """Elements of one layup whose normals point the same way to within half of ANGLE_STEP_DEG."""
+    """Elements of one shell section whose normals point the same way to within half of ANGLE_STEP_DEG."""
 
     name: str
-    layup: str  # "skin", "spar" or "rib"
+    section: int  # in WingModel.sections
     normal: np.ndarray  # (3,)
     reference: np.ndarray  # the 0 degree direction
     members: np.ndarray
@@ -110,13 +128,26 @@ class WingModel:
     section: Section
     mesh: QuadraticMesh
     part_of: np.ndarray  # (ne,) part name of each element
+    kind_of: np.ndarray  # (ne,) "skin", "cap", "spar" or "rib"
+    section_of: np.ndarray  # (ne,) its shell section, in sections
+    sections: list[ShellSection]
+    parts: dict[str, Part]  # the shape's parts by name
     groups: list[Group]
-    layers: dict[str, list[Layer]]  # by layup
     patterns: dict[str, np.ndarray]  # pattern -> (n,) vertical nodal force, N
     deck: str
     element_size_m: float
     build_seconds: float
     skins: str = "airfoil"  # one of SKIN_EXTENTS
+
+    def layer_table(self, element: np.ndarray, layer: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """For points of `element` in `layer`: whether the layer is a ply, its angle and its thickness."""
+        deepest = max(len(section.layers) for section in self.sections)
+        ply, angle, thickness = (np.zeros((len(self.sections), deepest), dtype=dtype) for dtype in (bool, float, float))
+        for k, section in enumerate(self.sections):
+            for j, item in enumerate(section.layers):
+                ply[k, j], angle[k, j], thickness[k, j] = item.material == "PLY", item.angle_deg, item.thickness_m
+        which = self.section_of[element]
+        return ply[which, layer], angle[which, layer], thickness[which, layer]
 
 
 @dataclass(frozen=True)
@@ -178,32 +209,34 @@ def quadratic(mesh: ShellMesh) -> QuadraticMesh:
     return QuadraticMesh(nodes=nodes, elements=elements, element_sets=dict(mesh.element_sets), root=np.nonzero(np.abs(nodes[:, 1]) < 1e-9)[0])
 
 
-def within_box(mesh: QuadraticMesh, part_of: np.ndarray, x_from: float, x_to: float) -> tuple[QuadraticMesh, np.ndarray]:
-    """The mesh without the skin and rib elements ahead of the front spar and behind the rear spar, its nodes renumbered.
-    The shape splits the skins and ribs at the webs, so every element lies wholly on one side of each web."""
+def within_box(mesh: QuadraticMesh, kind_of: np.ndarray, skins_m: tuple[float, float], ribs_m: tuple[float, float]) -> np.ndarray:
+    """Which elements the box keeps: the webs, the skins and caps between `skins_m` (the spars, or the caps' outer edges, so a cap's
+    outer half stays as in the hand calculation) and the ribs between `ribs_m` (the spars). The shape cuts the skins and ribs at the
+    webs and at the caps' edges, so every element lies wholly on one side of each."""
     centre_x = mesh.nodes[mesh.elements[:, :4], 0].mean(axis=1)
-    webs = np.isin(part_of, WEBS)
-    keep = webs | ((centre_x > x_from) & (centre_x < x_to))
-    kept = np.nonzero(keep)[0]
-    used = np.unique(mesh.elements[kept])
+    skins = np.isin(kind_of, SKIN_KINDS)
+    ribs = kind_of == "rib"
+    return ((kind_of == "spar") | (skins & (centre_x > skins_m[0]) & (centre_x < skins_m[1]))
+            | (ribs & (centre_x > ribs_m[0]) & (centre_x < ribs_m[1])))
+
+
+def kept(mesh: QuadraticMesh, keep: np.ndarray) -> QuadraticMesh:
+    """The mesh of the elements `keep` marks, its nodes renumbered."""
+    chosen = np.nonzero(keep)[0]
+    used = np.unique(mesh.elements[chosen])
     renumber = np.full(mesh.nodes.shape[0], -1, dtype=np.int64)
     renumber[used] = np.arange(used.size)
     new_index = np.full(mesh.elements.shape[0], -1, dtype=np.int64)
-    new_index[kept] = np.arange(kept.size)
+    new_index[chosen] = np.arange(chosen.size)
     sets = {name: new_index[members[keep[members]]] for name, members in mesh.element_sets.items()}
     nodes = mesh.nodes[used]
-    trimmed = QuadraticMesh(nodes=nodes, elements=renumber[mesh.elements[kept]], element_sets={k: v for k, v in sets.items() if v.size},
-                            root=np.nonzero(np.abs(nodes[:, 1]) < 1e-9)[0])
-    return trimmed, part_of[kept]
+    return QuadraticMesh(nodes=nodes, elements=renumber[mesh.elements[chosen]], element_sets={k: v for k, v in sets.items() if v.size},
+                         root=np.nonzero(np.abs(nodes[:, 1]) < 1e-9)[0])
 
 
-def layup_of(part: str) -> str:
-    return "rib" if part.startswith("Rib") else ("spar" if part in WEBS else "skin")
-
-
-def reference_axis(part: str) -> np.ndarray:
-    """The 0 degree direction: the span on the skins and webs, the chord on the ribs."""
-    return np.array([1.0, 0.0, 0.0]) if part.startswith("Rib") else np.array([0.0, 1.0, 0.0])
+def reference_axis(kind: str) -> np.ndarray:
+    """The 0 degree direction: the span on the skins, caps and webs, the chord on the ribs."""
+    return np.array([1.0, 0.0, 0.0]) if kind == "rib" else np.array([0.0, 1.0, 0.0])
 
 
 def element_normals(mesh: QuadraticMesh) -> np.ndarray:
@@ -212,24 +245,24 @@ def element_normals(mesh: QuadraticMesh) -> np.ndarray:
     return normal / np.linalg.norm(normal, axis=1)[:, None]
 
 
-def orientation_groups(mesh: QuadraticMesh, part_of: np.ndarray, step_deg: float = ANGLE_STEP_DEG) -> list[Group]:
-    """Elements grouped by layup and by the direction of their normal about the 0 degree axis, in steps of `step_deg`."""
+def orientation_groups(mesh: QuadraticMesh, kind_of: np.ndarray, section_of: np.ndarray, step_deg: float = ANGLE_STEP_DEG) -> list[Group]:
+    """Elements grouped by shell section and by the direction of their normal about the 0 degree axis, in steps of `step_deg`."""
     normals = element_normals(mesh)
     found: dict[tuple, list[int]] = {}
-    for k, (part, n) in enumerate(zip(part_of, normals)):
-        r = reference_axis(part)
+    for k, (kind, n) in enumerate(zip(kind_of, normals)):
+        r = reference_axis(kind)
         # A skin element on the curved airfoil tilts a little out of the span (under 0.2 degree at 40 mm); more means the wing is not straight
         if abs(float(n @ r)) > PARALLEL_TOLERANCE:
-            raise WingModelError(f"An element of {part} is not parallel to its 0 degree direction; the model needs a straight wing")
+            raise WingModelError(f"An element of a {kind} is not parallel to its 0 degree direction; the model needs a straight wing")
         u, v = (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])) if r[1] == 1.0 else (np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]))
         step = int(round(math.degrees(math.atan2(float(n @ v), float(n @ u))) / step_deg))
-        found.setdefault((layup_of(part), int(r[1]), step), []).append(k)
+        found.setdefault((int(section_of[k]), int(r[1]), step), []).append(k)
     groups = []
-    for (layup, along_span, step), members in sorted(found.items()):
+    for (section, along_span, step), members in sorted(found.items()):
         r = np.array([0.0, 1.0, 0.0]) if along_span else np.array([1.0, 0.0, 0.0])
         u, v = (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])) if along_span else (np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]))
         angle = math.radians(step * step_deg)
-        groups.append(Group(name=f"G{len(groups) + 1}", layup=layup, normal=math.cos(angle) * u + math.sin(angle) * v, reference=r,
+        groups.append(Group(name=f"G{len(groups) + 1}", section=section, normal=math.cos(angle) * u + math.sin(angle) * v, reference=r,
                             members=np.array(members)))
     return groups
 
@@ -312,15 +345,20 @@ def strip_pressure(x: np.ndarray, lift: np.ndarray, moment: np.ndarray, x_from: 
     return lift / width + beta * (x - middle)
 
 
-def load_patterns(wing: Wing, envelope: FlightEnvelope, mesh: QuadraticMesh, part_of: np.ndarray, section: Section,
-                  skins: str = "airfoil") -> dict[str, np.ndarray]:
-    """The vertical nodal forces of each load pattern, consistent with the S8R shape functions, half on each skin."""
-    L = wing.geometry.half_span_m
+def load_extent(wing: Wing, section: Section, skins: str = "airfoil") -> tuple[float, float]:
+    """Where along the chord the airload goes on the skins: round the whole airfoil, or over the box the hand calculation counts,
+    from spar to spar or, with caps, from the front cap's fore edge to the rear cap's aft edge."""
     if skins == "box":
-        x_from, x_to = section.spar_x_m
-    else:
-        x_from = float(min(section.upper[:, 0].min(), section.lower[:, 0].min()))
-        x_to = float(max(section.upper[:, 0].max(), section.lower[:, 0].max()))
+        edges = wing.cap_edges_m
+        return section.spar_x_m if edges is None else (edges[0], edges[3])
+    return (float(min(section.upper[:, 0].min(), section.lower[:, 0].min())), float(max(section.upper[:, 0].max(), section.lower[:, 0].max())))
+
+
+def load_patterns(wing: Wing, envelope: FlightEnvelope, mesh: QuadraticMesh, kind_of: np.ndarray, extent: tuple[float, float]) -> dict[str, np.ndarray]:
+    """The vertical nodal forces of each load pattern, consistent with the S8R shape functions, half on each skin, spread over the
+    chord from extent[0] to extent[1]."""
+    L = wing.geometry.half_span_m
+    x_from, x_to = extent
     x_ac = wing.aerodynamics.aerodynamic_center * wing.geometry.chord_m
     aileron = envelope.aileron
     names = PATTERNS if aileron is not None else PATTERNS[:2]
@@ -328,7 +366,7 @@ def load_patterns(wing: Wing, envelope: FlightEnvelope, mesh: QuadraticMesh, par
     forces = {name: np.zeros(mesh.nodes.shape[0]) for name in names}
     plain, split = _rule(1), _rule(SPLIT)
     shapes = {}
-    for k in np.nonzero(np.isin(part_of, SKINS))[0]:
+    for k in np.nonzero(np.isin(kind_of, SKIN_KINDS))[0]:
         nodes = mesh.elements[k]
         xy = mesh.nodes[nodes][:, :2]
         ys = xy[:, 1]
@@ -375,22 +413,27 @@ def _rows(values, per_line: int = 12) -> list[str]:
 
 
 def check_describable(wing: Wing) -> None:
-    """Refuse a wing the model cannot build: a core without its stiffness, ribs without a layup, a part of more layers than
-    CalculiX solves."""
-    if wing.spar_caps is not None or wing.has_zones:
-        raise WingModelError("The finite element check does not take spar caps or zones along the span yet (the hand calculation does): "
-                             "take them out to run it")
+    """Refuse a wing the model cannot build: a core without its stiffness, ribs without a layup, a part or a zone of more layers
+    than CalculiX solves."""
     for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)):
         if layup is not None and layup.core_thickness_m > 0 and layup.core is None:
             raise WingModelError(f"The finite element model needs the {name} core's stiffness: name a library core in [{name}] "
                                  "(core = \"divinycell-h45\") or give core_modulus and core_shear_modulus")
     if wing.geometry.rib_spacing_m is not None and wing.rib is None:
         raise WingModelError("The wing has ribs but no rib layup: add a [rib] table with its half_stack")
-    for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)):
-        if layup is not None and (count := len(layers(layup))) > MAX_LAYERS:
-            raise WingModelError(f"The finite element model holds at most {MAX_LAYERS} layers through a part, the core and plies "
-                                 f"of one angle side by side counting as one; the {name} layup makes {count}. Take plies out, "
-                                 "or put plies of one angle next to each other")
+    caps = None if wing.spar_caps is None else wing.spar_caps.layup
+    for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("spar caps'", caps), ("rib", wing.rib)):
+        for start, end, stack in (() if layup is None else layup.stretches()):
+            if (count := len(layers(stack))) > MAX_LAYERS:
+                where = "" if len(layup.stretches()) == 1 else f" from {start:g} to {end:g} of the half span"
+                raise WingModelError(f"The finite element model holds at most {MAX_LAYERS} layers through a part, the core and plies "
+                                     f"of one angle side by side counting as one; the {name} layup{where} makes {count}. Take plies out, "
+                                     "or put plies of one angle next to each other")
+
+
+def elset_name(part: str) -> str:
+    """A part's name as a CalculiX element set: capitals, digits and underscores ("Upper skin, root to 40 %" is UPPER_SKIN_ROOT_TO_40)."""
+    return re.sub(r"[^A-Z0-9]+", "_", part.upper()).strip("_")
 
 
 def _model_lines(model: WingModel) -> list[str]:
@@ -405,7 +448,7 @@ def _model_lines(model: WingModel) -> list[str]:
     out.append("*ELEMENT, TYPE=S8R, ELSET=EALL")
     out += [f"{k + 1}, " + ", ".join(str(n + 1) for n in nodes) for k, nodes in enumerate(mesh.elements.tolist())]
     for name, members in mesh.element_sets.items():
-        out.append(f"*ELSET, ELSET={name.upper().replace(' ', '_')}")
+        out.append(f"*ELSET, ELSET={elset_name(name)}")
         out += _rows(np.asarray(members) + 1)
     out.append("*NSET, NSET=ROOT")
     out += _rows(mesh.root + 1)
@@ -418,6 +461,7 @@ def _model_lines(model: WingModel) -> list[str]:
              if layup is not None and layup.core is not None and layup.core_thickness_m > 0}
     for name, core in cores.items():
         layup = {"skin": wing.skin, "spar": wing.spar, "rib": wing.rib}[name]
+        # A zone keeps its part's core (ADR-0125), so one material serves every stretch of the part.
         E, G = core.modulus_Pa / MPA, core.shear_modulus_Pa / MPA
         out += [f"** The {name} core, {core.name}: its in-plane modulus taken as its through-thickness one, its Poisson ratios as zero.",
                 f"*MATERIAL, NAME=CORE_{name.upper()}", "*ELASTIC, TYPE=ENGINEERING CONSTANTS",
@@ -425,14 +469,15 @@ def _model_lines(model: WingModel) -> list[str]:
     for group in model.groups:
         out.append(f"*ELSET, ELSET={group.name}")
         out += _rows(group.members + 1)
-        stack = model.layers[group.layup]
-        for angle in sorted({layer.angle_deg for layer in stack}):
+        section = model.sections[group.section]
+        for angle in sorted({layer.angle_deg for layer in section.layers}):
             fibre, across = fibre_axes(group, angle)
             out.append(f"*ORIENTATION, NAME={group.name}_{_angle_name(angle)}")
             out.append(", ".join(_num(v) for v in (*fibre, *across)))
-        out.append(f"*SHELL SECTION, ELSET={group.name}, COMPOSITE")
-        for layer in stack:
-            name = "PLY" if layer.material == "PLY" else f"CORE_{group.layup.upper()}"
+        offset = f", OFFSET={_num(section.offset)}" if section.offset else ""
+        out.append(f"*SHELL SECTION, ELSET={group.name}, COMPOSITE{offset}")
+        for layer in section.layers:
+            name = "PLY" if layer.material == "PLY" else f"CORE_{section.kind.upper()}"
             out.append(f"{_num(layer.thickness_m / MM)}, , {name}, {group.name}_{_angle_name(layer.angle_deg)}")
     out += ["*BOUNDARY", "ROOT, 1, 6"]
     return out
@@ -457,24 +502,46 @@ def _angle_name(angle: float) -> str:
     return ("M" if angle < 0 else "") + text
 
 
+def shell_sections(parts: dict[str, Part], part_of: np.ndarray) -> tuple[list[ShellSection], np.ndarray]:
+    """One shell section per layup and offset among the elements' parts, and each element's."""
+    sections: list[ShellSection] = []
+    index: dict[tuple, int] = {}
+    section_of = np.empty(part_of.shape[0], dtype=np.int64)
+    for name in dict.fromkeys(part_of.tolist()):
+        part = parts[name]
+        stack = part.stack
+        offset = part.offset_m / part.thickness_m if part.offset_m else 0.0
+        key = (part.layup, stack.half_stack_deg, stack.core_thickness_m, round(offset, 12))
+        if key not in index:
+            index[key] = len(sections)
+            sections.append(ShellSection(kind=part.layup, layup=stack, offset=offset, layers=tuple(layers(stack))))
+        section_of[part_of == name] = index[key]
+    return sections, section_of
+
+
 def build_wing_model(wing: Wing, envelope: FlightEnvelope, element_size_m: float, skins: str = "airfoil") -> WingModel:
-    """The wing's mesh, ply groups, load patterns and deck; `skins` is "airfoil" or "box" (SKIN_EXTENTS)."""
+    """The wing's mesh, shell sections, ply groups, load patterns and deck; `skins` is "airfoil" or "box" (SKIN_EXTENTS)."""
     if skins not in SKIN_EXTENTS:
         raise WingModelError(f"skins is one of {', '.join(SKIN_EXTENTS)}, got {skins!r}")
     check_describable(wing)
     began = time.perf_counter()
     shape = build_wing_shape(wing, element_size_m=element_size_m)
     mesh = quadratic(shape.mesh)
+    parts = {part.name: part for part in shape.parts}
     part_of = np.empty(mesh.elements.shape[0], dtype=object)
     for name, members in mesh.element_sets.items():
         part_of[members] = name
-    section = mid_surface_section(wing)
+    kind_of = np.array([parts[name].layup for name in part_of])
+    section = shape.section
+    extent = load_extent(wing, section, skins)
     if skins == "box":
-        mesh, part_of = within_box(mesh, part_of, *section.spar_x_m)
-    stacks = {name: layers(layup) for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)) if layup is not None}
-    model = WingModel(wing=wing, envelope=envelope, section=section, mesh=mesh, part_of=part_of, groups=orientation_groups(mesh, part_of),
-                      layers=stacks, patterns=load_patterns(wing, envelope, mesh, part_of, section, skins), deck="",
-                      element_size_m=element_size_m, build_seconds=0.0, skins=skins)
+        keep = within_box(mesh, kind_of, extent, section.spar_x_m)
+        mesh, part_of, kind_of = kept(mesh, keep), part_of[keep], kind_of[keep]
+    sections, section_of = shell_sections(parts, part_of)
+    model = WingModel(wing=wing, envelope=envelope, section=section, mesh=mesh, part_of=part_of, kind_of=kind_of, section_of=section_of,
+                      sections=sections, parts=parts, groups=orientation_groups(mesh, kind_of, section_of),
+                      patterns=load_patterns(wing, envelope, mesh, kind_of, extent), deck="", element_size_m=element_size_m,
+                      build_seconds=0.0, skins=skins)
     model.deck = write_deck(model)
     model.build_seconds = time.perf_counter() - began
     return model
@@ -522,7 +589,7 @@ def read_results(model: WingModel, dat: str, solve_seconds: float = 0.0, equatio
             point_element = values[:, 0].astype(np.int64) - 1
             point = values[:, 1].astype(np.int64) - 1
             point_layer = point // POINTS_IN_PLANE // POINTS_PER_LAYER
-            counts = np.array([len(model.layers[layup_of(model.part_of[k])]) for k in point_element])
+            counts = np.array([len(section.layers) for section in model.sections])[model.section_of[point_element]]
             if (point_layer >= counts).any():
                 raise WingModelError("CalculiX printed more integration points than the elements' layers hold")
         s = values[:, 2:8] * MPA  # sxx, syy, szz, sxy, sxz, syz in the layer's axes
@@ -549,13 +616,21 @@ def run_wing_model(model: WingModel, workdir: Path | str | None = None, ccx: str
     return read_results(model, result.dat_text, result.elapsed_s, equations)
 
 
+def web_elements(model: WingModel) -> tuple[np.ndarray, np.ndarray]:
+    """The elements of the front web and of the rear web, every stretch of each."""
+    centre_x = model.mesh.nodes[model.mesh.elements[:, :4], 0].mean(axis=1)
+    webs = model.kind_of == "spar"
+    middle = sum(model.section.spar_x_m) / 2
+    return np.nonzero(webs & (centre_x < middle))[0], np.nonzero(webs & (centre_x > middle))[0]
+
+
 def _tip(model: WingModel) -> tuple[np.ndarray, np.ndarray, float, float]:
     """The nodes of the front and of the rear web at the tip, and the webs' chord positions."""
     mesh, L = model.mesh, model.wing.geometry.half_span_m
     tip = np.abs(mesh.nodes[:, 1] - L) < 1e-9
     webs = []
-    for name in WEBS:
-        nodes = np.unique(mesh.elements[mesh.element_sets[name]])
+    for members in web_elements(model):
+        nodes = np.unique(mesh.elements[members])
         webs.append(nodes[tip[nodes]])
     return webs[0], webs[1], model.section.spar_x_m[0], model.section.spar_x_m[1]
 
@@ -574,9 +649,8 @@ def fe_cases(model: WingModel, results: PatternResults, shear_center_m: float) -
     lamina = wing.skin.material.lamina
     element, layer = results.point_element, results.point_layer
     parts = model.part_of[element]
-    is_ply = np.array([model.layers[layup_of(p)][j].material == "PLY" for p, j in zip(parts, layer)])
-    angle = np.array([model.layers[layup_of(p)][j].angle_deg for p, j in zip(parts, layer)])
-    kinds = np.array([layup_of(p) for p in parts])
+    is_ply, angle, _ = model.layer_table(element, layer)
+    kinds = np.where(model.kind_of[element] == "cap", "skin", model.kind_of[element])  # a cap's plies count with the skin's
     centroid = model.mesh.nodes[model.mesh.elements[:, :4]].mean(axis=1)
     outboard = centroid[element, 1] >= root_zone(model)
     core_strength = {name: getattr(layup.core, "shear_strength_Pa", None) for name, layup in
@@ -598,7 +672,7 @@ def fe_cases(model: WingModel, results: PatternResults, shear_center_m: float) -
             ratios[is_ply] = r
             modes[is_ply] = m
         for name, kind in (("skin plies", "skin"), ("spar plies", "spar"), ("rib plies", "rib")):
-            if kind not in model.layers:
+            if not (kinds == kind).any():
                 continue
             chosen = is_ply & (kinds == kind)
             checks.append(_check(name, ratios, modes, chosen & outboard, element, parts, angle, centroid, envelope))
@@ -758,9 +832,9 @@ def element_loads(model: WingModel, stress: np.ndarray, results: PatternResults)
     """Each element's in-plane resultants (Nx, Ny, Nxy) in its ply axes (x the 0 degree direction), N/m: every layer's stress
     turned from its fibre axes and multiplied by its thickness, the layer's points averaged."""
     element, layer = results.point_element, results.point_layer
-    parts = model.part_of[element]
-    angle = np.radians([model.layers[layup_of(p)][j].angle_deg for p, j in zip(parts, layer)])
-    weight = np.array([model.layers[layup_of(p)][j].thickness_m for p, j in zip(parts, layer)]) / (POINTS_IN_PLANE * POINTS_PER_LAYER)
+    _, angle, thickness = model.layer_table(element, layer)
+    angle = np.radians(angle)
+    weight = thickness / (POINTS_IN_PLANE * POINTS_PER_LAYER)
     c, s_ = np.cos(angle), np.sin(angle)
     s1, s2, t12 = stress[:, 0], stress[:, 1], stress[:, 3]
     local = np.c_[s1 * c**2 + s2 * s_**2 - 2 * t12 * s_ * c, s1 * s_**2 + s2 * c**2 + 2 * t12 * s_ * c, (s1 - s2) * s_ * c + t12 * (c**2 - s_**2)]
@@ -770,22 +844,29 @@ def element_loads(model: WingModel, stress: np.ndarray, results: PatternResults)
 
 
 def bays(model: WingModel) -> list[tuple[str, np.ndarray, float, float, float]]:
-    """The skin and web panels between ribs, inside the box: (part, elements, length along the span, width, middle station).
-    Without ribs a web is one panel the length of the span, and a skin one panel too."""
+    """The skin and web panels between ribs, inside the box: (part, elements, length along the span, width, middle station). A
+    skin panel runs between the caps' inner edges, or the spars without caps; where a zone's edge falls inside a rib bay, each
+    stretch of the bay is a panel of its own layup with the bay's length, as the hand calculation takes it. Without ribs a web is
+    one panel the length of the span, and a skin one panel too."""
     wing, mesh = model.wing, model.mesh
     stations = rib_stations(wing) or (0.0, wing.geometry.half_span_m)
     centre = mesh.nodes[mesh.elements[:, :4]].mean(axis=1)
-    x_front, x_rear = model.section.spar_x_m
+    edges = wing.cap_edges_m
+    x_front, x_rear = model.section.spar_x_m if edges is None else (edges[1], edges[2])
     heights = [top - bottom for top, bottom in zip(model.section.spar_top_m, model.section.spar_bottom_m)]
+    walls = []
+    for members, height in zip(web_elements(model), heights):
+        web = np.zeros(mesh.elements.shape[0], dtype=bool)
+        web[members] = True
+        walls.append((web, height))
+    walls.append(((model.kind_of == "skin") & (centre[:, 0] > x_front) & (centre[:, 0] < x_rear), x_rear - x_front))
     out = []
     for y0, y1 in zip(stations[:-1], stations[1:]):
         inside = (centre[:, 1] > y0) & (centre[:, 1] < y1)
-        for part, width in (("Front spar", heights[0]), ("Rear spar", heights[1])):
-            out.append((part, np.nonzero(inside & (model.part_of == part))[0], y1 - y0, width, (y0 + y1) / 2))
-        for part in SKINS:
-            chosen = inside & (model.part_of == part) & (centre[:, 0] > x_front) & (centre[:, 0] < x_rear)
-            out.append((part, np.nonzero(chosen)[0], y1 - y0, x_rear - x_front, (y0 + y1) / 2))
-    return [bay for bay in out if bay[1].size]
+        for wall, width in walls:
+            for part in dict.fromkeys(model.part_of[inside & wall].tolist()):  # a wall's parts in the bay: both skins, a web's stretches
+                out.append((part, np.nonzero(inside & wall & (model.part_of == part))[0], y1 - y0, width, (y0 + y1) / 2))
+    return out
 
 
 def panel_buckling(model: WingModel, results: PatternResults, cases: list[LoadCase]) -> list[FeBuckling]:
@@ -796,7 +877,7 @@ def panel_buckling(model: WingModel, results: PatternResults, cases: list[LoadCa
     from anisotropy_engine.buckling import ritz_buckling
     from anisotropy_engine.wing.section import WEB_PANEL_ASPECT, member_laminate
 
-    D = {name: member_laminate(layup).D for name, layup in (("skin", model.wing.skin), ("spar", model.wing.spar))}
+    D = {}
     area = 0.5 * np.linalg.norm(np.cross(*(model.mesh.nodes[model.mesh.elements[:, [2, 3]]] - model.mesh.nodes[model.mesh.elements[:, [0, 1]]]).transpose(1, 0, 2)), axis=1)
     panels = bays(model)
     out = []
@@ -806,8 +887,11 @@ def panel_buckling(model: WingModel, results: PatternResults, cases: list[LoadCa
         best = None
         for part, members, length, width, middle in panels:
             mean = (area[members] @ loads[members]) / area[members].sum()
-            stiffness = D[layup_of(part)]
-            plate_length = min(length, WEB_PANEL_ASPECT * width) if part in WEBS else length
+            if part not in D:
+                D[part] = member_laminate(model.parts[part].stack).D
+            stiffness = D[part]
+            web = model.parts[part].layup == "spar"
+            plate_length = min(length, WEB_PANEL_ASPECT * width) if web else length
             try:
                 factor = ritz_buckling(stiffness, plate_length, width, mean, PANEL_RITZ_TERMS).load_factor
             except ValueError:  # nothing compresses the panel
@@ -849,10 +933,9 @@ def fe_section(model: WingModel, results: PatternResults) -> FeSection:
     shear_center = wing.aerodynamics.aerodynamic_center * wing.geometry.chord_m + twist_lift * GJ / root_moment
     corners = mesh.nodes[mesh.elements[:, :4]]
     area = 0.5 * np.linalg.norm(np.cross(corners[:, 2] - corners[:, 0], corners[:, 3] - corners[:, 1]), axis=1)
-    layups = {"skin": wing.skin, "spar": wing.spar, "rib": wing.rib}
-    areal = {name: layup.fiber_thickness_m * layup.material.density_kg_m3 + layup.core_thickness_m * (layup.core_density_kg_m3 or 0.0)
-             for name, layup in layups.items() if layup is not None}
-    mass = area * np.array([areal[layup_of(part)] for part in model.part_of])
+    areal = np.array([section.layup.fiber_thickness_m * section.layup.material.density_kg_m3
+                      + section.layup.core_thickness_m * (section.layup.core_density_kg_m3 or 0.0) for section in model.sections])
+    mass = area * areal[model.section_of]
     centre = corners.mean(axis=1)
     total = float(mass.sum())
     x_cg, z_cg = float(mass @ centre[:, 0]) / total, float(mass @ centre[:, 2]) / total

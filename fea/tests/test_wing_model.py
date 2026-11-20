@@ -1,4 +1,5 @@
-"""The wing's CalculiX model (ADR-0117): its loads, its ply axes and its answers against a thin-walled beam worked here without it.
+"""The wing's CalculiX model (ADR-0117): its loads, its ply axes and its answers against a thin-walled beam worked here without it;
+with spar caps and zones along the span (ADR-0125), its offset shells against the hand calculation's box.
 
 Tests that build the shape skip with a reason when Gmsh is missing, and those that solve skip when CalculiX is missing.
 """
@@ -17,11 +18,11 @@ from anisotropy_engine.wing.section import box_section
 from anisotropy_fea.calculix import find_ccx
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.wing_model import (
-    MAX_LAYERS, PATTERNS, SKINS, WEBS, WingModelError, build_wing_model, buckling_cases, case_factors, check_describable, element_loads,
-    fe_cases, fe_section, layers, panel_buckling, read_modes, run_modes, run_wing_model, schrenk_lift, serendipity,
-    strip_pressure, typical_section,
+    MAX_LAYERS, PATTERNS, SKINS, WEBS, WingModelError, bays, build_wing_model, buckling_cases, case_factors, check_describable, element_loads,
+    elset_name, fe_cases, fe_section, layers, panel_buckling, read_modes, run_modes, run_wing_model, schrenk_lift, serendipity,
+    strip_pressure, typical_section, web_elements,
 )
-from anisotropy_fea.wing_shape import mid_surface_section
+from anisotropy_fea.wing_shape import mid_surface_section, reference_depth
 
 EXAMPLE = Path(__file__).parents[2] / "engine" / "examples" / "example-wing.toml"
 COARSE = 0.06  # m: a mesh coarse enough for every change's test run; the mesh study is in the ADR
@@ -87,12 +88,22 @@ def test_a_core_without_its_stiffness_and_ribs_without_a_layup_are_refused():
 
 
 CAPS = {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0]}
+# The caps with a zone from the root to 40 % that adds a 0 degree ply a side, and a thinner skin from 70 % to the tip.
+ZONED = {"spar_caps": {**CAPS, "zones": [{"start": 0, "end": 0.4, "half_stack": [0, 0, 0, 45, -45, 0]}]},
+         "skin.zones": [{"start": 0.7, "end": 1, "half_stack": [0, 45, -45]}]}
 
 
-@pytest.mark.parametrize("changes", [{"spar_caps": CAPS}, {"skin.zones": [{"start": 0, "end": 0.4, "half_stack": [0, 0, 45, -45, 0]}]}])
-def test_spar_caps_and_zones_along_the_span_are_refused_until_the_model_builds_them(changes):
-    with pytest.raises(WingModelError, match="does not take spar caps or zones along the span yet"):
-        check_describable(example(**changes)[0])
+def test_caps_and_zones_are_modelled_and_a_zone_past_the_solvers_limit_is_refused():
+    check_describable(example(**ZONED)[0])
+    deep = {"spar_caps": {**CAPS, "zones": [{"start": 0, "end": 0.4, "half_stack": [0, 45, 0, -45, 0, 45, 0, -45]}]}}
+    with pytest.raises(WingModelError, match="the spar caps' layup from 0 to 0.4 of the half span makes 15"):
+        check_describable(example(**deep)[0])
+
+
+def test_an_element_set_is_the_parts_name_in_capitals_digits_and_underscores():
+    assert elset_name("Upper skin") == "UPPER_SKIN" and elset_name("Rib 3") == "RIB_3"
+    assert elset_name("Upper skin, between the caps, root to 70 %") == "UPPER_SKIN_BETWEEN_THE_CAPS_ROOT_TO_70"
+    assert elset_name("Front spar, 33.3 % to tip") == "FRONT_SPAR_33_3_TO_TIP"
 
 
 WEB_14 = [45, -45, 45, -45, 45, -45, 0]  # fourteen plies through the web: one more layer than CalculiX solves, the middle pair at 0
@@ -326,3 +337,98 @@ def test_the_k_method_meets_a_p_k_solution_with_theodorsens_exact_function():
     pk = speeds[crossing - 1] + t * (speeds[crossing] - speeds[crossing - 1])
     strip = TypicalSection(1.0, a, x, math.sqrt(r2), mu * math.pi, sigma / (2 * math.pi), 1 / (2 * math.pi))
     assert flutter_speed(strip, 1.0).speed_m_s == pytest.approx(pk, rel=0.01)  # 2.170 against 2.184
+
+
+# ----------------------------------------------------------------------------------------------- spar caps and zones (ADR-0125)
+
+@pytest.fixture(scope="module")
+def capped_model():
+    if gmsh_available() is None:
+        pytest.skip("Gmsh is not available")
+    wing, envelope = example(spar_caps=CAPS)
+    return build_wing_model(wing, envelope, COARSE, skins="box")
+
+
+@needs_gmsh
+def test_a_capped_box_keeps_the_caps_outer_halves_and_offsets_the_skin_to_the_caps(capped_model):
+    """The box keeps each cap whole, its outer half too, as the hand calculation counts it, and no skin outside the webs; the skin,
+    thicker than the caps, is offset so that its mid-surface lies half its thickness inside the airfoil (the caps' lies there)."""
+    model = capped_model
+    wing = model.wing
+    edges = wing.cap_edges_m
+    centre = model.mesh.nodes[model.mesh.elements[:, :4]].mean(axis=1)
+    caps, skin = model.kind_of == "cap", model.kind_of == "skin"
+    assert centre[caps, 0].min() < edges[0] + 0.03 and centre[caps, 0].max() > edges[3] - 0.03
+    assert ((centre[skin, 0] > edges[1]) & (centre[skin, 0] < edges[2])).all()
+    sections = {section.kind: section for section in model.sections}
+    assert set(sections) == {"cap", "skin", "spar", "rib"} and len(model.sections) == 4
+    thickness = wing.skin.fiber_thickness_m + wing.skin.core_thickness_m
+    assert sections["skin"].offset == pytest.approx((thickness / 2 - reference_depth(wing)) / thickness)
+    assert sections["cap"].offset == sections["spar"].offset == sections["rib"].offset == 0.0
+    shells = [line for line in model.deck.splitlines() if line.startswith("*SHELL SECTION")]
+    assert sum("OFFSET=" in line for line in shells) == sum(model.sections[g.section].kind == "skin" for g in model.groups)
+    assert "*ELSET, ELSET=UPPER_FRONT_SPAR_CAP" in model.deck and "*ELSET, ELSET=LOWER_SKIN_BETWEEN_THE_CAPS" in model.deck
+    for group in model.groups:
+        assert (model.section_of[group.members] == group.section).all()
+    # The airload goes on the caps and the skin between them, from the front cap's fore edge to the rear cap's aft edge.
+    x, f = model.mesh.nodes[:, 0], model.patterns["lift"]
+    assert f.sum() == pytest.approx(1.0, abs=1e-3) and x[f != 0].min() == pytest.approx(edges[0], abs=1e-9)
+    assert x[f != 0].max() == pytest.approx(edges[3], abs=1e-9)
+
+
+@pytest.fixture(scope="module")
+def capped_solved(capped_model, tmp_path_factory):
+    if find_ccx() is None:
+        pytest.skip("CalculiX not found")
+    return run_wing_model(capped_model, tmp_path_factory.mktemp("capped"))
+
+
+@needs_gmsh
+@needs_ccx
+def test_a_capped_box_bends_and_twists_as_the_hand_calculations_box(capped_model, capped_solved):
+    """ADR-0125's test of the offsets: the capped box's bending and torsion stiffness and shear center by the model, against the
+    hand calculation's section (2026-11-20, 40 mm: 0.3 %, 4.3 % and 0.34 mm; the plain box at 40 mm the same day 2.0 %, 4.2 % and
+    0.22 mm; with the offsets left out the capped box was 13 %, 28 % and 2.6 mm off)."""
+    model, results = capped_model, capped_solved
+    L = model.wing.geometry.half_span_m
+    y = np.linspace(0, L, 2001)
+    lift = schrenk_lift(y, L)
+    moment = np.array([np.trapezoid(np.where(y >= s, lift * (y - s), 0), y) for s in y])
+    front, rear = (np.unique(model.mesh.elements[members]) for members in web_elements(model))
+    tip = np.abs(model.mesh.nodes[:, 1] - L) < 1e-9
+    w = results.displacement["lift"][np.r_[front[tip[front]], rear[tip[rear]]], 2].mean()
+    hand = box_section(model.wing)
+    section = fe_section(model, results)
+    assert np.trapezoid(moment * (L - y), y) / w == pytest.approx(hand.EI, rel=0.02)
+    assert section.torsion_stiffness == pytest.approx(hand.GJ, rel=0.05)  # the clamped root holds the box's warping, as on the plain box
+    assert section.shear_center_m == pytest.approx(hand.shear_center_m, abs=0.5e-3)
+
+
+@pytest.fixture(scope="module")
+def zoned(tmp_path_factory):
+    if gmsh_available() is None or find_ccx() is None:
+        pytest.skip("Gmsh or CalculiX is not available")
+    wing, envelope = example(**ZONED)
+    model = build_wing_model(wing, envelope, COARSE, skins="box")
+    return model, run_wing_model(model, tmp_path_factory.mktemp("zoned"))
+
+
+@needs_gmsh
+@needs_ccx
+def test_zones_give_each_stretch_its_own_section_and_the_cases_follow_the_hand_calculation(zoned):
+    model, results = zoned
+    wing = model.wing
+    stacks = {(section.kind, section.layup.half_stack_deg) for section in model.sections}
+    assert stacks == {("cap", (0, 0, 0, 45, -45, 0)), ("cap", (0, 0, 45, -45, 0)), ("skin", (0, 45, -45, 0)), ("skin", (0, 45, -45)),
+                      ("spar", (45, -45, 0, 0)), ("rib", (45, -45))}
+    outer_cap = next(s for s in model.sections if s.kind == "cap" and len(s.layup.half_stack_deg) == 5)
+    assert outer_cap.offset < 0  # thinner than the root's cap: its mid-surface lies nearer the airfoil than the reference
+    hand = analyze_wing(wing, model.envelope)
+    fe = fe_cases(model, results, box_section(wing).shear_center_m)
+    for c, h in zip(fe, hand.cases):
+        assert c.tip_deflection_m == pytest.approx(h.tip_deflection, rel=0.02)  # 0.3 % at 40 mm
+    # A rib bay that a zone's edge crosses is a panel per stretch, each of its own layup.
+    panels = {(part, round(middle, 3)) for part, _, _, _, middle in bays(model)}
+    assert {("Upper skin, between the caps, root to 70 %", 1.25), ("Upper skin, between the caps, 70 % to tip", 1.25)} <= panels
+    found = panel_buckling(model, results, buckling_cases(model))
+    assert found and all(np.isfinite(b.factor) for b in found)

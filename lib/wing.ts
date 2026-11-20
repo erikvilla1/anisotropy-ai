@@ -347,8 +347,9 @@ export type WingViews = {
   }[];
 };
 export type WingAnswer = { run_id: string | null; engine_version: string; wing: WingDescription; report: WingReport; views: WingViews };
-/** A part of the wing's shape for a CAD program (ADR-0116): the thickness to thicken its surface to, in the file's units. */
-export type WingShapePart = { name: string; layup: string; thickness: number | null; area: number; mass: number | null };
+/** A part of the wing's shape for a CAD program (ADR-0116): the thickness to thicken its surface to, in the file's units, and how far
+ * inside its surface its mid-surface lies (ADR-0125: a skin or cap face drawn on the caps' reference surface; 0 for the rest). */
+export type WingShapePart = { name: string; layup: string; thickness: number | null; offset?: number; area: number; mass: number | null };
 /** The wing's STEP file and its part table (ADR-0118), as the API sends them. */
 export type WingShape = {
   run_id: string | null;

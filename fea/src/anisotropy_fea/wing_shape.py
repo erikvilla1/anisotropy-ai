@@ -19,9 +19,17 @@ A STEP file holds shape only: faces, edges, their geometry and each part's name.
 table (WingShape.parts) gives each part's layup and thickness, and a CAD program's thicken feature, both sides by half the
 thickness, turns a part into a solid.
 
+Spar caps and zones along the span (ADR-0125): a cap is a strip of each skin centred on its web, and a zone a stretch of the span
+where a part has a stack of its own, so a skin or a web is several faces, each of one layup: the skins are cut at the caps' edges
+(planes across the chord) and every skin, cap and web where its own stack changes along the span (planes across the span). All
+the skins' faces lie on one surface, the reference: the mid-surface of the caps at the root, or of the skin at the root when the
+wing has no caps, so that the webs run between the caps' mid-surfaces as in the hand calculation. A face of another thickness has
+its mid-surface deeper or shallower than that: its offset (Part.offset_m), which the finite element model gives each shell and the
+part table gives the CAD user. A wing without caps or zones draws as before, every part at its own mid-surface.
+
 For the mesh the parts are cut where they meet (an OpenCASCADE fragment), so that a skin and a web share their nodes along the
 line where they join, and meshed with four-node quadrilaterals. Each element's corner order makes its normal point out of the
-wing for a skin, aft for a web and to the root for a rib (ADR-0004: ply angles turn counterclockwise about the normal).
+wing for a skin or a cap, aft for a web and to the root for a rib (ADR-0004: ply angles turn counterclockwise about the normal).
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from anisotropy_engine.wing import Wing
+from anisotropy_engine.wing.description import Layup
 
 MM = 1e-3  # metres per millimetre
 SECTION_POINTS = 81  # points along each side of the airfoil, cosine spaced, before the spar points are added
@@ -59,13 +68,16 @@ class Section:
 
 @dataclass(frozen=True)
 class Part:
-    """One part of the shape, as the STEP file names it."""
+    """One part of the shape, as the STEP file names it: a face of one layup."""
 
     name: str
-    layup: str  # "skin", "spar" or "rib": which layup of the description it carries
+    layup: str  # "skin", "cap", "spar" or "rib": which layup of the description it carries
     thickness_m: float | None  # plies and core; None for a rib when the description gives no rib layup
-    area_m2: float  # of its mid-surface
+    area_m2: float  # of its face as drawn
     mass_kg: float | None  # area times thickness times the material's density (plies) and the core's (core); None without a thickness
+    offset_m: float = 0.0  # how far inside the drawn face its mid-surface lies, into the wing; 0 where the face is the mid-surface
+    stack: Layup | None = None  # its layup over its stretch of the span, zones resolved; None for a rib without a layup
+    span_m: tuple[float, float] | None = None  # the stretch of the span it covers, from the root; None for a rib
 
 
 @dataclass(frozen=True)
@@ -114,11 +126,19 @@ def rib_stations(wing: Wing) -> tuple[float, ...]:
     return wing.geometry.rib_stations_m
 
 
+def reference_depth(wing: Wing) -> float:
+    """How far inside the airfoil the skins' faces are drawn, metres: half the thickness of the caps at the root, or of the skin at
+    the root when the wing has no caps. The webs run between the caps' mid-surfaces there, as in the hand calculation."""
+    layup = wing.skin if wing.spar_caps is None else wing.spar_caps.layup
+    return layup_thickness(layup.stretches()[0][2]) / 2
+
+
 def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Section:
-    """The skins' mid-surface section: the airfoil's outline moved inward by half the skin's thickness, closed aft."""
+    """The skins' reference section: the airfoil's outline moved inward by `reference_depth`, half the skin's thickness when the
+    wing has no caps or zones, closed aft."""
     g = wing.geometry
     c = g.chord_m
-    half = layup_thickness(wing.skin) / 2
+    half = reference_depth(wing)
     x = (1 - np.cos(np.linspace(0.0, math.pi, points_per_side))) / 2
     heights = np.array([g.airfoil.surface_heights(float(v)) for v in x])
     if abs(heights[0, 0] - heights[0, 1]) > 1e-9:
@@ -155,6 +175,12 @@ def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Se
     if spar_x[1] >= trailing - SPLIT_GAP * c:
         raise ShapeError(f"The rear spar at {g.rear_spar:.3f} of the chord is aft of where the skins' mid-surfaces meet "
                          f"({trailing / c:.3f} of the chord)")
+    edges = wing.cap_edges_m
+    if edges is not None and edges[3] >= trailing - SPLIT_GAP * c:
+        raise ShapeError(f"The rear spar cap reaches {edges[3] / c:.3f} of the chord, aft of where the skins' mid-surfaces meet "
+                         f"({trailing / c:.3f} of the chord): make it narrower")
+    if edges is not None and edges[0] <= upper[0, 0] + SPLIT_GAP * c:
+        raise ShapeError("The front spar cap reaches round the leading edge: make it narrower")
     tops = tuple(float(np.interp(v, upper[:, 0], upper[:, 1])) for v in spar_x)
     bottoms = tuple(float(np.interp(v, lower[:, 0], lower[:, 1])) for v in spar_x)
     if min(top - bottom for top, bottom in zip(tops, bottoms)) <= 0:
@@ -254,42 +280,105 @@ def _section_curves(occ, section: Section, y_mm: float) -> dict[str, int]:
     return curves
 
 
-def _build(gmsh, wing: Wing, section: Section, stations: tuple[float, ...]) -> list[tuple[str, int]]:
-    """Every part as its own OpenCASCADE surface, in millimetres; (part name, surface tag) in the order they are made."""
+@dataclass(frozen=True)
+class Region:
+    """A face of the shape as it is built: its name, which layup it carries, that layup over its stretch and its offset."""
+
+    name: str
+    kind: str  # "skin", "cap", "spar" or "rib"
+    stack: Layup | None
+    offset_m: float
+    span_m: tuple[float, float] | None
+
+
+def _plane(occ, axis: int, value: float, box: tuple[tuple[float, float, float], tuple[float, float, float]]) -> int:
+    """A rectangle across the whole shape at x = value (axis 0) or y = value (axis 1), millimetres."""
+    (x0, y0, z0), (x1, y1, z1) = box
+    corners = [(value, y0, z0), (value, y1, z0), (value, y1, z1), (value, y0, z1)] if axis == 0 else \
+              [(x0, value, z0), (x1, value, z0), (x1, value, z1), (x0, value, z1)]
+    points = [occ.addPoint(*corner) for corner in corners]
+    lines = [occ.addLine(points[k], points[(k + 1) % 4]) for k in range(4)]
+    return occ.addPlaneSurface([occ.addCurveLoop(lines)])
+
+
+def _cut(occ, surface: int, axis: int, values: list[float], box) -> list[int]:
+    """The pieces of a surface cut by planes at `values` of x (axis 0) or y (axis 1), in order along that axis; the planes are
+    removed again, so only the cut lines stay."""
+    if not values:
+        return [surface]
+    tools = [(2, _plane(occ, axis, value, box)) for value in values]
+    _, children = occ.fragment([(2, surface)], tools)
+    pieces = [tag for dim, tag in children[0] if dim == 2]
+    occ.remove([(dim, tag) for child in children[1:] for dim, tag in child if dim == 2 and tag not in pieces], recursive=True)
+    if len(pieces) != len(values) + 1:
+        raise ShapeError(f"A face cut at {len(values)} places came apart in {len(pieces)} pieces")
+
+    def middle(tag: int) -> float:
+        low = occ.getBoundingBox(2, tag)
+        return (low[axis] + low[axis + 3]) / 2
+    return sorted(pieces, key=middle)
+
+
+def _span_label(start: float, end: float) -> str:
+    """A stretch of the span by its ends, fractions of the half span: "root to 40 %", "40 % to tip"."""
+    def at(f: float) -> str:
+        return "root" if f == 0 else "tip" if f == 1 else f"{100 * f:g} %"
+    return f"{at(start)} to {at(end)}"
+
+
+def _build(gmsh, wing: Wing, section: Section, stations: tuple[float, ...]) -> list[tuple[Region, int]]:
+    """Every face as its own OpenCASCADE surface, in millimetres, in order: the upper skin's faces fore to aft and root to tip, the
+    lower skin's, the trailing edge strip's, the webs' and the ribs. A skin with caps is cut at the caps' edges; a skin, a cap or a
+    web is cut where its own stack changes along the span."""
     occ = gmsh.model.occ
-    span = wing.geometry.half_span_m / MM
+    g = wing.geometry
+    span = g.half_span_m / MM
+    box = ((-g.chord_m / MM, -span, -g.chord_m / MM), (2 * g.chord_m / MM, 2 * span, g.chord_m / MM))
+    depth = reference_depth(wing)
     root = _section_curves(occ, section, 0.0)
-    parts: list[tuple[str, int]] = []
-    for name, key in (("Upper skin", "upper"), ("Lower skin", "lower"), ("Trailing edge strip", "trailing")):
-        if key in root:
-            out = occ.extrude([(1, root[key])], 0, span, 0)
-            parts.append((name, next(tag for dim, tag in out if dim == 2)))
+    built: list[tuple[Region, int]] = []
+
+    def extruded(curve: int) -> int:
+        out = occ.extrude([(1, curve)], 0, span, 0)
+        return next(tag for dim, tag in out if dim == 2)
+
+    def along_span(label: str, kind: str, layup: Layup, surface: int) -> None:
+        stretches = layup.stretches()
+        pieces = _cut(occ, surface, 1, [start * span for start, _, _ in stretches[1:]], box)
+        for (start, end, stack), piece in zip(stretches, pieces):
+            name = label if len(stretches) == 1 else f"{label}, {_span_label(start, end)}"
+            offset = layup_thickness(stack) / 2 - depth if kind in ("skin", "cap") else 0.0
+            built.append((Region(name, kind, stack, offset, (start * g.half_span_m, end * g.half_span_m)), piece))
+
+    caps = wing.spar_caps
+    for side, key in (("Upper", "upper"), ("Lower", "lower")):
+        surface = extruded(root[key])
+        if caps is None:
+            along_span(f"{side} skin", "skin", wing.skin, surface)
+            continue
+        chord = ((f"{side} skin, nose", "skin"), (f"{side} front spar cap", "cap"), (f"{side} skin, between the caps", "skin"),
+                 (f"{side} rear spar cap", "cap"), (f"{side} skin, aft", "skin"))
+        for (label, kind), piece in zip(chord, _cut(occ, surface, 0, [edge / MM for edge in wing.cap_edges_m], box)):
+            along_span(label, kind, wing.skin if kind == "skin" else caps.layup, piece)
+    if "trailing" in root:
+        along_span("Trailing edge strip", "skin", wing.skin, extruded(root["trailing"]))
     for name, x, top, bottom in zip(("Front spar", "Rear spar"), section.spar_x_m, section.spar_top_m, section.spar_bottom_m):
-        line = occ.addLine(occ.addPoint(x / MM, 0.0, bottom / MM), occ.addPoint(x / MM, 0.0, top / MM))
-        out = occ.extrude([(1, line)], 0, span, 0)
-        parts.append((name, next(tag for dim, tag in out if dim == 2)))
+        along_span(name, "spar", wing.spar, extruded(occ.addLine(occ.addPoint(x / MM, 0.0, bottom / MM), occ.addPoint(x / MM, 0.0, top / MM))))
     for k, y in enumerate(stations, start=1):
         curves = _section_curves(occ, section, y / MM)
         loop = [curves["upper"], curves["lower"]] + ([curves["trailing"]] if "trailing" in curves else [])
-        parts.append((f"Rib {k}", occ.addPlaneSurface([occ.addCurveLoop(loop)])))
+        built.append((Region(f"Rib {k}", "rib", wing.rib, 0.0, None), occ.addPlaneSurface([occ.addCurveLoop(loop)])))
     occ.synchronize()
-    return parts
+    return built
 
 
-LAYUP_OF = {"Upper skin": "skin", "Lower skin": "skin", "Trailing edge strip": "skin", "Front spar": "spar", "Rear spar": "spar"}
-
-
-def _layup_of(name: str) -> str:
-    return LAYUP_OF.get(name, "rib")
-
-
-def _outward(name: str, section: Section, centers: np.ndarray) -> np.ndarray:
+def _outward(kind: str, section: Section, centers: np.ndarray) -> np.ndarray:
     """The direction each element's normal must point, for elements of one part with centroids `centers` (n, 3) in metres."""
-    if name.startswith("Rib"):
+    if kind == "rib":
         return np.tile([0.0, -1.0, 0.0], (len(centers), 1))
-    if name.endswith("spar"):
+    if kind == "spar":
         return np.tile([1.0, 0.0, 0.0], (len(centers), 1))
-    # A skin: away from the middle of the box at the element's chord position, held between the spars.
+    # A skin or a cap: away from the middle of the box at the element's chord position, held between the spars.
     x = np.clip(centers[:, 0], *section.spar_x_m)
     middle = (np.interp(x, section.upper[:, 0], section.upper[:, 1]) + np.interp(x, section.lower[:, 0], section.lower[:, 1])) / 2
     away = centers - np.c_[x, centers[:, 1], middle]
@@ -297,13 +386,15 @@ def _outward(name: str, section: Section, centers: np.ndarray) -> np.ndarray:
     return away
 
 
-def _mesh(gmsh, parts: list[tuple[str, int]], section: Section, element_size_m: float) -> ShellMesh:
+def _mesh(gmsh, parts: list[tuple[Region, int]], section: Section, element_size_m: float) -> ShellMesh:
     """Cut the parts where they meet, mesh them with quadrilaterals and order each element's corners to its part's normal."""
     occ = gmsh.model.occ
     out, children = occ.fragment([(2, tag) for _, tag in parts[:1]], [(2, tag) for _, tag in parts[1:]])
     occ.synchronize()
     owner: dict[int, str] = {}
-    for (name, _), pieces in zip(parts, children):
+    kind = {region.name: region.kind for region, _ in parts}
+    for (region, _), pieces in zip(parts, children):
+        name = region.name
         for dim, tag in pieces:
             if dim == 2:
                 if tag in owner and owner[tag] != name:
@@ -345,7 +436,7 @@ def _mesh(gmsh, parts: list[tuple[str, int]], section: Section, element_size_m: 
     normal = np.cross(p[:, 2] - p[:, 0], p[:, 3] - p[:, 1])
     for name, members in sets.items():
         members = np.asarray(members)
-        wanted = _outward(name, section, p[members].mean(axis=1))
+        wanted = _outward(kind[name], section, p[members].mean(axis=1))
         flip = members[np.einsum("ij,ij->i", normal[members], wanted) < 0]
         elements[flip] = elements[flip][:, ::-1]
     if (np.linalg.norm(normal, axis=1) <= 1e-18).any():
@@ -356,10 +447,8 @@ def _mesh(gmsh, parts: list[tuple[str, int]], section: Section, element_size_m: 
 
 
 def build_wing_shape(wing: Wing, step_path: Path | str | None = None, element_size_m: float | None = None) -> WingShape:
-    """The wing's parts as mid-surfaces; with `step_path`, its STEP file there; with `element_size_m`, its shell mesh."""
-    if wing.spar_caps is not None or wing.has_zones:
-        raise ShapeError("The shape for CAD does not draw spar caps or zones along the span yet (the hand calculation works them): "
-                         "take them out to download it")
+    """The wing's parts as surfaces, each face of one layup; with `step_path`, its STEP file there; with `element_size_m`, its shell
+    mesh."""
     gmsh = _gmsh()
     if element_size_m is not None and not element_size_m > 0:
         raise ShapeError("The element size must be positive")
@@ -373,12 +462,13 @@ def build_wing_shape(wing: Wing, step_path: Path | str | None = None, element_si
         gmsh.option.setNumber("General.Verbosity", 0)
         gmsh.model.add("wing")
         built = _build(gmsh, wing, section, stations)
-        areas = {name: gmsh.model.occ.getMass(2, tag) * MM**2 for name, tag in built}
+        areas = {region.name: gmsh.model.occ.getMass(2, tag) * MM**2 for region, tag in built}
         if step_path is not None:
             step_path = Path(step_path)
             with _quiet():  # OpenCASCADE's STEP writer prints its transfer statistics to the terminal
                 gmsh.write(str(step_path))
-            name_step_products(step_path, wing.name, [name for name, _ in built])
+            # The writer puts the faces in the order of their tags, which the cuts leave out of the order they were made in.
+            name_step_products(step_path, wing.name, [region.name for region, _ in sorted(built, key=lambda made: made[1])])
         mesh = _mesh(gmsh, built, section, element_size_m) if element_size_m is not None else None
     finally:
         if owned:
@@ -386,18 +476,18 @@ def build_wing_shape(wing: Wing, step_path: Path | str | None = None, element_si
         else:
             gmsh.model.remove()
 
-    layups = {"skin": wing.skin, "spar": wing.spar, "rib": wing.rib}
     parts = []
-    for name, _ in built:
-        layup = layups[_layup_of(name)]
-        thickness = None if layup is None else layup_thickness(layup)
-        mass = None if layup is None else areas[name] * _areal_mass(layup)
-        parts.append(Part(name=name, layup=_layup_of(name), thickness_m=thickness, area_m2=areas[name], mass_kg=mass))
+    for region, _ in built:
+        layup, area = region.stack, areas[region.name]
+        parts.append(Part(name=region.name, layup=region.kind, thickness_m=None if layup is None else layup_thickness(layup), area_m2=area,
+                          mass_kg=None if layup is None else area * _areal_mass(layup), offset_m=region.offset_m, stack=layup,
+                          span_m=region.span_m))
     return WingShape(wing_name=wing.name, section=section, rib_stations_m=stations, parts=tuple(parts), mesh=mesh)
 
 
 def part_table(shape: WingShape, units: str) -> dict:
-    """The part table in a wing file's units (SI or US): what a CAD user needs beside the STEP file, which holds no thickness."""
+    """The part table in a wing file's units (SI or US): what a CAD user needs beside the STEP file, which holds no thickness. A
+    part's offset is how far inside its face its mid-surface lies: move the face inward by it, then thicken both sides by half."""
     from anisotropy_engine.wing.wing_file import WING_UNITS
 
     u = WING_UNITS[units]
@@ -407,6 +497,7 @@ def part_table(shape: WingShape, units: str) -> dict:
         "units": {"thickness": thickness_unit, "area": f"{length_unit}^2", "mass": mass_unit, "step": "mm"},
         "parts": [{"name": part.name, "layup": part.layup,
                    "thickness": None if part.thickness_m is None else part.thickness_m / thickness,
+                   "offset": part.offset_m / thickness,
                    "area": part.area_m2 / length**2,
                    "mass": None if part.mass_kg is None else part.mass_kg / mass} for part in shape.parts],
         "mass": None if shape.mass_kg is None else shape.mass_kg / mass,
@@ -428,7 +519,7 @@ def main(argv: list[str] | None = None) -> None:
     from anisotropy_engine.wing import load_wing
     from anisotropy_engine.wing.wing_file import WING_UNITS, wing_from_dict
 
-    parser = argparse.ArgumentParser(description="Write a wing's shape as a STEP file, each part a surface at its mid-thickness.")
+    parser = argparse.ArgumentParser(description="Write a wing's shape as a STEP file, each part a surface of one layup.")
     parser.add_argument("wing_file", type=Path)
     parser.add_argument("step_file", type=Path)
     parser.add_argument("--mesh", type=float, metavar="SIZE_MM", help="also mesh it with elements of about this size, in mm")
@@ -450,14 +541,22 @@ def main(argv: list[str] | None = None) -> None:
     length, thickness, mass = units["length"], units["thickness"], units["mass"]
     area = (length[0] ** 2, f"{length[1]}^2")
     print(f"{shape.wing_name}: {len(shape.parts)} parts written to {args.step_file} (millimetres)")
-    print(f"{'part':22} {'layup':6} {'thickness ' + thickness[1]:>15} {'area ' + area[1]:>12} {'mass ' + mass[1]:>10}")
+    wide = max(22, *(len(part.name) for part in shape.parts))
+    offsets = any(part.offset_m for part in shape.parts)
+    head = f"{'offset ' + thickness[1]:>12}" if offsets else ""
+    print(f"{'part':{wide}} {'layup':6} {'thickness ' + thickness[1]:>15}{head} {'area ' + area[1]:>12} {'mass ' + mass[1]:>10}")
     for part in shape.parts:
         t = "not given" if part.thickness_m is None else f"{part.thickness_m / thickness[0]:.4g}"
+        o = f"{part.offset_m / thickness[0]:>12.4g}" if offsets else ""
         m = "-" if part.mass_kg is None else f"{part.mass_kg / mass[0]:.4g}"
-        print(f"{part.name:22} {part.layup:6} {t:>15} {part.area_m2 / area[0]:>12.4g} {m:>10}")
+        print(f"{part.name:{wide}} {part.layup:6} {t:>15}{o} {part.area_m2 / area[0]:>12.4g} {m:>10}")
     if shape.mass_kg is not None:
-        print(f"{'whole wing, one side':22} {'':6} {'':>15} {'':>12} {shape.mass_kg / mass[0]:>10.4g}")
-    print("In a CAD program, thicken each part on both sides of its surface, so that the solid's whole thickness is the table's.")
+        print(f"{'whole wing, one side':{wide}} {'':6} {'':>15}{' ' * len(head)} {'':>12} {shape.mass_kg / mass[0]:>10.4g}")
+    if offsets:
+        print("In a CAD program, move each part inward by its offset, then thicken it on both sides of its surface, so that the "
+              "solid's whole thickness is the table's.")
+    else:
+        print("In a CAD program, thicken each part on both sides of its surface, so that the solid's whole thickness is the table's.")
     if shape.mesh is not None:
         m = shape.mesh
         print(f"Mesh: {m.nodes.shape[0]} nodes, {m.element_count} four-node shells, "
