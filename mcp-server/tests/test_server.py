@@ -40,7 +40,9 @@ def test_the_server_offers_its_tools_each_described_and_tells_the_clients_model_
     for rule in ("Lead with the answer in one short line", "Answer only what was asked", "Never name these tools, a solver program",
                  "comes from a tool result of this server", "four significant figures at most", "When a required row is missing, ask for every missing row",
                  "solve_coupon solves a preview", "is no failure of the coupon", "only from its facts and theory sections", "start no full run",
-                 "ask back only for what has no such default", "never by the rows' keys", "show the working of the one that fails first"):
+                 "ask back only for what has no such default", "never by the rows' keys", "show the working of the one that fails first",
+                 "pass it as step and show that step alone", "then give the tool's basis_line as it is written", "Say each symbol's meaning in words",
+                 "a formula from show_working keeps the numbers as it wrote them"):
         assert rule in INSTRUCTIONS
     assert not re.search(r"calculix|prepomax|abaqus|\bkernel\b", INSTRUCTIONS + "".join(tool.description for tool in tools), re.I)  # ADR-0091
     assert server.instructions == INSTRUCTIONS
@@ -149,8 +151,31 @@ def test_the_working_is_the_packages_formulas_with_the_numbers_put_in(call):
                                  ("show_working", {"result_id": "r1", "criterion": "tsai_hill"}), ("show_working", {"result_id": "r1", "criterion": "tsai_wu"}))
     written = FIELDS["summary"]["working"]
     assert both["criteria"] == written["criteria"] and both["basis"] == written["basis"] and both["digits"] == written["digits"]
+    assert both["fails_first"] == "tsai_hill" and both["basis_line"] == (
+        "Tsai-Hill, factor 1.032 on the applied loading: ply 4 (90°), element 183, in the gauge section, in the preview.")
+    assert one["basis_line"] == both["basis_line"]
     assert one["criteria"] == {"tsai_hill": written["criteria"]["tsai_hill"]} and "substituted" in json.dumps(one)
     assert isinstance(unknown, Refused) and "No working for 'tsai_wu'. This result has it for: max_stress, tsai_hill." in unknown
+
+
+def test_one_step_of_the_working_is_the_one_the_engineer_named_of_the_criterion_that_fails_first(call):
+    # "equation for stress" asked through an MCP client got all four steps, as the page did (ADR-0103 amendment 1, ADR-0107 amendment 4)
+    _, stress, named, flawed = call(("solve_coupon", {"values": VALUES}), ("show_working", {"result_id": "r1", "step": "stress"}),
+                                    ("show_working", {"result_id": "r1", "step": "criterion", "criterion": "max_stress"}),
+                                    ("show_working", {"result_id": "r1", "step": "stress", "criterion": "tsai_wu"}))
+    written = FIELDS["summary"]["working"]["criteria"]
+    assert FIELDS["summary"]["verdict"]["earliest"] == "tsai_hill"
+    [chain] = stress["criteria"].values()
+    assert list(stress["criteria"]) == ["tsai_hill"] and chain["steps"] == [written["tsai_hill"]["steps"][1]]
+    assert chain["steps"][0]["title"] == "The ply's stress from its strain" and chain["ply"] == written["tsai_hill"]["ply"]
+    assert "the criterion that fails first" in stress["note"] and stress["whole_working"] == "show_working without step"
+    assert named["criteria"]["max_stress"]["steps"] == [written["max_stress"]["steps"][2]] and "fails first" not in named["note"]
+    assert stress["basis_line"].startswith("Tsai-Hill, factor 1.032") and "fails first" not in stress["basis_line"]
+    # a criterion asked for that does not fail first says which does, so its factor is never taken for the answer (the real run's
+    # "show the working for max stress" headed "Max stress governs at R = 1.057")
+    assert named["basis_line"] == ("Maximum stress, factor 1.057 on the applied loading: ply 4 (90°), element 183, in the gauge section, "
+                                   "in the preview. Tsai-Hill fails first, at a factor of 1.032.")
+    assert isinstance(flawed, Refused) and "No working for 'tsai_wu'" in flawed
 
 
 def test_the_server_holds_the_last_few_results_and_says_so_of_one_it_let_go(call):
