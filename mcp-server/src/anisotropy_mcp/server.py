@@ -41,11 +41,11 @@ Rules:
 1. Lead with the answer in one short line: the value with its unit, the ply that fails first, or yes or no. Then at most three short lines of basis: the place (element, gauge section), the ply and its angle, the criterion, and that it is a preview. Give more only when the engineer asks for it.
 2. Answer only what was asked. A question of one value gets that value, not the failure factors or the setup beside it.
 3. Never name these tools, a solver program, a vendor, a file path or a model to the engineer. Say "the preview" for what solve_coupon solves and "the full run" for the one started from the workspace page.
-4. Every number you state about a material, a setup or a result comes from a tool result of this server, with the unit it came with, printed as the tool wrote it to four significant figures at most. Do not compute, estimate, convert or interpolate one yourself.
+4. Every number you state about a material, a setup or a result comes from a tool result of this server, with the unit it came with, printed as the tool wrote it to four significant figures at most; a formula from show_working keeps the numbers as it wrote them. Do not compute, estimate, convert or interpolate one yourself.
 5. A setup is the rows of the coupon form. Read describe_coupon_form once before the first setup. Pass only what the engineer stated. When a required row is missing, ask for every missing row in one short message, in words and never by the rows' keys, with the form's default or example beside each row that has one, so the engineer can answer yes. If the engineer asks for an example or tells you to choose, use the form's example and say plainly which values were chosen by you and not by them.
 6. solve_coupon solves a preview: say so once, in a few words. The full run, with a mesh convergence study, a check by a second solver and a report, is started from the workspace page.
 7. Which ply fails first is the gauge section's answer, the test's: the criterion, the ply and its angle, the factor on the applied loading and the load at that factor, as the tool gives them. A factor above 1 means the laminate holds at the applied loading. A criterion the tool reports reached earlier at a gripped tab's edge is no failure of the coupon, since a value at a clamped edge grows as the mesh is refined; say it in one line, apart, after the answer.
-8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. Its Tsai-Hill sum is not the failure index the results show (that index is 1/R); keep the two apart.
+8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. When the engineer names one quantity and no criterion (the stress, the strain, the failure index, the load at failure), pass it as step and show that step alone, saying in a few words that the whole working is there if wanted. Lead with what was asked (the formula, or the step named), then give the tool's basis_line as it is written: it names the criterion, the ply and the place, and which criterion fails first when it is another. Say each symbol's meaning in words the first time it appears, from the tool's `what` and step titles. Its Tsai-Hill sum is not the failure index the results show (that index is 1/R); keep the two apart.
 9. For why, use explain_result and answer in one to three sentences only from its facts and theory sections. Name the section you rest on. If the sections do not hold the reason, say that they do not; never fill the gap from general knowledge without saying it is not from Anisotropy's pages.
 10. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
 11. A question that leaves out the ply or the quantity means every ply and the stresses along the fibres, across them and in shear; ask back only for what has no such default, once, with the choices named. For an element that is not in the model, say the range in one line and give the values at the element where first ply failure is read, saying so. For the working of a criterion the result does not have, say in one line which it has and show the working of the one that fails first.
@@ -56,6 +56,7 @@ A wing: the wing tools read a wing file on this machine by its full path, or `ex
 14. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
 15. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
 
+Step = Literal["strain", "stress", "criterion", "loading"]  # the steps of the fea package's working, in order (ADR-0103)
 Quantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
 READS = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 ASKS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)  # a run record is written when the API keeps records
@@ -183,6 +184,27 @@ def wing_text(wing: str) -> str:
     if not text.strip() or len(text) > MAX_WING_FILE:
         raise ToolError(f"{path} is {'empty' if not text.strip() else 'larger than a wing file'}.")
     return text
+
+
+CRITERION_NAMES = {"max_stress": "Maximum stress", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu", "max_strain": "Maximum strain"}
+
+
+def basis_line(criterion: str, chain: dict, first: str, chains: dict, basis: str | None) -> str:
+    """The one line a working answer opens with (ADR-0107 amendment 4): the criterion and its factor, the ply and the place, the section
+    it is read in and that it is a preview; and, when another criterion fails first, which and at what factor, so this one is never
+    taken for the answer."""
+    name = CRITERION_NAMES.get(criterion, criterion)
+    line = f"{name}, factor {chain.get('factor')} on the applied loading: {chain.get('where')}, " \
+           f"{'in the gauge section' if basis == 'gauge' else 'over the whole model'}, in the preview."
+    if first != criterion and first in chains:
+        line += f" {CRITERION_NAMES.get(first, first)} fails first, at a factor of {chains[first].get('factor')}."
+    return line
+
+
+def first_to_fail(summary: dict, basis: str | None, written: list[str]) -> str:
+    """The criterion whose working the page shows when none is named: the answer's earliest, else the first written (ADR-0103)."""
+    earliest = (summary.get("verdict") or {}).get("earliest") or summary.get("earliest_gauge" if basis == "gauge" else "earliest")
+    return earliest if earliest in written else written[0]
 
 
 def margin(value: float | None) -> float | None:
@@ -448,18 +470,37 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
 
     @server.tool(annotations=READS, structured_output=False)
     def show_working(result_id: Annotated[str, Field(description="The result_id solve_coupon returned")],
-                     criterion: Annotated[str | None, Field(description="max_stress or tsai_hill; leave out for every criterion that has its working")] = None) -> str:
+                     criterion: Annotated[str | None, Field(description="max_stress or tsai_hill; leave out for every criterion that has its working")] = None,
+                     step: Annotated[Step | None, Field(description="One step alone, when the engineer names one quantity: strain (the ply's strain in its "
+                                                        "fibre axes), stress (the ply's stress from its strain), criterion (the failure index) or "
+                                                        "loading (the load at first ply failure); leave out for the whole working")] = None) -> str:
         """The working behind the first ply to fail: each step's formula, the same formula with the result's numbers put in, and the value
-        it gives, written by the fea package (LaTeX). Show the formulas as written; do not redo the arithmetic."""
-        working = (fields_of(result_id).get("summary") or {}).get("working")
+        it gives, written by the fea package (LaTeX). Show the formulas as written; do not redo the arithmetic. With `step`, that one step
+        of the criterion named, or of the criterion that fails first."""
+        summary = fields_of(result_id).get("summary") or {}
+        working = summary.get("working")
         written = (working or {}).get("criteria") or {}
         if not written:
             raise ToolError("This result has no working written: it is written for the first ply to fail by maximum stress and Tsai-Hill, of a laminate of plies.")
         if criterion is not None and criterion not in written:
             raise ToolError(f"No working for {criterion!r}. This result has it for: {', '.join(written)}.")
-        return said({"basis": working.get("basis"), "digits": working.get("digits"),
-                "criteria": {criterion: written[criterion]} if criterion is not None else written,
-                "note": "Each equation has its formula, the formula with the numbers put in (`substituted`) and its result. `source` names the theory section."})
+        note = "Each equation has its formula, the formula with the numbers put in (`substituted`) and its result. `source` names the theory section."
+        first = first_to_fail(summary, working.get("basis"), list(written))
+        lines = {c: basis_line(c, chain, first, written, working.get("basis")) for c, chain in written.items()}
+        if step is None:
+            shown = {criterion: written[criterion]} if criterion is not None else written
+            return said({"basis": working.get("basis"), "digits": working.get("digits"), "fails_first": first,
+                         "basis_line": lines[criterion] if criterion is not None else lines[first],
+                         "criteria": shown, "note": note})
+        chosen = criterion or first
+        chain = written[chosen]
+        found = [s for s in chain.get("steps") or [] if s.get("id") == step]
+        if not found:
+            raise ToolError(f"The working for {chosen} has no {step} step. It has: {', '.join(s.get('id', '?') for s in chain.get('steps') or [])}.")
+        return said({"basis": working.get("basis"), "digits": working.get("digits"), "fails_first": first, "basis_line": lines[chosen],
+                     "criteria": {chosen: {**chain, "steps": found}},
+                     "whole_working": "show_working without step", "note": f"The {step} step alone, of {chosen}"
+                     + (", the criterion that fails first" if criterion is None else "") + ". " + note})
 
     return server
 
