@@ -208,17 +208,25 @@ function base(url: string): string { return url.replace(/\/+$/, ""); }
 /** A call to the API: its answer, or a `StudioError` in words the page may show. `what` names the request in the product's words
  * ("starting the analysis"); it heads a refusal that is not a sentence of its own and picks the words of a failure (`failedText`). */
 async function call(url: string, init: RequestInit & { signal?: AbortSignal }, what: string, notFound?: string): Promise<unknown> {
-  let response: Response;
+  const response = await send(url, init);
+  return answered(response, await response.text(), what, notFound);
+}
+
+/** The request itself: the API's response, or a `StudioError` for an outage. */
+async function send(url: string, init: RequestInit & { signal?: AbortSignal }): Promise<Response> {
   try {
     // Same-origin credentials: hosted, the page and /api share anisotropy.dev, so the browser sends the Access sign-in cookie
     // and Access lets the call through (ADR-0056); locally the API is another origin and gets no cookie, as before.
-    response = await fetch(url, { ...init, credentials: "same-origin", cache: "no-store" });
+    return await fetch(url, { ...init, credentials: "same-origin", cache: "no-store" });
   } catch (error) {
     if (init.signal?.aborted) throw error;
     throw new StudioError(ANALYSIS_UNAVAILABLE); // an outage: what happened and what to do, the same words as the calculator's
   }
+}
+
+/** A response's JSON answer, or its refusal as a `StudioError` in words the page may show. */
+function answered(response: Response, text: string, what: string, notFound?: string): unknown {
   let payload: unknown = null;
-  const text = await response.text();
   const code = response.headers?.get(RECORDS_HEADER) === "off" ? RECORDS_OFF : undefined;
   try { payload = text ? JSON.parse(text) : null; }
   catch {
@@ -323,6 +331,24 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
   const timings = isObject(payload.timings) ? Object.fromEntries(Object.entries(payload.timings).filter(([, v]) => typeof v === "number")) as Record<string, number> : {};
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview,
     fields, explanation, seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true, timings };
+}
+
+/** The programs the model is written for on request (ADR-0129), and how each file is named on the page: the customer's own program,
+ * named as the file that opens in it (`ALLOWED_PHRASE` in `studio-copy.ts` for the first). */
+export type ModelProgram = "abaqus" | "ansys";
+export const MODEL_FILE_LABELS: Record<ModelProgram, string> = { abaqus: "Abaqus input file (.inp)", ansys: "Ansys input file (.cdb)" };
+const MODEL_FILE_HEADER = "X-Anisotropy-Model-File";
+const MODEL_FILE_ENDINGS: Record<ModelProgram, string> = { abaqus: "-abaqus.inp", ansys: "-ansys.cdb" };
+
+/** The model the rows build, as a file for the engineer's own program (ADR-0129): the fea package writes it from the rows as they
+ * stand, with no solve; the page computes nothing and changes nothing in it. A setup the check stops is refused in the API's words. */
+export async function modelFile(apiBase: string, values: StudioValues, program: ModelProgram, signal?: AbortSignal): Promise<{ name: string; text: string }> {
+  const response = await send(`${base(apiBase)}/v1/coupon-jobs/model?program=${program}`, { method: "POST", headers, body: JSON.stringify({ values }), signal });
+  const text = await response.text();
+  if (!response.ok) answered(response, text, "the model file");
+  if (!text) throw unreadable("the model file: empty");
+  const named = response.headers?.get(MODEL_FILE_HEADER) ?? "";
+  return { name: /^[A-Za-z0-9._-]+$/.test(named) ? named : `model${MODEL_FILE_ENDINGS[program]}`, text };
 }
 
 /** A model brought in as an Abaqus input file (ADR-0105). `reading` is what the reader took from the file and what it skipped, in counts
@@ -827,8 +853,10 @@ export async function answerGeneral(apiBase: string, question: string, kinds: st
 /** What the API offers this visitor (ADR-0089): `all`, every coupon test; `imports`, bringing a model in as a file (ADR-0105), which a
  * founder's sign-in is offered where the tests are not (amendment 6); `plates`, a plate set up on the model tree, held and loaded on any
  * edge or face, offered where the import is (amendment 7). */
-export type Offered = { all: boolean; imports: boolean; plates: boolean };
-const NOTHING_MORE: Offered = { all: false, imports: false, plates: false };
+export type Offered = { all: boolean; imports: boolean; plates: boolean;
+  /** The model downloads as an Ansys file too (ADR-0129): offered where the import is, until the file has been run in Ansys. */
+  ansysModel: boolean };
+const NOTHING_MORE: Offered = { all: false, imports: false, plates: false, ansysModel: false };
 const couponTestAnswers = new Map<string, Promise<Offered>>();
 /** What is offered here, asked once per API address. Nothing but the unnotched tension coupon unless the API says more: before it
  * answers, when it does not (an older API) and with no API at all. Where every test is offered, so is the import. */
@@ -839,7 +867,8 @@ export function offeredHere(apiBase: string): Promise<Offered> {
     couponTestAnswers.set(key, call(`${key}/v1/coupon-tests`, { method: "GET", headers }, "the tests offered")
       .then((payload) => {
         const all = isObject(payload) && payload.all === true;
-        return { all, imports: all || (isObject(payload) && payload.imports === true), plates: all || (isObject(payload) && payload.plates === true) };
+        return { all, imports: all || (isObject(payload) && payload.imports === true), plates: all || (isObject(payload) && payload.plates === true),
+          ansysModel: all || (isObject(payload) && payload.ansys_model === true) };
       })
       .catch(() => NOTHING_MORE));
   }

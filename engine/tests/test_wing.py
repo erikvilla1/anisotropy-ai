@@ -423,9 +423,11 @@ def test_a_criterion_the_inputs_cannot_support_is_refused():
 
 
 def test_thirty_four_cases_take_a_fraction_of_a_second():
-    result = run()
-    assert len(result.cases) == 34
-    assert result.seconds < 0.25  # about 0.015 s on a laptop; the page reruns it on every change
+    results = [run() for _ in range(3)]
+    assert len(results[0].cases) == 34
+    # About 0.015 s on a laptop; the page reruns it on every change. The best of three: one run alone also times whatever else the
+    # machine is doing, and a shared CI runner once took 0.27 s for it (Tests run 44822791027, 2026-11-20).
+    assert min(result.seconds for result in results) < 0.25
 
 
 # ----------------------------------------------------------------------------------------------- wing file

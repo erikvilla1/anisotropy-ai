@@ -5,12 +5,14 @@ import { libraryOptions, unitLabels, unitsOf, unitWords, type StudioForm } from 
  * what it does, the setup's units and whether another system is offered, whether a material of one's own can be used, which layup to
  * use, what a coupon needs, whether von Mises suits a composite ply, and another program named. The first real-model run of the question
  * banks (2026-11-20) found each of these answered "Not sure what to change", or read as a change: "can I use inches?" switched the units.
- * A value of the setup asked for ("what is the width?") is read from the setup's own rows (amendment 4).
+ * A value of the setup asked for ("what is the width?") is read from the setup's own rows (amendment 4). What a model file is, where the
+ * report is, and a model brought in from a program whose files are not read here came from the real-model run of the downloads' questions
+ * (ADR-0129 amendment 1).
  *
  * Nothing here names a tool, a vendor or a model (ADR-0091), and nothing here is a number of a result. */
 
 export type AboutTopic = "identity" | "abilities" | "instructions" | "other-program" | "units" | "units-other" | "own-material" | "layup-advice"
-  | "needs" | "mises" | "setup-value";
+  | "needs" | "mises" | "setup-value" | "model-file-what" | "report" | "bring-in";
 
 const IDENTITY = [
   /^\s*(?:who|what)\s+(?:are|r)\s+(?:you|u)\b/i,
@@ -48,6 +50,14 @@ const NEEDS = [
   /^\s*what(?:'s|’s|\s+is)\s+needed\b/i,
   /^\s*where\s+do\s+i\s+(?:start|begin)\b/i,
 ];
+/** What a model file is ("what is an Abaqus input file?", "whats a cdb"): a question about the file, not a request for it (ADR-0129 amendment 1). */
+const FILE_WHAT = /^\s*what(?:'s|’s|s|\s+is|\s+are)\s+(?:an?\s+|the\s+|this\s+)?(?:(?:abaqus|abqus|ansys|apdl|solver)\s+)?(?:input\s+files?|\.?inp(?:\s+files?)?|\.?cdb(?:\s+files?)?|input\s+decks?|decks?|model\s+files?)\s*(?:for)?\s*\??\s*$/i;
+/** The report asked for, or where it is ("download the report", "where is the pdf"). "report the stress in ply 3" asks for a value. */
+const REPORT = /\b(?:the|a|my|this|its|pdf|full|final)\s+report\b|\breport\s+(?:pdf|file)\b|\bpdf\b/i;
+const REPORT_ASKS = /\b(?:downloads?|donwload|dowload|downlod|downlaod|get|give|send|make|write|create|generate|print|save|export|need|want|find|see|open|where|how)\b|^\s*(?:is|can|could|do|does)\b/i;
+/** A model brought in from a program whose files are not read here ("import an ansys model", "can I upload a nastran file?"). */
+const BRING_IN = /\b(?:import\w*|upload\w*|bring\s+in|read\s+in|load)\b/i;
+const NOT_READ_HERE = /\b(ansys|anssy|ansy|apdl|mapdl|workbench|nastran|femap|hypermesh|comsol|ls-?dyna|patran|optistruct|solidworks)\b|\.?\bcdb\b/i;
 const MISES = /\b(?:von\s*-?\s*mis+es|mises|tresca)\b/i;
 const MISES_ASKS = /^\s*(?:is|are|can|could|should|does|do|would|will)\b|\b(?:valid|apply|applies|applicable|ok|okay|suitable|appropriate|meaningful|good)\b.*\?\s*$/i;
 /** The setup's rows a question may ask the value of, longest name first, as the engineer names them. */
@@ -80,6 +90,9 @@ export function aboutAsked(text: string, readOnly = false): AboutTopic | null {
   if (INSTRUCTIONS.test(text)) return "instructions";
   if (IDENTITY.some((p) => p.test(text))) return "identity";
   if (ABILITIES.some((p) => p.test(text))) return "abilities";
+  if (FILE_WHAT.test(text)) return "model-file-what";
+  if (BRING_IN.test(text) && NOT_READ_HERE.test(text) && !/\d/.test(text)) return "bring-in";
+  if (REPORT.test(text) && REPORT_ASKS.test(text) && !/^\s*why\b/i.test(text) && !/\breport\s+(?:of|on|about)\b/i.test(text)) return "report";
   if (PROGRAM.test(text) && ASKS_TO_RUN.test(text) && !/\bimport/i.test(text)) return "other-program";
   if (MISES.test(text) && MISES_ASKS.test(text) && !/^\s*why\b/i.test(text)) return "mises";
   if (UNITS.some((p) => p.test(text))) return "units";
@@ -123,6 +136,20 @@ export function aboutAnswer(topic: AboutTopic, text: string, c: AboutContext): {
         "Run solves the model on this page and checks the answer with a second solver, so no other program is needed.",
         ...(c.results && !c.readOnly && named === "abaqus"
           ? ["To compare with your own copy, use the card under the results: it sends this coupon there and reads its results back beside these."] : [])] };
+    }
+    case "model-file-what":
+      return { title: "A text file that holds the whole model", lines: [
+        "It states the mesh, the layup, the material, the supports and the loads in one program's own commands, so that program builds and solves the same model.",
+        "To get this model as one, say “download the model”."] };
+    case "report":
+      return { title: "The report is under Files", lines: [
+        "After a run, Files beneath the results lists “Report (PDF)”. If it is not written yet, pressing it writes it in about half a minute.",
+        ...(c.results ? [] : ["There is no result yet: say “run” first."])] };
+    case "bring-in": {
+      const ansys = /\b(?:ansys|anssy|ansy|apdl|mapdl|workbench)\b|\.?\bcdb\b/i.test(text);
+      return { title: ansys ? "An Ansys model cannot be brought in yet" : "A model from that program cannot be brought in yet", lines: [
+        ...(c.readOnly ? [] : ["Set the coupon up here instead, for example “IM7/8552, [45/0/-45/90]s, 250 x 25 mm, 56 mm tabs”.",
+          "The other way works: say “download the model” for a file your own program opens."])] };
     }
     case "mises":
       return { title: "No, not for a composite ply", lines: [

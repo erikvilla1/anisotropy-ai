@@ -10,6 +10,9 @@ answer in time, or stops, is killed and replaced, and the request answered 504 o
 A model brought in as an Abaqus deck (ADR-0105) is answered by the same workers, one request at a time each, with the deck in place of
 the rows (`read_model`): nothing of it is kept once the answer is read.
 
+A model asked for as a file for Abaqus or Ansys (ADR-0129) is written by the same workers from the rows (`model_file`): the setup check
+and the program's writer, no solve.
+
 The API reads the files the tool wrote and passes them on as written (`raw`): the fields of a fine mesh run to megabytes, and parsing and
 writing them again would cost more than the solve. The API depends on the engine alone; the fea package runs in its own processes (ADR-0051).
 """
@@ -64,6 +67,17 @@ class ModelAnswer:
     summary: dict | None
     raw: dict[str, bytes]  # preview, fields, explanation (those present), as written
     timings: dict[str, float]
+    seconds: float
+    warm: bool
+
+
+@dataclass
+class ModelFile:
+    """The model the rows build, as a file another program reads (ADR-0129), as `studio_tool.py model` answered it."""
+    state: str  # written, blocked (the setup check stops it) or refused (the program's writer cannot state this model)
+    checklist: dict
+    head: dict  # model.json: the program, the file's name, its units, size and SHA-256; {} when blocked
+    content: bytes | None  # the file, when written
     seconds: float
     warm: bool
 
@@ -199,6 +213,40 @@ class LiveSolver:
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
+    def model_file(self, values: bytes, program: str, every: bool = False, root: Path | None = None) -> ModelFile:
+        """The model the rows build, written for `program` (ADR-0129): the tool's setup check and the program's writer, nothing solved.
+        `every` and `root` as for `solve`. The file is read into memory and its folder removed."""
+        if self.command is None:
+            raise LiveRefused("uv is not on PATH; a model is written by fea/tools/studio_tool.py through `uv run --project fea`")
+        started = time.perf_counter()
+        self.folder.mkdir(parents=True, exist_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix="model-", dir=self.folder))
+        try:
+            source, out = folder / "values.json", folder / "out"
+            source.write_bytes(values)
+            warm = self.workers > 0
+            if warm:
+                self._ask_a_worker({"values": str(source), "out": str(out), "model": program, "every": every,
+                                    **({} if root is None else {"root": str(root.resolve())})})
+            else:
+                self._run_once([*([] if root is None else ["--root", str(root.resolve())]), *(["--every-test"] if every else []), "model", str(source),
+                                "--program", program, "--out", str(out)])
+            checklist_path = out / "checklist.json"
+            if not checklist_path.is_file():
+                raise LiveRefused("the tool wrote no checklist for the model")
+            checklist = json.loads(checklist_path.read_bytes())
+            head = json.loads((out / "model.json").read_bytes()) if (out / "model.json").is_file() else {}
+            state = head.get("state", "blocked")
+            content = None
+            if state == "written":
+                name = Path(str(head.get("name", ""))).name  # the tool's own name for the file, never a path
+                if not name or not (out / name).is_file():
+                    raise LiveRefused("the tool named a model file it did not write")
+                content = (out / name).read_bytes()
+            return ModelFile(state=state, checklist=checklist, head=head, content=content, seconds=time.perf_counter() - started, warm=warm)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
     def _start(self) -> None:
         """The workers, started on the first live request rather than with the API: a process that never solves live starts none."""
         with self.lock:
@@ -231,7 +279,8 @@ class LiveSolver:
                 worker.stop()
                 self._start_one()
         if "error" in answer:
-            raise LiveRefused(f"the live solver could not solve {'this model' if 'deck' in request else 'these rows'}: {answer['error']}")
+            doing = "solve this model" if "deck" in request else "write a model of these rows" if "model" in request else "solve these rows"
+            raise LiveRefused(f"the live solver could not {doing}: {answer['error']}")
 
     def _run_once(self, arguments: list[str]) -> None:
         try:

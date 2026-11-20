@@ -25,6 +25,8 @@ export type ProjectContextValue = {
   imports: boolean;
   /** Whether a plate may be set up on the model tree, held and loaded on any edge or face (ADR-0089 amendment 7): where the import is. */
   plates: boolean;
+  /** Whether the model downloads as an Ansys file too (ADR-0129): where the import is, until the file has been run in Ansys. */
+  ansysModel: boolean;
   /** Whether this form's every row is offered: every test is, or it is a plate where plates are (ADR-0089 amendment 7). */
   offersAll: boolean;
   project: CouponProject;
@@ -122,7 +124,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   if (start.current === null) start.current = initial();
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
   const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
-  const { all: allTests, imports, plates } = useOffered(apiBaseUrl);
+  const { all: allTests, imports, plates, ansysModel } = useOffered(apiBaseUrl);
   const imported = useImportedModel(apiBaseUrl);
   const past = usePastRun(apiBaseUrl);
   // a run picked from the list of past analyses is opened once, as the page arrives (ADR-0109)
@@ -165,17 +167,17 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
     (found) => { if (found.kind === "fea") replace(asked.current && found.analysis === "none" ? { ...found, analysis: asked.current } : found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
-    apiBaseUrl, allTests, imports, plates, offersAll, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
+    apiBaseUrl, allTests, imports, plates, ansysModel, offersAll, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
     setForm, setPlate, setSpecimens, setAnalysis, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
     emphasis, setEmphasis, view, showField, shownField, setShownField, versions,
-  }), [apiBaseUrl, allTests, imports, plates, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, setAnalysis, rename, replace, run, imported, past, picked, place, showPlace, proposed,
+  }), [apiBaseUrl, allTests, imports, plates, ansysModel, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, setAnalysis, rename, replace, run, imported, past, picked, place, showPlace, proposed,
     emphasis, view, showField, shownField, versions]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
 /** What the API offers here (ADR-0089), asked once per API address; nothing more than the tension coupon until the API answers. */
 export function useOffered(apiBaseUrl: string): Offered {
-  const [offered, setOffered] = useState<Offered>({ all: false, imports: false, plates: false });
+  const [offered, setOffered] = useState<Offered>({ all: false, imports: false, plates: false, ansysModel: false });
   useEffect(() => {
     let current = true;
     void offeredHere(apiBaseUrl).then((answer) => { if (current) setOffered(answer); });

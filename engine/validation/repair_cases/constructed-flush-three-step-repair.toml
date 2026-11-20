@@ -1,0 +1,42 @@
+title = "Analytical check: a flush repair of three steps, worked step by step"
+source = "Constructed analytical check, not a printed problem and not a design: a 2 mm laminate cut back in three steps of 0.5 mm, each 12 mm long, and filled by a patch of a slightly lower modulus, bonded with a 0.15 mm film; round values of our own for everything. The closed form is validation/closed_forms.py `stepped_lap`: the general solution of the shear-lag equation in every step, with its two constants per step from one linear system (zero force in the patch at its tip, the whole load in it at the cut, and the patch's force and the adhesive's shear stress continuous at every boundary between steps)."
+units = "mm-MPa"
+
+[adhesive]
+shear_modulus = 800.0
+thickness = 0.15
+shear_strength = 35.0
+
+[[steps]]
+length = 12.0
+outer_thickness = 0.5
+outer_modulus = 48000.0
+inner_thickness = 1.5
+inner_modulus = 55000.0
+
+[[steps]]
+length = 12.0
+outer_thickness = 1.0
+outer_modulus = 48000.0
+inner_thickness = 1.0
+inner_modulus = 55000.0
+
+[[steps]]
+length = 12.0
+outer_thickness = 1.5
+outer_modulus = 48000.0
+inner_thickness = 0.5
+inner_modulus = 55000.0
+
+[applied]
+load = 300.0
+
+[expected]
+tolerance = 1e-9
+lambda_length = [6.42721486408, 5.47390503787, 6.21240206313]
+shared_forces = [67.6056338028, 139.805825243, 217.085427136]
+boundary_forces = [0.0, 100.855103304, 180.910511847, 300.0]
+shear_at_ends = [[36.2674413966, 17.9256487556], [17.9256487556, 18.8999897887], [18.8999897887, 43.000310326]]
+peak_shear = 43.000310326
+adherend_stresses = [[201.710206609, 200.0], [180.910511847, 199.144896696], [200.0, 238.178976306]]
+elastic_limit_load = 244.184284262

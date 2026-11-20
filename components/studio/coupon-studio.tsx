@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import type { Preview } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
@@ -8,6 +8,7 @@ import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { revealPanel } from "@/components/workspace/panels/step-panel";
 import { JobProgress } from "./job-progress";
+import { ModelDownloadMenu } from "./model-download";
 import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
 import { Scene } from "./scene";
@@ -17,12 +18,14 @@ import { SketchScene } from "./sketch";
 import { shownResults } from "./use-coupon-run";
 
 /** The package's preview: the mesh with every boundary condition and load drawn on it and listed under it, in words (ADR-0110). */
-export function PreviewScene({ preview, onPick, picked, proposed, emphasis = null }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null;
-  proposed?: SceneProps["proposed"]; emphasis?: SceneProps["emphasis"] }) {
+export function PreviewScene({ preview, onPick, picked, proposed, emphasis = null, tools = null }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null;
+  proposed?: SceneProps["proposed"]; emphasis?: SceneProps["emphasis"];
+  /** what can be done with the model as a whole, at the right of its heading: the download of its file (ADR-0129) */
+  tools?: ReactNode }) {
   const { held, loads, about } = sceneInputs(preview);
   return (
     <div className="studio-panel" data-testid="preview">
-      <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
+      <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span>{tools}</h3>
       <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
         about={about} onPick={onPick} picked={picked ?? null} emphasis={emphasis} />
       {preview.shape?.length ? <p className="studio-muted" data-testid="preview-shape">{shapeWords(preview.shape)}</p> : null}
@@ -59,7 +62,12 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
       {job ? <JobProgress job={job} brief={!allTests} /> : null}
       {shown ? (
         <>
-          {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
+          {/* the model as a file for the engineer's own program, once there is a model to write (ADR-0129): beside the results' link
+              here, and in the model's heading before a run, so it takes no room of its own from the model */}
+          <div className="studio-viewer-row">
+            {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : <span />}
+            <ModelDownloadMenu />
+          </div>
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
             live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
             onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} emphasis={emphasis} view={view} onShown={setShownField} />
@@ -68,7 +76,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         <>
           {checked?.preview ? (
             <>
-              <PreviewScene preview={checked.preview} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
+              <PreviewScene preview={checked.preview} tools={<ModelDownloadMenu />} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
                 proposed={isPlate ? proposedInputs(checked.preview, proposed) : null} emphasis={emphasis} />
               {isPlate && pickedElement !== null ? (() => {
                 const preview = checked.preview;
