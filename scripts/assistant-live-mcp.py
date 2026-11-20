@@ -73,9 +73,11 @@ SHOWN = 9000  # what the judge is shown of each tool result, in characters: the 
 
 def called_as_asked(calls: list[dict[str, Any]], asked: dict[str, Any], defaults: dict[str, dict[str, Any]], final: str = "") -> bool:
     """Whether the model called the bank's tool with its arguments: an argument left out counts as the tool's default, `example` and a
-    free-worded argument count when given at all. A question the bank expects refused, answered without a call because the solve the
-    model already holds says why (an element the mesh has not), is as asked when the answer says what the bank says."""
-    if asked.get("refused") and not calls and all(said in final for said in asked.get("says", []) if not said.startswith('"')):
+    free-worded argument count when given at all. A question the bank expects refused, answered from what the model already held (the
+    solve names the elements; the result names its criteria), is as asked when the answer tells the refusal in the bank's words (`said`,
+    else `says`), whatever it called to give the page's default with it (rule 11): the judge then reads the answer."""
+    told = asked.get("said") or [said for said in asked.get("says", []) if not said.startswith('"')]
+    if asked.get("refused") and told and all(said in final for said in told):
         return True
     for call in calls:
         if call["name"] != asked["tool"]:

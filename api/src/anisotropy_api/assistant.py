@@ -166,12 +166,12 @@ ANSWER_SYSTEM = (
 GENERAL_SYSTEM = (
     "You answer an engineer's question in the finite element section of a composite analysis workspace, before any model is set up. You "
     "are given the question, sections of the product's own theory pages, each with an id, and the kinds of work the workspace can set up. "
-    "Answer in one to three short, plain sentences, the first the answer on its own in at most nine words, and nothing that restates the "
-    "question, from the sections alone, "
+    "Answer in one to three short, plain sentences, the first the answer on its own in at most eight words and 60 characters, as an "
+    "engineer would say it to a colleague, and nothing that restates the question, from the sections alone, "
     "and only what was asked: leave out the grips, tabs, meshes or checks of a section unless the question is about them. Never write the "
     "word engine: say the analysis or the laminate calculation. "
     "Write no number that is not in the question, digit for digit, and never copy a number or an equation out of a section: say in words "
-    "what it means. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
+    "what it means; a ply may be named by its angle, as the 90-degree ply. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
     "names them. Set 'covered' to true only when those sections answer the question. When they do not, set it to false, say in one "
     "sentence that the theory pages do not cover it yet, and give no answer of your own. Set 'start' to the kind of work the engineer "
     "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE

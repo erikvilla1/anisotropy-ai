@@ -179,7 +179,8 @@ def report(rows: list[dict[str, Any]], before: dict[str, str], header: list[str]
         lines += [f"### {feature}", ""]
         for r in bad:
             known = f" Known gap: {r['gap']}." if r.get("gap") else ""
-            lines.append(f"- **{r['verdict']}**: “{r['ask']}” ({r['where']}). {r['why']}.{known} Shown: {r['shown']}")
+            aside = f" Set aside by the API: {r['aside']}." if r.get("aside") else ""
+            lines.append(f"- **{r['verdict']}**: “{r['ask']}” ({r['where']}). {r['why']}.{known}{aside} Shown: {r['shown']}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -231,7 +232,9 @@ def main() -> int:
             if (q["live"] or {}).get("judge") or said["kind"] == "why":
                 item = {"question": q["ask"], "page": q["page"], "the chat showed": {"heading": said["heading"], "lines": said["lines"]},
                         "a good answer": (q["live"] or {}).get("judge") or "Answers why in one to three short sentences from the result's facts"}
-            items.append((q, s, "chat", f"{q['page']} page", " · ".join([said["heading"], *said["lines"]])[:300], s["faults"], item))
+            # an answer the API's guard set aside shows no prose of the model's; its reason says why, which the page never shows
+            aside = "; ".join(r["response"]["reason"] for r in readings[s["id"]] if (r.get("response") or {}).get("withheld") and r["response"].get("reason"))
+            items.append((q, s, "chat", f"{q['page']} page", " · ".join([said["heading"], *said["lines"]])[:300], s["faults"], item, aside))
         for m in mcp_out["results"]:
             q = by_id[m["id"]]
             final = m["final"] or ""
@@ -240,8 +243,8 @@ def main() -> int:
                     **({"what the engineer told it before the question": m["before"]} if m.get("before") else {}),
                     **({"what its tools returned before the question": m["held"]} if m.get("held") else {}), "tools it called": m["tools"],
                     "its answer": final, "a good answer": (q["live"] or {}).get("judge") or f"Answers from what {q['mcp']['tool']} returned, its numbers as given"}
-            items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item))
-        for _, _, _, _, _, faults, item in items:
+            items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item, ""))
+        for _, _, _, _, _, faults, item, _ in items:
             if item is not None and not faults:
                 request = judge_request(JUDGE_MODEL, item)
                 to_judge[key_of(request)] = request
@@ -251,7 +254,7 @@ def main() -> int:
         return 3
 
     rows = []
-    for q, _, side, where, shown_text, faults, item in items:
+    for q, _, side, where, shown_text, faults, item, aside in items:
         graded = None
         if item is not None and not faults:
             answer = store.get(key_of(judge_request(JUDGE_MODEL, item)))
@@ -262,7 +265,7 @@ def main() -> int:
                 graded = {"verdict": "weak", "criteria": [], "why": "the judge gave no grade in this run"}
         verdict, why = verdict_of(faults, graded)
         rows.append({"key": f"{q['id']}:{side}", "feature": q["feature"], "ask": q["ask"], "where": where, "verdict": verdict, "why": why.rstrip("."),
-                     "shown": shown_text, "gap": q.get("gap")})
+                     "shown": shown_text, "gap": q.get("gap"), "aside": aside})
     summary = args.store / "summary.json"
     before = json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else {}
     header = [f"# Assistant check with a real model, {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC", "",

@@ -104,6 +104,9 @@ export type Question = {
   sections?: string[];
   /** The MCP server's tool a client should call for it, the arguments, and words its answer holds (ADR-0107). */
   mcp?: { tool: string; args: Record<string, unknown>; says?: string[]; refused?: boolean;
+    /** For a refused question, the words a client's own answer holds when it told the refusal from what it already held, in the
+     * real-model run; `says` (the tool's words) when absent. */
+    said?: string[];
     /** What the client's conversation holds before the question, in the real-model run: the coupon stated ("setup"), or stated and solved
      * ("solved", the default for a tool that reads a result). */
     context?: "setup" | "solved" };
