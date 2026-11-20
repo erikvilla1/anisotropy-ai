@@ -6,6 +6,7 @@ import { ArrowUp, Boxes, MessagesSquare, Plus } from "lucide-react";
 import { putHandoff, takeHandoff } from "@/lib/handoff";
 import { MODEL_TREE } from "@/lib/model-tree";
 import { answerGeneral, StudioError, type GeneralAnswer } from "@/lib/studio-api";
+import { generalLines } from "@/lib/result-why";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
 import { routeStart, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
@@ -126,10 +127,10 @@ export function FeaStartChat() {
     }
     // what to set up next: the kind the question named in fixed words, or the one the model read in it; offered, never done on its own
     const offered = (named && named !== "wing" && named !== "fea" ? named : null) ?? (answer.start === "coupon" ? "coupon" : null);
-    const sources = answer.sources.map((s) => `${s.document}, ${s.title}`);
+    const { prose, sources } = generalLines(answer); // in the product's own words (ADR-0091)
     add({ role: "assistant", testId: "fea-start-answer", body: (
       <div data-testid="fea-start-answer-body" data-covered={answer.covered} data-writer={answer.writer}>
-        {answer.prose.length ? answer.prose.map((line, i) => <p key={i}>{line}</p>)
+        {prose.length ? prose.map((line, i) => <p key={i}>{line}</p>)
           : sources.length ? <p>Our theory pages hold this. Read:</p> : <p>Our theory pages do not cover that yet.</p>}
         {sources.length ? <ul className="chat-understood" data-testid="fea-start-sources">{sources.map((s) => <li key={s}>{s}</li>)}</ul> : null}
         {offered ? <div className="chat-chips">{offer(offered)}</div> : null}

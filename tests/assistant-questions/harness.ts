@@ -14,7 +14,7 @@ import { applyMessage, unitsNamed } from "../../lib/studio-chat";
 import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
-import { factsOf, whyLines } from "../../lib/result-why";
+import { factsOf, generalLines, whyLines } from "../../lib/result-why";
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
@@ -354,10 +354,10 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
     if (r.reader === "questions") { // as fea-start.tsx shows it: the prose, the sections it was answered from, and a kind of work offered
       if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
       const answer = r.response as unknown as GeneralAnswer;
-      const sources = answer.sources.map((x) => `${x.document}, ${x.title}`);
+      const { prose, sources } = generalLines(answer);
       const offered = answer.start && answer.start !== "none" ? answer.start : null;
-      return said("general", answer.prose.length ? "Answered in words" : sources.length ? "Our theory pages hold this" : "Our theory pages do not cover that yet",
-        [...answer.prose, ...(sources.length ? [`Read: ${sources.join("; ")}`] : []), ...(offered ? [`Offers: set up a ${offered} test`] : [])],
+      return said("general", prose.length ? "Answered in words" : sources.length ? "Our theory pages hold this" : "Our theory pages do not cover that yet",
+        [...prose, ...(sources.length ? [`Read: ${sources.join("; ")}`] : []), ...(offered ? [`Offers: set up a ${offered} test`] : [])],
         { covered: answer.covered, start: offered ?? "none", sources });
     }
     if (r.reader === "result-answers") {
