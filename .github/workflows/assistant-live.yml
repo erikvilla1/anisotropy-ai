@@ -1,0 +1,62 @@
+name: Assistant check
+
+# The real-model check of the assistant (ADR-0121, check 2), started by hand from the Actions tab before a feature is merged: every
+# question of the banks that a model reads is asked of the API's readers and of an MCP client with the site's models, and the report
+# lands on the run's page. Answers are kept from one run to the next (the run's "assistant-answers" artifact), so a run pays only for
+# the questions, instructions or models that changed; the rest goes in one batch at half price. It needs the repository secret
+# ANTHROPIC_API_KEY, which only the founder sets.
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: "Banks to run, by feature, separated by commas (empty: every bank)"
+        default: ""
+        required: false
+      budget:
+        description: "The most this run may spend, in dollars"
+        default: "3"
+        required: true
+
+permissions:
+  contents: read
+  actions: read # to fetch the answers the last run kept
+
+concurrency:
+  group: assistant-live # two runs at once would pay twice for the same answers
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240 # a batch usually ends in minutes; this is the most it may take
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: npm ci
+      - run: uv sync --project api --locked && uv sync --project mcp-server --locked
+      - name: The answers the last runs kept
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for run in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow assistant-live.yml --status completed --limit 5 --json databaseId --jq '.[].databaseId'); do
+            gh run download "$run" --repo "$GITHUB_REPOSITORY" --name assistant-answers --dir assistant-live && echo "Answers from run $run." && break
+          done
+          true
+      - name: Ask the model
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FEATURES: ${{ inputs.features }}
+          BUDGET: ${{ inputs.budget }}
+        run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET"
+      - name: The report, on the run's page
+        if: always()
+        run: if [ -f assistant-live/report.md ]; then cat assistant-live/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: assistant-answers
+          path: assistant-live/
+          retention-days: 90

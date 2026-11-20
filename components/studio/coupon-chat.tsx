@@ -4,15 +4,15 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
-import { asksFailure, confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
-import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
-import { isConditionOrLoad, setupAsked, termAsked, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
+import { confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
+import { factsOf, whyLines } from "@/lib/result-why";
+import { isConditionOrLoad, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
-import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
+import { workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
-import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
-import { answerResultQuestion, asksElement, comparisonNote, describeElement, extremeLines, extremeWords, questionFrom, readFollowUp, readResultQuestion, RESULT_COLUMNS,
+import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
+import { answerResultQuestion, comparisonNote, describeElement, extremeLines, extremeWords, questionFrom, RESULT_COLUMNS,
   resultOffer, resultUnit, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
@@ -20,10 +20,11 @@ import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
-  applyMessage, COMMON_MATERIALS, couponLines, isBending, isSwitchRequest, unitsNamed, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
+  applyMessage, COMMON_MATERIALS, couponLines, isBending, unitsNamed, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
   missingIn, nextStep, parseLayup, PUSH_CHIPS, SIZE_CHIPS, stepOfKey, switchUnits, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
+import { ASKING, modelAsksResults, routeMessage } from "@/lib/chat-route";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
@@ -112,9 +113,6 @@ function placeOf(answer: ResultValues | ResultExtremes) {
 /** Where a first-ply failure is on the model: its element and ply, coloured by that ply's failure index in its criterion. */
 const failurePlace = (row: FailureAnswer["row"]) => ({ element: row.element, ply: row.ply, face: row.face, field: "failure_index_ply", criterion: row.criterion });
 const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
-/** A message that opens as a question: with results on the page it asks about them, and the setup's patterns do not read it, so "why is
- * ply 4 in compression?" never changes the test to compression (ADR-0100). */
-const ASKING = /^\s*(?:why|what|where|which|compare)\b/i;
 
 const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> = {
   test: { title: "What are we analysing?", text: "Pick a test, or describe the coupon in one line, e.g. “unnotched tension, ASTM D3039, IM7/8552, [45/0/-45/90]s, 1 mm pull”." },
@@ -488,7 +486,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
    * reading goes on. The model is shown the offer alone, never a result. */
   async function readQuestionWithModel(text: string): Promise<boolean> {
     const from = shown;
-    if (!from.fields || (!ASKING.test(text) && applyMessage(formRef.current, text).understood.length)) return false;
+    if (!from.fields || !modelAsksResults(text, formRef.current, true)) return false;
     let reading;
     try { reading = await readResultRequest(apiBaseUrl, resultOffer(from.fields, text, picked)); }
     catch { return false; } // no answer: the setup's reading says so once, as it does today
@@ -623,58 +621,37 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (!text) return;
     setInput("");
     lastSaid.current = text;
-    if (!shown.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
-    // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
-    const term = termAsked(text);
-    if (term) { answerTerm(text, term); return; }
-    // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
-    if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
-    // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
-    const facts = factsOf(shown.explanation);
-    if (asksWhy(text)) {
-      if (apiBaseUrl && shown.fields && facts) { void answerWhy(text, facts, shown.live); return; }
-      // with no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
-      add({ role: "user", text }, { role: "assistant", kind: "text", title: "No results to answer from yet",
-        body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
-          : `A question of why is answered from a solved model. ${resultsFirst()}`}</p> });
-      return;
-    }
-    const question = readResultQuestion(text);
-    if (question) { answerQuestion(text, question); return; }
-    // which ply fails first, or whether it fails, is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1)
-    if (asksFailure(text)) { answerFailure(text); return; }
-    if (shown.fields) {
-      // what an element is, or where it sits, is said from the fields, never asked back as a choice of quantity (ADR-0099 amendment 3)
-      const ofElement = asksElement(text);
-      // "it" is an element only when one was just spoken of
-      if (ofElement && (ofElement.element !== "last" || about.current !== null)) { answerElement(text, ofElement.element, shown.fields); return; }
-      // a follow-up of a few words takes its ply, its place and its quantity from the question before it (ADR-0099 amendment 3)
-      const next = applyMessage(formRef.current, text).understood.length ? null : readFollowUp(text, thread.current);
-      if (next) { answerQuestion(text, next); return; }
-    }
-    // an imported model's rows are the file's (ADR-0105) and a past run is shown as it was solved (ADR-0109): nothing below reads a message into either
-    if (shown.readOnly) { void readOfImported(text); return; }
-    // "add a boundary condition" where the setup fixes them, "partition the coupon", "create a step": said once, nothing changes (ADR-0110).
-    // On a plate read by a model, a boundary condition or a load is read into its lists instead (ADR-0101)
-    const adding = setupAsked(text);
-    if (adding && !(onPlateNow && isConditionOrLoad(adding)) && !applyMessage(formRef.current, text).understood.length) { answerSetup(text, adding); return; }
-    if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
-    if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
-    if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
-    if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
-    const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
-    // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it
-    // compression"; ADR-0088 amendment 2) or, on a plate read by a model, one that names a region or an action on it (ADR-0101 amendment 1)
-    // nor is a question a name
-    const edit = applyMessage(formRef.current, text).understood.length > 0 || (onPlateNow && namesPlateEdit(text));
-    const asks = /\?\s*$/.test(text) || ASKING.test(text);
-    if (step === "name" && !/\d/.test(text) && !edit && !asks) { answer(text, { filled_by: text }); return; }
-    // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
-    const named = unitsNamed(text);
-    if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }
-    if (shown.fields && ASKING.test(text)) { unread(text); return; }
-    readWithPatterns(text);
+    // who answers is the page's fixed order (ADR-0121), in one place the question banks try (lib/chat-route.ts)
+    const routed = routeMessage(text, {
+      form: formRef.current, readOnly: shown.readOnly, results: !!shown.fields, facts: !!factsOf(shown.explanation), api: !!apiBaseUrl,
+      modelReads: !!model?.proposes, onPlate: onPlateNow, ready: checked?.state === "ready", about: about.current, thread: thread.current, laminate: !!onLaminate,
+      step: current && current.role === "assistant" && current.kind === "ask" ? current.step : null,
+    });
+    switch (routed.route) {
+      case "start-over": add({ role: "user", text }); startOver(); return;
+      case "term": answerTerm(text, routed.term); return;
+      case "working": showWorking(text); return;
+      case "why": void answerWhy(text, factsOf(shown.explanation)!, shown.live); return;
+      case "why-none":
+        add({ role: "user", text }, { role: "assistant", kind: "text", title: "No results to answer from yet",
+          body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
+            : `A question of why is answered from a solved model. ${resultsFirst()}`}</p> });
+        return;
+      case "value": case "follow-up": answerQuestion(text, routed.question); return;
+      case "failure": answerFailure(text); return;
+      case "element": answerElement(text, routed.element, shown.fields!); return;
+      case "read-only": void readOfImported(text); return;
+      case "setup-fixed": answerSetup(text, routed.term); return;
+      case "run": void run(); return;
+      case "check": add({ role: "user", text }); void check(formRef.current); return;
+      case "full-form": add({ role: "user", text }); showPanel("advanced"); return;
+      case "laminate": add({ role: "user", text }); onLaminate?.(); return;
+      case "name": answer(text, { filled_by: text }); return;
+      case "model": void readWithModel(text); return;
+      case "unread": unread(text); return;
+      case "patterns": readWithPatterns(text); return;
+    }
   }
 
   /** A message while an imported model (ADR-0105) or a past run (ADR-0109) has the stage that the page's own patterns read no question

@@ -1,0 +1,24 @@
+name: Assistant questions
+
+# ADR-0121: a pull request that changes how the assistant reads or answers a question adds the questions that try it, or says in its
+# description why none are needed. It runs again when the description is edited, so writing the reason there is enough; the other
+# workflows do not rerun on an edit.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  questions-added:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # the description reaches the script as a variable, never as text in the command
+      - run: node scripts/assistant-questions-check.mjs --base "origin/$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
