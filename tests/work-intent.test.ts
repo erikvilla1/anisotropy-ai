@@ -6,11 +6,12 @@ import { COUPON_HREF, FEA_KINDS, WORKSPACES, workspace } from "../lib/workspaces
 
 // ADR-0124: what a message asks to work on, read by fixed words the same way on the start screen and in every section's chat
 
-test("the workspace has three sections, FEA, CAD and Laminate, in that order, and FEA is set up for a coupon test", () => {
+test("the workspace has three sections, FEA, CAD and Laminate, in that order, and FEA is set up for a coupon test or a wing", () => {
   assert.deepEqual(WORKSPACES.map((w) => w.title), ["FEA", "CAD", "Laminate"]);
   assert.deepEqual(WORKSPACES.map((w) => w.href), ["/workspace/fea", "/workspace/cad", "/workspace/laminate"]);
   assert.equal(workspace("cad").planned, true);
-  assert.deepEqual(FEA_KINDS.map((k) => k.id), ["coupon"]);
+  assert.deepEqual(FEA_KINDS.map((k) => k.id), ["coupon", "wing"]); // the wing on its own page under FEA (ADR-0118 amendment 1)
+  assert.deepEqual(FEA_KINDS.map((k) => k.href), [undefined, "/workspace/wing"]);
   assert.equal(COUPON_HREF, "/workspace/fea?for=coupon");
 });
 

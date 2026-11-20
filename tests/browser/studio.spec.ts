@@ -2371,6 +2371,8 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await expectNoBannedWords(page, "the coupon workspace, a hidden test named");
   await page.goto("/workspace/laminate");
   await expectNoBannedWords(page, "the laminate workspace");
+  await page.goto("/workspace/wing");
+  await expectNoBannedWords(page, "the wing workspace");
   await page.goto("/workspace/fea/view");
   await expectNoBannedWords(page, "the viewer with no job");
   await page.goto("/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");

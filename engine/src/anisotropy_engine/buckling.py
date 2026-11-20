@@ -137,33 +137,33 @@ def ritz_buckling(D, a: float, b: float, loads, terms: int) -> BucklingResult:
     alpha = np.arange(1, terms + 1) * math.pi / a
     beta = np.arange(1, terms + 1) * math.pi / b
     n = terms * terms
-    K = np.zeros((n, n))
-    G = np.zeros((n, n))
     Nx, Ny, Nxy = loads
-    for i in range(terms):
-        for j in range(terms):
-            r = i * terms + j
-            for p in range(terms):
-                for q in range(terms):
-                    c = p * terms + q
-                    ai, aj, bp, bq = alpha[i], beta[j], alpha[p], beta[q]
-                    # Products of derivatives integrate to products of 1D integrals.
-                    xx_xx = ai**2 * bp**2 * SSx[i, p] * SSy[j, q]
-                    xx_yy = ai**2 * bq**2 * SSx[i, p] * SSy[j, q]
-                    yy_xx = aj**2 * bp**2 * SSx[i, p] * SSy[j, q]
-                    yy_yy = aj**2 * bq**2 * SSx[i, p] * SSy[j, q]
-                    xy_xy = ai * aj * bp * bq * CCx[i, p] * CCy[j, q]
-                    xx_xy = -ai**2 * bp * bq * SCx[i, p] * SCy[j, q]  # w_i,xx (sin sin) times w_j,xy (cos cos)
-                    xy_xx = -ai * aj * bp**2 * SCx[p, i] * SCy[q, j]
-                    yy_xy = -aj**2 * bp * bq * SCx[i, p] * SCy[j, q]
-                    xy_yy = -ai * aj * bq**2 * SCx[p, i] * SCy[q, j]
-                    K[r, c] = (D[0, 0] * xx_xx + D[0, 1] * (xx_yy + yy_xx) + D[1, 1] * yy_yy + 4 * D[2, 2] * xy_xy
-                               + 2 * D[0, 2] * (xx_xy + xy_xx) + 2 * D[1, 2] * (yy_xy + xy_yy))
-                    x_x = ai * bp * CCx[i, p] * SSy[j, q]
-                    y_y = aj * bq * SSx[i, p] * CCy[j, q]
-                    x_y = ai * bq * SCx[p, i] * SCy[j, q]  # w_i,x (cos sin) times w_j,y (sin cos)
-                    y_x = aj * bp * SCx[i, p] * SCy[q, j]
-                    G[r, c] = -(Nx * x_x + Ny * y_y + Nxy * (x_y + y_x))
+    # Every entry K[(i, j), (p, q)] and G[(i, j), (p, q)] at once: arrays indexed [i, j, p, q], i and p along x, j and q along y.
+    ai, aj = alpha[:, None, None, None], beta[None, :, None, None]
+    bp, bq = alpha[None, None, :, None], beta[None, None, None, :]
+    SS = SSx[:, None, :, None] * SSy[None, :, None, :]
+    CC = CCx[:, None, :, None] * CCy[None, :, None, :]
+    SC_ip_jq = SCx[:, None, :, None] * SCy[None, :, None, :]  # SCx[i, p] SCy[j, q]
+    SC_pi_qj = SCx.T[:, None, :, None] * SCy.T[None, :, None, :]  # SCx[p, i] SCy[q, j]
+    SC_pi_jq = SCx.T[:, None, :, None] * SCy[None, :, None, :]  # SCx[p, i] SCy[j, q]
+    SC_ip_qj = SCx[:, None, :, None] * SCy.T[None, :, None, :]  # SCx[i, p] SCy[q, j]
+    # Products of derivatives integrate to products of 1D integrals.
+    xx_xx = ai**2 * bp**2 * SS
+    xx_yy = ai**2 * bq**2 * SS
+    yy_xx = aj**2 * bp**2 * SS
+    yy_yy = aj**2 * bq**2 * SS
+    xy_xy = ai * aj * bp * bq * CC
+    xx_xy = -ai**2 * bp * bq * SC_ip_jq  # w_i,xx (sin sin) times w_j,xy (cos cos)
+    xy_xx = -ai * aj * bp**2 * SC_pi_qj
+    yy_xy = -aj**2 * bp * bq * SC_ip_jq
+    xy_yy = -ai * aj * bq**2 * SC_pi_qj
+    K = (D[0, 0] * xx_xx + D[0, 1] * (xx_yy + yy_xx) + D[1, 1] * yy_yy + 4 * D[2, 2] * xy_xy
+         + 2 * D[0, 2] * (xx_xy + xy_xx) + 2 * D[1, 2] * (yy_xy + xy_yy)).reshape(n, n)
+    x_x = ai * bp * CCx[:, None, :, None] * SSy[None, :, None, :]
+    y_y = aj * bq * SSx[:, None, :, None] * CCy[None, :, None, :]
+    x_y = ai * bq * SC_pi_jq  # w_i,x (cos sin) times w_j,y (sin cos)
+    y_x = aj * bp * SC_ip_qj
+    G = -(Nx * x_x + Ny * y_y + Nxy * (x_y + y_x)).reshape(n, n)
     # K is symmetric positive definite for a stable laminate. Reduce K w = lambda G w to a symmetric
     # standard problem: with K = L L^T, (L^-1 G L^-T) v = mu v and lambda = 1/mu for mu > 0.
     L = np.linalg.cholesky((K + K.T) / 2)

@@ -130,12 +130,12 @@ class JobRow(Base):
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
 
-PROJECT_KINDS = ("fea", "laminate")
+PROJECT_KINDS = ("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
 
 
 class ProjectRow(Base):
-    """A workspace project (ADR-0062 part 6, migration 0007): the rows of a coupon test or the draft of a laminate problem, as the page
-    states them, under a name the engineer gives. `content` is the page's own object; the fea package judges a coupon's rows at check
+    """A workspace project (ADR-0062 part 6, migration 0007): the rows of a coupon test, the draft of a laminate problem or a wing's
+    description (ADR-0122, migration 0014), as the page states them, under a name the engineer gives. `content` is the page's own object; the fea package judges a coupon's rows at check
     time as always (ADR-0051), and the designation it derived is written back here with the check's run. The owner is the signed-in
     email behind Cloudflare Access (ADR-0056), or, locally, the actor. Rows here change; the runs stay the immutable receipts."""
 

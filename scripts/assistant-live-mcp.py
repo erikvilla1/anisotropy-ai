@@ -39,6 +39,8 @@ TURNS = 6
 # The coupon of VALUES, as an engineer would state it to their assistant.
 SETUP = ("I am setting up an unnotched tension coupon, sized from an example: 250 by 25 mm with 56 mm tabs, IM7/8552 from the library, "
          "layup [45/0/-45/90]s, symmetric, loaded by a 1 mm displacement, G13 4688.43 MPa and G23 3000 MPa. Filled by A. Engineer on 2026-11-17.")
+# The wing a wing question is about (ADR-0128), as an engineer would name it to their assistant.
+WING = "I am working on Anisotropy's example wing: give the wing tools example as the wing."
 
 
 def block(content: dict[str, Any]) -> dict[str, Any] | None:
@@ -109,7 +111,8 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
                          {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_context_1", "name": "solve_coupon", "input": {"values": VALUES}}]},
                          {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_context_1", "content": solved.content[0].text}]},
                          {"role": "assistant", "content": "It is solved; its result is r1."}]
-        messages.append({"role": "user", "content": f"{SETUP}\n\n{question['ask']}" if context == "setup" else question["ask"]})
+        opening = {"setup": SETUP, "wing": WING}.get(context or "")
+        messages.append({"role": "user", "content": f"{opening}\n\n{question['ask']}" if opening else question["ask"]})
         calls: list[dict[str, Any]] = []
         final = ""
         for _ in range(TURNS):

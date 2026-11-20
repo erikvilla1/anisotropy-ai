@@ -13,7 +13,7 @@ import pytest
 from anisotropy_api.main import app
 from anisotropy_api.result_answers import SECTIONS_SHOWN
 from anisotropy_api.result_questions import KINDS, QUANTITIES, SENSES
-from anisotropy_api.theory import find, sections
+from anisotropy_api.theory import find, sections, wing_sections
 
 BANKS = Path(__file__).resolve().parents[2] / "tests" / "assistant-questions"
 ALL = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(BANKS.glob("*.json"))]
@@ -45,7 +45,8 @@ def test_the_banks_are_there_and_the_theory_pages_hold_every_section_a_bank_name
 
 @pytest.mark.parametrize(("feature", "question"), [(f, q) for f, q in QUESTIONS if q.get("sections")], ids=lambda v: v["ask"] if isinstance(v, dict) else v)
 def test_a_question_of_why_finds_the_section_that_holds_its_reason_among_those_a_model_is_shown(feature, question):
-    found = [section.id for section, _ in find(question["ask"], limit=SECTIONS_SHOWN)]
+    among = wing_sections() if feature == "wing" else None  # the wing's chat searches its theory and the reference pages (ADR-0127, ADR-0128)
+    found = [section.id for section, _ in find(question["ask"], among=among, limit=SECTIONS_SHOWN)]
     missing = [s for s in question["sections"] if s not in found]
     if search_gap(question):
         assert missing, f"{feature}: “{question['ask']}”: the gap “{question['gap']}” is closed; take the mark off"

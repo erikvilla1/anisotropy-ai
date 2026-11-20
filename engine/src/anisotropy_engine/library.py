@@ -109,7 +109,7 @@ def load_library() -> dict:
 def list_datasets() -> list[dict]:
     """Every dataset: material id and name, dataset id and label, whether it has elastic inputs."""
     return [{"material_id": d["materialId"], "name": d["name"], "dataset_id": d["datasetId"],
-             "dataset": d["dataset"], "primary": d["primary"], "rights": d["source"]["rights"],
+             "dataset": d["dataset"], "primary": d["primary"], "strength_basis": d.get("strengthBasis"), "rights": d["source"]["rights"],
              "elastic_inputs": d["elasticInputs"] is not None}
             for d in load_library()["datasets"]]
 
@@ -127,6 +127,17 @@ def find_dataset(material_id: str, dataset_id: str | None = None) -> dict:
             return d
     raise ValueError(f"material {material_id!r} has no dataset {dataset_id!r}; "
                      f"its datasets are {[d['datasetId'] for d in datasets]}")
+
+
+def strength_dataset(material_id: str, basis: str) -> str:
+    """The id of a material's dataset of design strengths at a basis ("B-basis"), kept beside its means (ADR-0126); refused by name
+    when the library holds none for that material."""
+    find_dataset(material_id)  # an unknown material is refused with the known ones
+    found = [d["datasetId"] for d in load_library()["datasets"] if d["materialId"] == material_id and d.get("strengthBasis") == basis]
+    if not found:
+        held = sorted({d["materialId"] for d in load_library()["datasets"] if d.get("strengthBasis") == basis})
+        raise ValueError(f"the library holds no {basis} strengths for {material_id!r}; materials with them: {held}")
+    return found[0]
 
 
 def _si(prop: dict, allowed_units: set[str] | None = None) -> tuple[float, str]:
@@ -228,3 +239,47 @@ def library_material(material_id: str, dataset_id: str | None = None) -> Library
                            lamina=lamina, ply_thickness_m=ply_thickness_m, values=tuple(cited),
                            not_provided=tuple(not_provided), authors=source.get("authors"),
                            density_kg_per_m3=extras["density"], fiber_volume_fraction=extras["Vf"], extra_values=tuple(extra_values))
+
+
+_CORE_FAMILY = "Sandwich cores"
+_CORE_KEYS = {"modulus": ("compression-modulus-nominal",), "shear_modulus": ("shear-modulus-nominal",),
+              "shear_strength": ("shear-strength-nominal",), "density": ("density",)}
+
+
+@dataclass(frozen=True)
+class LibraryCore:
+    """A library sandwich core resolved to the values a model of it needs, each with its citation (ADR-0117).
+
+    Only a core whose record gives one shear modulus is read: a honeycomb's two ribbon directions are not modeled yet."""
+
+    material_id: str
+    name: str
+    dataset_id: str
+    citation: str
+    rights: str
+    modulus_Pa: float  # through the thickness, in compression, nominal
+    shear_modulus_Pa: float  # nominal
+    shear_strength_Pa: float | None  # nominal
+    density_kg_m3: float
+    values: tuple[CitedValue, ...]
+
+
+def library_core(material_id: str, dataset_id: str | None = None) -> LibraryCore:
+    """A sandwich core from the library: its nominal compression and shear moduli, shear strength and density, in SI."""
+    d = find_dataset(material_id, dataset_id)
+    if d.get("family") != _CORE_FAMILY:
+        raise ValueError(f"{material_id!r} is not a sandwich core in the library (its family is {d.get('family')!r})")
+    props = {p["key"]: p for p in d["properties"]}
+    found = {role: _first(props, keys) for role, keys in _CORE_KEYS.items()}
+    missing = [role for role in ("modulus", "shear_modulus", "density") if found[role] is None]
+    if missing:
+        raise ValueError(f"the library record of {material_id!r} gives no single {', '.join(missing)}: "
+                         "only a core with one compression modulus and one shear modulus is read")
+    cited = {role: _cite(role, prop, d, _DENSITY_UNITS if role == "density" else _MODULUS_UNITS)
+             for role, prop in found.items() if prop is not None}
+    source = d["source"]
+    citation = f"{source['title']} · {source['revision']} · {source['publisher']}" + (f" · {source['date']}" if source["date"] else "")
+    return LibraryCore(material_id=d["materialId"], name=d["name"], dataset_id=d["datasetId"], citation=citation, rights=source["rights"],
+                       modulus_Pa=cited["modulus"].value, shear_modulus_Pa=cited["shear_modulus"].value,
+                       shear_strength_Pa=cited["shear_strength"].value if "shear_strength" in cited else None,
+                       density_kg_m3=cited["density"].value, values=tuple(cited.values()))

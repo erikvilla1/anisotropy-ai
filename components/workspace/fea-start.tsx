@@ -18,13 +18,16 @@ import { goTo } from "./go-to";
 const couponReads = (text: string): boolean => applyMessage({ ...blankForm(), date: "" }, text).understood.length > 0;
 
 /** Sets the open FEA project up for a kind of work in place (ADR-0124): its name and history stay, the kind's own chat takes over with
- * the message that set it up at its head, and the message itself when it says more than the kind. */
+ * the message that set it up at its head, and the message itself when it says more than the kind. A wing is a project of its own kind
+ * (ADR-0122): it opens on its own page under FEA, this blank project left as it was (ADR-0118 amendment 1). */
 function useSetUp() {
   const { setAnalysis } = useProject();
+  const router = useRouter();
   return useCallback((kind: FeaKind["id"], said: string) => {
+    if (kind === "wing") { goTo("wing", {}, router.push); return; }
     putHandoff(tabStorage(), { setUp: said, prompt: saysMore(said, couponReads) ? said : "" });
     setAnalysis(kind);
-  }, [setAnalysis]);
+  }, [setAnalysis, router]);
 }
 
 /** The left column of an FEA project not set up yet (ADR-0124): the model tree with nothing in it, what it can be set up for, and the
@@ -78,8 +81,9 @@ type NewEntry = Entry extends infer E ? E extends { id: number } ? Omit<E, "id">
 const QUESTIONS = ["What is a mesh convergence study?", "Why do the failure criteria give different answers?"];
 
 /** The FEA assistant of a project not set up yet (ADR-0124): it answers a question about finite elements from our theory pages, and sets
- * the project up when asked ("I want to test some coupons"). Another section asked for opens at once, since nothing here is work yet;
- * a wing says it is not here yet. What is read is fixed words (`readIntent`); only a question goes to the API. */
+ * the project up when asked ("I want to test some coupons"); a wing asked for opens on its own page (ADR-0118 amendment 1). Another
+ * section asked for opens at once, since nothing here is work yet. What is read is fixed words (`readIntent`); only a question goes to
+ * the API. */
 export function FeaStartChat() {
   const { apiBaseUrl } = useProject();
   const router = useRouter();
@@ -95,17 +99,17 @@ export function FeaStartChat() {
   }, []);
 
   const offer = (target: WorkTarget, label = `Set up a ${TARGET_TITLES[target].toLowerCase()}`) => (
-    target === "coupon"
-      ? <button type="button" key={target} data-testid="fea-start-offer" data-target={target} onClick={() => setUp("coupon", TARGET_TITLES.coupon)}><Plus size={14} /> {label}</button>
+    target === "coupon" || target === "wing"
+      ? <button type="button" key={target} data-testid="fea-start-offer" data-target={target} onClick={() => setUp(target, TARGET_TITLES[target])}><Plus size={14} /> {label}</button>
       : target === "laminate" || target === "cad"
         ? <button type="button" key={target} data-testid="fea-start-offer" data-target={target} onClick={() => goTo(target, {}, router.push)}>Open {TARGET_TITLES[target]}</button>
         : null
   );
 
-  function notHereYet(target: "wing" | "fea") {
-    add({ role: "assistant", title: target === "wing" ? "Wing analysis is not here yet" : "You are in FEA", testId: "fea-start-kind-missing",
-      body: <><p>{target === "wing" ? "It is being built. A coupon test can be set up now." : "Say what to analyse, or ask a question about it."}</p>
-        <div className="chat-chips">{offer("coupon")}</div></> });
+  function notHereYet() {
+    add({ role: "assistant", title: "You are in FEA", testId: "fea-start-kind-missing",
+      body: <><p>Say what to analyse, or ask a question about it.</p>
+        <div className="chat-chips">{offer("coupon")}{offer("wing")}</div></> });
   }
 
   async function ask(text: string, named: WorkTarget | null) {
@@ -126,7 +130,7 @@ export function FeaStartChat() {
       return;
     }
     // what to set up next: the kind the question named in fixed words, or the one the model read in it; offered, never done on its own
-    const offered = (named && named !== "wing" && named !== "fea" ? named : null) ?? (answer.start === "coupon" ? "coupon" : null);
+    const offered = (named && named !== "fea" ? named : null) ?? (answer.start === "coupon" || answer.start === "wing" ? answer.start : null);
     const { prose, sources } = generalLines(answer); // in the product's own words (ADR-0091)
     add({ role: "assistant", testId: "fea-start-answer", body: (
       <div data-testid="fea-start-answer-body" data-covered={answer.covered} data-writer={answer.writer}>
@@ -147,7 +151,7 @@ export function FeaStartChat() {
     const routed = routeStart(text);
     switch (routed.route) {
       case "set-up": setUp(routed.kind, text); return;
-      case "not-here": notHereYet(routed.target); return;
+      case "not-here": notHereYet(); return;
       case "open": goTo(routed.target, { prompt: saysMore(text) ? text : "" }, router.push); return; // nothing here is work yet: it opens at once
       case "general": void ask(text, routed.named); return;
     }

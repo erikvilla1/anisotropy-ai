@@ -76,8 +76,8 @@ type Entry = { stage?: boolean } & (
   | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean; place: string | null }
   // another section asked for while the coupon holds work: one tap to go, the coupon kept (ADR-0124)
   | { id: number; role: "assistant"; kind: "switch"; target: Switchable; carried: string });
-/** The sections a coupon's chat opens on request (ADR-0124). */
-type Switchable = "laminate" | "cad";
+/** The sections a coupon's chat opens on request (ADR-0124), and the wing's page under FEA (ADR-0118 amendment 1). */
+type Switchable = "laminate" | "cad" | "wing";
 /** The project's own cards: a question, a check, a run and its results, a proposal. Their buttons act on the project. */
 const PROJECT_KINDS = new Set(["ask", "check", "job", "result", "proposal"]);
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -384,10 +384,6 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   /** Another section asked for (ADR-0124): opened at once with the message carried when the coupon holds nothing of the engineer's,
    * asked once when it does; a wing is not here yet. */
   function openSection(target: SectionAsked, text: string) {
-    if (target === "wing") {
-      add({ role: "assistant", kind: "text", title: "Wing analysis is not here yet", body: <p data-testid="chat-kind-missing">It is being built. This project stays a coupon test.</p> });
-      return;
-    }
     if (!onSwitch) return;
     const carried = saysMore(text) ? text : "";
     if (!hasWork(projectRef.current)) { onSwitch(target, carried); return; }

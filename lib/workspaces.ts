@@ -33,15 +33,22 @@ export function workspace(id: WorkspaceId): Workspace {
 }
 
 /** The kinds of work an FEA project is set up for (ADR-0124). "none" is a project not set up yet; a project kept before there were
- * kinds is a coupon. The wing joins here when its branch merges. */
+ * kinds is a coupon. */
 export type FeaAnalysis = "none" | "coupon";
 
-export type FeaKind = { id: Exclude<FeaAnalysis, "none">; title: string; detail: string };
+/** The wing's page (ADR-0118), a page of the FEA section since the wing joined it (ADR-0118 amendment 1). */
+export const WING_HREF = `${WORKSPACE_ROOT}/wing`;
+
+/** A kind of FEA work. A coupon is set up in the FEA project itself; a wing is a project of its own kind (ADR-0122) worked on its own
+ * page, `href`, under FEA (ADR-0118 amendment 1). */
+export type FeaKindId = Exclude<FeaAnalysis, "none"> | "wing";
+export type FeaKind = { id: FeaKindId; title: string; detail: string; href?: string };
 export const FEA_KINDS: readonly FeaKind[] = [
   { id: "coupon", title: "Coupon test", detail: "A test coupon in tension, compression, shear or bending, set up from its material and layup." },
+  { id: "wing", title: "Wing analysis", detail: "A composite wing over its flight envelope: every case's margins, stiffness and mass as you change it.", href: WING_HREF },
 ];
 
-export function feaKind(id: Exclude<FeaAnalysis, "none">): FeaKind {
+export function feaKind(id: FeaKindId): FeaKind {
   const found = FEA_KINDS.find((k) => k.id === id);
   if (!found) throw new Error(`no kind of FEA work ${id}`);
   return found;

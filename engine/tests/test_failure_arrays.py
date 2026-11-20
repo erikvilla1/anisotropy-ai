@@ -121,6 +121,17 @@ def test_nothing_held_is_the_scaled_form():
         assert np.array_equal(held_none[0], scaled[0]) and held_none[1] == scaled[1]
 
 
+@pytest.mark.parametrize("criterion", CRITERIA)
+def test_the_ratios_alone_are_the_same_ratios_without_the_modes(criterion):
+    """`with_modes=False` skips naming a mode for every row (a wing names only its weakest state) and changes no ratio."""
+    v = states()
+    s = held_states(len(v))
+    ratios, modes = combined_strength_ratios(criterion, MATERIAL, s, v, -0.5)
+    alone, none = combined_strength_ratios(criterion, MATERIAL, s, v, -0.5, with_modes=False)
+    assert none is None and np.array_equal(ratios, alone)
+    assert np.array_equal(scaled_strength_ratios(criterion, MATERIAL, v, -0.5, with_modes=False)[0], scaled_strength_ratios(criterion, MATERIAL, v, -0.5)[0])
+
+
 def test_the_combined_form_refuses_what_the_per_ply_functions_refuse():
     with pytest.raises(ValueError, match="same shape"):
         combined_strength_ratios("max_stress", MATERIAL, np.zeros((2, 3)), np.zeros((3, 3)), None)

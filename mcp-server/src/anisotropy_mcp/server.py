@@ -1,4 +1,4 @@
-"""The tools (ADR-0107). An MCP client starts this program and speaks to it over stdin and stdout; each tool asks the Anisotropy API on
+"""The tools (ADR-0107; the wing's, ADR-0128). An MCP client starts this program and speaks to it over stdin and stdout; each tool asks the Anisotropy API on
 this machine, so the engine and the fea package compute every number (ADR-0001) and a setup the API refuses is refused here in the same
 words (ADR-0003). The client's own model writes the words the engineer reads, and no guard of ours runs on them: what this server can do
 is hand it numbers with their units and their place, the theory section a reason rests on, and the rules below.
@@ -26,6 +26,8 @@ from .api import Api, ApiRefused
 
 REPO = Path(__file__).resolve().parents[3]
 FORM = REPO / "lib" / "coupon-form-definition.json"  # the form the page is built from, written by fea/tools/export_form_definition.py
+EXAMPLE_WING = REPO / "engine" / "examples" / "example-wing.toml"  # Anisotropy's example wing, the wing tools' `example`
+MAX_WING_FILE = 200_000  # characters, as the API takes a wing file's text
 RESULTS_KEPT = 8
 RUN_ONLY = ("solver", "document")  # setup items that concern the full run alone; the preview's solve goes ahead without them (ADR-0086)
 PREVIEW = ("A preview of the rows as they stand: no mesh convergence study, no check by a second solver and no report. The full run with "
@@ -46,7 +48,13 @@ Rules:
 8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. Its Tsai-Hill sum is not the failure index the results show (that index is 1/R); keep the two apart.
 9. For why, use explain_result and answer in one to three sentences only from its facts and theory sections. Name the section you rest on. If the sections do not hold the reason, say that they do not; never fill the gap from general knowledge without saying it is not from Anisotropy's pages.
 10. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
-11. A question that leaves out the ply or the quantity means every ply and the stresses along the fibres, across them and in shear; ask back only for what has no such default, once, with the choices named. For an element that is not in the model, say the range in one line and give the values at the element where first ply failure is read, saying so. For the working of a criterion the result does not have, say in one line which it has and show the working of the one that fails first."""
+11. A question that leaves out the ply or the quantity means every ply and the stresses along the fibres, across them and in shear; ask back only for what has no such default, once, with the choices named. For an element that is not in the model, say the range in one line and give the values at the element where first ply failure is read, saying so. For the working of a criterion the result does not have, say in one line which it has and show the working of the one that fails first.
+
+A wing: the wing tools read a wing file on this machine by its full path, or `example` for Anisotropy's example wing, and the API works it by hand in under a second.
+12. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). A margin is given as the wing page prints it, with its sign and three decimals (+0.059); write it so. Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
+13. Answer a wing question the way the wing page does: the answer first, in one sentence (the part, yes or no, or the value, with its basis), then at most three short lines of what it rests on. No table and nothing the engineer did not ask about unless they ask for more. Say parts and checks in words; never name a tool's fields.
+14. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
+15. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
 
 Quantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
 READS = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -158,6 +166,69 @@ def answer_of(summary: dict) -> dict:
         "gauge_section_read": summary.get("gauge_reading") if gauge else None,
         "applied": summary.get("applied"), "reaction": summary.get("reaction"), "max_displacement": summary.get("max_displacement"),
     }.items() if value is not None}
+
+
+WING = "The wing file (.toml) on this machine, by its full path, or example for Anisotropy's example wing"
+
+
+def wing_text(wing: str) -> str:
+    """A wing file's text, read from this machine: `example` is Anisotropy's own; any other is a .toml file by its path."""
+    path = EXAMPLE_WING if wing.strip().lower() == "example" else Path(wing.strip()).expanduser()
+    if path.suffix.lower() != ".toml":
+        raise ToolError("A wing is given as a wing file (.toml) on this machine, by its full path, or as example for Anisotropy's example wing.")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ToolError(f"No wing file could be read at {path}: give its full path on this machine.") from exc
+    if not text.strip() or len(text) > MAX_WING_FILE:
+        raise ToolError(f"{path} is {'empty' if not text.strip() else 'larger than a wing file'}.")
+    return text
+
+
+def margin(value: float | None) -> float | None:
+    """A margin as the wing page prints it: three decimals (ADR-0128)."""
+    return None if value is None else round(value, 3)
+
+
+def summary_shown(summary: dict | None) -> dict | None:
+    """A preview's summary with its margins as the wing page prints them; every other value as the engine gave it."""
+    if not summary:
+        return summary
+    governing = summary.get("governing")
+    return {**summary, "lowest": {name: margin(value) for name, value in (summary.get("lowest") or {}).items()},
+            "governing": governing and {**governing, "margin_ultimate": margin(governing.get("margin_ultimate"))}}
+
+
+def results_of(report: dict) -> dict:
+    """The wing's hand calculation as a client's model reads it: the verdict, what governs and where, each check's lowest margin with its
+    case, the largest tip deflection and twist, the design summary, the aeroelastic speeds and the cases waiting. Values are picked out of
+    the report, never derived."""
+    cases = report.get("cases") or []
+    lowest = {}
+    for case in cases:
+        for name, check in (case.get("checks") or {}).items():
+            ultimate = (check or {}).get("margin_ultimate")
+            if ultimate is not None and (name not in lowest or ultimate < lowest[name]["margin_ultimate"]):
+                lowest[name] = {"margin_ultimate": ultimate, "case": case["number"], "label": case["label"],
+                                **{key: check.get(key) for key in ("member", "station", "ply_angle", "mode")}, "margin_proof": check.get("margin_proof")}
+    for found in lowest.values():  # margins as the wing page prints them, once the lowest are found on the engine's own numbers
+        found["margin_ultimate"], found["margin_proof"] = margin(found["margin_ultimate"]), margin(found["margin_proof"])
+    governing = report.get("governing")
+    governing = governing and {**governing, "margin_ultimate": margin(governing.get("margin_ultimate"))}
+
+    def largest(key: str) -> dict | None:
+        top = max(cases, key=lambda c: abs(c.get(key) or 0.0), default=None)
+        return None if top is None else {"value": top.get(key), "case": top["number"], "label": top["label"]}
+
+    design = {key: value for key, value in (report.get("design") or {}).items() if key != "stretches"}
+    material = report.get("material") or {}
+    return {"wing": report.get("wing"), "units": report.get("units"), "passes": report.get("passes"), "cases_run": len(cases),
+            "strengths": material.get("strength_basis"), "governing": governing, "lowest_by_check": lowest,
+            "largest_tip_deflection": largest("tip_deflection"), "largest_tip_twist": largest("tip_twist"), "design": design,
+            "aeroelastic": report.get("aeroelastic"), "cases_waiting": report.get("not_run"),
+            "note": "The hand calculation: the box between the spars as a thin-walled beam. Margins are at ultimate load; a margin is the strength "
+                    "ratio over the factor of safety, less one. Mass is one side of the wing, the box alone (no ribs). The finite element check "
+                    "is started from the wing page."}
 
 
 def build(api: Api, form_path: Path = FORM) -> MCPServer:
@@ -293,6 +364,87 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
                 "how_to_answer": ("Answer from the facts and the theory sections alone, and name the section the reason rests on. Every number in the "
                                   "answer is one of the facts. " + ("" if sections else "No section of the theory pages shares a word with this question: "
                                   "say that Anisotropy's pages do not hold this reason, and answer from the facts alone."))})
+
+    def wing_answer(wing: str) -> dict:
+        return ask(api.post, "/v1/wings/analyze", {"toml": wing_text(wing)})
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def read_wing(wing: Annotated[str, Field(description=WING)]) -> str:
+        """The wing as the engine reads its file: its title, units, geometry, material and the strengths' basis, each part's half stack
+        (the outer half of a symmetric laminate; a sandwich's is one face) and its zones along the span, the design rule limits and the
+        flight envelope. Read it to say what the wing is before answering about it."""
+        found = wing_answer(wing)
+        return said({"wing": found.get("wing"), "note": "A half stack lists the plies from the outside in; the other half mirrors it. A zone is a stretch "
+                     "of the half span, start and end as fractions from the root, with its own half stack; outside its zones a part has its own."})
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def wing_results(wing: Annotated[str, Field(description=WING)]) -> str:
+        """The wing's hand calculation: whether it passes the flight cases run, what governs and where, each check's lowest margin at
+        ultimate load with its case and place, the largest tip deflection and twist, the mass and stiffness, the first bending frequency,
+        divergence and aileron reversal, and the cases that wait for inputs. Margins are on the strengths wing_strengths lists."""
+        report = wing_answer(wing)["report"]
+        return said(results_of(report))
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def wing_rules(wing: Annotated[str, Field(description=WING)],
+                   part: Annotated[Literal["skin", "spar", "cap", "rib"] | None, Field(description="skin, spar (the webs), cap (the spar caps) or rib; leave "
+                                                                                            "out for every part")] = None) -> str:
+        """The design rules judged on each layup of the wing and at each ply drop along the span: the 10 % rule, plies of one angle in a
+        row, balance, symmetry, plies ending at one place, the ply drop ratio and the outside ply over the drop, each met or not with the
+        wing's own sentence, and the limits the wing sets."""
+        report = wing_answer(wing)["report"]
+        rules = [rule for rule in report.get("rules", []) if part is None or rule.get("part") == part]
+        return said({"limits": report.get("rule_limits"), "rules": rules,
+                     "note": "A rule not met is a warning: no margin changes with it. The limits are the wing file's [design_rules], or the defaults "
+                             "(10 %, 4 in a row, 20 to 1, 2 per place); `span` is the stretch a layup holds over and `at` a ply drop's place, as "
+                             "fractions of the half span." + ("" if rules else " No rule of this part: the wing has no such part, or no ply drop.")})
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def wing_strengths(wing: Annotated[str, Field(description=WING)]) -> str:
+        """The ply strengths the wing's margins use: the material, the basis (B-basis from the material's public qualification report, or
+        test means, which are not design values), the dataset, the report, and each strength in the file's stress unit with its basis
+        (B-basis or B-estimate), its value in the report's unit and the report's page and link. Every part uses the one ply material."""
+        report = wing_answer(wing)["report"]
+        return said({"material": report.get("material"), "stress_unit": (report.get("units") or {}).get("stress"),
+                     "roles": {"F1t": "tension along the fibres", "F1c": "compression along the fibres", "F2t": "tension across the fibres",
+                               "F2c": "compression across the fibres", "F6": "in-plane shear"},
+                     "note": "A B-estimate is the report's basis number from data that do not meet every statistical requirement; it is used where the "
+                             "report recommends no value. Room temperature, dry: hot and wet strengths are not worked."})
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def search_wing_references(question: Annotated[str, Field(min_length=1, max_length=2000, description="The engineer's question, in their words")]) -> str:
+        """The sections of Anisotropy's pages a question's words find: the wing's theory and three reference pages written in our own
+        words, design rules for laminates, the test methods behind a strength and allowables, each section ending with its sources. For
+        why, how, a rule's purpose, a test method or a basis. A section explains; its numbers are not the wing's."""
+        sections = ask(api.post, "/v1/workspace/theory-sections", {"question": question, "about": "wing", "limit": 3}).get("sections", [])
+        return said({"question": question, "sections": [{"id": s["id"], "from": f"{s['document']}, {s['title']}", "text": s["text"]} for s in sections],
+                     "how_to_answer": ("Explain from these sections and name the one you rest on. A number about the wing, a rule's limit or a strength "
+                                       "comes from wing_results, wing_rules or wing_strengths, never from a section. " + ("" if sections else
+                                       "No section shares a word with this question: say that Anisotropy's pages do not hold it."))})
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def preview_wing_change(
+        wing: Annotated[str, Field(description=WING)],
+        action: Annotated[Literal["add_plies", "remove_plies"], Field(description="add_plies or remove_plies")],
+        part: Annotated[Literal["skin", "spar", "spar_caps"], Field(description="skin, spar (the webs) or spar_caps")],
+        angle: Annotated[float, Field(ge=-90, le=180, description="The plies' angle in degrees from the span, e.g. 0, 45, -45, 90")],
+        count: Annotated[int, Field(ge=2, le=40, description="Plies of the whole laminate, both halves: 2 is one each side of the middle (one on each face "
+                                                             "of a sandwich). Always even")],
+        start: Annotated[float, Field(ge=0, lt=1, description="Where the change starts, as a fraction of the half span from the root: 0 is the root")] = 0.0,
+        end: Annotated[float, Field(gt=0, le=1, description="Where it ends, as a fraction of the half span: 0.4 is 40 % span, 1 the tip")] = 1.0,
+        placement: Annotated[Literal["beside", "middle"], Field(description="beside: next to the plies of that angle nearest the outside (the default); "
+                                                                             "middle: at the middle of the laminate")] = "beside",
+    ) -> str:
+        """Preview a change of plies on the wing, never applied: the engine makes it on a copy of the wing file (splitting the part into
+        zones where it covers a stretch) and works the wing as it is and as changed. Returns the change in one sentence with the stacks it
+        gives, the summary before and after (the lowest margin and where, each check's lowest margin, mass, tip deflection, first bending
+        frequency, the strengths' basis), the design rules of the part changed, and the part's table as changed."""
+        change = {"action": action, "part": part, "angle": angle, "count": count, "start": start, "end": end, "placement": placement}
+        found = ask(api.post, "/v1/wings/changes", {"toml": wing_text(wing), "change": change})
+        return said({"words": found.get("words"), "before": summary_shown(found.get("before")), "after": summary_shown(found.get("after")),
+                     "units": found.get("units"), "rules": found.get("rules"), "table_as_changed": (found.get("wing") or {}).get(part),
+                     "applied": False, "note": "Nothing is applied. The engineer applies it with Apply on the wing page, or by changing the wing file "
+                                               "themselves. Margins are at ultimate load, on the strengths' basis each summary names."})
 
     @server.tool(annotations=READS, structured_output=False)
     def show_working(result_id: Annotated[str, Field(description="The result_id solve_coupon returned")],

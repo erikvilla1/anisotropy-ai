@@ -260,7 +260,7 @@ test("FEA answers a question before anything is set up, and is set up as a coupo
   await expect(answer).toContainText("A convergence study refines the mesh until the answer stops moving.");
   await expect(answer.getByTestId("fea-start-sources")).toHaveText("Reasons behind a result, Why the element size changes the numbers");
   await expect(answer.getByTestId("fea-start-offer")).toHaveCount(0); // it named no work to set up
-  expect(questions).toEqual([{ question: "What is a mesh convergence study?", kinds: ["coupon"] }]);
+  expect(questions).toEqual([{ question: "What is a mesh convergence study?", kinds: ["coupon", "wing"] }]);
   await expect(page.getByTestId("fea-start-rail")).toBeVisible(); // a question sets nothing up
 
   await message.fill("How do I test a coupon?"); // a question about a coupon: answered, and a coupon offered, not set up
@@ -268,9 +268,10 @@ test("FEA answers a question before anything is set up, and is set up as a coupo
   await expect(page.getByTestId("fea-start-answer-body").last().getByTestId("fea-start-offer")).toHaveAttribute("data-target", "coupon");
   await expect(page.getByTestId("fea-start-rail")).toBeVisible();
 
-  await message.fill("you know what I want to start a wing analysis");
+  await message.fill("I want to do FEA"); // the section it is in: said so, with what can be set up (a wing opens its page: wing.spec.ts)
   await message.press("Enter");
-  await expect(page.getByTestId("fea-start-kind-missing")).toContainText("Wing analysis is not here yet");
+  await expect(page.getByTestId("fea-start-kind-missing")).toContainText("You are in FEA");
+  await expect(page.getByTestId("fea-start-kind-missing").getByTestId("fea-start-offer")).toHaveCount(2);
 
   await page.getByTestId("project-name").fill("Coupons for the class");
   await message.fill("I want to test some coupons");

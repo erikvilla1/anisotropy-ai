@@ -20,7 +20,7 @@ from .assistant import _sentences, number_guard
 from .result_answers import MAX_ANSWER
 from .theory import Section
 
-# The kinds of FEA work the page may offer to set up, with the words the model reads them by (ADR-0124). The wing joins with its branch.
+# The kinds of FEA work the page may offer to set up, with the words the model reads them by (ADR-0124); the wing is offered since it joined FEA (ADR-0118 amendment 1).
 KIND_WORDS = {
     "coupon": "a test coupon (tension, compression, shear or bending; open-hole or unnotched), set up from its material and layup",
     "wing": "a wing: its skins, spars and ribs under flight loads",

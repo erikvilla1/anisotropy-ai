@@ -22,6 +22,8 @@ import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
 import { FEA_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
+import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
+import type { WingDescription, WingReport } from "../../lib/wing";
 
 export const FOLDER = "tests/assistant-questions";
 
@@ -31,10 +33,11 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start"] as const;
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps"] as const;
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
- * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124). */
-export const ALL_ROUTES = [...ROUTES, ...START_ROUTES] as const;
+ * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
+ * `lib/wing-chat.ts`, ADR-0128). */
+export const ALL_ROUTES = [...ROUTES, ...START_ROUTES, ...WING_ROUTES] as const;
 export type AnyRoute = (typeof ALL_ROUTES)[number];
 
 export type Kind = (typeof KINDS)[number];
@@ -66,6 +69,8 @@ export type Expected = {
   element?: string;
   /** A failure answer that confirms the engineer's own statement of it ("Yes"). */
   confirmed?: boolean;
+  /** The change of plies a wing's message is read into (ADR-0128), as the engine's form takes it. */
+  change?: Record<string, unknown>;
 };
 
 /** What a real model should read the question as (the real-model run, `scripts/assistant-live.py`). */
@@ -108,8 +113,8 @@ export type Question = {
      * real-model run; `says` (the tool's words) when absent. */
     said?: string[];
     /** What the client's conversation holds before the question, in the real-model run: the coupon stated ("setup"), or stated and solved
-     * ("solved", the default for a tool that reads a result). */
-    context?: "setup" | "solved" };
+     * ("solved", the default for a tool that reads a result), or the wing named ("wing": Anisotropy's example wing, ADR-0128). */
+    context?: "setup" | "solved" | "wing" };
   live?: Live;
   /** A known gap: the answer does not yet hold what is expected, by the skill's criterion. The bank fails when the gap closes, so the
    * mark comes off with the fix. A gap that opens "search:" is the theory search's (the API's test), "mcp:" the MCP server's; any other
@@ -140,6 +145,11 @@ export function banks(folder = FOLDER): Bank[] {
 
 const studio = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}`, "utf8"));
 const imported = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio-import/${name}`, "utf8"));
+/** The wing's page: the engine's answer to the example wing, and to the example with spar caps and a cap zone (ADR-0125). */
+const WING_ANSWERS: Record<string, { report: WingReport; wing: WingDescription }> = {
+  wing: JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf8")),
+  "wing-caps": JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf8")),
+};
 const RESULTS = { fields: studio("fields.json") as Fields, facts: !!studio("explanation.json").facts, explanation: studio("explanation.json") };
 const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported("explanation.json").facts, explanation: imported("explanation.json") };
 
@@ -258,9 +268,11 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     case "run": return said("said", "Running the analysis");
     case "check": return said("said", "Checking the setup");
     case "full-form": return said("said", "All inputs");
-    case "section": return routed.target === "wing" ? said("said", "Wing analysis is not here yet", ["It is being built. This project stays a coupon test."])
-      // a coupon that holds the engineer's work asks first, with one tap to go (switch-ask.tsx); a blank one opens the section at once
-      : hasWork(newProject(s.form)) ? said("ask", `Open ${TARGET_TITLES[routed.target]}?`, ["Your coupon is saved under Projects, as it is now. Your message goes with you."])
+    // a coupon that holds the engineer's work asks first, with one tap to go (switch-ask.tsx); a blank one opens the section at once. A
+    // wing opens its own page under FEA, and no message goes with it (ADR-0118 amendment 1)
+    case "section": return hasWork(newProject(s.form))
+      ? said("ask", `Open ${routed.target === "wing" ? "FEA for a wing analysis" : TARGET_TITLES[routed.target]}?`,
+        [`Your coupon is saved under Projects, as it is now.${routed.target === "wing" ? "" : " Your message goes with you."}`])
       : said("said", `Opens ${TARGET_TITLES[routed.target]}`);
     case "name": return said("rows", "Got it", [`Run by ${text}`], { rows: { filled_by: text } });
     case "general": return said("general", "Answered in words from our theory pages", []); // the API's reader writes it (ADR-0121 amendment 5)
@@ -279,9 +291,9 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
  * answered by the API's reader (`modelAnswer`), so here it only names who answers. */
 export function startAnswer(routed: StartRoute): Said {
   switch (routed.route) {
-    case "set-up": return said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });
-    case "not-here": return routed.target === "wing" ? said("said", "Wing analysis is not here yet", ["It is being built. A coupon test can be set up now."])
-      : said("said", "You are in FEA", ["Say what to analyse, or ask a question about it."]);
+    case "set-up": return routed.kind === "wing" ? said("said", "Opens Wing analysis", ["The wing's own page under FEA, a new wing from the example."], { kind: "wing" })
+      : said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });
+    case "not-here": return said("said", "You are in FEA", ["Say what to analyse, or ask a question about it."]);
     case "open": return said("said", `Opens ${TARGET_TITLES[routed.target]}`);
     case "general": return said("general", "Answered in words from our theory pages", [], { named: routed.named });
   }
@@ -289,10 +301,16 @@ export function startAnswer(routed: StartRoute): Said {
 
 /** A talk: the earlier messages, then the question, each routed and answered on the same scene; the chat's own memory of the last
  * question and the element last spoken of is kept as the component keeps it (`thread` and `about` in coupon-chat.tsx). */
-export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } {
+export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } {
   const s = scene(question, modelReads);
-  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } | null = null;
+  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } | null = null;
   for (const text of [...(question.after ?? []), question.ask]) {
+    if (question.page === "wing" || question.page === "wing-caps") { // the wing's chat reads by its own patterns; no model reads there yet (ADR-0128)
+      const routed = readWingAsk(text);
+      const shown = WING_ANSWERS[question.page];
+      last = { route: routed.route, said: wingAnswer(routed, shown.report, shown.wing), routed };
+      continue;
+    }
     if (question.page === "start") { // the FEA assistant of a blank project, which reads no setup (ADR-0124)
       const routed = routeStart(text);
       last = { route: routed.route, said: startAnswer(routed), routed };
@@ -330,6 +348,7 @@ function expected(e: Expected, answer: Said): string[] {
   if (e.confirmed !== undefined && data.confirmed !== e.confirmed) out.push(`confirmed ${String(data.confirmed)}, expected ${e.confirmed}`);
   if (e.plies !== undefined && JSON.stringify(data.plies) !== JSON.stringify(e.plies)) out.push(`plies ${JSON.stringify(data.plies)}, expected ${JSON.stringify(e.plies)}`);
   if (e.columns !== undefined && JSON.stringify(data.columns) !== JSON.stringify(e.columns)) out.push(`quantities ${JSON.stringify(data.columns)}, expected ${JSON.stringify(e.columns)}`);
+  if (e.change !== undefined && JSON.stringify(data.change) !== JSON.stringify(e.change)) out.push(`change ${JSON.stringify(data.change)}, expected ${JSON.stringify(e.change)}`);
   if (e.rows !== undefined) {
     const rows = (data.rows ?? {}) as Record<string, string>;
     for (const [key, value] of Object.entries(e.rows)) if (rows[key] !== value) out.push(`row ${key} = ${rows[key] ?? "unset"}, expected ${value}`);
@@ -342,7 +361,7 @@ function rules(question: Question, answer: Said): string[] {
   const out: string[] = [];
   const text = [answer.heading, ...answer.lines].join("\n");
   // a question is never a row of the setup: "what is ASTM D3039?" or "how did you get 16740 N?" changes nothing (criterion 1, ADR-0100)
-  const changes = answer.kind === "rows" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0);
+  const changes = answer.kind === "rows" || answer.kind === "preview" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0);
   if (changes && question.kind !== "change" && question.kind !== "command") out.push(`a question changed the setup: ${answer.lines.join(", ")}`);
   // every answer, whatever was asked (criterion 8 and ADR-0091): short, and in the product's own words
   const banned = bannedIn(text);

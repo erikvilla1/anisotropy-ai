@@ -225,6 +225,11 @@ def input_key(job_id: str, filename: str) -> str:
     return f"{JOBS}/{job_id}/input/{filename}"
 
 
+def job_output_key(job_id: str, filename: str) -> str:
+    """A file a job made that belongs to no coupon (a wing's check, ADR-0119): beside its input, under the job's own key."""
+    return f"{JOBS}/{job_id}/output/{filename}"
+
+
 def upload_prefix(upload_id: str) -> str:
     """Everything kept for one upload (ADR-0094 part 6): a prefix of its own, outside every coupon's."""
     return f"{UPLOADS}/{upload_id}/"

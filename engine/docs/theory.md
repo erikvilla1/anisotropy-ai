@@ -720,6 +720,355 @@ A series of $`n`$ specimens is summarised by its mean, its sample standard devia
 
 The checks of the record against the standard's clauses (gauge length, number of specimens, resin strain, speed) are the fea package's profile `standards/astm_d4018.py`; the engine only computes.
 
+## 12. Sandwich panel (`sandwich.py`)
+
+Two thin laminated faces on a core that carries no in-plane load (Zenkert, *An Introduction to Sandwich Construction*, 1995, Chapter 3). The core's in-plane stiffness is taken as zero, so it adds distance between the faces and nothing else. The stiffnesses are the sums of Section 3 over the face plies only, with $`z`$ measured from the mid-plane of the whole panel, computed by `sandwich_abd`:
+
+```math
+A_{ij} = \sum_{k \in \text{faces}} \bar{Q}_{ij}^{k}\,(z_k - z_{k-1}), \qquad
+B_{ij} = \frac{1}{2}\sum_{k \in \text{faces}} \bar{Q}_{ij}^{k}\,(z_k^2 - z_{k-1}^2), \qquad
+D_{ij} = \frac{1}{3}\sum_{k \in \text{faces}} \bar{Q}_{ij}^{k}\,(z_k^3 - z_{k-1}^3)
+```
+
+For two faces that mirror each other, each of membrane stiffness $`\mathbf{A}_f`$ and with its mid-plane at a distance $`d`$ from the panel's, $`\mathbf{A} = 2\mathbf{A}_f`$, $`\mathbf{B} = 0`$ and $`\mathbf{D} \approx 2 d^2 \mathbf{A}_f`$: the core multiplies the bending stiffness and leaves the membrane stiffness as it was. With a core of zero thickness the result is the laminate of the two faces.
+
+<!-- code: sandwich_abd -->
+
+Not covered: transverse shear deformation of the core, which lowers a panel's buckling load and adds to its deflection; face wrinkling; crushing and shear failure of the core.
+
+## 13. Wing (`wing/`)
+
+One side of a straight wing of constant chord with two spars, worked as a beam (ADR-0115). Axes: $`y`$ along the span from the root, $`x`$ along the chord from the leading edge, $`z`$ up. A layup's 0° direction is the span. Layups are symmetric, given by their outer half; the skin may have a core between its halves (Section 12). Sources for the beam theory: Megson, *Aircraft Structures for Engineering Students*, 4th ed. (2007), Chapters 16 to 18; Bruhn, *Analysis and Design of Flight Vehicle Structures* (1973), Chapter A15.
+
+### Airfoil
+
+The height of the upper and lower surface at a chord position, as fractions of the chord, is computed by `Airfoil.surface_heights`: by straight lines between the points of an outline the engineer gives, or from the NACA four-digit formula (Jacobs, Ward and Pinkerton, NACA Report 460, 1933). For digits $`m\,p\,tt`$, with $`m`$ in hundredths, $`p`$ in tenths and the thickness $`t`$ in hundredths of the chord:
+
+```math
+y_t = 5t\left(0.2969\sqrt{x} - 0.1260x - 0.3516x^2 + 0.2843x^3 - 0.1015x^4\right)
+```
+
+```math
+y_c = \begin{cases} \dfrac{m}{p^2}\left(2px - x^2\right) & x < p \\[2mm] \dfrac{m}{(1-p)^2}\left(1 - 2p + 2px - x^2\right) & x \ge p \end{cases}
+\qquad
+x_{u,l} = x \mp y_t\sin\theta, \quad z_{u,l} = y_c \pm y_t\cos\theta, \quad \tan\theta = \frac{dy_c}{dx}
+```
+
+The thickness is laid off at right angles to the camber line, so the surface point above a chord position belongs to a camber point slightly beside it; that point is found by repeating $`x_p = x \pm y_t(x_p)\sin\theta(x_p)`$.
+
+<!-- code: Airfoil.surface_heights -->
+
+### Air density and dynamic pressure
+
+The density ratio $`\sigma = \rho/\rho_0`$ of the International Standard Atmosphere up to 11 km (ISO 2533:1975) is computed by `density_ratio`, with $`T_0 = 288.15`$ K, $`p_0 = 101\,325`$ Pa, a lapse rate $`\lambda = 6.5`$ K/km, $`R = 287.05287`$ J/(kg K), $`g_0 = 9.80665`$ m/s² and $`\rho_0 = p_0/(RT_0) = 1.2250`$ kg/m³:
+
+```math
+\sigma(h) = \left(1 - \frac{\lambda h}{T_0}\right)^{\frac{g_0}{R\lambda} - 1}
+```
+
+<!-- code: density_ratio -->
+
+The dynamic pressure is computed by `dynamic_pressure`. An equivalent airspeed is the speed that gives the same dynamic pressure at sea-level density, so it loads the wing alike at every altitude; a true airspeed does not:
+
+```math
+q = \tfrac{1}{2}\rho_0 V_e^2 = \tfrac{1}{2}\rho_0\,\sigma(h)\,V^2
+```
+
+<!-- code: dynamic_pressure -->
+
+### Load cases
+
+The set of cases, each at every altitude of the envelope, is computed by `flight_cases` (14 CFR Part 23 as it stood before Amendment 23-64: 23.333, 23.337, 23.341, 23.349). With $`n_p`$ and $`n_n`$ the positive and negative limit load factors:
+
+| Cases | Condition | Speed | Load factor |
+| --- | --- | --- | --- |
+| 1 to 5 | Level flight | stall with flaps, stall without, cruise, dive, flutter | 1 |
+| 6, 7 | Positive maneuver, high and low angle of attack | positive maneuver speed, dive | $`n_p`$ |
+| 8, 9 | Negative maneuver, high and low angle of attack | negative maneuver speed, dive | $`n_n`$ |
+| 10 to 13 | Gust up and down | cruise, dive | stated, or $`1 \pm \Delta n`$ below |
+| 14, 15 | Roll, aileron down and up | cruise | 1 |
+| 16, 17 | Roll in a pull-up, aileron down and up | positive maneuver speed | a stated fraction of $`n_p`$ |
+
+A case whose speed, gust entry or aileron the envelope does not state is not run and is listed with what it needs; nothing is assumed in its place (ADR-0003).
+
+<!-- code: flight_cases -->
+
+The change of load factor in a gust, when the gust load factors are not stated, is computed by `gust_load_factor_increment` from the derived gust speed $`U_{de}`$, the equivalent airspeed $`V_e`$, the lift curve slope $`a`$ per radian, the wing loading $`W/S`$ and the mean chord $`\bar{c}`$ (14 CFR 23.341(c)):
+
+```math
+\Delta n = \frac{K_g\,\rho_0\,U_{de}\,V_e\,a}{2\,(W/S)}, \qquad K_g = \frac{0.88\,\mu_g}{5.3 + \mu_g}, \qquad \mu_g = \frac{2\,(W/S)}{\rho\,\bar{c}\,a\,g}
+```
+
+The regulation prints the first as $`K_g U_{de} V a / (498\,(W/S))`$ with $`V`$ in knots, $`U_{de}`$ in ft/s and $`W/S`$ in lb/ft²; 498 is $`2/\rho_0`$ in those units, rounded.
+
+<!-- code: gust_load_factor_increment -->
+
+### Loads along the span
+
+Running lift, shear, bending moment and torque at the stations of every case are computed by `span_loads`. One side of the wing carries $`P = nW/2`$ over its half span $`L`$. Schrenk's approximation (NACA TM 948, 1940) takes the mean of a load in proportion to the chord, uniform here, and an elliptical load of the same total, with $`\eta = y/L`$:
+
+```math
+w(y) = \frac{1}{2}\left[\frac{4P}{\pi L}\sqrt{1 - \eta^2} + \frac{P}{L}\right]
+```
+
+The shear and the bending moment are its exact integrals from the station to the tip:
+
+```math
+V(y) = \frac{1}{2}\left[\frac{2P}{\pi}\left(\frac{\pi}{2} - \arcsin\eta - \eta\sqrt{1-\eta^2}\right) + P\,(1-\eta)\right]
+```
+
+```math
+M(y) = \frac{1}{2}\left[\frac{2PL}{\pi}\left(\eta\arcsin\eta - \frac{\pi}{2}\eta + \sqrt{1-\eta^2} - \frac{(1-\eta^2)^{3/2}}{3}\right) + \frac{PL}{2}(1-\eta)^2\right]
+```
+
+At the root $`V = P`$ and $`M = PL\,(1/4 + 2/(3\pi))`$: the lift of one side acts at the mean of $`L/2`$ and $`4L/(3\pi)`$. An aileron between $`y_1`$ and $`y_2`$ adds $`\Delta w = q\,c\,\Delta c_l`$ over its span, with $`\hat{y}`$ the station moved into $`[y_1, y_2]`$:
+
+```math
+\Delta V = \Delta w\,(y_2 - \hat{y}), \qquad \Delta M = \frac{\Delta w}{2}\left[(y_2 - y)^2 - (\hat{y} - y)^2\right] \ \ (y < y_2)
+```
+
+The torque about the shear center, nose up positive, has the lift at the aerodynamic center $`x_{ac}`$ acting ahead of the shear center $`x_{sc}`$, the airfoil's own moment on every unit of span, and the aileron's change of it over the aileron's span:
+
+```math
+T(y) = (x_{sc} - x_{ac})\,V(y) + q\,c^2 c_m\,(L - y) + q\,c^2\,\Delta c_m\,(y_2 - \hat{y})
+```
+
+Roll acceleration, the change of angle of attack in a roll and the wing's elastic twist are not modeled, and the wing's own weight is not subtracted.
+
+<!-- code: span_loads -->
+
+### Section
+
+A symmetric layup under in-plane load strains alike through its thickness, so each ply angle has one stress state. A wall's own spanwise curvature $`k_x`$, its other moments free, adds a strain that grows through the thickness: with $`\mathbf{d} = \mathbf{D}^{-1}`$ (the core between the halves, Section 12), a point at $`\zeta`$ from the wall's mid-surface strains by $`\zeta\,\mathbf{d}_{\cdot 1} k_x / d_{11}`$, largest at the outer face of each angle's outermost ply, $`\zeta_\theta`$, on either side. The membrane moduli of a layup of plies of thickness $`t`$ (Section 6, with $`\mathbf{a} = \mathbf{A}^{-1}`$) and the stress in each ply angle are computed by `member_laminate`:
+
+```math
+E_x = \frac{1}{t\,a_{11}}, \qquad G_{xy} = \frac{1}{t\,a_{66}}, \qquad
+\boldsymbol{\sigma}_{12}^{\theta} = \mathbf{T}_\sigma(\theta)\,\bar{\mathbf{Q}}(\theta)\left(\mathbf{a}\begin{bmatrix}N_x & 0 & N_{xy}\end{bmatrix}^T \pm \zeta_\theta\,\frac{\mathbf{d}_{\cdot 1}}{d_{11}}\,k_x\right)
+```
+
+<!-- code: member_laminate -->
+
+The box is the part of the section between the spars, drawn as the shell model draws it (ADR-0116): each skin is the airfoil's surface moved inward along its outward normal $`\mathbf{n}`$ by half the skin's whole thickness $`h`$, plies and core, and each web is a straight wall at its chord position from the lower skin's mid-surface to the upper's. The skins' mid-surface heights are computed by `mid_surface_heights`:
+
+```math
+\begin{bmatrix}x_m \\ z_m\end{bmatrix} = \begin{bmatrix}x \\ z\end{bmatrix} - \frac{h}{2}\,\mathbf{n}
+```
+
+<!-- code: mid_surface_heights -->
+
+The walls are cut into straight pieces, 32 on each skin and 8 on each web, and worked as one closed thin-walled cell (Megson, *Aircraft Structures for Engineering Students*, 4th ed., 2007, Chapters 16 to 18); its properties are computed by `box_section`. Each wall carries load in proportion to its stiffness per unit length, $`E_x t`$ and $`G_{xy} t`$ of its plies. The centroid and the second moments are taken round the cell, $`x`$ along the chord and $`z`$ up, from the modulus-weighted centroid:
+
+```math
+\bar{x} = \frac{\oint E t\,x\,ds}{\oint E t\,ds}, \quad \bar{z} = \frac{\oint E t\,z\,ds}{\oint E t\,ds}, \qquad
+EI_{zz} = \oint E t\,(z - \bar{z})^2 ds, \quad EI_{xx} = \oint E t\,(x - \bar{x})^2 ds, \quad EI_{xz} = \oint E t\,(x - \bar{x})(z - \bar{z})\,ds
+```
+
+The lift's moment $`M`$ acts with no chordwise moment, so a cambered box bends about an inclined axis. With $`r = EI_{xz}/EI_{xx}`$, its curvature and the strain of a point are:
+
+```math
+\kappa = \frac{M}{EI}, \quad EI = EI_{zz} - \frac{EI_{xz}^2}{EI_{xx}}, \qquad \varepsilon = -\kappa\left[(z - \bar{z}) - r\,(x - \bar{x})\right], \qquad N_x = E_x t\,\varepsilon, \quad k_x = -\kappa\,(n_z - r\,n_x)
+```
+
+The walls' axis $`s`$ runs round the cell forward along the upper skin, down the front web, aft along the lower skin and up the rear web; it is the second axis of each wall's laminate, whose first is the span and whose third is the outward normal. Spanwise equilibrium of a wall, $`\partial N_x/\partial y + \partial q/\partial s = 0`$ with $`dM/dy = -V`$, gives the shear flow of a vertical shear $`V`$ in the cell cut where the upper skin meets the rear web, and the constant flow $`q_0`$ that closes the cell with no twist, so that the shear acts at the shear center $`x_{sc}`$:
+
+```math
+q_b(s) = -\frac{V}{EI}\int_0^s E t\left[(z - \bar{z}) - r\,(x - \bar{x})\right]ds, \qquad q = q_b + q_0, \quad q_0 = -\frac{\oint q_b\,ds/(G t)}{\oint ds/(G t)}, \qquad V x_{sc} = -\oint q\,(z\,e_x - x\,e_z)\,ds
+```
+
+with $`\mathbf{e}`$ the direction of $`s`$. The flow is quadratic along a straight piece and is integrated exactly by Simpson's rule. Part of the shear is carried by the skins where they slope; each web's share is the vertical force of its own flow. A torque $`T`$ about the shear center, nose up, adds a constant flow round the cell of enclosed area $`A_c`$ (inside the mid-surfaces) and twists it by $`T/GJ`$ (Bredt-Batho):
+
+```math
+q_T = -\frac{T}{2A_c}, \qquad GJ = \frac{4A_c^2}{\oint \dfrac{ds}{G\,t}}
+```
+
+The walls' own bending about their mid-surface is left out of $`EI`$: for a sandwich skin it is about $`(c/2)^2/z^2`$ of the skin's part, $`c`$ the core and $`z`$ the skin's height, 2 % on the example wing, and leaving it out raises the strains by as much. Mass is that of the walls of one side, their lengths round the cell times the plies' and the core's mass per area; the skin ahead of the front spar and behind the rear spar is in neither the stiffness nor the mass, but for the outer halves of the spar caps of Section 15. The first bending frequency is that of a uniform cantilever of mass per length $`m'`$ (Blevins, *Formulas for Natural Frequency and Mode Shape*, 1979, Table 8-1), with $`\beta_1 = 1.8751`$ the first root of $`1 + \cos\beta\cosh\beta = 0`$:
+
+```math
+f_1 = \frac{\beta_1^2}{2\pi}\sqrt{\frac{EI}{m' L^4}}
+```
+
+<!-- code: box_section -->
+
+Each skin buckles as a flat, simply supported plate as wide as its length $`b`$ round the curve between the spars, computed by `skin_buckling_load` and `long_plate_buckling_load`: without ribs as a long plate, the lowest value of the closed form of Section 8 over the length of a half-wave (Whitney Eq. 5.80); with ribs, by the closed form of Section 8 with the rib spacing as the panel's length. $`D_{16}`$ and $`D_{26}`$ are dropped, which overstates the load of a skin with angle plies away from its mid-plane; the skin's curve, which raises the load, and the shear in the skin, which lowers it, are left out:
+
+```math
+N_{cr} = \frac{2\pi^2}{b^2}\left[\sqrt{D_{11}D_{22}} + D_{12} + 2D_{66}\right]
+```
+
+<!-- code: skin_buckling_load, long_plate_buckling_load -->
+
+The load set against it is the skin's mean compression across the chord. For an isotropic plate whose compression falls linearly across its width to $`\psi`$ times its largest, the buckling coefficient of the largest is $`k_\sigma = 8.2/(1.05 + \psi)`$ (EN 1993-1-5, Table 4.1), so the mean compression at buckling, $`k_\sigma (1 + \psi)/2`$, stays between 3.9 and 4.0 for $`\psi`$ from 0 to 1: the mean of a varying compression buckles a plate as a uniform compression of the same size does, within 2.5 %.
+
+### Checks of every case
+
+The checks of every case at every station are computed by `analyze_wing`, on arrays over cases and stations; a case whose loads repeat another's is checked once. At every point of every wall, the corners and 31 points between them on each skin and 7 on each web, a wall carries the $`N_x`$ and $`k_x`$ of the moment, and the shear flow $`q(s)`$ of the shear and $`q_T`$ of the torque, added with their signs:
+
+```math
+N_{xy} = q(s) + q_T
+```
+
+Every ply angle is checked at the outer face of its outermost ply on both sides of the wall. The strength ratio $`R`$ of the weakest follows Section 5 by the criterion the envelope names. A skin's buckling ratio is its $`N_{cr}`$ over its mean compression; each web's buckling ratio is its bay's buckling shear flow over the size of the web's mean shear flow. Deflection and twist are integrated along the span by the trapezoid rule:
+
+```math
+\delta(y) = \int_0^y\!\!\int_0^{s} \kappa\,dr\,ds, \qquad \phi(y) = \int_0^y \frac{T}{GJ}\,ds
+```
+
+A margin is the ratio over a factor on the limit load, less one, at the ultimate factor and, when the envelope gives one, at the proof factor:
+
+```math
+MS = \frac{R}{FS} - 1
+```
+
+<!-- code: analyze_wing -->
+
+A web bay between two ribs (the whole span without ribs) buckles in shear as a plate simply supported on its four edges, the web's height $`h`$ wide and the rib spacing long, but never taken longer than $`5h`$, beyond which an isotropic plate's load is within 3 % of the infinitely long one's. Its buckling shear flow is the lower of the two directions of the shear, computed by `web_shear_buckling_load`:
+
+```math
+q_{cr} = \min_{\pm}\,\lambda\!\left(\mathbf{D}_{web},\ \min(s, 5h),\ h,\ (0, 0, \pm 1)\right)
+```
+
+with $`\lambda`$ the Ritz double sine series of Section 7 (`ritz_buckling`, 14 terms a direction). A web's $`+45`$ and $`-45`$ plies are not alike in bending ($`D_{16}, D_{26} \ne 0`$), so one direction of the shear buckles the bay sooner, by about two on a $`[45/-45/0]_s`$ web, and the beam does not follow the shear's sign. Two things move a real web's buckle from this one, in opposite directions: the skins hold its top and bottom edges harder than simple supports, which raises it, and its own bending stress, spanwise compression along one edge in a lift case, is left out, which lowers it. On the example wing's former $`[45/-45/0]_s`$ web this check put the root bay's buckle at 1.09 times limit load and a large-deflection solution of the finite element model at about 1.6 (ADR-0115 amendment 2).
+
+<!-- code: web_shear_buckling_load -->
+
+Checks: `engine/validation/wing_cases/constructed-straight-sandwich-wing.toml`, a wing with a straight-sided airfoil worked by hand in `engine/validation/closed_forms.py` without the engine, its box one closed cell of four flat walls whose shear flow is integrated wall by wall in closed form, every face of every ply checked along each wall; the section's own sums in `engine/tests/test_wing.py` (the shear flow carries the shear at the shear center and the torque round the box, the bending load sums to the moment and to no force, a rectangular box shares the shear equally between its webs); the ply check against `first_ply_failure` of the whole laminate and, for a sandwich, ply by ply with the core between the faces; the gust formula against the regulation's printed form; the web's buckling shear flow against Timoshenko and Gere's $`k_s = 5.35 + 4(b/a)^2`$ for an isotropic plate within 2 %, and on one $`[45/-45/0]_s`$ web against CalculiX's buckling of the same flat plate within 1.2 % in both directions (ADR-0117). The finite element model of the same description is compared case by case in ADR-0117 and ADR-0115 amendment 3: on the example wing the section's bending and torsion stiffness are within 2 % and 4 % of the shell model's, its shear center within 0.3 mm, and the lowest skin margin outboard of the root +0.154 against +0.146.
+
+### Divergence and aileron reversal
+
+The wing's static aeroelastic checks treat it as a uniform cantilever in torsion with strip-theory lift: lift acts at the aerodynamic center, a distance $`e`$ ahead of the shear center, with the section's lift slope $`a`$. The elastic twist $`\theta(y)`$, nose up, obeys
+
+```math
+GJ\,\theta'' + q\,c\,e\,a\,\theta = -m(y), \qquad \theta(0) = 0, \quad \theta'(L) = 0
+```
+
+where $`m`$ is the moment per unit span of every other load about the shear center. The dynamic pressure at which the wing diverges, the lowest at which the equation has a solution with no load, $`\lambda L = \pi/2`$ with $`\lambda^2 = q c e a / GJ`$, is computed by `divergence_dynamic_pressure`:
+
+```math
+q_D = \left(\frac{\pi}{2L}\right)^2 \frac{GJ}{c\,e\,a}
+```
+
+A wing whose aerodynamic center is not ahead of its shear center ($`e \le 0`$) does not diverge. An aileron over $`[y_1, y_2]`$ adds $`q c\,\Delta c_l`$ of lift per unit span at the aerodynamic center and $`q c^2 \Delta c_m`$ of moment about it. The lift it adds to the flexible wing is computed by `aileron_lift`:
+
+```math
+\frac{\Delta L}{q c} = \Delta c_l\,(y_2 - y_1) - \frac{a\,q\,c\,(e\,\Delta c_l + c\,\Delta c_m)}{GJ}\int_{y_1}^{y_2}\psi\,dy
+```
+
+with $`\psi'' + \lambda^2\psi = 1`$, $`\psi(0) = 0`$, $`\psi'(L) = 0`$ the twist under a unit moment per unit span; by reciprocity of the torsion equation, the lift lost to the twist of a moment over $`[y_1, y_2]`$ is its integral there, computed by `twist_influence`:
+
+```math
+\int_{y_1}^{y_2}\psi\,dy = \frac{1}{\lambda^2}\left[y_2 - y_1 + g(y_2) - g(y_1)\right], \qquad g(y) = \frac{\sin\lambda(L - y)}{\lambda\cos\lambda L}
+```
+
+with $`\sin`$ and $`\cos`$ becoming $`\sinh`$ and $`\cosh`$ when $`\lambda^2 < 0`$, and a two-term series in $`\lambda^2`$ when $`|\lambda^2| L^2 < 10^{-6}`$. The reversal dynamic pressure, the lowest at which the aileron adds no lift, is computed by `reversal_dynamic_pressure`; it depends only on the ratio $`\Delta c_l / \Delta c_m`$, and does not occur below divergence when $`e\,\Delta c_l + c\,\Delta c_m`$ has the sign of $`\Delta c_l`$. Both are reported as equivalent airspeeds, $`V = \sqrt{2q/\rho_0}`$, beside the envelope's dive speed. Bisplinghoff, Ashley and Halfman, Aeroelasticity (1955), chapter 8; Hodges and Pierce, Introduction to Structural Dynamics and Aeroelasticity, 2nd ed. (2011), chapter 5. Not modeled: sweep, taper, the lift's drop toward the tip, and compressibility; flutter follows.
+
+<!-- code: divergence_dynamic_pressure -->
+<!-- code: aileron_lift -->
+<!-- code: twist_influence -->
+<!-- code: reversal_dynamic_pressure -->
+
+Checks: `engine/tests/test_wing_aeroelastic.py` solves the same torsion equation by finite differences, written without these formulas: its lowest eigenvalue against $`q_D`$, its twist integral against `twist_influence` for $`\lambda^2`$ of both signs and near zero, and its aileron lift against `aileron_lift`, changing sign at the reversal dynamic pressure.
+
+### Flutter estimate
+
+Flutter is estimated on the typical section: one strip of the wing that plunges ($`h`$, down positive) and pitches ($`\theta`$, nose up) about its elastic axis, $`a\,b`$ aft of mid-chord with $`b`$ the semichord. Its mass per unit span $`m`$ has its center $`x_\theta b`$ aft of the axis and radius of gyration $`r b`$ about it; its springs are set by the wing's first bending and first torsion frequencies $`\omega_h`$ and $`\omega_\theta`$:
+
+```math
+m\ddot h + m b x_\theta \ddot\theta + k_h h = -L, \qquad m b x_\theta \ddot h + m b^2 r^2 \ddot\theta + k_\theta \theta = M
+```
+
+For harmonic motion at the reduced frequency $`k = \omega b / U`$, Theodorsen's lift and moment about the elastic axis, divided by $`\pi\rho b^3\omega^2`$ and $`\pi\rho b^4\omega^2`$ per unit $`h/b`$ and per unit $`\theta`$, are computed by `airload`:
+
+```math
+\begin{aligned}
+\hat L_h &= -1 + \tfrac{2iC}{k}, & \hat L_\theta &= a + \tfrac{i}{k} + \tfrac{2C}{k^2} + \tfrac{iC(1 - 2a)}{k},\\
+\hat M_h &= -a + \tfrac{2i(a + \frac12)C}{k}, & \hat M_\theta &= \tfrac18 + a^2 - \tfrac{i(\frac12 - a)}{k} + \tfrac{2(a + \frac12)C}{k^2} + \tfrac{i(a + \frac12)(1 - 2a)C}{k}
+\end{aligned}
+```
+
+with Theodorsen's function $`C(k)`$ by R. T. Jones's approximation, computed by `theodorsen`, within 0.02 of the exact function:
+
+```math
+C(k) \approx 1 - \frac{0.165}{1 - 0.0455\,i/k} - \frac{0.335}{1 - 0.3\,i/k}
+```
+
+The k method gives both springs a structural damping, $`k(1 + ig)`$, and for each reduced frequency solves for $`Z = (\omega_\theta/\omega)^2(1 + ig)`$, with $`\mu = m/(\pi\rho b^2)`$ and $`\sigma = \omega_h/\omega_\theta`$:
+
+```math
+\begin{bmatrix} 1 - \hat L_h/\mu & x_\theta - \hat L_\theta/\mu \\ x_\theta + \hat M_h/\mu & r^2 + \hat M_\theta/\mu \end{bmatrix}
+\begin{bmatrix} h/b \\ \theta \end{bmatrix} = Z \begin{bmatrix} \sigma^2 & 0 \\ 0 & r^2 \end{bmatrix} \begin{bmatrix} h/b \\ \theta \end{bmatrix}
+```
+
+Each root gives $`\omega = \omega_\theta/\sqrt{\operatorname{Re} Z}`$, the speed $`U = \omega b/k`$ and the damping $`g = \operatorname{Im} Z/\operatorname{Re} Z`$ the strip would need to hold that motion; the sweep runs $`k`$ from 4 down to 0.01, follows each root from one $`k`$ to the next, and the flutter speed, computed by `flutter_speed`, is the lowest at which a root's $`g`$ rises through zero. It is a true airspeed at the density given; the finite element model reads it at each altitude of the envelope as the envelope's kind of airspeed. Theodorsen, NACA Report 496 (1935); R. T. Jones, NACA Report 681 (1940); Bisplinghoff, Ashley and Halfman (1955), chapters 5 and 9; Hodges and Pierce (2011), chapter 5. An estimate only: two-dimensional air on one strip, the first bending and torsion modes alone, no compressibility, sweep or control surface, and only the mass the description holds.
+
+<!-- code: theodorsen, airload, flutter_speed -->
+
+Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against the exact function at three reduced frequencies; the strip $`a = -1/5`$, $`x_\theta = 1/10`$, $`r^2 = 6/25`$, $`\sigma = 2/5`$, $`\mu = 20`$ flutters at $`U/(b\omega_\theta) = 2.170`$; mass moved forward, a heavier strip and thinner air each raise the speed. `fea/tests/test_wing_model.py` solves the same strip by the p-k method with the exact $`C(k)`$ from the Hankel functions, written without this module: 2.184, within 1 %.
+
+## 14. Design rules of a stack (`layup_rules.py`)
+
+Four rules a designer checks on a stack before any load (ADR-0123). They are rules of practice, not physics: a rule not met is a warning, nothing else in the engine reads the result, and no number of an analysis changes with it. Plies are counted, not weighed by thickness, as the rules are stated, and a fiber at $`\theta`$ is the fiber at $`\theta + 180°`$, so $`135°`$ counts as $`-45°`$ and $`-90°`$ as $`90°`$. The limits are the designer's: the least share $`s_{\min}`$ (default 10 %, at most 25 %, since four directions cannot each hold more) and the most plies of one angle in a row $`r_{\max}`$ (default 4).
+
+The 10 % rule asks that the laminate be carried by its fibers in every direction (MIL-HDBK-17-3F, Volume 3). With $`n`$ plies and $`n_d`$ of them in direction $`d`$, it is met when
+
+```math
+\frac{n_d}{n} \ge s_{\min} \qquad \text{for each } d \in \{0°, +45°, -45°, 90°\},
+```
+
+a ply at any other angle counting only in $`n`$. It is checked by `ten_percent_rule`.
+
+<!-- code: ten_percent_rule -->
+
+Plies of one angle next to each other act as one thick ply, which cracks between plies more readily; the run counts across the middle of a solid laminate, where the two middle plies touch, but not across a core. The longest run, its angle and its first and last ply are computed by `in_a_row_rule`, and the rule is met when that run is at most $`r_{\max}`$. Thicker plies usually call for a smaller $`r_{\max}`$.
+
+<!-- code: in_a_row_rule -->
+
+Balance and symmetry are the stack's own facts of section 10 (`is_balanced`, `is_symmetric`): a balanced stack has $`A_{16} = A_{26} = 0`$, so stretching does not shear it, and a symmetric one has $`\mathbf{B} = 0`$, so stretching does not bend it. Their words, the plies at each off-axis angle without a partner and the first ply that does not mirror its own, are checked by `balance_rule` and `symmetry_rule`; a core must also sit in the middle, with as many plies on each side.
+
+<!-- code: balance_rule, symmetry_rule -->
+
+All four on one stack, listed from one face to the other with the core after a given ply, are checked by `layup_rules`. A wing judges its skins, spar webs and ribs this way, both halves of each with the core between them, by the limits of its file's `[design_rules]`; the wing's report lists every rule of every layup with one plain sentence and the numbers behind it.
+
+<!-- code: layup_rules -->
+
+Checks: `engine/tests/test_layup_rules.py`: stacks counted by hand, among them $`[0/\pm 45/90]_s`$ meeting every rule, one $`90°`$ ply in twelve (8.3 %) short of 10 % and one in ten meeting it, $`[\pm 45/0_2]_s`$ with four $`0°`$ plies across the middle, the same run broken by a core, unpaired $`+45°`$ plies, partners of another thickness, and a core off the middle; the example wing's limits changed with every analysis number the same.
+
+## 15. Spar caps and layups that change along the span (`wing/`)
+
+A spar cap is a strip of each skin centred on each web with a solid layup of its own, usually more plies at $`0°`$ to carry the bending (ADR-0125). Its width along the chord is the same from root to tip. Any layup, a skin, a spar web or the spar caps, may also change along the span: each zone is a stretch of the half span, from a start to an end as fractions of it, with a half stack of its own, and outside its zones the part keeps its own half stack. A rib stands at one station and has no zones. The wing is cut into stretches of constant layup wherever any part's stack changes, and each stretch has its own section, worked as in Section 13.
+
+In a section with caps, each stretch of a skin, a cap, the panel between the caps and the other cap, lies at its own mid-surface: the airfoil's surface moved inward by half its own thickness, so a solid cap beside a cored skin lies nearer the surface. The webs run between the caps' mid-surfaces. Where a cap's mid-surface and the skin's differ, a straight step joins them, as the skin's faces close onto the cap: the shear flow goes on through it, with the skin's $`G t`$ in $`\oint ds/(G t)`$ and its line in the outline of $`A_c`$, and it carries no spanwise load, $`E t = 0`$ in the centroid and $`EI`$. The half of each cap outside the box is an open flange. It adds to the centroid and to $`EI`$, and its shear flow is nothing at its free edge and gathers along it to the corner where it meets the cell, where the whole of it joins the cell's open flow:
+
+```math
+q_f(s) = -\frac{V}{EI}\int_{\text{free edge}}^{s} E t\left[(z - \bar{z}) - r\,(x - \bar{x})\right]ds, \qquad q_b(\text{corner}^+) = q_b(\text{corner}^-) + q_f(\text{corner})
+```
+
+The cell's open flow then comes back to nothing at the cut, since the first moment of the whole section about its centroid is nothing. The flanges are open, so the closing flow $`q_0`$ and the torque's flow $`q_T`$ run round the cell only. Every point of every stretch of wall, the flanges included, is checked ply by ply as in Section 13; a step's plies are its neighbours', checked there. The skin panel that buckles is the skin between the caps' inner edges, $`b`$ its length round the curve. The mass counts each cap's whole width, both halves, while the skin outside the box is counted nowhere, so a wing with caps reads heavier than it is by the skin their outer halves replace.
+
+The stations along the span are the equally spaced ones and every change twice, once with the section inboard of it and once with the one outboard, computed by `stations_of`. The loads of Section 13 do not depend on the section, except the torque, which each station takes about its own shear center (the stretches' shear centers differ by under a millimetre on the example). The curvature $`M/EI`$ and the rate of twist $`T/GJ`$ jump at a change, and the trapezoid rule over the two stations at one $`y`$ adds nothing, so the deflection and twist integrals of Section 13 take the jump as it is.
+
+The first bending frequency of a wing whose section changes is that of a clamped-free beam of about 200 cubic (Hermite) elements with an edge at every change, each with its stretch's $`EI`$ and mass per length $`m'`$, the consistent mass matrix (Przemieniecki, *Theory of Matrix Structural Analysis*, 1968, Sections 5.3 and 11.3), solved as $`\mathbf{K}\mathbf{v} = \omega^2\mathbf{M}\mathbf{v}`$ for its lowest $`\omega`$; it is computed by `bending_frequency`. For an element of length $`h`$:
+
+```math
+\mathbf{k} = \frac{EI}{h^3}\begin{bmatrix}12 & 6h & -12 & 6h\\ 6h & 4h^2 & -6h & 2h^2\\ -12 & -6h & 12 & -6h\\ 6h & 2h^2 & -6h & 4h^2\end{bmatrix}, \qquad
+\mathbf{m} = \frac{m' h}{420}\begin{bmatrix}156 & 22h & 54 & -13h\\ 22h & 4h^2 & 13h & -3h^2\\ 54 & 13h & 156 & -22h\\ -13h & -3h^2 & -22h & 4h^2\end{bmatrix}
+```
+
+A uniform wing keeps the closed form of Section 13, and the beam of a uniform wing cut at any station gives it again within $`2\times10^{-6}`$, the round-off of the eigenvalue. Divergence and reversal of Section 13 are worked with each stretch's section taken as the whole wing's, and the lowest dynamic pressure of each is kept, computed by `lowest_aeroelastic`. It is a simple estimate: on the safe side when one stretch is both the weaker in torsion and the one with the longer arm, and not a bound when those are different stretches.
+
+<!-- code: stations_of, bending_frequency, lowest_aeroelastic -->
+
+Where a stack changes, plies end: a ply drop. Three rules of practice judge it, warnings like those of Section 14, checked by `ply_drop_rules` on the two half stacks either side, listed from the outside. $`n_d`$ plies end, both halves counted, $`2\,(n_{\text{thick}} - n_{\text{thin}})`$ for half stacks of $`n_{\text{thick}}`$ and $`n_{\text{thin}}`$ plies; at most $`d_{\max}`$ should end at one place (default 2). The thickness tapers over a run-out, the drop ratio $`\rho`$ times the thickness that ends (default 20 to 1), which must fit in the thicker side's stretch of length $`L_{\text{thick}}`$, with $`t_p`$ the ply thickness:
+
+```math
+n_d \le d_{\max}, \qquad \rho\, n_d\, t_p \le L_{\text{thick}}
+```
+
+The plies that end are found by matching the thinner stack to the thicker one ply by ply from the outside, each ply of the thinner taken at the first ply of the thicker of the same angle; a stack that cannot be matched this way changes angle or order, not only ends, and is not a ply drop. The outside ply should run on over the ends of the others, so that no ply's edge is on the surface. A wing judges every change of its skins, spar webs and spar caps this way, by the limits of its file's `[design_rules]`, and lists the rules of every stretch of every part as in Section 14.
+
+<!-- code: ply_drop_rules -->
+
+Checks: `engine/tests/test_wing_caps.py`: a flat-sided box with caps summed by hand strip by strip (its $`EI`$, $`GJ`$ by Bredt-Batho with the steps in the loop, its enclosed area and its mass, each within $`10^{-12}`$); on NACA 2412 and 0012 boxes with caps, the shear flow with the steps put back carries a unit shear at the shear center and is nothing at every flange's free edge, and the bending load sums to the moment and to no force; zones in order, merged where alike, and the span cut where any part changes; the stations doubled at a change; the beam against the closed form; the same wing in US units. `engine/tests/test_layup_rules.py`: ply drops counted by hand, the run-out on whichever side is thicker, the outside ply ending, and a change of angle that is not a drop.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -727,4 +1076,6 @@ The checks of the record against the standard's clauses (gauge length, number of
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
+- Ply drops in the stiffness: a change of layup is a step in the section, with no taper over the run-out; a drop's own stresses
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
+- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars, beyond the caps; the walls' own bending stiffness and the core's in-plane stiffness; a skin's curve in its buckling; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing

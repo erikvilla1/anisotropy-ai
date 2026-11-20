@@ -50,8 +50,8 @@ export function readIntent(text: string): Intent | null {
  * ask at least one question that takes each (ADR-0121, `tests/assistant-questions/sections.json`, page "start"). */
 export const START_ROUTES = ["set-up", "not-here", "open", "general"] as const;
 export type StartRoute =
-  | { route: "set-up"; kind: "coupon" } // a kind of FEA work this project is set up for, in place
-  | { route: "not-here"; target: "wing" | "fea" } // a wing, not built yet, or FEA itself, where the engineer already is
+  | { route: "set-up"; kind: "coupon" | "wing" } // a kind of FEA work: a coupon set up in place, a wing opened on its own page (ADR-0118 amendment 1)
+  | { route: "not-here"; target: "fea" } // FEA itself, where the engineer already is
   | { route: "open"; target: "laminate" | "cad" } // another section, opened at once with the message: a blank project holds no work
   | { route: "general"; named: WorkTarget | null }; // anything else, answered in words from the theory pages (`/v1/workspace/questions`)
 
@@ -59,8 +59,8 @@ export type StartRoute =
 export function routeStart(text: string): StartRoute {
   const intent = readIntent(text);
   if (intent?.start) {
-    if (intent.target === "coupon") return { route: "set-up", kind: "coupon" };
-    if (intent.target === "wing" || intent.target === "fea") return { route: "not-here", target: intent.target };
+    if (intent.target === "coupon" || intent.target === "wing") return { route: "set-up", kind: intent.target };
+    if (intent.target === "fea") return { route: "not-here", target: "fea" };
     return { route: "open", target: intent.target };
   }
   return { route: "general", named: intent?.target ?? null };

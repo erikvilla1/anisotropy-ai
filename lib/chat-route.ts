@@ -48,7 +48,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
   "ready", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
-/** What the coupon chat opens, or answers is not here yet, when asked for by name (ADR-0124). */
+/** What the coupon chat opens when asked for by name (ADR-0124): another section, or the wing's page under FEA (ADR-0118 amendment 1). */
 export type SectionAsked = "laminate" | "cad" | "wing";
 
 export type ChatRoute =
@@ -178,9 +178,9 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   if (CHECK.test(text) || BARE_RUN.test(text)) return { route: "check" };
   if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) return { route: "full-form" };
   // another section, or a wing, asked for by the words every chat reads (ADR-0124): "open the laminate calculator", "CAD please",
-  // "I want to start a wing analysis". A wing is answered here, since it is FEA work not built yet; a section only where one can be opened
+  // "I want to start a wing analysis", where one can be opened; a wing opens its own page under FEA (ADR-0118 amendment 1)
   const wanted = readIntent(text);
-  if (wanted?.start && (wanted.target === "wing" || (s.sections && (wanted.target === "laminate" || wanted.target === "cad")))) {
+  if (wanted?.start && s.sections && (wanted.target === "wing" || wanted.target === "laminate" || wanted.target === "cad")) {
     return { route: "section", target: wanted.target };
   }
   // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it

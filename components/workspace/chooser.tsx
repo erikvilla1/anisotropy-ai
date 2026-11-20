@@ -13,8 +13,9 @@ import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
+import { wingAbout, wingMaterial } from "@/lib/wing";
 import { readIntent, saysMore, sectionOf, type WorkTarget } from "@/lib/work-intent";
-import { feaKind, workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
+import { feaKind, WING_HREF, workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 import { goTo } from "./go-to";
 
 function testTitle(test: string): string {
@@ -26,9 +27,10 @@ const when = (stamp: string): string => runWhen(stamp);
 /** How many past analyses the list shows before "Show all". */
 const RUNS_SHOWN = 8;
 
-/** What a project is about, in a few words: a coupon's test, a laminate's layup; a coupon of a test the studio does not offer yet (ADR-0089)
- * says so, and stays listed. */
+/** What a project is about, in a few words: a coupon's test, a laminate's layup, a wing's size; a coupon of a test the studio does not offer
+ * yet (ADR-0089) says so, and stays listed. */
 function about(project: Project, allTests: boolean): string {
+  if (project.kind === "wing") return wingAbout(project.wing);
   if (project.kind === "fea" && project.analysis === "none") return "Not set up yet";
   if (project.kind === "fea") {
     const test = project.form.test;
@@ -40,14 +42,18 @@ function about(project: Project, allTests: boolean): string {
 }
 
 function materialOf(project: Project): string {
+  if (project.kind === "wing") return wingMaterial(project.wing);
   if (project.kind === "fea") return project.form.library || project.form.own_name || "–";
   return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
 }
 
-const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
-/** A project's kind is its section's one name (audit fea-screens-10), and an FEA project's kind of work once it is set up (ADR-0124). */
-const kindWord = (project: Project): string => project.kind === "fea" && project.analysis !== "none"
-  ? `${workspace("fea").title} · ${feaKind(project.analysis).title}` : workspace(ROUTE[project.kind]).title;
+const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate", wing: "fea" };
+/** A project's kind is its section's one name (audit fea-screens-10), and an FEA project's kind of work once it is set up (ADR-0124); a
+ * wing is FEA work kept as a project of its own kind (ADR-0118 amendment 1). */
+const kindWord = (project: Project): string => project.kind === "wing" ? `${workspace("fea").title} · ${feaKind("wing").title}`
+  : project.kind === "fea" && project.analysis !== "none" ? `${workspace("fea").title} · ${feaKind(project.analysis).title}` : workspace(ROUTE[project.kind]).title;
+/** Where a project opens: its section, or the wing's own page under FEA. */
+const hrefOf = (project: Project): string => project.kind === "wing" ? WING_HREF : workspace(ROUTE[project.kind]).href;
 
 /** Suggestions under the start box: one of each kind of request it reads (ADR-0124). */
 const STARTS = ["I want to test some coupons", "ABD matrix of a [0/90]s laminate", "What is a mesh convergence study?"];
@@ -104,7 +110,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function open(project: Project) {
     const store = browserStorage();
     writeProjects(upsert(readProjects(store), project), store);
-    router.push(workspace(ROUTE[project.kind]).href);
+    router.push(hrefOf(project));
   }
   /** A past analysis in the coupon workspace, as it was solved; where this tab keeps nothing, its results in the viewer's own page. */
   function openRun(run: PastRun) {

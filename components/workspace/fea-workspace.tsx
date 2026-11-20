@@ -32,7 +32,7 @@ export function FeaWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
   );
 }
 
-function FeaColumns({ apiBaseUrl, onSwitch }: { apiBaseUrl: string; onSwitch: (target: "laminate" | "cad", carried: string) => void }) {
+function FeaColumns({ apiBaseUrl, onSwitch }: { apiBaseUrl: string; onSwitch: (target: "laminate" | "cad" | "wing", carried: string) => void }) {
   const { project, form, rename, allTests, imported, past } = useProject();
   // The columns are drawn once the page runs in the browser: what they show is this browser's project and the address's `?for=`, which
   // the prerendered page cannot know, and a blank FEA project and a coupon differ in every column (ADR-0124)

@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import subprocess
 import tempfile
 import tomllib
 import uuid
@@ -28,6 +29,9 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
+from anisotropy_engine.wing.analysis import analyze_wing
+from anisotropy_engine.wing.changes import preview_change
+from anisotropy_engine.wing.wing_file import wing_from_dict, wing_report, wing_views
 
 from .abaqus_coupon import NotABuildScript, coupon_data
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
@@ -39,11 +43,11 @@ from .proposals import model_view_of_form, source_guard
 from .general_answers import general_guard, general_schema, general_view
 from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
 from .result_questions import model_view, question_guard, question_schema
-from .theory import find as find_theory
+from .theory import find as find_theory, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
-from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
+from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
+                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, runner_command, studio_command, wing_check_command, wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
@@ -57,7 +61,8 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
+    WingRequest, WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -86,17 +91,18 @@ PAIRING_CODES = "/v1/pairing-codes"  # a one-time code that a signed-in page han
 PAIRING_MINUTES = 10
 ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
 ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
+WING_CHECKS = "/v1/wings/checks"  # a wing's finite element check, a job like a coupon run (ADR-0119)
 
 
 def job_recorder(app: FastAPI):
     """The receipt of an ended coupon job, written as every run is (ADR-0026): solved with the tool's outcome, or rejected with
-    its message."""
+    its message. A wing's check is recorded at its own address (ADR-0119), its description among the inputs."""
     def record(job: Job, state: str, outcome: dict) -> uuid.UUID | None:
         engine = getattr(app.state, "records", None)
         if engine is None:
             return None
         try:
-            return record_run(engine, actor=job.actor, endpoint=COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
+            return record_run(engine, actor=job.actor, endpoint=WING_CHECKS if is_wing(job) else COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
                               api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
                               response={**outcome, "job_id": str(job.id)} if state == "done" else None,
                               error=None if state == "done" else outcome["message"], user_email=job.user_email)
@@ -134,7 +140,7 @@ async def lifespan(app: FastAPI):
         if orphans:
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
-                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role)
+                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command())
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # our kernel's answer to every edit (ADR-0086): warm workers, started on the first live request
     app.state.live = LiveSolver(studio_command(), Path(tempfile.gettempdir()) / "anisotropy-live", settings.live_workers)
@@ -1594,6 +1600,190 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
                     calls=calls)
 
 
+WINGS = "/v1/wings/analyze"
+WING_CHANGES = "/v1/wings/changes"
+WING_SHAPE = "/v1/wings/shape"
+WING_SHAPE_TIMEOUT_S = 90.0  # Gmsh builds the example in under a second; a cold start of the fea environment takes a few
+SHAPE_REFUSED = 2  # anisotropy_fea.wing_shape.REFUSED: the description was refused, the reason on stderr
+
+
+def _finite(value) -> bool:
+    """Whether a JSON-like value holds only finite numbers (None stands for an unloaded check and is fine)."""
+    if isinstance(value, dict):
+        return all(_finite(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return all(_finite(v) for v in value)
+    return not isinstance(value, float) or math.isfinite(value)
+
+
+@app.post(WINGS, response_model=WingAnswer)
+def analyze_wing_endpoint(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingAnswer:
+    """A wing worked by hand (ADR-0115) for the wing workspace (ADR-0118): the description read by the engine's own rules, every
+    flight case that its values allow, the results in the file's units and what the page draws. Recorded with its actor (ADR-0026):
+    the record keeps the description, the verdict, the governing check and the design summary, not the drawings, which follow from
+    them. Answers in well under a second, so the page asks again on every change."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing, envelope = wing_from_dict(data)
+        result = analyze_wing(wing, envelope)
+        report = wing_report(result, data["units"], data["envelope"]["speed_unit"])
+        views = wing_views(result, data["units"])
+        if not (_finite(report) and _finite(views)):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else "These values do not give a finite, solvable wing. Check the values and their units."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    summary = {key: report[key] for key in ("wing", "passes", "seconds", "design", "governing", "aeroelastic")}
+    run_id = _record(request, actor, problem, response=summary | {"cases_run": len(report["cases"]), "cases_not_run": len(report["not_run"])})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), wing=data,
+                      report=report, views=views)
+
+
+@app.post(WING_CHANGES, response_model=WingChangePreview)
+def preview_wing_change(problem: WingChangeRequest, actor: Actor, request: Request, response: Response) -> WingChangePreview:
+    """A change of plies previewed on a wing (ADR-0128): the engine makes it on a copy of the wing file (zones split and joined, ADR-0125)
+    and works the wing as it is and as changed by hand, in well under a second. Nothing is kept: the engineer applies the change on the
+    page, or not, and the chat and the MCP server only preview. A change the wing cannot take (no spar caps, too few plies of the angle)
+    is refused in the engine's words. Recorded with its actor (ADR-0026): the change, its sentence and both summaries, not the wing."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        preview = preview_change(data, problem.change)
+        if not _finite(preview):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else "These values do not give a finite, solvable wing. Check the values and their units."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    run_id = _record(request, actor, problem, response={key: preview[key] for key in ("change", "words", "before", "after")})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingChangePreview(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), **preview)
+
+
+@app.post(WING_SHAPE, response_model=WingShapeAnswer)
+def wing_shape_endpoint(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingShapeAnswer:
+    """A wing's shape for a CAD program (ADR-0116), from the wing workspace's Download STEP (ADR-0118): the engine reads the
+    description first, so a wing the page could not work is refused in the same words, then the fea package's `wing_shape` builds
+    the parts in Gmsh's OpenCASCADE in a process of its own (the API depends on the engine alone, ADR-0051) and writes the STEP file
+    and the part table. Recorded with its actor: the description and a summary, never the file."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing_from_dict(data)
+    except (ValueError, TypeError, KeyError) as exc:
+        detail = str(exc) or exc.__class__.__name__
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    command = wing_shape_command()
+    if command is None:
+        raise HTTPException(status_code=503, detail="The shape builder is not installed here")
+    with tempfile.TemporaryDirectory(prefix="wing-shape-") as folder:
+        wing_json, step_path, parts_path = Path(folder) / "wing.json", Path(folder) / "wing.step", Path(folder) / "parts.json"
+        wing_json.write_text(json.dumps(data), encoding="utf-8")
+        try:
+            done = subprocess.run([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", cwd=FEA, timeout=WING_SHAPE_TIMEOUT_S, check=False)
+        except subprocess.TimeoutExpired as exc:
+            run_id = _record(request, actor, problem, error="the shape took longer than the time allowed")
+            raise HTTPException(status_code=504, detail="The shape took too long to build", headers=_run_header(run_id)) from exc
+        reason = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
+        if done.returncode == SHAPE_REFUSED and reason:
+            run_id = _record(request, actor, problem, error=reason)
+            raise HTTPException(status_code=422, detail=reason, headers=_run_header(run_id))
+        if done.returncode != 0 or not step_path.exists() or not parts_path.exists():
+            print(f"the wing shape stopped with status {done.returncode}: {reason}", flush=True)  # the tool's own words stay in the log
+            run_id = _record(request, actor, problem, error=f"the shape builder stopped with status {done.returncode}")
+            raise HTTPException(status_code=503, detail="The shape could not be built", headers=_run_header(run_id))
+        step = step_path.read_text(encoding="ascii", errors="replace")
+        parts = json.loads(parts_path.read_text(encoding="utf-8"))
+    run_id = _record(request, actor, problem, response={"wing": parts.get("wing"), "parts": len(parts.get("parts", [])), "mass": parts.get("mass"),
+                                                        "step_bytes": len(step)})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingShapeAnswer(run_id=None if run_id is None else str(run_id), step=step, parts=parts)
+
+
+# What the page shows of a wing's check that did not end done, in its own words (ADR-0091 amendment 2): the cause goes to the log.
+CHECK_STOPPED = "The check could not be finished. Start it again; if it keeps failing, contact us."
+CHECK_UNREAD = "The check's result could not be read right now. Try again in a minute."
+WING_REPORT = "wing_check"  # the key the check's tool lists its report under (anisotropy_fea.wing_check.OUTPUT_KEY)
+
+
+def _wing_check(request: Request, jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    """A wing's check by its id when it is the requester's; 404 in the same words as for none, a coupon job included."""
+    job = _known_job(request, jobs, job_id)
+    if not is_wing(job):
+        raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
+    return job
+
+
+def _wing_check_output(jobs: CouponJobs, job: Job) -> WingCheckOutput:
+    """The check as it stands, and once done its report, read here from the job's file (the disk or the store)."""
+    with jobs.lock:
+        state, outcome, progress = job.state, dict(job.outcome or {}), dict(job.progress() or {})
+    message, report = None, None
+    if state == "queued":
+        message = progress.get("message")
+    elif state == "refused":
+        message = outcome.get("message")  # the reason the description cannot be checked, in the engine's or the model's words
+    elif state == "stopped":
+        print(f"wing check {job.id} stopped: {outcome.get('message')}", flush=True)
+        message = CHECK_STOPPED
+    elif state == "done":
+        try:
+            report = json.loads(jobs.output_file(job, WING_REPORT).read_text(encoding="utf-8"))
+        except (KeyError, OSError, ValueError, PermissionError) as exc:
+            print(f"wing check {job.id}: its report could not be read: {exc}", flush=True)
+            message = CHECK_UNREAD
+    return WingCheckOutput(job_id=str(job.id), state=state, wing=(job.inputs or {}).get("wing"), started_at=job.started_at.isoformat(),
+                           finished_at=None if job.finished_at is None else job.finished_at.isoformat(), stage=progress.get("stage"),
+                           stages_done=list(progress.get("done") or []), stages=list(progress.get("stages") or []), message=message,
+                           run_id=None if job.run_id is None else str(job.run_id), report=report)
+
+
+@app.post(WING_CHECKS, status_code=202, response_model=WingCheckOutput)
+def start_wing_check(problem: WingCheckRequest, actor: Actor, request: Request, response: Response) -> WingCheckOutput:
+    """A wing's finite element check (ADR-0117, ADR-0119), started from the wing workspace like a coupon run: the engine reads the
+    description first, so a wing the page could not work is refused in the same words and at once; then the check runs in the
+    background, through the job queue on the hosted tier, half a minute for the example. Poll the Location until the state is
+    neither queued nor running; once done the answer holds the check's report in the wing file's units. The same limits as a
+    coupon run apply: one at a time here, and the hosted tier's per-user limits (409, 429). Its receipt is a run record at this
+    address, written when it ends. `project_id` names the wing project it is run for, when it is the requester's (ADR-0122)."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing, _ = wing_from_dict(data)
+    except (ValueError, TypeError, KeyError) as exc:
+        detail = str(exc) or exc.__class__.__name__
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    jobs = _coupon_jobs(request)
+    try:
+        job = jobs.start_wing(actor, {"kind": WING, "wing": wing.name, "description": data}, user_email=getattr(request.state, "user_email", None),
+                              project_id=_own_project_id(request, actor, problem.project_id))
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except JobRefused as exc:
+        print(f"wing check not started: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="The check could not be started right now. Try again in a minute.") from exc
+    response.headers["Location"] = f"{WING_CHECKS}/{job.id}"
+    if job.state == "queued":
+        response.headers[ENQUEUE_HEADER] = str(job.id)
+    return _wing_check_output(jobs, job)
+
+
+@app.get(WING_CHECKS + "/{job_id}", response_model=WingCheckOutput)
+def wing_check(job_id: uuid.UUID, request: Request) -> WingCheckOutput:
+    """A wing's check as it stands: its state and stage, and once done its report (ADR-0119)."""
+    jobs = _coupon_jobs(request)
+    return _wing_check_output(jobs, _wing_check(request, jobs, job_id))
+
+
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)
 def workspace_assistant(request: Request) -> AssistantInfo:
     """Whether a model reads the chat's messages here (ADR-0088); the page asks once. Not a run: nothing is computed or recorded."""
@@ -1775,10 +1965,12 @@ def answer_general_question(asked: GeneralQuestionRequest, actor: Actor, request
 @app.post("/v1/workspace/theory-sections", response_model=TheorySectionsResponse)
 def find_theory_sections(asked: TheorySectionsRequest, actor: Actor, request: Request, response: Response) -> TheorySectionsResponse:
     """The sections of our theory pages a question's words find, with their text (ADR-0107): what `result-answers` hands the API's own
-    model, handed to a reader whose own model writes, such as an MCP client. No result is sent here, no model is called and nothing is
-    computed: the sections are the documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
+    model, handed to a reader whose own model writes, such as an MCP client; a wing's question (`about="wing"`) searches the wing's theory
+    and the reference pages instead (ADR-0128). No result is sent here, no model is called and nothing is computed: the sections are the
+    documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
     the ids of the sections found, never their text, so the questions that find nothing can be read back."""
-    found = [section for section, _ in find_theory(asked.question, limit=asked.limit)]
+    among = wing_sections() if asked.about == "wing" else None  # a wing's question: its theory and the reference pages (ADR-0127)
+    found = [section for section, _ in find_theory(asked.question, among=among, limit=asked.limit)]
     run_id = _record(request, actor, asked, response={"sections": [section.id for section in found]})
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)

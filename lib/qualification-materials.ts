@@ -145,6 +145,46 @@ const ncampProperties = (rows: NcampRow[], environment: string): CitedProperty[]
   }));
 const rtd70 = "70 °F (21.1 °C), dry as fabricated";
 
+// Hexcel 8552 / IM7 unidirectional tape, NCAMP 2019 (Rev B) statistical report: the B-basis strengths at room temperature, dry
+// (ADR-0126). Table 3-1 gives the values NCAMP recommends; where it recommends none for a strength a wing needs (longitudinal
+// compression from the cross-ply tests, shear strength at 5 % strain) the record takes the report's modified-CV B-estimate from the
+// property's own table and says so in its basis. Fibre-dominated strengths are normalized to the 0.0072 in nominal ply, as Table 3-1
+// gives them; matrix-dominated ones are as measured. The moduli are the summary's measured means (Table 3-3), the same values as the
+// measured-means record, so a laminate's stiffness does not change with the strengths chosen.
+const im7BasisRows: NcampRow[] = [
+  ["E1t", "Longitudinal tensile modulus", 23.51, "Msi", 37, "ASTM D3039/D3039M-00ε1", "Table 3-3, RTD measured mean; the same value as the data report's", "Fibre direction", "Measured mean"],
+  ["E2t", "Transverse tensile modulus", 1.30, "Msi", 37, "ASTM D3039/D3039M-00", "Table 3-3, RTD measured mean", "Transverse direction", "Measured mean"],
+  ["nu12", "Poisson ratio · tension", .316, "—", 37, "ASTM D3039/D3039M-00ε1", "Table 3-3, RTD measured mean", "Longitudinal–transverse", "Measured mean"],
+  ["G12", "In-plane shear modulus", .68, "Msi", 37, "ASTM D3518/D3518M-94", "Table 3-3, RTD measured mean", "1–2 plane", "Measured mean"],
+  ["F1t", "Longitudinal tensile strength", 323.09, "ksi", 35, "ASTM D3039/D3039M-00ε1",
+    "Table 3-1, LT from the [0] tension tests, RTD; normalized, modified-CV B-basis (Table 4-3, p. 42); 3 batches, 18 specimens", "Fibre direction", "B-basis"],
+  ["F1c-derived", "Longitudinal compressive strength · derived", 218.20, "ksi", 46, "UNC0 cross-ply compression; lamina back-calculation",
+    "Table 4-6, RTD normalized, modified-CV B-estimate from 2 batches, 9 specimens; Table 3-1 recommends no RTD value (insufficient data)", "Fibre direction", "B-estimate"],
+  ["F2t", "Transverse tensile strength", 7.59, "ksi", 35, "ASTM D3039/D3039M-00", "Table 3-1, TT, RTD as measured, B-basis (Table 4-4, p. 44); 3 batches, 20 specimens", "Transverse direction", "B-basis"],
+  ["F2c", "Transverse compressive strength", 36.45, "ksi", 35, "ASTM D6641/D6641M-01e1", "Table 3-1, TC, RTD as measured, modified-CV B-basis (Table 4-8, p. 48); 3 batches, 20 specimens", "Transverse direction", "B-basis"],
+  ["F12-5pct", "Shear strength · at 5% strain", 11.47, "ksi", 50, "ASTM D3518/D3518M-94",
+    "Table 4-10, RTD as measured, modified-CV B-estimate; 3 batches, 12 specimens; Table 3-1 recommends no RTD value at 5 % strain (insufficient data)", "1–2 plane", "B-estimate"],
+  ["F12-offset", "Shear strength · 0.2% offset", 6.87, "ksi", 35, "ASTM D3518/D3518M-94", "Table 3-1, IPS 0.2 % offset, RTD as measured, modified-CV B-basis (Table 4-10, p. 50); 3 batches, 16 specimens", "1–2 plane", "B-basis"],
+  ["SBS", "Short-beam strength", 15.10, "ksi", 35, "ASTM D2344/D2344M-00ε1", "Table 3-1, RTD as measured, B-basis (Table 4-12, p. 52)", "Interlaminar test", "B-basis"],
+  ["tply", "Nominal cured ply thickness", .0072, "in", 37, "Normalizing ply thickness", "Table 3-3: the ply thickness every normalized value is normalized to", "Through thickness", "Reported nominal"],
+];
+export const qualifiedCarbonIM7BBasis: CitedMaterial = {
+  id: "im7-8552", name: "IM7 / 8552", family: "Carbon / epoxy", architecture: "Unidirectional · autoclave",
+  datasetId: "ncamp-im7-8552-2019-rtd-bbasis-v1", dataset: "NCAMP 2019 · B-basis", strengthBasis: "B-basis",
+  conditions: im7Conditions, reviewedOn: "2026-11-20", recordRevision: "2026-11-20.1", elasticInputs,
+  application: "Design strengths for the stated material and process at room temperature, dry: B-basis values, which at least 90 % of the material is expected to exceed with 95 % confidence. Two are B-estimates, marked as such. The moduli are the measured means.",
+  source: references["im7-stats"],
+  supportingReferences: [references["im7-data"], references["as4-base"], references["as4-process"]],
+  recordDetails: [
+    "Table 3-1 (p. 35) lists the B-basis values NCAMP recommends, which meet CMH-17-1G's requirements for publication. Its rules (p. 34): modified-CV values where available, normalized values for normalized properties, no ANOVA values from three batches.",
+    "Two strengths a wing needs have no recommended room-temperature value. Longitudinal compression from the cross-ply tests had two batches (Table 4-6, p. 46), and shear strength at 5 % strain too few specimens (Table 4-10, p. 50). The record takes each table's modified-CV B-estimate and marks its basis \"B-estimate\": it does not meet the requirements for publication.",
+    "The shear strength at 0.2 % offset has a recommended B-basis value (6.87 ksi). A check that wants the stricter shear strength may use it in place of the B-estimate at 5 % strain.",
+    "Only the room-temperature dry column is entered. The report also gives cold dry (-65 °F), elevated dry and elevated wet (250 °F) values; hot wet is lower for matrix-dominated strengths and a design must check it too.",
+    "NCAMP states the values may not be used for certification unless the certifying agency allows it, and that the data is not applicable when the material is not procured to NMS 128/2 (data report, p. 9).",
+  ],
+  properties: ncampProperties(im7BasisRows, rtd70),
+};
+
 // Solvay Cycom 5320-1 / T650 unidirectional tape, NCAMP 2017 (Rev A) report.
 const t650Conditions = "70 °F (21.1 °C), dry as fabricated. Solvay Cytec Cycom 5320-1 / T650 unidirectional tape, 145 g/m², nominal 33% resin content; NMS 532/5, NPS 85321 baseline cure cycle C.";
 export const qualifiedT650: CitedMaterial = {

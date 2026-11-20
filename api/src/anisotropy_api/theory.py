@@ -6,6 +6,12 @@ documents' own text, cut and ranked.
 
 The ranking is BM25 over words (k1 = 1.5, b = 0.75), with a section's title counted three times. It is the same for the same question
 and documents, so a test can pin which section a question finds.
+
+The wing's sections (a `##` heading that names a file of the wing, as `wing/` or `wing_model.py`, and the sections under it) are read but
+not searched by default (ADR-0102 amendment 4): no chat answers a question about a wing yet, and their words would change how every other
+section ranks. The wing's chat will search them by its own subject (ADR-0125), with the three reference pages, design rules, test
+methods and allowables, which are of the subject "references" (ADR-0127): `wing_sections()`. A section may name the other words it is
+asked by in a line `<!-- also: taper, run-out, drop-off -->` under its heading; they count as its title's words and are not shown.
 """
 
 from __future__ import annotations
@@ -21,9 +27,16 @@ SOURCES: dict[str, tuple[str, Path]] = {  # by id: the name an engineer reads, a
     "engine": ("Laminate theory", REPO / "engine" / "docs" / "theory.md"),
     "fea": ("Finite element theory", REPO / "fea" / "docs" / "theory.md"),
     "reasons": ("Reasons behind a result", REPO / "engine" / "docs" / "reasons.md"),  # reasons in words, each from the theory above
+    # the wing's references in our own words, each section with its public sources (ADR-0127): searched only by their subject
+    "rules": ("Design rules for laminates", REPO / "engine" / "docs" / "references" / "design-rules.md"),
+    "tests": ("Test methods behind a strength", REPO / "engine" / "docs" / "references" / "test-methods.md"),
+    "allowables": ("Allowables and design values", REPO / "engine" / "docs" / "references" / "allowables.md"),
 }
+SUBJECT_OF = {"rules": "references", "tests": "references", "allowables": "references"}  # a page whose every section is of one subject
+WING_SUBJECTS = ("wing", "references")  # what the wing's chat searches
 HEADING = re.compile(r"^(#{2,3})\s+(.*?)\s*$")
 MARKER = re.compile(r"^<!-- code: .*? -->\n?", re.MULTILINE)  # the line that pairs an equation with its function: the code's, not a reader's
+ALSO = re.compile(r"^<!-- also: (.*?) -->\n?", re.MULTILINE)  # the other words a section is asked by: counted as its title's, never shown
 WORD = re.compile(r"[a-z][a-z0-9]+|σ|τ|ε")
 # words that say nothing about the subject: the question's own grammar and the documents' most common words
 STOP = frozenset("""a an and are as at be by can could do does for from had has have how if in into is it its may more most of on or our so than
@@ -32,6 +45,7 @@ also only one two both here ply plies value values""".split())
 # two spellings or forms of one word, so a question in one finds a page in the other
 SAME = {"max": "maximum", "min": "minimum", "tied": "tie", "fiber": "fibre", "sigma": "σ", "tau": "τ", "epsilon": "ε", "meshe": "mesh"}
 K1, B, TITLE_WEIGHT = 1.5, 0.75, 3
+WING_FILE = re.compile(r"\(`wing[/_][^`]*`\)\s*$")  # a heading that names a file of the wing: `wing/`, `wing_model.py`
 MAX_SECTION_CHARS = 6000  # what one section may hand a model; a longer one is cut at a paragraph
 
 
@@ -42,10 +56,12 @@ class Section:
     document: str  # "Laminate theory"
     title: str  # "5. Failure", without the file named in the heading
     text: str  # the section's own text, with its sub-headings' text apart (each is its own section)
+    subject: str = ""  # "wing" or "references", found only when asked for by subject; "" for every other
+    also: str = ""  # the other words it is asked by, from its `<!-- also: ... -->` line
 
     @property
     def words(self) -> list[str]:
-        return words_of(self.text) + words_of(self.title) * TITLE_WEIGHT
+        return words_of(self.text) + (words_of(self.title) + words_of(self.also)) * TITLE_WEIGHT
 
     def cited(self) -> str:
         """How an answer names it: the document and the section."""
@@ -72,17 +88,21 @@ def words_of(text: str) -> list[str]:
     return found
 
 
-def split(source: str, document: str, text: str) -> list[Section]:
+def split(source: str, document: str, text: str, of: str = "") -> list[Section]:
     """A document's sections: one per `##` or `###` heading, holding the text up to the next heading of either level. A sub-section's
-    title carries its parent's ("5. Failure: Fixed and variable loading")."""
+    title carries its parent's ("5. Failure: Fixed and variable loading"). Every section is of the subject `of` when one is given, else
+    of the wing's when its `##` heading names a file of the wing."""
     sections: list[Section] = []
-    parent, title, lines = "", "", []
+    parent, title, subject, lines = "", "", of, []
 
     def close() -> None:
-        body = "\n".join(lines).strip()
+        body = "\n".join(lines)
+        also = ", ".join(found.group(1) for found in ALSO.finditer(body))
+        body = ALSO.sub("", body).strip()
         if title and body:
             slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-            sections.append(Section(f"{source}:{slug}", source, document, title, body[:MAX_SECTION_CHARS].rsplit("\n\n", 1)[0] if len(body) > MAX_SECTION_CHARS else body))
+            cut = body[:MAX_SECTION_CHARS].rsplit("\n\n", 1)[0] if len(body) > MAX_SECTION_CHARS else body
+            sections.append(Section(f"{source}:{slug}", source, document, title, cut, subject, also))
 
     for line in text.splitlines():
         heading = HEADING.match(line)
@@ -93,6 +113,7 @@ def split(source: str, document: str, text: str) -> list[Section]:
         name = re.sub(r"\s*\(`[^`]*`\)\s*$", "", heading.group(2))  # the file a heading names is the code's, not the reader's
         if heading.group(1) == "##":
             parent, title = name, name
+            subject = of or ("wing" if WING_FILE.search(heading.group(2)) else "")
         else:
             title = f"{parent}: {name}" if parent else name
         lines = []
@@ -105,13 +126,25 @@ def sections() -> tuple[Section, ...]:
     """Every section of the theory pages, in the documents' order. Read once per process: the pages change only with a deploy."""
     found: list[Section] = []
     for source, (document, path) in SOURCES.items():
-        found.extend(split(source, document, path.read_text(encoding="utf-8")))
+        found.extend(split(source, document, path.read_text(encoding="utf-8"), SUBJECT_OF.get(source, "")))
     return tuple(found)
 
 
+def of_subject(subject: str = "") -> tuple[Section, ...]:
+    """The sections of one subject: by default every section but the wing's and the references', which only the wing's chat will search
+    (ADR-0102 amendment 4, ADR-0127)."""
+    return tuple(section for section in sections() if section.subject == subject)
+
+
+def wing_sections() -> tuple[Section, ...]:
+    """What the wing's chat searches: the wing's theory and the three reference pages (ADR-0127)."""
+    return tuple(section for section in sections() if section.subject in WING_SUBJECTS)
+
+
 def find(question: str, among: tuple[Section, ...] | None = None, limit: int = 2) -> list[tuple[Section, float]]:
-    """The sections a question's words find, best first, each with its score; none when no word of the question is in any section."""
-    among = sections() if among is None else among
+    """The sections a question's words find, best first, each with its score; none when no word of the question is in any section. The
+    sections searched are `among`, by default every section but the wing's and the references'."""
+    among = of_subject() if among is None else among
     asked = set(words_of(question))
     if not asked or not among:
         return []

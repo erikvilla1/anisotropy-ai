@@ -15,7 +15,7 @@ export function SwitchAsk({ target, kept, onGo, onStay }: {
   return (
     <div data-testid="chat-switch" data-target={target} data-answered={answered ?? undefined}>
       <h4>Open {section}?</h4>
-      <p>Your {kept} is saved under Projects, as it is now. Your message goes with you.</p>
+      <p>Your {kept} is saved under Projects, as it is now.{target === "wing" ? "" : " Your message goes with you."}</p>
       <div className="chat-chips">
         <button type="button" className="chat-primary" disabled={answered !== null} data-testid="switch-go" onClick={() => { setAnswered("go"); onGo(); }}>
           Yes, open {title} <ArrowRight size={14} />

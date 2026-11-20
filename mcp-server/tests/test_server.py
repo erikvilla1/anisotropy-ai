@@ -4,6 +4,7 @@ package wrote. Each tool passes on what the API or the result holds; none comput
 import asyncio
 import json
 import re
+from pathlib import Path
 
 import httpx
 from mcp import Client
@@ -17,7 +18,9 @@ VALUES = {"filled_by": "A. Engineer", "date": "2026-11-17", "test": "unnotched t
           "angles": [45, 0, -45, 90], "symmetric": "yes", "library": "im7-8552", "G13": 4688.43, "G23": 3000.0, "control": "displacement", "value": 1.0}
 FIELDS = fixture("fields.json")
 EXPLANATION = fixture("explanation.json")
-TOOLS = ["list_materials", "material_values", "describe_coupon_form", "check_setup", "solve_coupon", "result_values", "result_extreme", "explain_result", "show_working"]
+TOOLS = ["list_materials", "material_values", "describe_coupon_form", "check_setup", "solve_coupon", "result_values", "result_extreme", "explain_result",
+         "read_wing", "wing_results", "wing_rules", "wing_strengths", "search_wing_references", "preview_wing_change", "show_working"]
+EXAMPLE_WING = (Path(__file__).resolve().parents[2] / "engine" / "examples" / "example-wing.toml").read_text(encoding="utf-8")
 
 
 def test_the_server_offers_its_tools_each_described_and_tells_the_clients_model_the_rules(fake):
@@ -165,3 +168,70 @@ def test_what_the_api_refuses_the_tool_refuses_in_the_same_words(call, fake):
     fake.refuse = (422, [{"loc": ["body", "values"], "msg": "Input should be a valid dictionary"}])
     odd, = call(("check_setup", {"values": VALUES}))
     assert isinstance(odd, Refused) and "values: Input should be a valid dictionary" in odd
+
+
+# The wing's tools (ADR-0128): each reads a wing file by its path or `example`, asks the API, and passes on what the engine answered.
+WING = fixture("example-answer.json", Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "wing")
+
+
+def test_a_wing_is_read_from_its_file_or_the_example_and_sent_as_its_text(call, fake, tmp_path):
+    kept = tmp_path / "my-wing.toml"
+    kept.write_text(EXAMPLE_WING, encoding="utf-8")
+    read, by_path = call(("read_wing", {"wing": "example"}), ("read_wing", {"wing": str(kept)}))
+    assert read["wing"] == WING["wing"] and "half stack lists the plies from the outside in" in read["note"]
+    assert by_path == read
+    assert [c[2] for c in fake.calls] == [{"toml": EXAMPLE_WING}, {"toml": EXAMPLE_WING}]
+    assert all(c[3]["x-anisotropy-actor"] == "assistant" for c in fake.calls)
+    other = tmp_path / "notes.txt"
+    other.write_text("x", encoding="utf-8")
+    for given in (str(other), str(tmp_path / "missing.toml"), "../../etc/passwd"):
+        refused = call(("read_wing", {"wing": given}))[0]
+        assert isinstance(refused, Refused) and ("wing file" in refused), refused
+    assert len(fake.calls) == 2, "a file that is not a wing file is never sent"
+
+
+def test_the_results_are_the_reports_values_picked_out_with_their_case_and_place(call):
+    found = call(("wing_results", {"wing": "example"}))[0]
+    report = WING["report"]
+    assert found["passes"] is True and found["cases_run"] == 34 and found["strengths"] == "B-basis"
+    printed = round(report["governing"]["margin_ultimate"], 3)  # a margin as the wing page prints it, +0.059
+    assert found["governing"] == {**report["governing"], "margin_ultimate": printed} and printed == 0.059
+    skin = found["lowest_by_check"]["skin plies"]
+    assert skin["margin_ultimate"] == printed and skin["case"] == 6 and skin["member"] == "upper skin"
+    tip = max(report["cases"], key=lambda c: abs(c["tip_deflection"]))
+    assert found["largest_tip_deflection"] == {"value": tip["tip_deflection"], "case": tip["number"], "label": tip["label"]}
+    assert found["design"]["mass"] == report["design"]["mass"] and "stretches" not in found["design"]
+    assert found["units"]["mass"] == "kg" and "no ribs" in found["note"]
+
+
+def test_the_rules_and_the_strengths_are_the_wings_own(call):
+    every, skin, caps, strengths = call(("wing_rules", {"wing": "example"}), ("wing_rules", {"wing": "example", "part": "skin"}),
+                                        ("wing_rules", {"wing": "example", "part": "cap"}), ("wing_strengths", {"wing": "example"}))
+    assert every["limits"] == {"min_percent": 10.0, "max_in_a_row": 4, "drop_ratio": 20.0, "max_dropped": 2} and every["rules"] == WING["report"]["rules"]
+    assert {r["part"] for r in skin["rules"]} == {"skin"} and not next(r for r in skin["rules"] if r["rule"] == "ten_percent")["met"]
+    assert caps["rules"] == [] and "no such part" in caps["note"]
+    material = strengths["material"]
+    assert material["strength_basis"] == "B-basis" and material["estimates"] == ["F1c", "F6"] and strengths["stress_unit"] == "MPa"
+    assert next(s for s in material["strengths"] if s["role"] == "F1c")["page"] == 46
+
+
+def test_a_question_finds_the_wings_reference_sections_and_never_a_value_from_them(call, fake):
+    found = call(("search_wing_references", {"question": "what ply drop ratio should I use?"}))[0]
+    assert fake.calls[-1][2] == {"question": "what ply drop ratio should I use?", "about": "wing", "limit": 3}
+    assert found["sections"][0]["from"] == "Design rules for laminates, Ply drops: How long the run-out is"  # the API's own search of the wing's pages
+    assert "never from a section" in found["how_to_answer"]
+
+
+def test_a_change_is_previewed_never_applied_and_one_the_wing_cannot_take_is_refused_in_the_engines_words(call, fake):
+    change = {"action": "add_plies", "part": "skin", "angle": 0, "count": 2, "start": 0, "end": 0.4}
+    previewed, caps, odd = call(("preview_wing_change", {"wing": "example", **change}),
+                                ("preview_wing_change", {"wing": "example", **change, "part": "spar_caps"}),
+                                ("preview_wing_change", {"wing": "example", **change, "count": 1}))
+    assert fake.calls[0][2] == {"toml": EXAMPLE_WING, "change": {**change, "placement": "beside"}}
+    assert previewed["words"].startswith("Two 0° plies added to the skin from the root to 40 % of the half span")
+    assert previewed["applied"] is False and previewed["table_as_changed"]["zones"][0]["end"] == 0.4
+    assert previewed["after"]["lowest"]["skin plies"] > previewed["before"]["lowest"]["skin plies"]
+    assert previewed["before"]["governing"]["margin_ultimate"] == 0.059 and previewed["after"]["strength_basis"] == "B-basis"
+    assert all(round(value, 3) == value for value in previewed["after"]["lowest"].values()), "margins as the wing page prints them"
+    assert isinstance(caps, Refused) and caps.endswith(": The wing has no spar caps: add them on the Layup step first.")
+    assert isinstance(odd, Refused) and len(fake.calls) == 2, "an odd count is refused before the API is asked"
