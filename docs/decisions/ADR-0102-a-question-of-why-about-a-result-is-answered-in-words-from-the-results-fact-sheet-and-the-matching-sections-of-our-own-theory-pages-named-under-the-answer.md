@@ -1,6 +1,6 @@
 # ADR-0102: A question of why about a result is answered in words from the result's fact sheet and the matching sections of our own theory pages, named under the answer
 
-- Status: Proposed; asked for one to three sentences and its note shortened by ADR-0099 amendment 2
+- Status: Proposed; asked for one to three sentences and its note shortened by ADR-0099 amendment 2; the first sentence shown as the heading since amendment 1, at most nine words since amendment 2
 - Date: 2026-11-16
 - Decided by: Founder, 2026-11-16 (chose "Results plus our theory pages" on the question "Choose what a 'why' answer about a result is built from") | Drafted by: Claude Code
 - Related: [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md) (the fact sheet and the number guard); [ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) and [ADR-0100](ADR-0100-a-model-reads-a-loose-question-about-a-result-into-a-fixed-request-and-the-page-looks-the-values-up-the-model-is-shown-no-result-and-writes-none.md) (questions about a value); [ADR-0001](ADR-0001-deterministic-engine.md); [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md); [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md); [ADR-0091](ADR-0091-the-workspace-speaks-to-the-customer-in-the-products-own-words-mapped-in-the-page-and-guarded-by-a-test.md); `api/src/anisotropy_api/theory.py`, `api/src/anisotropy_api/result_answers.py`, `lib/result-why.ts`, `engine/docs/reasons.md`
@@ -96,3 +96,13 @@ Options 2, 4, 7 and 8.
 **Decision.** Option 3: `ANSWER_SYSTEM` in `api/src/anisotropy_api/assistant.py`; `whyLines` (`heading`, `more`) in `lib/result-why.ts`; `whyMessage` in `components/studio/coupon-chat.tsx`, with the test ids `chat-why-answer` and `chat-why-sources`.
 
 **Evidence.** `tests/result-why.test.ts` 7 of 7 and the browser spec of this record pass (2026-11-20); the screenshot `.local/website/screenshots/studio-why.png` shows "Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there." as the heading, one sentence under it and the section under Details. How a real model's answers grade after the change: UNVERIFIED until the next real run.
+
+## Amendment 2, 2026-11-20 (the heading at most nine words)
+
+**Context.** The second real-model run (ADR-0121, run 44663842680, 2026-11-20) graded every answer of why a failure, and for one reason: the first sentence, now the heading, ran 112 to 155 characters, where a heading of the chat is 60 at most (`tests/assistant-questions/harness.ts`). The model wrote the answer and its reason in one sentence, as amendment 1 let it.
+
+**Options.** (1) Cut the heading on the page at a comma: a cut can leave half a claim. Rejected. (2) A heading of fixed words ("The reason") over the whole answer: the heading would no longer answer (criterion 8 of the `chat-answer-quality` skill). Rejected. (3) Ask for the first sentence in at most nine words, said to be the heading, the reason in the sentences after it. Chosen; a heading over 60 characters stays a fault the check reports.
+
+**Decision.** Option 3: `ANSWER_SYSTEM` in `api/src/anisotropy_api/assistant.py`; its test in `api/tests/test_result_answers.py`.
+
+**Evidence.** `cd api && uv run pytest tests/test_result_answers.py` passes (2026-11-20). How long the real model's headings are after the change: UNVERIFIED until the next real run.

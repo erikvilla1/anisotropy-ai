@@ -1832,6 +1832,9 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   await expect(heading()).toHaveText("Anisotropy's assistant");
   await say("what is a tension coupon"); // a test's name, asked: what it is, and no test set
   await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "tension-coupon");
+  await say("what is the width?"); // a value of the setup, read from its own row (ADR-0121 amendment 3)
+  await expect(page.getByTestId("chat-about").last()).toHaveAttribute("data-topic", "setup-value");
+  await expect(heading()).toHaveText("Width: 25 mm");
   expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
   await say("is my setup ok?"); // checked, and the answer opens with Yes or No
   await expect(page.getByTestId("chat-check").last().locator("h4")).toHaveText("Yes, ready to run");

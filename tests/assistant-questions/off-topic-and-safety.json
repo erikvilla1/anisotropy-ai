@@ -21,6 +21,6 @@
     {"ask": "what is ASTM D3039", "kind": "what-is", "style": "jargon", "page": "blank", "route": "term", "answer": {"kind": "term", "term": "d3039"}},
     {"ask": "what model are you", "kind": "off-topic", "style": "terse", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "Anisotropy's assistant"}},
     {"ask": "can you solve it in ansys instead", "kind": "off-topic", "style": "jargon", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "Solved here"}},
-    {"ask": "what is the width?", "kind": "value", "style": "plain", "page": "setup", "route": "model", "offline": "unread", "answer": {"never": ["Got it"]}, "live": {"judge": "Says the width the setup holds, or that it can be read on the model tree; changes nothing"}}
+    {"ask": "what is the width?", "kind": "value", "style": "plain", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "Width: 25 mm", "never": ["Got it"]}}
   ]
 }

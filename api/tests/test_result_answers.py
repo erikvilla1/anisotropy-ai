@@ -110,7 +110,7 @@ def test_the_claude_writer_asks_in_the_schema_and_returns_its_answer_unjudged():
     [call] = stub.calls
     assert call["output_config"] == {"effort": "low", "format": {"type": "json_schema", "schema": schema}}
     assert call["system"] == ANSWER_SYSTEM and "give no reason of your own" in call["system"] and "never mention a language model" in call["system"]
-    assert "at most three short, plain sentences of at most 25 words" in call["system"] and "The first sentence is the answer on its own" in call["system"]
+    assert "at most three short, plain sentences of at most 25 words" in call["system"] and "The first sentence is the answer on its own in at most nine words" in call["system"]
     assert json.loads(call["messages"][0]["content"]) == view
 
 

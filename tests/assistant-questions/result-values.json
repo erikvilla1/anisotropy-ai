@@ -26,7 +26,7 @@
     {"ask": "what is the reaction force", "kind": "value", "style": "plain", "page": "results", "route": "summary", "answer": {"kind": "summary", "heading": "Reaction: 16220 N", "says": ["the top grip"]}, "live": {"judge": "Gives the top grip's reaction, 16220 N, from the results"}},
     {"ask": "what is the modulus", "kind": "value", "style": "plain", "page": "results", "route": "summary", "answer": {"kind": "refused", "says": ["ASTM D3039"]}},
     {"ask": "max displacement", "kind": "value", "style": "terse", "page": "results", "route": "summary", "answer": {"kind": "summary", "says": ["1 mm"]}},
-    {"ask": "is ply 2 above 1000 MPa?", "kind": "yes-no", "style": "units", "page": "results", "route": "model", "live": {"judge": "Opens with Yes or No from ply 2's own σ₁ at the gauge centre, 1182 MPa; writes no number not in the results"}},
+    {"ask": "is ply 2 above 1000 MPa?", "kind": "yes-no", "style": "units", "page": "results", "route": "model", "live": {"judge": "Opens with Yes from ply 2's own σ₁: 1182 MPa at the gauge centre, or its largest, 1203 MPa, with the place it is read; writes no number not in the results"}},
     {"ask": "how much force does it carry?", "kind": "value", "style": "loose", "page": "results", "route": "summary", "answer": {"kind": "summary", "says": ["16220 N"]}},
     {"ask": "whats the stiffness of the coupon", "kind": "value", "style": "typo", "page": "results", "route": "summary", "answer": {"kind": "refused"}},
     {"ask": "is ply 2 above 1000 MPa in σ₁ at element 125?", "kind": "yes-no", "style": "units", "page": "results", "route": "value", "answer": {"opens": "Yes", "says": ["1182 MPa"]}},

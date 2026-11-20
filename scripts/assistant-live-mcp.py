@@ -1,6 +1,7 @@
 """The MCP half of the real-model check (ADR-0121, check 2): each question a bank answers with one of our tools is put to a model acting as
 an engineer's own assistant, with the MCP server's tools and instructions, and the server answers it in process from the stored results
-the tests use (the stand-in API of `mcp-server/tests/conftest.py`), so no solver runs. Whether the model calls the tool the bank names,
+the tests use (the stand-in API of `mcp-server/tests/conftest.py`), so no solver runs; a search of the theory pages is our own (`theory.py`
+of the API, which reads only the documents), so a why question finds what it would find on the site. Whether the model calls the tool the bank names,
 with its arguments, is checked here; its last words go to the judge in `assistant-live.py`, which starts this script:
 
     uv run --project mcp-server --with "anthropic>=1,<2" python scripts/assistant-live-mcp.py --questions q.json --store DIR --out a.json
@@ -23,9 +24,10 @@ import httpx
 from mcp import Client
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "mcp-server" / "tests")]
+sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "mcp-server" / "tests"), str(ROOT / "api" / "src")]
 
 from assistant_live_common import AT_ONCE, OverBudget, Spend, Store, key_of, reply, resolve  # noqa: E402
+from anisotropy_api.theory import find  # noqa: E402  (the standard library only: no API package is installed here)
 from conftest import FakeApi  # noqa: E402
 from test_server import VALUES  # noqa: E402
 
@@ -51,6 +53,18 @@ def block(content: dict[str, Any]) -> dict[str, Any] | None:
     if kind == "redacted_thinking":
         return {"type": "redacted_thinking", "data": content["data"]}
     return None
+
+
+class TheoryApi(FakeApi):
+    """The stand-in API, with the theory pages' own search in place of its one fixed section."""
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/v1/workspace/theory-sections":
+            return super().__call__(request)
+        asked = json.loads(request.content)
+        found = [section for section, _ in find(asked["question"], limit=asked.get("limit", 3))]
+        return httpx.Response(200, json={"run_id": None, "sections": [{"id": s.id, "document": s.document, "title": s.title, "text": s.shown}
+                                                                      for s in found]})
 
 
 FREE_WORDS = {"question"}  # an argument the model words itself: the engineer's question put in its own words is the same question
@@ -79,12 +93,13 @@ def shown(text: str) -> str:
 async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend, client: Any) -> dict[str, Any]:
     asked = question["mcp"]
     context = asked.get("context") or ("solved" if asked["tool"] in ON_A_RESULT else None)
-    server = build(Api("http://127.0.0.1:8000", transport=httpx.MockTransport(FakeApi())))
+    server = build(Api("http://127.0.0.1:8000", transport=httpx.MockTransport(TheoryApi())))
     async with Client(server) as session:
         tools = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in (await session.list_tools()).tools]
         defaults = {t["name"]: {key: p["default"] for key, p in t["input_schema"].get("properties", {}).items() if "default" in p} for t in tools}
         messages: list[dict[str, Any]] = []
         held: list[dict[str, Any]] = []
+        before = {"solved": SETUP + " Solve it.", "setup": SETUP}.get(context or "")  # what the engineer said before the question
         if context == "solved":
             solved = await session.call_tool("solve_coupon", {"values": VALUES})
             held.append({"name": "solve_coupon", "input": {"values": VALUES}, "returned": shown(solved.content[0].text)})
@@ -101,7 +116,7 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
             await asyncio.to_thread(resolve, client, {key: params}, store, spend, batch=False, log=print)
             answer = store.get(key)
             if answer is None:
-                return {"id": question["id"], "tools": calls, "final": final, "faults": ["the model gave no answer in this run"]}
+                return {"id": question["id"], "tools": calls, "held": held, "before": before, "final": final, "faults": ["the model gave no answer in this run"]}
             message = reply(answer)
             final = "".join(b.text for b in message.content if b.type == "text").strip()
             messages.append({"role": "assistant", "content": [b for b in map(block, answer["content"]) if b]})
@@ -116,7 +131,7 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
                 results.append({"type": "tool_result", "tool_use_id": use["id"], "content": text, **({"is_error": True} if result.is_error else {})})
             messages.append({"role": "user", "content": results})
     faults = [] if called_as_asked(calls, asked, defaults, final) else [f"did not call {asked['tool']} with {json.dumps(asked['args'])}; called {[c['name'] for c in calls] or 'nothing'}"]
-    return {"id": question["id"], "tools": calls, "held": held, "final": final, "faults": faults}
+    return {"id": question["id"], "tools": calls, "held": held, "before": before, "final": final, "faults": faults}
 
 
 async def talk_all(questions: list[dict[str, Any]], model: str, store: Store, spend: Spend, client: Any) -> tuple[list[dict[str, Any]], str | None]:

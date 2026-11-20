@@ -84,7 +84,8 @@ def judge_request(model: str, item: dict[str, Any]) -> dict[str, Any]:
               "and what the question's author expects of a good answer. Grade what the engineer sees, not the reasoning behind it. "
               "'holds' meets every criterion that applies and the expectation; 'weak' meets the expectation but misses a criterion in a "
               "small way; 'fails' misses the expectation or a criterion in a way the engineer would notice. Name the criteria missed by "
-              "number, and say why in one short sentence.\n\n" + criteria())
+              "number, and say why in one short sentence. The product is called Anisotropy: its own name is not a tool, vendor or model name "
+              "under criterion 8.\n\n" + criteria())
     return {"model": model, "max_tokens": 2000, "system": system, "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
             "messages": [{"role": "user", "content": json.dumps(item, ensure_ascii=False, indent=1)}]}
 
@@ -236,6 +237,7 @@ def main() -> int:
             final = m["final"] or ""
             # what the tools returned goes with them: a number the answer quotes from there is the engine's, not typed (criterion 4)
             item = {"question": q["ask"], "where": "an engineer's own assistant, on our MCP server's tools",
+                    **({"what the engineer told it before the question": m["before"]} if m.get("before") else {}),
                     **({"what its tools returned before the question": m["held"]} if m.get("held") else {}), "tools it called": m["tools"],
                     "its answer": final, "a good answer": (q["live"] or {}).get("judge") or f"Answers from what {q['mcp']['tool']} returned, its numbers as given"}
             items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item))

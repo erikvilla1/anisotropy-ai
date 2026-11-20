@@ -1,15 +1,16 @@
-import { LAYUP_CHOICES, nextStep, unitsNamed } from "./studio-chat";
-import { unitLabels, unitsOf, unitWords, type StudioForm } from "./studio-form";
+import { LAYUP_CHOICES, layupNotation, nextStep, unitsNamed } from "./studio-chat";
+import { libraryOptions, unitLabels, unitsOf, unitWords, type StudioForm } from "./studio-form";
 
 /** Questions the chat answers in fixed words, with no model and no change to the setup (ADR-0121 amendment 2): who the assistant is and
  * what it does, the setup's units and whether another system is offered, whether a material of one's own can be used, which layup to
  * use, what a coupon needs, whether von Mises suits a composite ply, and another program named. The first real-model run of the question
  * banks (2026-11-20) found each of these answered "Not sure what to change", or read as a change: "can I use inches?" switched the units.
+ * A value of the setup asked for ("what is the width?") is read from the setup's own rows (amendment 4).
  *
  * Nothing here names a tool, a vendor or a model (ADR-0091), and nothing here is a number of a result. */
 
 export type AboutTopic = "identity" | "abilities" | "instructions" | "other-program" | "units" | "units-other" | "own-material" | "layup-advice"
-  | "needs" | "mises";
+  | "needs" | "mises" | "setup-value";
 
 const IDENTITY = [
   /^\s*(?:who|what)\s+(?:are|r)\s+(?:you|u)\b/i,
@@ -49,6 +50,29 @@ const NEEDS = [
 ];
 const MISES = /\b(?:von\s*-?\s*mis+es|mises|tresca)\b/i;
 const MISES_ASKS = /^\s*(?:is|are|can|could|should|does|do|would|will)\b|\b(?:valid|apply|applies|applicable|ok|okay|suitable|appropriate|meaningful|good)\b.*\?\s*$/i;
+/** The setup's rows a question may ask the value of, longest name first, as the engineer names them. */
+const SETUP_ROWS: { key: string; name: string; words: string }[] = [
+  { key: "ply_thickness", name: "Ply thickness", words: "ply\\s+thickness" },
+  { key: "tab_length", name: "Tab length", words: "tab\\s+length|(?<=(?:the|its|my|our|this)\\s+)tabs?" }, // "what are tabs?" asks what they are
+  { key: "element_size", name: "Element size", words: "(?:element|mesh)\\s+size" },
+  { key: "thickness", name: "Thickness", words: "thickness" },
+  { key: "width", name: "Width", words: "width" },
+  { key: "length", name: "Length", words: "length" },
+  { key: "layup", name: "Layup", words: "lay-?up|stacking\\s+sequence" },
+  { key: "library", name: "Material", words: "material" },
+];
+const OF_IT = "(?:\\s+(?:of|on|for|in)\\s+(?:the\\s+|this\\s+|my\\s+|our\\s+)?(?:coupon|specimen|model|laminate|setup|it))?(?:\\s+(?:is\\s+|are\\s+)?(?:now|set\\s+to|here|used|it|this))?\\s*\\??\\s*$";
+const SETUP_ASKED = SETUP_ROWS.map((row) => ({ ...row,
+  asked: new RegExp(`^\\s*(?:what(?:'s|’s|s|\\s+is|\\s+was|\\s+are)?|which)\\s+(?:is\\s+)?(?:the\\s+|its\\s+|my\\s+|our\\s+|this\\s+)?(?:coupon'?s\\s+|specimen'?s\\s+)?(?:${row.words})${OF_IT}`, "i") }));
+const HOW = /^\s*how\s+(wide|long|thick)\s+(?:is|are)\s+(?:it|the\s+(?:coupon|specimen|laminate|tabs?))\s*\??\s*$/i;
+const HOW_ROW: Record<string, string> = { wide: "width", long: "length", thick: "thickness" };
+
+/** The row of the setup a question asks the value of ("what is the width?", "how wide is it?"), or null. */
+export function setupRowAsked(text: string): string | null {
+  const how = HOW.exec(text);
+  if (how) return /\btabs?\b/i.test(text) && how[1].toLowerCase() === "long" ? "tab_length" : HOW_ROW[how[1].toLowerCase()];
+  return SETUP_ASKED.find((row) => row.asked.test(text))?.key ?? null;
+}
 
 /** The topic a message asks about, or null. A message with a value in it is a change, not a question of what is offered ("can I use
  * inches?" is asked; "use 0.5 in tabs" is not). On an imported model or a past run only what changes nothing of a setup is answered. */
@@ -60,6 +84,7 @@ export function aboutAsked(text: string, readOnly = false): AboutTopic | null {
   if (MISES.test(text) && MISES_ASKS.test(text) && !/^\s*why\b/i.test(text)) return "mises";
   if (UNITS.some((p) => p.test(text))) return "units";
   if (readOnly) return null;
+  if (setupRowAsked(text)) return "setup-value";
   if (unitsNamed(text) && CAN_USE.test(text) && !/\d/.test(text)) return "units-other";
   if (OWN_MATERIAL.test(text) && OWN_ASKS.test(text) && !/\d/.test(text)) return "own-material";
   if (LAYUP.test(text) && ADVICE.test(text) && !/\[/.test(text) && /^\s*(?:what|which|any|suggest|recommend|is|are|should|can|could|do)\b|\?\s*$/i.test(text)) return "layup-advice";
@@ -124,6 +149,16 @@ export function aboutAnswer(topic: AboutTopic, text: string, c: AboutContext): {
       return { title: "The layup is your choice", lines: [
         `Common ones: ${LAYUP_CHOICES.map((l) => `${l.title.toLowerCase().replace(/ \(shear\)$/, "")} ${l.notation}`).join(", ")}.`,
         "Say one, or type your own."] };
+    case "setup-value": {
+      const key = setupRowAsked(text)!;
+      const name = SETUP_ROWS.find((row) => row.key === key)!.name;
+      const material = c.form.library ? libraryOptions.find((m) => m.id === c.form.library)?.name ?? c.form.library : c.form.own_E1?.trim() ? "your own material" : "";
+      const value = key === "layup" ? layupNotation(c.form) : key === "library" ? material
+        : c.form[key]?.trim() ? `${c.form[key].trim()} ${unitLabels(units).length}` : "";
+      return value
+        ? { title: `${name}: ${value}`, lines: [`From the setup. Say a new ${name.toLowerCase()} to change it.`] }
+        : { title: `No ${name.toLowerCase()} yet`, lines: [`Say one to set it.`] };
+    }
     case "needs":
       return { title: "A material, a layup, a size and a load", lines: [
         "For example “IM7/8552, [45/0/-45/90]s, 250 x 25 mm, 56 mm tabs, pull 1 mm”.",

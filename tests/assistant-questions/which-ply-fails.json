@@ -24,6 +24,6 @@
     {"ask": "load at failure in kN", "kind": "value", "style": "units", "page": "results", "route": "failure", "answer": {"kind": "failure", "says": ["16740 N"]}, "live": {"request": {"kind": "failure"}}, "gap": "offline 10: a unit named with the question stops the page's reading"},
     {"ask": "what is the margin of safety", "kind": "value", "style": "jargon", "page": "results", "route": "failure", "answer": {"kind": "failure", "says": ["No margin of safety is worked out here", "1.032"]}, "live": {"request": {"kind": "failure"}, "judge": "Gives the first-ply failure factor 1.032 and says the margin is not computed here; writes no number that is not the result's"}},
     {"ask": "which ply fails first", "kind": "which", "style": "plain", "page": "setup", "route": "failure", "answer": {"kind": "none", "heading": "No answer to read yet"}},
-    {"ask": "displacement 2 mm", "kind": "change", "style": "terse", "page": "results", "route": "model", "offline": "patterns", "answer": {"kind": "rows"}, "live": {"proposals": {"value": "2"}}}
+    {"ask": "displacement 2 mm", "kind": "change", "style": "terse", "page": "results", "route": "model", "offline": "patterns", "answer": {"kind": "rows"}, "live": {"proposals": {"displacement": "2"}}}
   ]
 }
