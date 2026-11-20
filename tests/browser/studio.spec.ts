@@ -35,7 +35,7 @@ const TENSION_BUILT = [
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[]; wakes?: number;
     reports?: number; reportReads?: string[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; plates?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean; plates?: boolean; ansysModel?: boolean; writer?: "template" | "model"; jobs?: (poll: number) => unknown;
     report?: () => { status: number; body: unknown } } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
@@ -47,7 +47,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const path = url.pathname;
     // one workflow first (ADR-0089): the API says whether every test is offered. The scenarios below test the full panels, development's
     // view, so the switch is on unless a scenario turns it off for the tension screen (ADR-0090), the product's view
-    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true, plates: options.plates ?? false });
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true, plates: options.plates ?? false, ansys_model: options.ansysModel ?? true });
     if (path === "/v1/workspace/assistant" && options.writer === "model") return json(route, { proposes: false, provider: "anthropic", model: "claude-opus-5-5" });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) { // no project store, and the API says so: the browser keeps the project alone (ADR-0091 amendment 2)
@@ -1981,9 +1981,9 @@ test("the model downloads as a file for the engineer's own program, from the men
   expect(browserErrors).toEqual([]);
 });
 
-test("a customer is offered the Abaqus file alone, and an Ansys file asked for is said to be not offered yet (ADR-0129, ADR-0091)", async ({ page, browserName }) => {
+test("where the Ansys file is closed, a customer is offered the Abaqus file alone and an Ansys file asked for is said to be not offered yet (ADR-0129, ADR-0091)", async ({ page, browserName }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls, { allTests: false });
+  await mockApi(page, calls, { allTests: false, ansysModel: false }); // the API can close the Ansys file again; it is everyone's since amendment 3
   const asked: { program: string | null; values: Record<string, unknown> }[] = [];
   await mockModelFile(page, asked);
   await page.goto("/workspace/fea?for=coupon");
@@ -2010,6 +2010,36 @@ test("a customer is offered the Abaqus file alone, and an Ansys file asked for i
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus");
   await expect(page.getByTestId("chat-model-file").last().getByRole("button")).toHaveText(["Abaqus input file (.inp)"]);
   await expectNoBannedTerms(page, "the assistant's answer about the file");
+});
+
+test("a customer is offered both files, by the menu and by asking (ADR-0129 amendment 3, ADR-0091)", async ({ page, browserName }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // a customer's sign-in: one test, and the Ansys file as the API offers it to everyone
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  await mockModelFile(page, asked);
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expectNoBannedTerms(page, "the download menu open, both files");
+  const file = browserName === "webkit" ? null : page.waitForEvent("download");
+  await menu.getByTestId("model-download-ansys").click();
+  if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Ansys input file (.cdb).");
+  expect(asked[0]).toMatchObject({ program: "ansys" });
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("can i get this as an ansys file?");
+  await message.press("Enter");
+  await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Download the model");
+  await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
+  await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
 });
 
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {

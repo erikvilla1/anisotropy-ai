@@ -84,14 +84,15 @@ def test_the_abaqus_file_is_everyones_and_comes_as_a_named_download(tool, tmp_pa
     assert not any((tmp_path / "live").iterdir()), "nothing of the model is kept once it is answered"
 
 
-def test_the_ansys_file_is_offered_where_the_import_is(tool, monkeypatch):
-    refused = client.post(ADDRESS, params={"program": "ansys"}, json={"values": VALUES})
-    assert refused.status_code == 403 and refused.json()["detail"] == "The Ansys model is not offered yet."
-    monkeypatch.setattr("anisotropy_api.main._imports", lambda request: True)  # a founder's sign-in, or the machine's switch
-    answer = client.post(ADDRESS, params={"program": "ansys"}, json={"values": VALUES})
+def test_the_ansys_file_is_everyones_and_refused_only_if_it_is_closed_again(tool, monkeypatch):
+    answer = client.post(ADDRESS, params={"program": "ansys"}, json={"values": VALUES})  # no sign-in and no switch (ADR-0129 amendment 3)
     assert answer.status_code == 200 and answer.text.startswith("! Generated\n/PREP7\n")
     assert answer.headers["content-disposition"] == 'attachment; filename="IM78552-UNT-L1-ansys.cdb"'
     assert client.get("/v1/coupon-tests").json()["ansys_model"] is True
+    monkeypatch.setattr("anisotropy_api.main._ansys_model", lambda request: False)
+    refused = client.post(ADDRESS, params={"program": "ansys"}, json={"values": VALUES})
+    assert refused.status_code == 403 and refused.json()["detail"] == "The Ansys model is not offered yet."
+    assert client.get("/v1/coupon-tests").json()["ansys_model"] is False
 
 
 def test_a_setup_the_check_stops_is_a_422_with_its_first_reason(tool):
@@ -101,7 +102,6 @@ def test_a_setup_the_check_stops_is_a_422_with_its_first_reason(tool):
 
 
 def test_a_model_the_writer_cannot_state_is_a_422_that_says_why(tool, monkeypatch):
-    monkeypatch.setattr("anisotropy_api.main._imports", lambda request: True)
     answer = client.post(ADDRESS, params={"program": "ansys"}, json={"values": {**VALUES, "notes": "TURNS"}})
     assert answer.status_code == 422
     assert answer.json()["detail"] == "This model cannot be written for Ansys yet: the reference point RF-Top of the grip Grip-Top may turn"
