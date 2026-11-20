@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
-import { confirmsFailure, failureAnswer, failureLines, plyWords, type FailureAnswer } from "@/lib/result-failure";
+import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
+import { summaryAnswer, type SummaryQuantity } from "@/lib/result-summary";
 import { factsOf, whyLines } from "@/lib/result-why";
 import { isConditionOrLoad, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
@@ -13,7 +14,7 @@ import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, extremeWords, questionFrom, RESULT_COLUMNS,
-  resultOffer, resultUnit, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "@/lib/result-question";
+  resultOffer, resultUnit, thresholdVerdict, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
 import {
@@ -58,14 +59,14 @@ type Entry = { stage?: boolean } & (
   | { id: number; role: "assistant"; kind: "result"; job: string }
   | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer }
   // a value read from the results on the page (ADR-0099): the answer as read, the fields it was read from, and whether they were a preview
-  | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean }
+  | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean; verdict?: string | null }
   // where a quantity is largest in those results (ADR-0100): stored values picked out, by the page's patterns or a model's reading
-  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" }
+  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model"; verdict?: string | null }
   // the working behind the answer, as the package wrote it (ADR-0103): the chain asked for, the fields it is of, and whether they were a preview
   | { id: number; role: "assistant"; kind: "working"; found: Extract<FoundWorking, { kind: "chain" }>; from: Fields; preview: boolean }
   // which ply fails first, whether the coupon fails and at what loading: the package's own answer (ADR-0099 amendment 1)
   // `confirmed`: the message stated the answer back, right, and asked if it is so, so the answer opens with "Yes" (ADR-0099 amendment 3)
-  | { id: number; role: "assistant"; kind: "failure"; found: FailureAnswer; from: Fields; preview: boolean; reader: "patterns" | "model"; confirmed: boolean }
+  | { id: number; role: "assistant"; kind: "failure"; found: FailureAnswer; from: Fields; preview: boolean; reader: "patterns" | "model"; confirmed: boolean; asked?: string }
   // what an element is and where it sits, said from the fields (ADR-0099 amendment 3)
   | { id: number; role: "assistant"; kind: "element"; answer: ElementFacts; from: Fields }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
@@ -461,9 +462,22 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     thread.current = question;
     about.current = null; // the talk has moved from an element to a value: "it" is no longer the element
-    if (answer.kind === "extremes") add({ role: "assistant", kind: "extremes", answer, from: from.fields, preview: from.live, reader });
-    else add({ role: "assistant", kind: "values", answer, from: from.fields, preview: from.live });
+    // "is ply 2 above 1000 MPa?" opens with Yes or No, from the one value the answer gives (ADR-0099 amendment 4)
+    const column = answer.kind === "extremes" ? answer.blocks[0]?.column : answer.columns[0];
+    const verdict = column ? thresholdVerdict(text, answer, resultUnit(from.fields, column), printed) : null;
+    if (answer.kind === "extremes") add({ role: "assistant", kind: "extremes", answer, from: from.fields, preview: from.live, reader, verdict });
+    else add({ role: "assistant", kind: "values", answer, from: from.fields, preview: from.live, verdict });
     showPlace(placeOf(answer));
+  }
+
+  /** The reaction, the largest displacement or the modulus of the result (ADR-0099 amendment 4), as the result card prints it. */
+  function answerSummary(text: string, quantity: SummaryQuantity, from: Fields) {
+    const said = summaryAnswer(from, quantity, printed);
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: said.title, body: (
+      <div data-testid="chat-summary" data-quantity={quantity}>
+        {said.lines.map((line, i) => <p key={line} className={i ? "chat-note" : undefined}>{line}</p>)}
+      </div>
+    ) });
   }
 
   /** What an element is, or where one sits (ADR-0099 amendment 3): said from the fields, in place of a question back about quantities.
@@ -512,7 +526,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           : "This result carries no first-ply failure. Run the analysis again, then ask."}</p> });
       return;
     }
-    add({ role: "assistant", kind: "failure", found, from: from.fields, preview: from.live, reader, confirmed: confirmsFailure(text, found, printed) });
+    add({ role: "assistant", kind: "failure", found, from: from.fields, preview: from.live, reader, confirmed: confirmsFailure(text, found, printed), asked: text });
     showPlace(failurePlace(found.row));
   }
 
@@ -655,6 +669,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
             : `A question of why is answered from a solved model. ${resultsFirst()}`}</p> });
         return;
+      case "summary": answerSummary(text, routed.quantity, shown.fields!); return;
       case "value": case "follow-up": answerQuestion(text, routed.question); return;
       case "failure": answerFailure(text); return;
       case "element": answerElement(text, routed.element, shown.fields!); return;
@@ -1025,7 +1040,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const caution = comparisonNote(answer.columns);
     return (
       <div data-testid="chat-values" data-element={answer.label} data-place={answer.place} data-source={preview ? "live" : "run"}>
-        {lines ? <h4 data-testid="chat-value">{lines.headline}</h4>
+        {entry.verdict ? <h4 data-testid="chat-value-verdict">{entry.verdict}</h4> : null}
+        {lines ? (entry.verdict ? <p data-testid="chat-value"><strong>{lines.headline}</strong></p> : <h4 data-testid="chat-value">{lines.headline}</h4>)
           : <h4>Element {answer.label}{one ? `, ply ${one.ply} (${one.angle}°)` : read.length < from.mesh.plies ? `, plies ${read.join(", ")}` : ", every ply"}</h4>}
         {lines ? null : (
           <div className="studio-table-scroll">
@@ -1116,13 +1132,23 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const current = sameResults(shown.fields, from);
     const L = from.labels.length ?? "";
     const lines = failureLines(found, printed);
+    // "does it fail?" opens with Yes or No; a loading stated back wrongly is answered No; a margin asked for is said not to be worked out
+    const asked = entry.asked ?? "";
+    const verdict = entry.confirmed ? null : failureVerdict(asked, found);
+    const denied = !entry.confirmed && lines.confirmed !== null && contradictsFailure(asked, found, printed);
+    const margin = marginNote(asked, found, printed);
     const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
     const outside = answer.outside;
     return (
       <div data-testid="chat-failure" data-reader={reader} data-source={preview ? "live" : "run"} data-basis={answer.basis} data-criterion={row.criterion} data-fails={row.fails}>
         {entry.confirmed && lines.confirmed ? <><h4 data-testid="chat-failure-yes">Yes</h4><p data-testid="chat-failure-loading"><strong>{lines.confirmed}</strong></p></>
+          : denied ? <><h4 data-testid="chat-failure-no">No</h4><p data-testid="chat-failure-loading"><strong>{lines.confirmed}</strong></p></>
+          : verdict ? <><h4 data-testid="chat-failure-verdict">{verdict}</h4>
+            <p data-testid="chat-failure-loading"><strong>{lines.headline}, {lines.loading.charAt(0).toLowerCase()}{lines.loading.slice(1)}</strong></p>
+            {lines.applied ? <p className="chat-note" data-testid="chat-failure-applied">{lines.applied}</p> : null}</>
           : <><h4 data-testid="chat-failure-ply">{lines.headline}</h4><p data-testid="chat-failure-loading"><strong>{lines.loading}</strong></p>
             {lines.applied ? <p className="chat-note" data-testid="chat-failure-applied">{lines.applied}</p> : null}</>}
+        {margin ? <p className="chat-note" data-testid="chat-failure-margin">{margin}</p> : null}
         <p className="chat-note" data-testid="chat-failure-facts">{lines.facts.join(" · ")}{preview ? " · preview, run the analysis to verify" : ""}</p>
         {found.missing ? <p className="chat-note" data-testid="chat-failure-missing">{found.missing} is not in this result, so the governing criterion is shown.</p> : null}
         <details className="chat-details" data-testid="chat-failure-details"><summary>Details</summary>
@@ -1166,7 +1192,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const extremeCaution = comparisonNote(answer.blocks.map((b) => b.column));
     return (
       <div data-testid="chat-extremes" data-reader={reader} data-source={preview ? "live" : "run"} data-region={answer.region}>
-        {lines ? <h4 data-testid="chat-extreme">{lines.headline}</h4> : <h4>Largest in {answer.region}</h4>}
+        {entry.verdict ? <h4 data-testid="chat-value-verdict">{entry.verdict}</h4> : null}
+        {lines ? (entry.verdict ? <p data-testid="chat-extreme"><strong>{lines.headline}</strong></p> : <h4 data-testid="chat-extreme">{lines.headline}</h4>)
+          : <h4>Largest in {answer.region}</h4>}
         {lines ? null : (
           <div className="studio-table-scroll">
             <table className="studio-table studio-table-num studio-table-compact" data-testid="chat-extremes-table">

@@ -7,8 +7,9 @@ import { join } from "node:path";
 import type { Fields, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
 import { asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
 import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
-import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, valueLines, type ResultQuestion } from "../../lib/result-question";
-import { confirmsFailure, failureAnswer, failureLines } from "../../lib/result-failure";
+import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
+import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
+import { summaryAnswer } from "../../lib/result-summary";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
 import { workingFor } from "../../lib/result-working";
 import { applyMessage, unitsNamed } from "../../lib/studio-chat";
@@ -155,7 +156,17 @@ export type Said = { kind: string; heading: string; lines: string[]; data: Recor
 
 const said = (kind: string, heading: string, lines: string[] = [], data: Record<string, unknown> = {}): Said => ({ kind, heading, lines, data });
 
-function valueAnswer(s: Scene, question: ResultQuestion): Said {
+function valueAnswer(s: Scene, question: ResultQuestion, text: string): Said {
+  const answer = valueOnly(s, question);
+  if (!s.fields || (answer.kind !== "values" && answer.kind !== "extremes")) return answer;
+  // "is ply 2 above 1000 MPa?" opens with Yes or No (ADR-0099 amendment 4), as coupon-chat.tsx's answerQuestion says it
+  const found = answerResultQuestion(s.fields, question, s.picked);
+  const column = found.kind === "extremes" ? found.blocks[0]?.column : found.kind === "values" ? found.columns[0] : undefined;
+  const verdict = column ? thresholdVerdict(text, found, resultUnit(s.fields, column), printed) : null;
+  return verdict ? { ...answer, heading: verdict, lines: [answer.heading, ...answer.lines] } : answer;
+}
+
+function valueOnly(s: Scene, question: ResultQuestion): Said {
   if (!s.fields) return said("none", "No results to read yet", ["Stresses and strains come from a solved model."]);
   const answer = answerResultQuestion(s.fields, question, s.picked);
   if (answer.kind === "ask") return said("ask", "Which element?", [answer.text]);
@@ -196,15 +207,25 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     }
     case "why": return said("why", "Answered in words from the results", [], {});
     case "why-none": return said("none", "No results to answer from yet");
-    case "value": case "follow-up": return valueAnswer(s, routed.question);
+    case "summary": {
+      const answer = summaryAnswer(s.fields!, routed.quantity, printed);
+      return said(answer.found ? "summary" : "refused", answer.title, answer.lines, { quantity: routed.quantity });
+    }
+    case "value": case "follow-up": return valueAnswer(s, routed.question, text);
     case "failure": {
       const found = s.fields ? failureAnswer(s.fields, text) : null;
       if (!found) return said("none", "No answer to read yet");
       const lines = failureLines(found, printed);
       const confirmed = confirmsFailure(text, found, printed) && lines.confirmed !== null;
       const data = { criterion: found.row.criterion, confirmed, element: found.row.label.split(".").pop(), plies: [found.row.ply] };
-      return confirmed ? said("failure", "Yes", [lines.confirmed!, lines.facts.join(" · ")], data)
-        : said("failure", lines.headline, [lines.loading, ...(lines.applied ? [lines.applied] : []), lines.facts.join(" · ")], data);
+      const margin = marginNote(text, found, printed);
+      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : [])];
+      if (confirmed) return said("failure", "Yes", [lines.confirmed!, ...facts], data);
+      // as failureMessage in coupon-chat.tsx: a loading stated back wrongly is answered No, "does it fail?" opens with Yes or No
+      if (lines.confirmed !== null && contradictsFailure(text, found, printed)) return said("failure", "No", [lines.confirmed, ...facts], data);
+      const verdict = failureVerdict(text, found);
+      if (verdict) return said("failure", verdict, [`${lines.headline}, ${lines.loading.charAt(0).toLowerCase()}${lines.loading.slice(1)}`, ...(lines.applied ? [lines.applied] : []), ...facts], data);
+      return said("failure", lines.headline, [lines.loading, ...(lines.applied ? [lines.applied] : []), ...facts], data);
     }
     case "element": {
       const answer = describeElement(s.fields!, routed.element === "last" ? s.state.about : routed.element, s.picked);

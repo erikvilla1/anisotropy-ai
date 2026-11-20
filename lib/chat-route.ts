@@ -1,5 +1,6 @@
 import { aboutAsked, type AboutTopic } from "./chat-about";
-import { asksFailure } from "./result-failure";
+import { asksFailure, namesCriterion } from "./result-failure";
+import { summaryAsked, type SummaryQuantity } from "./result-summary";
 import { asksElement, readFollowUp, readResultQuestion, type ResultQuestion } from "./result-question";
 import { asksWhy } from "./result-why";
 import { asksWorking } from "./result-working";
@@ -44,8 +45,8 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
-export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "value", "failure", "element", "follow-up", "read-only", "ready",
-  "setup-fixed", "run", "check", "full-form", "laminate", "name", "model", "unread", "patterns"] as const;
+export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
+  "ready", "setup-fixed", "run", "check", "full-form", "laminate", "name", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 
 export type ChatRoute =
@@ -55,6 +56,7 @@ export type ChatRoute =
   | { route: "working" } // the formula or the proof behind the answer (ADR-0103)
   | { route: "why" } // a question of why, answered in words from the results and the theory pages (ADR-0102)
   | { route: "why-none" } // a question of why with no result (or no API) to answer from
+  | { route: "summary"; quantity: SummaryQuantity } // the reaction, the largest displacement, the modulus of the whole result (ADR-0099 amendment 4)
   | { route: "value"; question: ResultQuestion } // a value of the results, read by the page's patterns (ADR-0099)
   | { route: "failure" } // which ply fails first, whether it fails, at what load (ADR-0099 amendment 1)
   | { route: "element"; element: number | "picked" | "last" | null } // what an element is, or where (ADR-0099 amendment 3)
@@ -109,7 +111,16 @@ export const modelAsksResults = (text: string, form: StudioForm, results: boolea
 
 /** Who answers a message: the first reader, in a fixed order, that claims it. The order is the page's rule, not a ranking: a fixed word
  * (a term, the working, a why) is answered before a value, a value before a failure, a question before an edit, and an edit before a guess. */
-export function routeMessage(text: string, s: ChatState): ChatRoute {
+/** The ways the words a question turns on are mistyped, read as meant (ADR-0099 amendment 4): "whcih ply fails first", "wher is the max
+ * shear". Only the reading uses them; the message is kept as typed. */
+const TYPOS: [RegExp, string][] = [
+  [/\b(?:whcih|wich|whihc|whitch|wihch|hwich)\b/gi, "which"], [/\b(?:wher|whre|wehre)\b/gi, "where"], [/\b(?:waht|wht|whta|wat)\b/gi, "what"],
+  [/\b(?:fials|failes|fale)\b/gi, "fails"], [/\b(?:fial|fai|faill)\b/gi, "fail"], [/\bteh\b/gi, "the"], [/\b(?:frist|fisrt|firts)\b/gi, "first"],
+];
+export const spelled = (text: string): string => TYPOS.reduce((out, [typo, word]) => out.replace(typo, word), text);
+
+export function routeMessage(typed: string, s: ChatState): ChatRoute {
+  const text = spelled(typed);
   const edits = () => applyMessage(s.form, text).understood.length > 0;
   if (!s.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) return { route: "start-over" };
   // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
@@ -125,6 +136,12 @@ export function routeMessage(text: string, s: ChatState): ChatRoute {
   // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102); with
   // no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
   if (asksWhy(text)) return s.api && s.results && s.facts ? { route: "why" } : { route: "why-none" };
+  // the reaction, the largest displacement or the modulus of the result, as the result card prints it (ADR-0099 amendment 4)
+  const quantity = s.results ? summaryAsked(text) : null;
+  if (quantity) return { route: "summary", quantity };
+  // a criterion named with a word of failure asks its first ply, never a table of the largest stresses: "which ply fails first by max stress"
+  if (asksFailure(text) && namesCriterion(text)) return { route: "failure" };
+  if (namesCriterion(text) && /\b(?:first[- ]ply[- ]failure|fpf|fails?\s+first|first\s+to\s+fail)\b/i.test(text)) return { route: "failure" };
   const question = readResultQuestion(text);
   if (question) return { route: "value", question };
   // which ply fails first, or whether it fails, is the package's own answer, never a table of the largest stresses (ADR-0099 amendment 1)

@@ -1020,11 +1020,12 @@ test("the assistant keeps the thread: a missing place is the gauge centre, a fra
   const yes = page.getByTestId("chat-failure").last();
   await expect(yes.getByTestId("chat-failure-yes")).toHaveText("Yes");
   await expect(yes.getByTestId("chat-failure-loading")).toHaveText(`At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${printed(row.factor)} × that: ${failing}.`);
-  // a statement with a number the page does not print gets the answer with both states, and no yes
+  // a statement with a number the page does not print is told no, with both states as the page prints them (ADR-0099 amendment 4)
   await say("does it mean that it fails at 20000 N");
-  const plain = page.getByTestId("chat-failure").last();
-  await expect(plain.getByTestId("chat-failure-yes")).toHaveCount(0);
-  await expect(plain.getByTestId("chat-failure-applied")).toHaveText(`Applied: ${now}.`);
+  const no = page.getByTestId("chat-failure").last();
+  await expect(no.getByTestId("chat-failure-yes")).toHaveCount(0);
+  await expect(no.getByTestId("chat-failure-no")).toHaveText("No");
+  await expect(no.getByTestId("chat-failure-loading")).toHaveText(`At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${printed(row.factor)} × that: ${failing}.`);
 
   expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
@@ -1041,7 +1042,7 @@ test("with a model on, a loose question about the results is read into a fixed r
   let proposalsAsked = 0;
   // a model behind the API: its readings, as the guard would keep them
   const readings: Record<string, unknown> = {
-    "wher is teh shear highest?": { kind: "extreme", quantities: ["S12"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
+    "where's the shearing worst?": { kind: "extreme", quantities: ["S12"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
     "which ply carries the most load?": { kind: "extreme", quantities: ["S11"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
     "compare the 0° and 90° plies here": { kind: "values", quantities: ["S11", "S22", "S12"], plies: [2, 4, 5, 7], element: null, here: true, sense: null, region: "default" },
     "worst transverse loading anywhere, grips included?": { kind: "extreme", quantities: ["S22"], plies: [], element: null, here: false, sense: "magnitude", region: "whole" },
@@ -1075,13 +1076,19 @@ test("with a model on, a loose question about the results is read into a fixed r
 
   // the page's own patterns read a plain question: no model is asked
   await say("where is the shear stress highest?");
-  const plain = page.getByTestId("chat-extremes").last();
+  const plain = page.getByTestId("chat-extremes").first();
   await expect(plain).toHaveAttribute("data-reader", "patterns");
   await expect(plain).toHaveAttribute("data-region", "the gauge section");
   expect(offers).toHaveLength(0);
 
-  // a loose one goes to the model, which answers with a request; the page looks the values up
+  // and one with its words misspelt (ADR-0121 amendment 2)
   await say("wher is teh shear highest?");
+  await expect(page.getByTestId("chat-extremes")).toHaveCount(2);
+  await expect(page.getByTestId("chat-extremes").last()).toHaveAttribute("data-reader", "patterns");
+  expect(offers).toHaveLength(0);
+
+  // a loose one goes to the model, which answers with a request; the page looks the values up
+  await say("where's the shearing worst?");
   const loose = page.getByTestId("chat-extremes").last();
   await expect(loose).toHaveAttribute("data-reader", "model");
   await expect(loose.getByTestId("chat-extreme")).toHaveText(await plain.getByTestId("chat-extreme").innerText()); // the same answer, whoever read the question
@@ -1793,7 +1800,7 @@ test("what is applied is drawn and listed under the model before and after a run
   expect(browserErrors).toEqual([]);
 });
 
-test("a question is answered and changes nothing: the units, inches, who it is, a test's name, ready to run, the working (ADR-0121 amendment 2)", async ({ page }) => {
+test("a question is answered and changes nothing: the units, inches, who it is, a test's name, ready to run, the working, the reaction, yes or no (ADR-0121 amendment 2, ADR-0099 amendment 4)", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
@@ -1825,6 +1832,16 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   await say("how did you get 16740 N"); // a number of the answer, asked about: the working, never a new load of 16740 N
   await expect(page.getByTestId("chat-working-none").or(page.getByTestId("chat-working")).last()).toBeVisible();
   await expect(page.getByTestId("coupon-chat")).not.toContainText("16740 N force");
+  // questions of the result the page answers itself, each opening with the answer (ADR-0099 amendment 4)
+  await say("what is the reaction force");
+  await expect(heading()).toHaveText(`Reaction: ${printed(16222.038876522856)} N`);
+  await expect(page.getByTestId("chat-summary").last()).toContainText("the top grip, in tension");
+  await say("does it fail?");
+  await expect(page.getByTestId("chat-failure-verdict").last()).toHaveText("No, the coupon holds");
+  await say("what is the margin of safety");
+  await expect(page.getByTestId("chat-failure-margin").last()).toContainText("No margin of safety is worked out here");
+  await say("is ply 2 above 1000 MPa in σ₁ at element 125?");
+  await expect(page.getByTestId("chat-value-verdict").last()).toHaveText(/^Yes, \d+ MPa is above 1000 MPa$/);
   expect(calls.solves).toHaveLength(1);
   const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
   for (const word of ["claude", "anthropic", "chatgpt", "abaqus"]) expect(said).not.toContain(word);
