@@ -36,13 +36,13 @@ RULES: tuple[RuleName, ...] = ("ten_percent", "in_a_row", "balance", "symmetry")
 DROP_RULES: tuple[RuleName, ...] = ("drop_count", "drop_ratio", "drop_cover")  # the rules of a change of stack
 DIRECTIONS = (0.0, 45.0, -45.0, 90.0)  # the four directions of the 10 % rule
 SOURCES: dict[RuleName, str] = {
-    "ten_percent": "MIL-HDBK-17-3F, Volume 3: a laminate carried by its fibers in every direction",
-    "in_a_row": "Common practice: plies of one angle together crack apart more easily; thicker plies call for fewer",
+    "ten_percent": "MIL-HDBK-17-3F, Volume 3, p. 5-69: a laminate carried by its fibers in every direction",
+    "in_a_row": "MIL-HDBK-17-3F, Volume 3, p. 5-69: plies of one angle together crack apart more easily; thicker plies call for fewer",
     "balance": "Laminate theory: a balanced laminate does not shear when stretched (A16 = A26 = 0)",
     "symmetry": "Laminate theory: a symmetric laminate does not bend when stretched (B = 0)",
-    "drop_count": "Common practice: plies ending together leave a step where the plies start to part; end a few at a time",
-    "drop_ratio": "Common practice: a change of thickness tapered over many times its height carries the load past it smoothly",
-    "drop_cover": "Common practice: a ply that runs on over the ends of the dropped plies holds them down",
+    "drop_count": "MIL-HDBK-17-3F, Volume 3, p. 12-13: plies ending together leave a step where the plies start to part; end a few at a time",
+    "drop_ratio": "MIL-HDBK-17-3F, Volume 3, p. 12-13: a change of thickness tapered over many times its height carries the load past it smoothly",
+    "drop_cover": "MIL-HDBK-17-3F, Volume 3, p. 12-12: a ply that runs on over the ends of the dropped plies holds them down",
 }
 MINUS = "−"
 

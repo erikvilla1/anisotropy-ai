@@ -1,8 +1,8 @@
 # ADR-0123: A layup's design rules are judged by the engine on the stack alone, as warnings, with their limits in the wing file, and change no number of the analysis
 
-- Status: Proposed
+- Status: Proposed; the four default limits kept by the founder and their sources read in MIL-HDBK-17-3F, Volume 3, since amendment 1
 - Date: 2026-11-20
-- Decided by: Founder, 2026-11-19 ("Plan order: project, rules, caps, chat", his choice on the order of the wing chat's plan, whose second step is this; the rules and their default limits are the plan's, and the limits stay open until he sets others) | Drafted by: Claude Code
+- Decided by: Founder, 2026-11-19 ("Plan order: project, rules, caps, chat", his choice on the order of the wing chat's plan, whose second step is this; the rules and their default limits are the plan's, and the limits stay open until he sets others); 2026-11-20 ("Keep all four", his answer to "Keep 10 %, 4 in a row, 2 per drop and 20 to 1 as our defaults?", amendment 1) | Drafted by: Claude Code
 - Related: [ADR-0059](ADR-0059-the-engine-describes-the-stack-and-evaluates-first-ply-failure-on-the-response-endpoint-for-the-home-calculator.md), [ADR-0115](ADR-0115-a-wing-is-one-description-worked-first-as-a-beam-by-the-engine-over-every-flight-case-at-once-and-the-finite-element-model-of-the-same-description-is-its-check.md), [ADR-0118](ADR-0118-the-wing-workspace-works-the-engines-hand-calculation-through-the-api-on-every-settled-change-draws-what-the-engine-returns-and-keeps-the-wing-as-its-wing-file.md), [ADR-0122](ADR-0122-a-wing-is-a-project-of-its-own-kind-kept-like-a-coupon-or-a-laminate-with-its-versions-in-the-browser.md), `engine/src/anisotropy_engine/layup_rules.py`, `engine/src/anisotropy_engine/wing/wing_file.py`, `components/workspace/wing-rail.tsx`
 - Area: engine, website
 
@@ -62,3 +62,22 @@ Options 1(a), 2(a), 3(a), 4(a) and 5(a). `layup_rules(plies, limits, core_after)
 - The founder, or a professor using it in a class, gives other rules or limits than these: then the defaults or the rules change.
 - People read a warning as a failed wing.
 - The handbook, once read at its section, words a rule differently (for example ±45° counted together): then the rule follows it.
+
+## Amendment 1, 2026-11-20 (the four default limits kept, their sources read in MIL-HDBK-17-3F; confirmed by the founder)
+
+**Context.** The defaults, 10 % in each of the four directions, 4 plies of one angle in a row, a run-out of 20 to 1 and 2 plies ending at one place, were the plan's, with their sources seen only in search excerpts (UNVERIFIED here, in ADR-0125 and in the design rules page of ADR-0127). The founder downloaded MIL-HDBK-17-3F, Volume 3 (17 June 2002, Distribution Statement A, public release) on 2026-11-20, and the copy was read at its sections and pages. The copy is kept in the project's files, never in the repository.
+
+**Options.** Keep all four as the defaults; change one or more; or leave the limits open. Each wing can still set its own limits in the Design rules box either way.
+
+**Decision.** Keep all four. The founder's words, 2026-11-20 at 2:23 AM PT: "Keep all four". What the handbook says, read on 2026-11-20:
+
+| Limit | MIL-HDBK-17-3F, Volume 3 |
+| --- | --- |
+| 10 % in each of 0°, +45°, −45° and 90° | Section 4.4.1.1 item 5 (p. 4-7); Section 5.6.5.2.1 strong recommendation 2 (p. 5-69); Section 12.3.1 lesson A-18 (p. 12-13) |
+| 4 plies of one angle in a row | Section 5.6.5.2.1 strong recommendation 3 (p. 5-69): for tape, no more than four together, a group no thicker than 0.03 in (0.8 mm), and 0.015 in (0.38 mm) for plies across a free edge; lesson A-21 (p. 12-13) |
+| A run-out of 20 to 1 | Lesson A-26 (p. 12-13): each drop no thicker than 0.010 in (0.25 mm), drops at least 0.20 in apart in the major load direction; 0.20 / 0.010 = 20. The handbook's "(0.51 mm)" beside 0.20 in is a slip: 0.20 in is 5.1 mm |
+| 2 plies ending at one place | Lesson A-25 (p. 12-13): no more than 2 plies per step, and not two plies next to each other |
+
+Balance and symmetry are Section 5.6.5.2.1 strong recommendation 4 (p. 5-70) and lesson A-17 (p. 12-12); the outside ply over a drop, lesson A-15 (p. 12-12). The rules' source lines (`SOURCES` in `layup_rules.py`) name the handbook and its page, and the design rules page cites each section. The handbook's list holds rules the wing does not check: a ±45° pair at each surface (A-24), no grouping of 90° plies (A-22), at most 40 % in one direction where fastened (A-20), dropped plies not next to each other (A-25) and no skin drop across a spar or rib flange (A-27, p. 12-14). It names no limit on the angle between neighbouring plies in Sections 5.6.5.2 or 12.3.1.
+
+**Evidence.** The handbook read at the pages above, 2026-11-20. The rules' tests and the fixtures written again by `scripts/wing-choices.py`; no limit, margin or verdict changed, only the source lines.
