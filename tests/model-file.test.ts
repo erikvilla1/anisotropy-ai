@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { aboutAnswer, aboutAsked } from "../lib/chat-about";
 import { routeMessage, type ChatState } from "../lib/chat-route";
 import { modelFileAnswer, modelFileAsked, programNamed } from "../lib/model-file";
 import { bannedIn } from "../lib/studio-copy";
@@ -76,5 +77,28 @@ test("the answer offers the files this visitor may have, says what the Ansys fil
   for (const answer of [all, one, notYet, readOnly]) {
     for (const sentence of [answer.title, ...answer.lines, ...answer.offers.map((p) => MODEL_FILE_LABELS[p])]) assert.deepEqual(bannedIn(sentence), [], sentence);
     assert.ok(answer.lines.length <= 2, answer.title);
+  }
+});
+
+test("what a model file is, where the report is and a model brought in from another program are answered in fixed words, and are no request for a file (ADR-0129 amendment 1)", () => {
+  const asked: [string, string | null][] = [
+    ["what is an abaqus input file", "model-file-what"], ["whats a cdb file", "model-file-what"], ["what is a deck?", "model-file-what"],
+    ["download the report", "report"], ["where is the pdf", "report"], ["how do i get the report", "report"],
+    ["import an ansys model", "bring-in"], ["can i upload a nastran file?", "bring-in"],
+    // a value asked for with the verb "report", a question of why, a load and an Abaqus file brought in are read by others
+    ["report the stress in ply 3", null], ["why is the report empty", null], ["load 10 kN", null], ["import an abaqus model", null], ["what is in the report", null],
+  ];
+  for (const [text, topic] of asked) {
+    assert.equal(aboutAsked(text), topic, text);
+    assert.equal(modelFileAsked(text), null, text);
+  }
+  const form = exampleForm("2026-11-20");
+  const report = aboutAnswer("report", "download the report", { form, results: false, readOnly: false });
+  assert.equal(report.title, "The report is under Files");
+  assert.ok(report.lines.some((line) => line.includes("no result yet")));
+  for (const topic of ["model-file-what", "report", "bring-in"] as const) {
+    const said = aboutAnswer(topic, "import an ansys model", { form, results: true, readOnly: false });
+    for (const line of [said.title, ...said.lines]) assert.deepEqual(bannedIn(line), [], line); // the customer's words (ADR-0091)
+    assert.ok(![said.title, ...said.lines].some((line) => /nastran/i.test(line)), topic); // another program is not named back
   }
 });
