@@ -299,9 +299,13 @@ test("each time the clip starts again the hero's words are typed in again, stand
   expect(Date.now() - began).toBeGreaterThan(2_900);
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero).toHaveAttribute("data-words", "gone");
-  // And the next time round they come again.
-  await startsAgain();
-  await expect(hero).toHaveAttribute("data-words-round", "3");
+  // And the next time round they come again. The page takes a report only once the leaving has ended, a moment after the last
+  // character is gone, and nothing on the page says when: the report is made again until it is taken. One made while the words
+  // stand changes nothing, as shown above, so the round is counted once.
+  await expect(async () => {
+    await startsAgain();
+    await expect(hero).toHaveAttribute("data-words-round", "3", { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
 });
 
 /** When a press last reached the page, in ms since the document started. */
