@@ -147,6 +147,14 @@ def test_the_pages_wing_choices_and_the_browser_tests_answer_are_what_the_script
     sent["report"]["seconds"] = caps["report"]["seconds"]
     assert close({key: sent[key] for key in ("wing", "report", "views")}, {key: caps[key] for key in ("wing", "report", "views")}), \
         "the browser test's answer with caps is the API's"
+    previewed = json.loads(module.CAPS_PREVIEW.read_text(encoding="utf-8"))  # the founder's change on those caps (ADR-0128)
+    assert close(previewed, module.preview()), hint
+    sent = client.post("/v1/wings/changes", json={"wing": module.without_zones(example()), "change": module.FOUNDERS.model_dump()}).json()
+    assert close({key: sent[key] for key in previewed if key != "run_id"}, {key: previewed[key] for key in previewed if key != "run_id"}), \
+        "the browser test's preview is the API's"
+    assert close(previewed["wing"], caps["wing"]), "the change previewed gives the zone the caps answer holds"
+    skin = json.loads(module.SKIN_PREVIEW.read_text(encoding="utf-8"))  # the MCP server's stand-in answer
+    assert close(skin, module.preview(skin=True)), hint
 
 
 def test_the_wing_file_the_page_saves_reads_back_as_the_example():
@@ -230,3 +238,64 @@ def test_the_example_wings_shape_is_built_by_the_fea_package():
     assert body["step"].startswith("ISO-10303-21;") and "PRODUCT('Front spar'" in body["step"]
     assert [p["name"] for p in body["parts"]["parts"]][:4] == ["Upper skin", "Lower skin", "Front spar", "Rear spar"]
     assert body["parts"]["wing"] == "Example straight wing" and body["parts"]["mass"] > 0
+
+
+# A change of plies previewed (ADR-0128): the engine's preview passed on, the wing sent never kept, a change the wing cannot take refused in
+# the engine's words, and the record holding the change and both summaries, not the wing.
+CHANGES = "/v1/wings/changes"
+FOUNDERS = {"action": "add_plies", "part": "spar_caps", "angle": 0, "count": 2, "start": 0, "end": 0.4}  # "Add 2 0 plies to the spar caps from the root to 40% span"
+
+
+def capped() -> dict:
+    return {**example(), "spar_caps": {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0]}}
+
+
+def test_a_change_is_previewed_as_the_engine_previews_it_and_the_wing_sent_is_unchanged():
+    from anisotropy_engine.wing.changes import PlyChange, preview_change
+    sent = capped()
+    answer = client.post(CHANGES, json={"wing": sent, "change": FOUNDERS})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    expected = preview_change(capped(), PlyChange(**FOUNDERS))
+    assert body["words"] == expected["words"] and body["wing"] == expected["wing"] and body["rules"] == expected["rules"]
+    assert close(body["before"], expected["before"]) and close(body["after"], expected["after"])
+    assert body["wing"]["spar_caps"]["zones"] == [{"start": 0.0, "end": 0.4, "half_stack": [0.0, 0.0, 0.0, 45.0, -45.0, 0.0]}]
+    assert sent == capped(), "the wing sent is never changed"
+    assert body["after"]["lowest"]["skin plies"] > body["before"]["lowest"]["skin plies"] and body["after"]["mass"] > body["before"]["mass"]
+    from_text = client.post(CHANGES, json={"toml": EXAMPLE.read_text(encoding="utf-8"), "change": {**FOUNDERS, "part": "skin", "end": 1}})
+    assert from_text.status_code == 200 and from_text.json()["wing"]["skin"]["half_stack"] == [0.0, 0.0, 45.0, -45.0, 0.0]
+
+
+@pytest.mark.parametrize(("wing", "change", "says"), [
+    (example, FOUNDERS, "The wing has no spar caps: add them on the Layup step first"),
+    (capped, {**FOUNDERS, "action": "remove_plies", "angle": 90}, "has 0 plies at 90°"),
+])
+def test_a_change_the_wing_cannot_take_is_refused_in_the_engines_words(wing, change, says):
+    refused = client.post(CHANGES, json={"wing": wing(), "change": change})
+    assert refused.status_code == 422 and says in refused.json()["detail"]
+
+
+@pytest.mark.parametrize("change", [
+    {**FOUNDERS, "count": 3}, {**FOUNDERS, "start": 0.5, "end": 0.4}, {**FOUNDERS, "part": "rib"}, {**FOUNDERS, "count": "2"},
+    {**FOUNDERS, "where": "both caps"}, {k: v for k, v in FOUNDERS.items() if k != "angle"},
+])
+def test_a_change_out_of_its_shape_is_refused_before_the_engine_works(change):
+    assert client.post(CHANGES, json={"wing": capped(), "change": change}).status_code == 422
+
+
+@needs_test_database
+def test_a_change_is_recorded_by_the_change_and_its_summaries_never_the_wing_it_gives(recording):
+    answer = recording.post(CHANGES, json={"wing": capped(), "change": FOUNDERS})
+    assert answer.status_code == 200 and answer.json()["run_id"]
+    run = recording.get(f"/v1/runs/{answer.json()['run_id']}").json()
+    assert run["endpoint"] == CHANGES and run["status"] == "solved" and run["inputs"]["change"] == FOUNDERS
+    assert set(run["response"]) == {"change", "words", "before", "after"} and run["response"]["words"] == answer.json()["words"]
+
+
+def test_a_wings_question_searches_its_theory_and_the_reference_pages_and_a_coupons_does_not():
+    asked = "what ply drop ratio should I use?"
+    wing = client.post("/v1/workspace/theory-sections", json={"question": asked, "about": "wing"}).json()["sections"]
+    assert wing[0]["id"] == "rules:ply-drops-how-long-the-run-out-is" and "<!-- also" not in wing[0]["text"]
+    coupon = client.post("/v1/workspace/theory-sections", json={"question": asked}).json()["sections"]
+    assert not any(s["id"].startswith(("rules:", "tests:", "allowables:")) for s in coupon)
+    assert client.post("/v1/workspace/theory-sections", json={"question": asked, "about": "plate"}).status_code == 422

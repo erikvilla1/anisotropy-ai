@@ -1,6 +1,7 @@
 "use client";
 
 import { answerWords, CHECK_WORDS, marginText, whereWords, type WingCheckName, type WingReport } from "@/lib/wing";
+import { WingChat } from "./wing-chat";
 import { useWing } from "./wing-context";
 import { showPanel } from "./panels/step-panel";
 
@@ -45,8 +46,8 @@ function Governing({ report }: { report: WingReport }) {
   );
 }
 
-/** The right column of the wing workspace (ADR-0118): the answer in words, what governs and why, and what each waiting case needs.
- * It words the engine's report; it computes nothing and changes nothing. */
+/** The right column of the wing workspace (ADR-0118): the answer in words, what governs and why, what each waiting case needs, and the
+ * wing's chat (ADR-0128). It words the engine's report and computes nothing; the chat changes the wing only when the engineer taps Apply. */
 export function WingAssistant() {
   const { answer, problem } = useWing();
   return (
@@ -63,6 +64,7 @@ export function WingAssistant() {
           <p className="studio-hint">This is the hand calculation: the box between the spars as a thin-walled beam, worked in a fraction of a second on every change.</p>
         </>
       ) : <p className="studio-muted">The wing&apos;s answer appears here once it is worked.</p>}
+      <WingChat />
     </div>
   );
 }

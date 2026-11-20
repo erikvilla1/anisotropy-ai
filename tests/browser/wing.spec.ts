@@ -12,7 +12,13 @@ const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", 
 /** The engine's answer to the example with the spar caps the page adds and a cap zone from the root to 40 % (ADR-0125), written and
  * checked like ANSWER. */
 const CAPS = JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf-8"));
-const WINGS = /\/v1\/wings\/(analyze|shape|checks(\/[0-9a-f-]+)?)$|\/v1\/wake$/;
+/** The preview of "Add 2 0 plies to the spar caps from the root to 40% span" on the example with the caps the page adds (ADR-0128): it gives
+ * the zone CAPS holds. Written and checked like ANSWER. */
+const PREVIEW = JSON.parse(readFileSync("tests/fixtures/wing/caps-preview.json", "utf-8"));
+/** What the reference search answers in these tests: a section of the design rules as the API cuts it. */
+const SECTION = { id: "rules:the-10-rule", document: "Design rules for laminates", title: "The 10 % rule",
+  text: "Each of the four directions 0°, +45°, −45° and 90° should hold at least a tenth of the plies.\n\nThe default is 10 %, set per wing up to 25 %." };
+const WINGS = /\/v1\/wings\/(analyze|shape|changes|checks(\/[0-9a-f-]+)?)$|\/v1\/wake$|\/v1\/workspace\/theory-sections$/;
 const CHECK_ID = "0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00";
 /** How the check stands at each look: queued when started, then running at its second stage, then done with the report. */
 const LOOKS = [
@@ -33,6 +39,8 @@ const CAPPED_SHAPE = { ...SHAPE, parts: { ...SHAPE.parts, parts: [
 type Sent = { wing?: Record<string, unknown>; toml?: string };
 const shapes: Sent[] = []; // what Download STEP sent, in the test that runs
 const checks: Sent[] = []; // what the finite element check was started with
+const changes: (Sent & { change?: Record<string, unknown> })[] = []; // what the chat asked to preview
+const searched: { question: string; about?: string }[] = []; // what the chat asked the reference pages
 let looks = LOOKS; // what each look at the check answers, the last one repeated
 let looked = 0;
 
@@ -40,6 +48,8 @@ async function playWings(page: Page, answer: (body: Sent) => { status: number; b
   const sent: Sent[] = [];
   shapes.length = 0;
   checks.length = 0;
+  changes.length = 0;
+  searched.length = 0;
   looked = 0;
   await page.route(/\/v1\/.*/, (route: Route) => {
     const request = route.request();
@@ -54,7 +64,17 @@ async function playWings(page: Page, answer: (body: Sent) => { status: number; b
       const look = looks[Math.min(looked++, looks.length - 1)];
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(checkAt(look)) });
     }
+    if (path.endsWith("/theory-sections")) {
+      searched.push(request.postDataJSON());
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run_id: null, sections: [SECTION] }) });
+    }
     const body = request.postDataJSON() as Sent;
+    if (path.endsWith("/changes")) { // the engine refuses a change to caps the wing does not have, in its own words
+      changes.push(body);
+      return body.wing?.spar_caps
+        ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(PREVIEW) })
+        : route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ detail: "The wing has no spar caps: add them on the Layup step first." }) });
+    }
     if (new URL(request.url()).pathname.endsWith("/shape")) {
       shapes.push(body);
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body.wing?.spar_caps ? CAPPED_SHAPE : SHAPE) });
@@ -378,6 +398,45 @@ test("the margins use the material's B-basis strengths, each shown with its basi
   await expect.poll(() => sent.at(-1)?.wing?.material).toEqual({ library: "t650-5320-1" });
   await page.getByTestId("wing-material-library").selectOption("im7-8552");
   await expect.poll(() => sent.at(-1)?.wing?.material).toEqual({ library: "im7-8552", strengths: "B-basis" });
+});
+
+test("the wing's chat answers from the wing's own numbers and pages, and previews a change that changes the wing only on Apply (ADR-0128)", async ({ page }) => {
+  const sent = await playWings(page, (body) => ({ status: 200, body: body.wing?.spar_caps ? CAPS : ANSWER }));
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  const chat = page.getByTestId("wing-chat");
+  const box = chat.getByLabel("Message the wing assistant");
+  const ask = async (message: string) => { await box.fill(message); await box.press("Enter"); return chat.getByTestId("wing-chat-answer").last(); };
+
+  const rule = await ask("does my skin meet the 10% rule?");
+  await expect(rule.getByTestId("wing-chat-heading")).toHaveText("No: the skin misses the 10 % rule");
+  await expect(rule).toContainText("Skin: No plies at 90°");
+  await expect(rule.locator("summary")).toHaveText("Why: Design rules, The 10 % rule"); // the page explains, the wing's rule judges
+  expect(searched.at(-1)).toEqual({ question: "does my skin meet the 10% rule?", about: "wing", limit: 2 });
+  const which = await ask("which part fails first");
+  await expect(which.getByTestId("wing-chat-heading")).toHaveText("Upper skin first: +0.059");
+
+  const refused = await ask("Add 2 0 plies to the spar caps from the root to 40% span");
+  await expect(refused.getByRole("alert")).toHaveText("The wing has no spar caps: add them on the Layup step first."); // the engine's words alone
+  await page.getByTestId("wing-spar_caps").getByTestId("wing-add-caps").click();
+  await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toBeTruthy();
+  const previewed = await ask("Add 2 0 plies to the spar caps from the root to 40% span");
+  await expect(previewed.getByTestId("wing-preview-words")).toHaveText(PREVIEW.words);
+  expect(changes.at(-1)?.change).toEqual({ action: "add_plies", part: "spar_caps", angle: 0, count: 2, start: 0, end: 0.4, placement: "beside" });
+  const table = previewed.getByTestId("wing-preview-table");
+  await expect(table.locator("tbody tr").first()).toContainText("Lowest margin");
+  await expect(table.locator("tbody tr").first().locator("td").last()).toHaveAttribute("data-better", "true");
+  expect(sent.at(-1)?.wing?.spar_caps).not.toHaveProperty("zones"); // nothing changes before Apply
+  await previewed.getByTestId("wing-apply").click();
+  await expect.poll(() => sent.at(-1)?.wing).toEqual(CAPS.wing); // the zone the change gives, worked at once
+  await expect(previewed).toContainText("Applied as a new version");
+  await expect(page.getByTestId("wing-spar_caps").getByTestId("wing-spar_caps-zone-0-end")).toHaveValue("40");
+  const history = page.getByTestId("panel-wing-history");
+  await history.locator("summary").click();
+  const newest = page.getByTestId("wing-history").locator("li[data-by]").first();
+  await expect(newest).toHaveAttribute("data-by", "assistant");
+  await expect(newest).toContainText("the assistant: “Add 2 0 plies to the spar caps from the root to 40% span”");
+  await expect(newest).toContainText("Spar cap zones along the span: blank → root to 40 % [0/0/0/45/-45/0]s");
 });
 
 test("the wing workspace names no tool, no machinery and no record, with every panel open, the shape built and the check made (ADR-0091, ADR-0118, ADR-0119)", async ({ page }) => {

@@ -30,6 +30,7 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
+from anisotropy_engine.wing.changes import preview_change
 from anisotropy_engine.wing.wing_file import wing_from_dict, wing_report, wing_views
 
 from .abaqus_coupon import NotABuildScript, coupon_data
@@ -42,7 +43,7 @@ from .proposals import model_view_of_form, source_guard
 from .general_answers import general_guard, general_schema, general_view
 from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
 from .result_questions import model_view, question_guard, question_schema
-from .theory import find as find_theory
+from .theory import find as find_theory, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
@@ -60,8 +61,8 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingCheckOutput, WingCheckRequest, WingRequest,
-    WingShapeAnswer,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
+    WingRequest, WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1600,6 +1601,7 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
 
 
 WINGS = "/v1/wings/analyze"
+WING_CHANGES = "/v1/wings/changes"
 WING_SHAPE = "/v1/wings/shape"
 WING_SHAPE_TIMEOUT_S = 90.0  # Gmsh builds the example in under a second; a cold start of the fea environment takes a few
 SHAPE_REFUSED = 2  # anisotropy_fea.wing_shape.REFUSED: the description was refused, the reason on stderr
@@ -1639,6 +1641,28 @@ def analyze_wing_endpoint(problem: WingRequest, actor: Actor, request: Request, 
         response.headers[RUN_ID_HEADER] = str(run_id)
     return WingAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), wing=data,
                       report=report, views=views)
+
+
+@app.post(WING_CHANGES, response_model=WingChangePreview)
+def preview_wing_change(problem: WingChangeRequest, actor: Actor, request: Request, response: Response) -> WingChangePreview:
+    """A change of plies previewed on a wing (ADR-0128): the engine makes it on a copy of the wing file (zones split and joined, ADR-0125)
+    and works the wing as it is and as changed by hand, in well under a second. Nothing is kept: the engineer applies the change on the
+    page, or not, and the chat and the MCP server only preview. A change the wing cannot take (no spar caps, too few plies of the angle)
+    is refused in the engine's words. Recorded with its actor (ADR-0026): the change, its sentence and both summaries, not the wing."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        preview = preview_change(data, problem.change)
+        if not _finite(preview):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else "These values do not give a finite, solvable wing. Check the values and their units."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    run_id = _record(request, actor, problem, response={key: preview[key] for key in ("change", "words", "before", "after")})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return WingChangePreview(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), **preview)
 
 
 @app.post(WING_SHAPE, response_model=WingShapeAnswer)
@@ -1941,10 +1965,12 @@ def answer_general_question(asked: GeneralQuestionRequest, actor: Actor, request
 @app.post("/v1/workspace/theory-sections", response_model=TheorySectionsResponse)
 def find_theory_sections(asked: TheorySectionsRequest, actor: Actor, request: Request, response: Response) -> TheorySectionsResponse:
     """The sections of our theory pages a question's words find, with their text (ADR-0107): what `result-answers` hands the API's own
-    model, handed to a reader whose own model writes, such as an MCP client. No result is sent here, no model is called and nothing is
-    computed: the sections are the documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
+    model, handed to a reader whose own model writes, such as an MCP client; a wing's question (`about="wing"`) searches the wing's theory
+    and the reference pages instead (ADR-0128). No result is sent here, no model is called and nothing is computed: the sections are the
+    documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
     the ids of the sections found, never their text, so the questions that find nothing can be read back."""
-    found = [section for section, _ in find_theory(asked.question, limit=asked.limit)]
+    among = wing_sections() if asked.about == "wing" else None  # a wing's question: its theory and the reference pages (ADR-0127)
+    found = [section for section, _ in find_theory(asked.question, among=among, limit=asked.limit)]
     run_id = _record(request, actor, asked, response={"sections": [section.id for section in found]})
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)

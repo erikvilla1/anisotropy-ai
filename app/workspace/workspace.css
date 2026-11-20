@@ -301,6 +301,13 @@
 .wing-assistant h3 { margin-top: 0; }
 .wing-explain { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
 .wing-explain ul { margin: 4px 0 8px; padding-left: 18px; }
+/* The wing's chat (ADR-0128) under the answer in words */
+.wing-chat { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.wing-chat-scroll { display: flex; flex-direction: column; gap: 14px; }
+.wing-chat .chat-studio-composer { margin: 0; }
+.wing-chat .chat-assistant h4 { margin-top: 2px; }
+.wing-chat td[data-better="true"] { color: #8fd18f; }
+.wing-chat td[data-better="false"] { color: #e66767; }
 .wing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; align-items: start; }
 .wing-swatch-line { width: 16px; height: 0; border-top: 2px dashed #9085e9; border-radius: 0; vertical-align: 3px; }
 .wing-swatch-ring { border: 2px solid #f2f2f2; border-radius: 50%; background: transparent; }

@@ -3,6 +3,7 @@
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
+import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
@@ -638,6 +639,28 @@ export async function shapeWing(apiBaseUrl: string, request: { wing: WingDescrip
     throw unreadable("the wing's shape: not a shape");
   }
   return payload as unknown as WingShape;
+}
+
+/** A change of plies previewed on the wing as it stands (ADR-0128): the engine makes it on a copy and works both, and nothing is kept.
+ * A change the wing cannot take is refused in the engine's words. */
+export async function previewWingChange(apiBaseUrl: string, wing: WingDescription, change: PlyChange, signal?: AbortSignal): Promise<WingChangePreview> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/changes`, { method: "POST", headers, body: JSON.stringify({ wing, change }), signal }, "the preview of the change");
+  if (!isObject(payload) || typeof payload.words !== "string" || !isObject(payload.wing) || !isObject(payload.before) || !isObject(payload.after)
+    || !isObject(payload.units) || !Array.isArray(payload.rules)) throw unreadable("the preview of the change: not a preview");
+  return payload as unknown as WingChangePreview;
+}
+
+/** A section of our pages as the search hands it: its id, the page, its title and its text. */
+export type ReferenceSection = { id: string; document: string; title: string; text: string };
+
+/** The sections of the wing's theory and the reference pages a question's words find, best first (ADR-0127): words cut from our own
+ * pages and ranked, no model and no number. */
+export async function wingReferences(apiBaseUrl: string, question: string, signal?: AbortSignal): Promise<ReferenceSection[]> {
+  const body = JSON.stringify({ question: question.slice(0, 2000), about: "wing", limit: 2 });
+  const payload = await call(`${base(apiBaseUrl)}/v1/workspace/theory-sections`, { method: "POST", headers, body, signal }, "the reference pages");
+  if (!isObject(payload) || !Array.isArray(payload.sections)) throw unreadable("the reference pages: not a list of sections");
+  return payload.sections.filter((s): s is ReferenceSection => isObject(s) && typeof s.id === "string" && typeof s.title === "string" && typeof s.text === "string"
+    && typeof s.document === "string");
 }
 
 /** The check's answer as the page reads it: a state it knows, its stage, and once done a report with its lowest margins and cases. */

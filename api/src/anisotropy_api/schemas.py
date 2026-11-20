@@ -13,6 +13,7 @@ from anisotropy_engine.library import LibraryMaterial, library_material
 from anisotropy_engine.response import Loads
 from anisotropy_engine.summary import FailureSummary, LaminateSummary
 from anisotropy_engine.units import UNIT_SYSTEMS
+from anisotropy_engine.wing.changes import PlyChange
 
 
 class Contract(BaseModel):
@@ -1130,6 +1131,9 @@ class TheorySectionsRequest(Contract):
 
     question: Annotated[str, Field(min_length=1, max_length=2000)]
     limit: Annotated[int, Field(ge=1, le=5)] = 3
+    # what the question is about: a coupon's result searches the theory pages as before; a wing searches the wing's theory and the three
+    # reference pages of design rules, test methods and allowables (ADR-0127, ADR-0128)
+    about: Literal["coupon", "wing"] = "coupon"
 
 
 class TheorySection(Contract):
@@ -1401,6 +1405,29 @@ class WingCheckRequest(WingRequest):
     whose row then lists the check; a project unknown or not the requester's is ignored, so a wing the browser alone knows still runs."""
 
     project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
+
+
+class WingChangeRequest(WingRequest):
+    """A change of plies to preview on a wing (ADR-0128): the wing as for its hand calculation, and the change, plies of one angle added to
+    or taken from one part over a stretch of the half span. The wing sent is never kept or changed."""
+
+    change: PlyChange
+
+
+class WingChangePreview(Contract):
+    """A change worked before it is applied (ADR-0128): the change in one sentence, the wing file it gives, the summary of the wing as it is
+    and as changed (the passes, the lowest margin and where, each check's lowest margin, mass, tip deflection and first bending frequency,
+    in the file's units), and the design rules of the part changed. Applying it is the engineer's tap on the page."""
+
+    run_id: str | None = None
+    engine_version: str
+    change: dict[str, Any]
+    words: str
+    wing: dict[str, Any]
+    before: dict[str, Any]
+    after: dict[str, Any]
+    units: dict[str, Any]
+    rules: list[dict[str, Any]]
 
 
 class WingAnswer(Contract):

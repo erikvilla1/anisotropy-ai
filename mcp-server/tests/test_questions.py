@@ -30,7 +30,7 @@ def test_every_tool_is_asked_about():
 @pytest.mark.parametrize(("feature", "question"), ASKED, ids=lambda v: v["ask"] if isinstance(v, dict) else v)
 def test_a_question_answered_by_a_tool_gets_what_its_bank_says(call, feature, question):
     asked = question["mcp"]
-    args = {key: VALUES if value == "example" else value for key, value in asked["args"].items()}
+    args = {key: VALUES if key == "values" and value == "example" else value for key, value in asked["args"].items()}
     steps = [("solve_coupon", {"values": VALUES})] if asked["tool"] in ON_A_RESULT else []
     if asked["tool"] in ON_A_RESULT:
         args = {"result_id": "r1", **args}

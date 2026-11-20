@@ -14,6 +14,7 @@ from anisotropy_mcp.server import build
 
 REPO = Path(__file__).resolve().parents[2]
 STUDIO = REPO / "tests" / "fixtures" / "studio"
+WING = REPO / "tests" / "fixtures" / "wing"  # the engine's answers for the wing (ADR-0128), written by scripts/wing-choices.py
 SECTIONS = [{"id": "engine:5-failure", "document": "Laminate theory", "title": "5. Failure", "text": "Tsai-Hill combines the stresses of a ply."}]
 
 
@@ -64,6 +65,15 @@ class FakeApi:
                                              "fields": fixture("fields.json"), "explanation": fixture("explanation.json")})
         if path == "/v1/workspace/theory-sections":
             return httpx.Response(200, json={"run_id": None, "sections": self.sections})
+        if path == "/v1/wings/analyze":  # the example wing's answer, whatever wing file is sent
+            return httpx.Response(200, json=fixture("example-answer.json", WING))
+        if path == "/v1/wings/changes":  # two 0° plies on the skin, root to 40 %; caps the example does not have are refused as the engine refuses them
+            change = body["change"]
+            if change["part"] == "spar_caps" and "[spar_caps]" not in body["toml"]:
+                return httpx.Response(422, json={"detail": "The wing has no spar caps: add them on the Layup step first."})
+            if change == {"action": "add_plies", "part": "skin", "angle": 0, "count": 2, "start": 0, "end": 0.4, "placement": "beside"}:
+                return httpx.Response(200, json=fixture("skin-preview.json", WING))
+            return httpx.Response(422, json={"detail": "not in this stand-in"})
         return httpx.Response(404, json={"detail": "Not Found"})
 
 

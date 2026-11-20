@@ -20,6 +20,8 @@ import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
 import { FEA_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
+import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
+import type { WingDescription, WingReport } from "../../lib/wing";
 
 export const FOLDER = "tests/assistant-questions";
 
@@ -29,10 +31,11 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start"] as const;
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps"] as const;
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
- * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124). */
-export const ALL_ROUTES = [...ROUTES, ...START_ROUTES] as const;
+ * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
+ * `lib/wing-chat.ts`, ADR-0128). */
+export const ALL_ROUTES = [...ROUTES, ...START_ROUTES, ...WING_ROUTES] as const;
 export type AnyRoute = (typeof ALL_ROUTES)[number];
 
 export type Kind = (typeof KINDS)[number];
@@ -64,6 +67,8 @@ export type Expected = {
   element?: string;
   /** A failure answer that confirms the engineer's own statement of it ("Yes"). */
   confirmed?: boolean;
+  /** The change of plies a wing's message is read into (ADR-0128), as the engine's form takes it. */
+  change?: Record<string, unknown>;
 };
 
 /** What a real model should read the question as (the real-model run, `scripts/assistant-live.py`). */
@@ -103,8 +108,8 @@ export type Question = {
   /** The MCP server's tool a client should call for it, the arguments, and words its answer holds (ADR-0107). */
   mcp?: { tool: string; args: Record<string, unknown>; says?: string[]; refused?: boolean;
     /** What the client's conversation holds before the question, in the real-model run: the coupon stated ("setup"), or stated and solved
-     * ("solved", the default for a tool that reads a result). */
-    context?: "setup" | "solved" };
+     * ("solved", the default for a tool that reads a result), or the wing named ("wing": Anisotropy's example wing, ADR-0128). */
+    context?: "setup" | "solved" | "wing" };
   live?: Live;
   /** A known gap: the answer does not yet hold what is expected, by the skill's criterion. The bank fails when the gap closes, so the
    * mark comes off with the fix. A gap that opens "search:" is the theory search's (the API's test), "mcp:" the MCP server's; any other
@@ -135,6 +140,11 @@ export function banks(folder = FOLDER): Bank[] {
 
 const studio = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}`, "utf8"));
 const imported = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio-import/${name}`, "utf8"));
+/** The wing's page: the engine's answer to the example wing, and to the example with spar caps and a cap zone (ADR-0125). */
+const WING_ANSWERS: Record<string, { report: WingReport; wing: WingDescription }> = {
+  wing: JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf8")),
+  "wing-caps": JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf8")),
+};
 const RESULTS = { fields: studio("fields.json") as Fields, facts: !!studio("explanation.json").facts, explanation: studio("explanation.json") };
 const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported("explanation.json").facts, explanation: imported("explanation.json") };
 
@@ -259,10 +269,16 @@ export function startAnswer(routed: StartRoute): Said {
 
 /** A talk: the earlier messages, then the question, each routed and answered on the same scene; the chat's own memory of the last
  * question and the element last spoken of is kept as the component keeps it (`thread` and `about` in coupon-chat.tsx). */
-export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } {
+export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } {
   const s = scene(question, modelReads);
-  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } | null = null;
+  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } | null = null;
   for (const text of [...(question.after ?? []), question.ask]) {
+    if (question.page === "wing" || question.page === "wing-caps") { // the wing's chat reads by its own patterns; no model reads there yet (ADR-0128)
+      const routed = readWingAsk(text);
+      const shown = WING_ANSWERS[question.page];
+      last = { route: routed.route, said: wingAnswer(routed, shown.report, shown.wing), routed };
+      continue;
+    }
     if (question.page === "start") { // the FEA assistant of a blank project, which reads no setup (ADR-0124)
       const routed = routeStart(text);
       last = { route: routed.route, said: startAnswer(routed), routed };
@@ -300,6 +316,7 @@ function expected(e: Expected, answer: Said): string[] {
   if (e.confirmed !== undefined && data.confirmed !== e.confirmed) out.push(`confirmed ${String(data.confirmed)}, expected ${e.confirmed}`);
   if (e.plies !== undefined && JSON.stringify(data.plies) !== JSON.stringify(e.plies)) out.push(`plies ${JSON.stringify(data.plies)}, expected ${JSON.stringify(e.plies)}`);
   if (e.columns !== undefined && JSON.stringify(data.columns) !== JSON.stringify(e.columns)) out.push(`quantities ${JSON.stringify(data.columns)}, expected ${JSON.stringify(e.columns)}`);
+  if (e.change !== undefined && JSON.stringify(data.change) !== JSON.stringify(e.change)) out.push(`change ${JSON.stringify(data.change)}, expected ${JSON.stringify(e.change)}`);
   if (e.rows !== undefined) {
     const rows = (data.rows ?? {}) as Record<string, string>;
     for (const [key, value] of Object.entries(e.rows)) if (rows[key] !== value) out.push(`row ${key} = ${rows[key] ?? "unset"}, expected ${value}`);
@@ -312,7 +329,7 @@ function rules(question: Question, answer: Said): string[] {
   const out: string[] = [];
   const text = [answer.heading, ...answer.lines].join("\n");
   // a question is never a row of the setup: "what is ASTM D3039?" or "how did you get 16740 N?" changes nothing (criterion 1, ADR-0100)
-  const changes = answer.kind === "rows" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0);
+  const changes = answer.kind === "rows" || answer.kind === "preview" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0);
   if (changes && question.kind !== "change" && question.kind !== "command") out.push(`a question changed the setup: ${answer.lines.join(", ")}`);
   // every answer, whatever was asked (criterion 8 and ADR-0091): short, and in the product's own words
   const banned = bannedIn(text);
