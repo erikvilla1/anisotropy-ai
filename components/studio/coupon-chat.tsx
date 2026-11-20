@@ -1120,13 +1120,15 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const { found, from, preview } = entry;
     const figures = workingOf(from)?.digits.given ?? 6;
     return (
-      <div data-testid="chat-working" data-criterion={found.criterion} data-source={preview ? "live" : "run"}>
-        <h4>The working: {found.name}</h4>
-        <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading.</p>
-        <WorkingSteps chain={found.chain} figures={figures} />
+      <div data-testid="chat-working" data-criterion={found.criterion} data-step={found.step?.id ?? "all"} data-source={preview ? "live" : "run"}>
+        <h4>{found.step ? found.step.title : `The working: ${found.name}`}</h4>
+        <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading{found.step ? `, by ${found.name}` : ""}.</p>
+        {/* one step asked for: its title is the heading, so the step is not titled again */}
+        <WorkingSteps chain={found.step ? { ...found.chain, steps: [found.step] } : found.chain} figures={figures} titled={!found.step} />
         <p className="chat-note" data-testid="chat-working-note">Inputs are shown to {figures} figures, results to 4.{preview ? " Preview: run the analysis to verify." : ""}</p>
-        {found.others.length ? <Chips>{found.others.map((name) => <button key={name} type="button" onClick={() => showWorking(`Show the working for ${name}`)}>Working for {name}</button>)}</Chips> : null}
-        {shown.fields !== from ? <p className="chat-note">The setup has changed since: ask again.</p> : null}
+        {found.step ? <Chips><button type="button" data-testid="chat-working-all" onClick={() => showWorking(`Show the working for ${found.name}`)}>The whole working</button></Chips>
+          : found.others.length ? <Chips>{found.others.map((name) => <button key={name} type="button" onClick={() => showWorking(`Show the working for ${name}`)}>Working for {name}</button>)}</Chips> : null}
+        {!sameResults(shown.fields, from) ? <p className="chat-note" data-testid="chat-working-stale">The setup has changed since: ask again.</p> : null}
       </div>
     );
   }
