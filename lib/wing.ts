@@ -208,7 +208,7 @@ export function unitLabel(wing: WingDescription, unit: WingField["unit"]): strin
   return UNIT_LABELS[units][unit];
 }
 
-/** A wing in the list of projects (ADR-0120): its size in a few words, as the description states it ("2 m half span, 0.45 m chord"). */
+/** A wing in the list of projects (ADR-0122): its size in a few words, as the description states it ("2 m half span, 0.45 m chord"). */
 export function wingAbout(wing: WingDescription): string {
   const length = UNIT_LABELS[unitsOf(wing)].length;
   const part = (path: string, words: string) => {

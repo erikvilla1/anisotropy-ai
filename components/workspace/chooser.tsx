@@ -105,7 +105,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function create(id: WorkspaceId) {
     if (id === "fea") open(newProject());
     else if (id === "laminate") open(newLaminateProject());
-    else if (id === "wing") open(newWingProject()); // a new wing starts from the example, to change (ADR-0120)
+    else if (id === "wing") open(newWingProject()); // a new wing starts from the example, to change (ADR-0122)
     else router.push(workspace(id).href);
   }
 

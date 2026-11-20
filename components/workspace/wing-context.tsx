@@ -11,10 +11,10 @@ import { useWingVersions, type WingVersions } from "./use-wing-versions";
 /** How long the page waits after the last change before it asks the engine: long enough not to send every keystroke, short enough to
  * feel immediate (ADR-0118). */
 export const WING_SETTLE_MS = 350;
-/** Where this browser kept its one wing before a wing was a project (ADR-0118); read once, to make it the first wing project (ADR-0120). */
+/** Where this browser kept its one wing before a wing was a project (ADR-0118); read once, to make it the first wing project (ADR-0122). */
 export const WING_STORAGE_KEY = "anisotropy.wing.v1";
 /** Where this browser keeps the finite element check under way or last made, the wing project and the description it was started for
- * (ADR-0119, ADR-0120). */
+ * (ADR-0119, ADR-0122). */
 export const WING_CHECK_KEY = "anisotropy.wing-check.v1";
 /** How often the page asks how the check stands while it is queued or running. */
 export const CHECK_POLL_MS = 2000;
@@ -22,9 +22,9 @@ const POLL_TRIES = 3; // a look that fails this many times running ends the foll
 
 export type WingContextValue = {
   apiBaseUrl: string;
-  /** The wing project the page edits (ADR-0120): kept in this browser's list of projects and on the server like a coupon's. */
+  /** The wing project the page edits (ADR-0122): kept in this browser's list of projects and on the server like a coupon's. */
   project: WingProject;
-  /** Its versions, newest last; any can be gone back to (ADR-0120, as ADR-0113). */
+  /** Its versions, newest last; any can be gone back to (ADR-0122, as ADR-0113). */
   versions: WingVersions;
   wing: WingDescription;
   /** Counts the times the whole description was replaced (an opened file, the example), so the fields show the new values. */
@@ -68,7 +68,7 @@ function storedCheck(): KeptCheck | null {
   try {
     const value: unknown = JSON.parse(browserStorage()?.getItem(WING_CHECK_KEY) ?? "null");
     if (value && typeof value === "object" && "jobId" in value && "wing" in value && typeof value.jobId === "string" && value.wing && typeof value.wing === "object") {
-      const project = "project" in value && typeof value.project === "string" ? value.project : null; // none: kept before ADR-0120
+      const project = "project" in value && typeof value.project === "string" ? value.project : null; // none: kept before ADR-0122
       return { project, jobId: value.jobId, wing: value.wing as WingDescription };
     }
   } catch { /* storage blocked or holding something else: no check */ }
@@ -96,7 +96,7 @@ const OPENING: WingProject = { id: "opening", kind: "wing", name: "", wing: EXAM
 const following = (check: WingFeCheck | null): boolean => check !== null && (check.state === "queued" || check.state === "running");
 
 /** The wing the workspace edits and the engine's answer to it, shared by the setup, the drawings and the assistant (ADR-0118). The wing
- * is a project (ADR-0120): kept in this browser's list of projects and, a moment after each change, on the server under the signed-in
+ * is a project (ADR-0122): kept in this browser's list of projects and, a moment after each change, on the server under the signed-in
  * email, with its versions in this browser. Every change is worked again once the typing settles; an answer that comes back for an
  * older description than the newest is dropped. */
 export function WingProvider({ apiBaseUrl, children }: { apiBaseUrl: string; children: ReactNode }) {

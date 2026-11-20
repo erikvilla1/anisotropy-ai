@@ -10,7 +10,7 @@ function memory() {
   return { map, getItem: (k: string) => map.get(k) ?? null, setItem: (k: string, v: string) => { map.set(k, v); } };
 }
 
-test("a wing's change is said in the page's labels: a half stack as its laminate, a library entry by its name (ADR-0120)", () => {
+test("a wing's change is said in the page's labels: a half stack as its laminate, a library entry by its name (ADR-0122)", () => {
   assert.deepEqual(wingChanges(null, EXAMPLE_WING), ["The wing as it started"]);
   let changed = withValue(EXAMPLE_WING, "geometry.chord", 0.5);
   changed = withValue(changed, "skin.half_stack", [0, 45, -45, 0, 0]);

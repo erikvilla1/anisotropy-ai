@@ -79,7 +79,7 @@ def test_a_project_is_created_replaced_listed_and_renamed(recording):
 
 @needs_test_database
 def test_a_wing_is_a_project_of_its_own_kind(recording):
-    """ADR-0120: a wing's description is kept under `wing`, listed with the other kinds, and never becomes another kind."""
+    """ADR-0122: a wing's description is kept under `wing`, listed with the other kinds, and never becomes another kind."""
     pid = str(uuid.uuid4())
     made = recording.put(f"/v1/projects/{pid}", json=body(kind="wing", name="Example straight wing", content=WING))
     assert made.status_code == 201 and made.json()["kind"] == "wing" and made.json()["content"] == WING and made.json()["form_version"] is None
@@ -95,7 +95,7 @@ def test_a_wing_is_a_project_of_its_own_kind(recording):
     ({"kind": "fea", "name": "x", "content": {"big": "x" * 300_000}}, "far below"),
     ({"kind": "fea", "name": "x", "content": COUPON, "owner": "me"}, "extra"),
     ({"kind": "fea", "name": "x" * 201, "content": COUPON}, "200"),
-    ({"kind": "wing", "name": "x", "content": {"title": "Example straight wing"}}, "under `wing`"),  # ADR-0120
+    ({"kind": "wing", "name": "x", "content": {"title": "Example straight wing"}}, "under `wing`"),  # ADR-0122
     ({"kind": "wing", "name": "x", "content": {"wing": "Example straight wing"}}, "under `wing`"),
 ])
 def test_a_project_outside_the_contract_is_refused(recording, bad, reason):

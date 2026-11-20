@@ -522,7 +522,7 @@ class CouponJobs:
 
     def start_wing(self, actor: str, inputs: dict, user_email: str | None = None, project_id: uuid.UUID | None = None) -> Job:
         """Start a wing's finite element check (ADR-0119): `inputs` hold the kind, the wing's title and its description, which the
-        engine has read already; `project_id` the wing project it is run for, already known to be the requester's (ADR-0120). Like a coupon job it is refused while another runs here, within the per-user limits, and with the
+        engine has read already; `project_id` the wing project it is run for, already known to be the requester's (ADR-0122). Like a coupon job it is refused while another runs here, within the per-user limits, and with the
         queue it is filed for a solver: the description travels in the row, so nothing is filed in the store first."""
         if self.role == "solver":
             raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")

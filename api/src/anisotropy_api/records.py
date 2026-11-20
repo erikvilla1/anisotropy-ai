@@ -16,15 +16,19 @@ import re
 import subprocess
 import uuid
 from collections.abc import Mapping
+from decimal import Decimal
 from pathlib import Path
 
 from contextlib import contextmanager
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, delete, func, inspect, select, text, update
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Engine, Float, ForeignKey, Integer, Numeric, String, Text, Uuid, create_engine, delete, func,
+                        inspect, select, text, update)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+
+from .model_costs import FEATURES, ModelCall
 
 # Who triggered a run. Adding one is a migration, so a new consumer is a reviewed change.
 # `founder-agent` is the founder's own tooling outside this repository, an outside client of the API (ADR-0028);
@@ -126,12 +130,12 @@ class JobRow(Base):
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
 
-PROJECT_KINDS = ("fea", "laminate", "wing")  # a wing since migration 0013 (ADR-0120)
+PROJECT_KINDS = ("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
 
 
 class ProjectRow(Base):
     """A workspace project (ADR-0062 part 6, migration 0007): the rows of a coupon test, the draft of a laminate problem or a wing's
-    description (ADR-0120, migration 0013), as the page states them, under a name the engineer gives. `content` is the page's own object; the fea package judges a coupon's rows at check
+    description (ADR-0122, migration 0014), as the page states them, under a name the engineer gives. `content` is the page's own object; the fea package judges a coupon's rows at check
     time as always (ADR-0051), and the designation it derived is written back here with the check's run. The owner is the signed-in
     email behind Cloudflare Access (ADR-0056), or, locally, the actor. Rows here change; the runs stay the immutable receipts."""
 
@@ -226,6 +230,45 @@ class UploadRow(Base):
     )
 
 
+class ModelCallRow(Base):
+    """One call to the language model and what it cost (ADR-0120, migration 0013): when, who asked, for what, which model answered,
+    the tokens it was billed for by kind, and the cost at the list's prices on the day. Read it through the views
+    `model_costs_by_person`, `model_costs_by_feature` and `model_costs_by_day`, or `python -m anisotropy_api.cost_report`.
+    Rows are only added; the run a row names may be cleared (ADR-0026 amendment 2), and the row stays with that link empty."""
+
+    __tablename__ = "model_calls"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    called_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False, comment="When the model answered")
+    user_email: Mapped[str | None] = mapped_column(String(320), comment="Who asked: the signed-in email; empty when nobody was signed in")
+    actor: Mapped[str] = mapped_column(String(40), nullable=False, comment="Which client sent the request: studio, browser, assistant ...")
+    feature: Mapped[str] = mapped_column(String(40), nullable=False, comment="What the call was for, such as explain_result")
+    model: Mapped[str] = mapped_column(String(80), nullable=False, comment="The model that answered")
+    effort: Mapped[str | None] = mapped_column(String(10), comment="The effort the call asked for")
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, comment="Tokens read, billed at the input price")
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False,
+                                               comment="Tokens written, billed at the output price; the hidden thinking is part of them")
+    thinking_tokens: Mapped[int | None] = mapped_column(Integer, comment="The part of output_tokens that was hidden thinking, as the API reports it")
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"), comment="Tokens read from the prompt cache")
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"), comment="Tokens written to the prompt cache")
+    answer_characters: Mapped[int] = mapped_column(Integer, nullable=False, comment="Length of the answer we received, in characters")
+    stop_reason: Mapped[str | None] = mapped_column(String(20), comment="How the call ended: end_turn, max_tokens, refusal")
+    seconds: Mapped[float] = mapped_column(Float, nullable=False, comment="How long the call took")
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), comment="US dollars at the list prices of prices_as_of; empty when not priced")
+    prices_as_of: Mapped[str | None] = mapped_column(String(10), comment="The date of the price list the cost was taken from")
+    run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"),
+                                                     comment="The run record of the request the call answered")
+    attempts: Mapped[list | None] = mapped_column(JSONB(none_as_null=True), comment="Each attempt's tokens when there was more than one")
+
+    __table_args__ = (
+        CheckConstraint(f"feature IN ({_sql_list(FEATURES)})", name="model_calls_feature_known"),
+        CheckConstraint("input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 "
+                        "AND answer_characters >= 0", name="model_calls_counts_not_negative"),
+        CheckConstraint("thinking_tokens IS NULL OR thinking_tokens BETWEEN 0 AND output_tokens", name="model_calls_thinking_within_output"),
+        {"comment": "One row per call to the language model: who asked, for what, the tokens billed and the cost (ADR-0120)"},
+    )
+
+
 CONNECT_TIMEOUT_S = 5
 # TCP keepalives and the user timeout, libpq's own parameters: a connection whose network went away under it (a container's can,
 # ADR-0056 amendment 5) fails within about half a minute instead of waiting for an answer that never comes. A system without one of
@@ -248,7 +291,8 @@ def check_ready(engine: Engine) -> None:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__, UploadTokenRow.__tablename__, UploadRow.__tablename__):
+            for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__, UploadTokenRow.__tablename__, UploadRow.__tablename__,
+                          ModelCallRow.__tablename__):
                 if not inspect(connection).has_table(table):
                     raise RuntimeError(
                         f"The database at {shown} has no '{table}' table. "
@@ -302,6 +346,21 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
         session.add(run)
         session.commit()
         return run.id
+
+
+def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None) -> int:
+    """One row per call (ADR-0120), in one transaction; returns how many. A database failure raises; the caller decides."""
+    if not calls:
+        return 0
+    with Session(engine) as session:
+        session.add_all(ModelCallRow(called_at=c.answered_at, user_email=user_email, actor=actor, feature=c.feature, model=c.model, effort=c.effort,
+                                     input_tokens=c.input_tokens, output_tokens=c.output_tokens, thinking_tokens=c.thinking_tokens,
+                                     cache_read_tokens=c.cache_read_tokens, cache_write_tokens=c.cache_write_tokens,
+                                     answer_characters=c.answer_characters, stop_reason=c.stop_reason, seconds=c.seconds, cost_usd=c.cost_usd,
+                                     prices_as_of=c.prices_as_of, run_id=run_id, attempts=list(c.attempts) if c.attempts else None)
+                        for c in calls)
+        session.commit()
+    return len(calls)
 
 
 EVERYONE = "*"  # in place of an owner's email: no narrowing by owner (the local API, which has no sign-in; ADR-0104)

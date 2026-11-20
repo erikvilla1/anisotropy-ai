@@ -1,6 +1,6 @@
 /** The project: the one thing a workspace edits (ADR-0062). A coupon project holds the rows of the values file (ADR-0046 amendment 3)
  * and a plate's lists (ADR-0054); a laminate project holds the draft of a laminate problem (ADR-0060), each value with its unit; a wing
- * project holds the wing's description as a wing file states it (ADR-0118, ADR-0120); each under a name the engineer gives. The
+ * project holds the wing's description as a wing file states it (ADR-0118, ADR-0122); each under a name the engineer gives. The
  * check, the job and its files belong to the run, not to the project, and the coupon's designation stays the fea package's (ADR-0038). Pure: no React, no browser, so `tests/project-store.test.ts` can run it. The browser keeps the
  * projects of every kind under one key so a reload picks up where the engineer left off, until the server store (part 6) exists. */
 
@@ -35,7 +35,7 @@ export type LaminateProject = {
   updated: string;
 };
 
-/** A wing (ADR-0120): its description as a wing file states it, the name being the wing's own title. */
+/** A wing (ADR-0122): its description as a wing file states it, the name being the wing's own title. */
 export type WingProject = {
   id: string;
   kind: "wing";
@@ -80,7 +80,7 @@ export function newLaminateProject(draft: LaminateDraft = blankDraft(), now: str
   return { id, kind: "laminate", name: "", draft, created: now, updated: now };
 }
 
-/** A wing's name is its own title, which the wing file carries (ADR-0120). */
+/** A wing's name is its own title, which the wing file carries (ADR-0122). */
 const wingTitle = (wing: WingDescription): string => (typeof wing.title === "string" ? wing.title : "");
 
 export function newWingProject(wing: WingDescription = EXAMPLE_WING, now: string = new Date().toISOString(), id: string = makeId()): WingProject {

@@ -195,7 +195,7 @@ test("a check the model cannot make says why, in the words it was refused with (
   await expect(page.getByTestId("wing-fe-headline")).toHaveCount(0);
 });
 
-test("a wing is a project: listed with the others, each opened as it was left, its changes kept as versions to go back to (ADR-0120)", async ({ page }) => {
+test("a wing is a project: listed with the others, each opened as it was left, its changes kept as versions to go back to (ADR-0122)", async ({ page }) => {
   looks = LOOKS;
   await playWings(page);
   await page.goto("/workspace");
@@ -243,7 +243,7 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   await expect(page.getByTestId("panel-wing-history").locator(".ws-panel-note")).toHaveText("version 4");
 });
 
-test("a wing this browser kept before wings were projects becomes the first wing project, its check with it (ADR-0120)", async ({ page }) => {
+test("a wing this browser kept before wings were projects becomes the first wing project, its check with it (ADR-0122)", async ({ page }) => {
   looks = [LOOKS[1]];
   await playWings(page);
   const old = { ...ANSWER.wing, title: "Kept wing" };

@@ -11,7 +11,7 @@ const time = (at: string) => {
 };
 const who = (v: WingVersion) => (v.by === "assistant" ? "the assistant" : "you");
 
-/** The wing's History (ADR-0120, as the model tree's of ADR-0113): every version newest first, who made it and why, what it changed and
+/** The wing's History (ADR-0122, as the model tree's of ADR-0113): every version newest first, who made it and why, what it changed and
  * the check made from it; any version can be gone back to, which is kept as a new version. */
 export function WingHistoryPanel() {
   const { versions } = useWing();

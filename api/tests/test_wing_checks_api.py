@@ -192,7 +192,7 @@ def test_through_the_queue_a_solver_runs_the_check_and_the_api_reads_its_report_
 
 @needs_test_database
 def test_a_check_started_for_a_wing_project_is_listed_with_it_and_anothers_project_is_ignored(queue):
-    """A wing is a project (ADR-0120): the check names it, the project lists the check, even while it waits for a solver; a project id
+    """A wing is a project (ADR-0122): the check names it, the project lists the check, even while it waits for a solver; a project id
     that is not the requester's is ignored and the check still runs."""
     front, solver, store, table = queue
     pid = str(uuid.uuid4())

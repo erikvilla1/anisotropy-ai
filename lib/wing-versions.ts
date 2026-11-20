@@ -1,5 +1,5 @@
 /**
- * Versions of a wing (ADR-0120, kept as ADR-0113 keeps a coupon's setup): each settled change to the description is a version, who made it
+ * Versions of a wing (ADR-0122, kept as ADR-0113 keeps a coupon's setup): each settled change to the description is a version, who made it
  * and why, and what it changed in the page's own labels, so an engineer can see the wing's history and go back to any version. Going
  * back is itself a new version: no earlier state is ever overwritten. Pure: no React, no browser, so `tests/wing-versions.test.ts` runs it.
  */

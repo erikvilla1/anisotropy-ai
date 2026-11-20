@@ -267,11 +267,11 @@ def test_migration_0007_creates_the_projects_table_and_refuses_to_drop_it_over_r
         upsert_project(engine, project_id=uuid.uuid4(), kind="stl", name="", actor="studio", user_email=None, content={}, form_version=None, units=None, now=now)
 
 
-def test_migration_0013_admits_a_wing_project_and_refuses_to_be_undone_over_one(engine):
-    """ADR-0120: the projects table knows the kind `wing`; undone, the old constraint would refuse the row, so the downgrade refuses."""
+def test_migration_0014_admits_a_wing_project_and_refuses_to_be_undone_over_one(engine):
+    """ADR-0122: the projects table knows the kind `wing`; undone, the old constraint would refuse the row, so the downgrade refuses."""
     config = alembic_config(TEST_URL)
     now = _dt.datetime.now(_dt.timezone.utc)
-    command.downgrade(config, "0012")
+    command.downgrade(config, "0013")
     with pytest.raises(DBAPIError):
         upsert_project(engine, project_id=uuid.uuid4(), kind="wing", name="", actor="studio", user_email=None, content={"wing": {}},
                        form_version=None, units=None, now=now)
@@ -280,7 +280,7 @@ def test_migration_0013_admits_a_wing_project_and_refuses_to_be_undone_over_one(
                                   content={"wing": {"title": "Example straight wing"}}, form_version=None, units="SI", now=now)
     assert created and row.kind == "wing"
     with pytest.raises(RuntimeError, match="holds 1 wing project"):
-        command.downgrade(config, "0012")
+        command.downgrade(config, "0013")
 
 
 def test_migration_0008_adds_the_queue_and_one_running_job_per_coupon(engine):

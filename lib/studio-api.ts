@@ -653,7 +653,7 @@ export function readWingFeCheck(payload: unknown): WingFeCheck {
 
 /** Start the wing's finite element check (ADR-0119), a job like a coupon run: the description as it stands, read by the engine first, so a
  * wing the calculation refuses is refused here in the same words. Poll it with `getWingFeCheck` until it is neither queued nor running. */
-/** A wing's finite element check (ADR-0119), for the wing project it is run for when the page knows one the server keeps (ADR-0120). */
+/** A wing's finite element check (ADR-0119), for the wing project it is run for when the page knows one the server keeps (ADR-0122). */
 export async function startWingFeCheck(apiBaseUrl: string, wing: WingDescription, projectId?: string | null, signal?: AbortSignal): Promise<WingFeCheck> {
   const body = JSON.stringify(projectId ? { wing, project_id: projectId } : { wing });
   return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks`, { method: "POST", headers, body, signal }, "starting the wing's check"));

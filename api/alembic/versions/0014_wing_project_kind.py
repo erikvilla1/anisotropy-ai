@@ -1,20 +1,20 @@
-"""A wing is a project of its own kind (ADR-0120).
+"""A wing is a project of its own kind (ADR-0122).
 
 The wing workspace kept one wing in the browser alone (ADR-0118): cleared with the site's data, invisible from another machine, and
 one at a time. A wing is now kept like a coupon or a laminate, in the projects table under the signed-in email, its description the
 row's content. The kinds the check constraint knows grow by one; no row changes, the constraint is dropped and recreated with the new
 list. The downgrade refuses while a wing project exists, because the old constraint would not admit it.
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-11-20
 """
 
 from alembic import op
 from sqlalchemy import text
 
-revision = "0013"
-down_revision = "0012"
+revision = "0014"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 

@@ -18,7 +18,7 @@ export type WingVersions = {
   checked(job: string, headline?: string | null): void;
 };
 
-/** The versions of a wing (ADR-0120), kept in this browser per project: a settled change adds one, a check marks the version it was
+/** The versions of a wing (ADR-0122), kept in this browser per project: a settled change adds one, a check marks the version it was
  * started from. `active` is false until the page has a wing project to keep (a page opened on nothing keeps nothing until it changes). */
 export function useWingVersions(project: string, active: boolean, wing: WingDescription, replace: (wing: WingDescription) => void): WingVersions {
   const [list, setList] = useState<WingVersion[]>([]);

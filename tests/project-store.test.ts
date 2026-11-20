@@ -97,7 +97,7 @@ test("a project goes to the server as the page states it and comes back whole; t
   assert.ok(isUuid(coupon.id) && !isUuid("m3kz9-abc"));
 });
 
-test("a wing is a project of its own kind: its name is its title, it is kept beside the others and goes to the server under `wing` (ADR-0120)", () => {
+test("a wing is a project of its own kind: its name is its title, it is kept beside the others and goes to the server under `wing` (ADR-0122)", () => {
   const wing = newWingProject(EXAMPLE_WING, "2026-11-20T10:00:00.000Z", "w1");
   assert.equal(wing.kind, "wing");
   assert.equal(wing.name, "Example straight wing");

@@ -1,9 +1,9 @@
-# ADR-0120: A wing is a project of its own kind, kept like a coupon or a laminate, with its versions in the browser
+# ADR-0122: A wing is a project of its own kind, kept like a coupon or a laminate, with its versions in the browser
 
 - Status: Proposed
 - Date: 2026-11-20
 - Decided by: Founder, 2026-11-19 ("Finish step 4: saved wing + chat", his choice on what to build after the wing's finite element check; and "Plan order: project, rules, caps, chat", his choice on the order of the wing chat's plan, whose first step is this) | Drafted by: Claude Code
-- Related: [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md), [ADR-0113](ADR-0113-each-settled-change-to-a-setup-is-kept-as-a-version-in-the-browser-with-who-made-it-why-and-its-runs-answer-and-going-back-is-a-new-version.md), [ADR-0118](ADR-0118-the-wing-workspace-works-the-engines-hand-calculation-through-the-api-on-every-settled-change-draws-what-the-engine-returns-and-keeps-the-wing-as-its-wing-file.md), [ADR-0119](ADR-0119-a-wings-finite-element-check-runs-from-the-wing-workspace-as-a-background-job-like-a-coupon-run-and-sets-the-model-beside-the-hand-calculation.md), [ADR-0104](ADR-0104-behind-the-sign-in-a-run-a-job-its-files-and-a-coupon-are-their-owners-alone-a-stranger-is-answered-as-if-there-were-none-and-the-local-api-narrows-nothing.md), `api/alembic/versions/0013_wing_project_kind.py`, `api/src/anisotropy_api/records.py` (`PROJECT_KINDS`), `api/src/anisotropy_api/schemas.py` (`ProjectInput`, `WingCheckRequest`), `lib/project-store.ts` (`WingProject`), `lib/wing-versions.ts`, `components/workspace/wing-context.tsx`, `components/workspace/use-wing-versions.ts`, `components/workspace/wing-history.tsx`, `components/workspace/chooser.tsx`
+- Related: [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md), [ADR-0113](ADR-0113-each-settled-change-to-a-setup-is-kept-as-a-version-in-the-browser-with-who-made-it-why-and-its-runs-answer-and-going-back-is-a-new-version.md), [ADR-0118](ADR-0118-the-wing-workspace-works-the-engines-hand-calculation-through-the-api-on-every-settled-change-draws-what-the-engine-returns-and-keeps-the-wing-as-its-wing-file.md), [ADR-0119](ADR-0119-a-wings-finite-element-check-runs-from-the-wing-workspace-as-a-background-job-like-a-coupon-run-and-sets-the-model-beside-the-hand-calculation.md), [ADR-0104](ADR-0104-behind-the-sign-in-a-run-a-job-its-files-and-a-coupon-are-their-owners-alone-a-stranger-is-answered-as-if-there-were-none-and-the-local-api-narrows-nothing.md), `api/alembic/versions/0014_wing_project_kind.py`, `api/src/anisotropy_api/records.py` (`PROJECT_KINDS`), `api/src/anisotropy_api/schemas.py` (`ProjectInput`, `WingCheckRequest`), `lib/project-store.ts` (`WingProject`), `lib/wing-versions.ts`, `components/workspace/wing-context.tsx`, `components/workspace/use-wing-versions.ts`, `components/workspace/wing-history.tsx`, `components/workspace/chooser.tsx`
 - Area: website, api, data
 
 ## Context
@@ -34,14 +34,14 @@ ADR-0118 kept one wing in the browser (`anisotropy.wing.v1`) and as a wing file 
 
 Options 1(a), 2(a), 3(a), 4(a) and 5(a).
 
-- **Server.** Migration 0013 adds `wing` to the kinds `projects_kind_known` admits; the downgrade refuses while a wing project exists. `PUT /v1/projects/{id}` takes `kind = "wing"` with the description under `content.wing`, and refuses a wing whose `content.wing` is not an object. `POST /v1/wings/checks` takes `project_id`.
+- **Server.** Migration 0014 adds `wing` to the kinds `projects_kind_known` admits; the downgrade refuses while a wing project exists. `PUT /v1/projects/{id}` takes `kind = "wing"` with the description under `content.wing`, and refuses a wing whose `content.wing` is not an object. `POST /v1/wings/checks` takes `project_id`.
 - **Page.** The wing workspace opens the wing project the person last changed or opened from the list; with none, the wing kept before (option 4), else the example, which is kept and sent only once it is changed or checked. A moment after each change the project is sent to the server, as the other kinds are; a browser with no wing project is offered the newest one on the server. "New Wing design project" starts a project from the example. The check under way is kept with the project it was started for.
 - **History.** Panel 11, History: every version newest first, who and why, what changed, the check made from it, "Undo the last change" and "Go back to this".
 - **List of projects.** A wing shows as "Wing design", its size ("2 m half span, 0.45 m chord") and its material by name.
 
 ## As built (2026-11-20)
 
-- `api/alembic/versions/0013_wing_project_kind.py`; `PROJECT_KINDS` in `api/src/anisotropy_api/records.py`; `ProjectInput`, `ProjectOutput` and `WingCheckRequest` in `api/src/anisotropy_api/schemas.py`; `start_wing_check` in `api/src/anisotropy_api/main.py`; `CouponJobs.start_wing(project_id=...)` in `api/src/anisotropy_api/coupon_jobs.py`.
+- `api/alembic/versions/0014_wing_project_kind.py`; `PROJECT_KINDS` in `api/src/anisotropy_api/records.py`; `ProjectInput`, `ProjectOutput` and `WingCheckRequest` in `api/src/anisotropy_api/schemas.py`; `start_wing_check` in `api/src/anisotropy_api/main.py`; `CouponJobs.start_wing(project_id=...)` in `api/src/anisotropy_api/coupon_jobs.py`.
 - A project read while one of its jobs was queued failed its own answer's contract (`ProjectJobOutput.state` lacked `queued`); found by this record's test and fixed with it.
 - `WingProject`, `newWingProject`, `reduceWing`, `wingProjects`, and the wing in `uploadOf` and `projectOfRecord` in `lib/project-store.ts`; `startWingFeCheck(..., projectId)` in `lib/studio-api.ts`; `wingAbout` and `wingMaterial` in `lib/wing.ts`.
 - `lib/wing-versions.ts` (`wingChanges`, `withWingVersion`, `withWingCheck`, `withWingCheckResult`, `readWingVersions`, `writeWingVersions`, `MAX_WING_VERSIONS` 50, key `anisotropy.wing-versions.v1.<project>`); `components/workspace/use-wing-versions.ts`; `components/workspace/wing-history.tsx`.
@@ -49,14 +49,14 @@ Options 1(a), 2(a), 3(a), 4(a) and 5(a).
 
 ## Why (evidence)
 
-- `cd api && uv run pytest -q tests/test_projects.py tests/test_wing_checks_api.py tests/test_run_records_db.py` with the test database: 50 passed, 2026-11-20. It holds the wing project created and refused as another kind, a wing without `content.wing` refused, migration 0013 admitting a wing and refusing to be undone over one, and a check started for the requester's wing project listed with it while queued, another's project id ignored.
+- `cd api && uv run pytest -q tests/test_projects.py tests/test_wing_checks_api.py tests/test_run_records_db.py` with the test database: 50 passed, 2026-11-20. It holds the wing project created and refused as another kind, a wing without `content.wing` refused, migration 0014 admitting a wing and refusing to be undone over one, and a check started for the requester's wing project listed with it while queued, another's project id ignored.
 - `npx tsx --test tests/wing-versions.test.ts tests/project-store.test.ts`: 7 passed; `npm test`: 438 passed, 1 skipped (the course appendix is not on this machine).
 - `npx playwright test --config playwright.studio.config.ts wing.spec.ts workspace.spec.ts` (Chromium): 13 passed, the new specs included: a wing listed with its size and material, a second wing from the example, each opened as left with its check, versions gone back to, and the wing kept before brought over with its check.
 
 ## Consequences
 
 - Every wing a person changes is saved to their account and listed with their coupons and laminates; the chat of the next steps changes a saved version that can be undone.
-- A new kind of project now exists in the database; undoing migration 0013 needs the wing projects gone first.
+- A new kind of project now exists in the database; undoing migration 0014 needs the wing projects gone first.
 - Versions stay in one browser, as a coupon's do; another machine sees the latest wing, not its history.
 - The example opened on a fresh browser is not saved until it is changed or checked, so opening the page does not add a project.
 

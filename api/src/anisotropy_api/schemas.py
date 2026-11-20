@@ -1164,7 +1164,7 @@ PROJECT_KINDS = ("fea", "laminate")
 
 class ProjectInput(Contract):
     """A workspace project as the page states it (ADR-0062 part 6): its kind, its name, its content as one JSON object (a coupon's rows
-    and a plate's lists, a laminate problem's draft, or a wing's description under `wing`, ADR-0120), and the form version and unit
+    and a plate's lists, a laminate problem's draft, or a wing's description under `wing`, ADR-0122), and the form version and unit
     system the content was stated in. The API keeps it; the fea package judges a coupon's rows at check time (ADR-0051). PUT
     /v1/projects/{id} creates or replaces it."""
 
@@ -1179,7 +1179,7 @@ class ProjectInput(Contract):
         if not self.content:
             raise ValueError("content must hold the project as the page states it; the object is empty")
         if self.kind == "wing" and not isinstance(self.content.get("wing"), dict):
-            raise ValueError("a wing project's content holds the wing's description as an object under `wing` (ADR-0120)")
+            raise ValueError("a wing project's content holds the wing's description as an object under `wing` (ADR-0122)")
         size = len(json.dumps(self.content, ensure_ascii=False).encode("utf-8"))
         if size > VALUES_LIMIT_BYTES:
             raise ValueError(f"the content is {size} bytes; a project's rows are far below {VALUES_LIMIT_BYTES}")
@@ -1192,7 +1192,7 @@ class ProjectRename(Contract):
 
 class ProjectJobOutput(Contract):
     """A job of a project, as its row stands: enough to list it and open it by its id. `queued` until a solver takes it, on the hosted
-    tier (ADR-0056 amendment 3); a project read while one of its jobs waited failed before ADR-0120 found it."""
+    tier (ADR-0056 amendment 3); a project read while one of its jobs waited failed before ADR-0122 found it."""
 
     job_id: str
     state: Literal["queued", "running", "done", "stopped", "refused"]
@@ -1373,7 +1373,7 @@ class WingRequest(Contract):
 
 
 class WingCheckRequest(WingRequest):
-    """A wing's finite element check (ADR-0119): the wing as for its hand calculation, and the wing project it is run for (ADR-0120),
+    """A wing's finite element check (ADR-0119): the wing as for its hand calculation, and the wing project it is run for (ADR-0122),
     whose row then lists the check; a project unknown or not the requester's is ignored, so a wing the browser alone knows still runs."""
 
     project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
