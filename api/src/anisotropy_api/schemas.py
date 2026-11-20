@@ -833,13 +833,14 @@ class OfferedChoice(Contract):
 
 
 class OfferedRow(Contract):
-    """A row the page offers a message to fill (ADR-0088): a number, a choice or a notation. A coupon's number names the unit it is stated
-    in, and a value written in another unit of the same system is converted to it; a laminate's number names the dimension of its units,
-    and the value keeps the unit written (the engine converts, ADR-0060). A pure number names neither."""
+    """A row the page offers a message to fill (ADR-0088): a number, a choice, a notation or a ply's angle. A coupon's number names the unit
+    it is stated in, and a value written in another unit of the same system is converted to it; a laminate's number names the dimension of
+    its units, and the value keeps the unit written (the engine converts, ADR-0060). A pure number names neither. An angle is in degrees,
+    from -90 to 90 (ADR-0121 amendment 5)."""
 
     key: Key
     label: ShortText
-    kind: Literal["number", "choice", "notation"]
+    kind: Literal["number", "choice", "notation", "angle"]
     unit: CouponUnit | None = None
     dimension: Dimension | None = None
     choices: Annotated[list[OfferedChoice], Field(min_length=1, max_length=120)] | None = None

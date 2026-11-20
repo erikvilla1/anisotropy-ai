@@ -9,7 +9,7 @@ import type { Fields } from "./studio-api";
 const FAILS = "(?:fail(?:s|ed|ing|ure|ures)?|break(?:s|ing)?|broke|breakage|give(?:s)? (?:out|way)|go(?:es)? first)";
 const OPENS = "(?:what|which|where|when|who|does|do|did|will|would|is|are|can|could|at what|how (?:much|far|close|soon|early)|tell me|show me)";
 const IT = "(?:it|this|that|the (?:coupon|laminate|specimen|part|model|plate|panel|sample))";
-const FACTOR = "(?:(?:safety|reserve|load|strength) (?:factor|ratio)|factor of safety|strength ratio|failure (?:load|factor|index|ply|mode|point))";
+const FACTOR = "(?:(?:safety|reserve|load|strength) (?:factor|ratio)|factor of safety|strength ratio|failure (?:load|factor|index|ply|mode|point)|margins? of safety|safety margins?|margins?)";
 const ASKS = [
   new RegExp(`^\\s*${OPENS}\\b.*\\b${FAILS}\\b`, "i"), // "what is the ply that fails", "does it fail?", "where does it break"
   new RegExp(`\\b${FAILS}\\b[^.!]*\\?\\s*$`, "i"), // "the first ply to fail?"
@@ -45,6 +45,27 @@ export function failureAnswer(fields: Fields, text: string): FailureAnswer | nul
   const named = criterionNamed(text);
   const row = named ? answer.rows.find((r) => r.criterion === named) : undefined;
   return { answer, row: row ?? answer.earliest, missing: named && !row ? CRITERION_NAMES[named] ?? named : null };
+}
+
+/** A criterion named by its words ("max stress", "Tsai-Hill"): with a word of failure, the message asks the criterion's first ply, never a
+ * table of the largest stresses (ADR-0099 amendment 4). */
+export const namesCriterion = (text: string): boolean => criterionNamed(text) !== null;
+
+const ASKS_FAILS = /^\s*(?:does|do|did|will|would|is|are|can|could)\s+(?:it|this|that|the\s+(?:coupon|laminate|specimen|part|model|plate|panel|sample)|any\s+ply|anything)\s+(?:going\s+to\s+)?(?:fail|break|crack|give\s+way)\b/i;
+const ASKS_HOLDS = /^\s*(?:does|do|did|will|would|is|are|can|could)\s+(?:it|this|that|the\s+(?:coupon|laminate|specimen|part|model|plate|panel|sample))\s+(?:going\s+to\s+)?(?:be\s+)?(?:hold|survive|pass|safe|strong\s+enough|ok|okay|fine)\b/i;
+
+/** A yes-or-no question of failure answered Yes or No (ADR-0099 amendment 4): "does it fail?" is "No, the coupon holds" when the first
+ * ply fails above the applied load, "will the coupon hold?" is "Yes, the coupon holds". Null for any other question. */
+export function failureVerdict(text: string, found: FailureAnswer): string | null {
+  const fails = found.row.fails;
+  if (ASKS_FAILS.test(text)) return fails ? "Yes, it fails" : "No, the coupon holds";
+  if (ASKS_HOLDS.test(text)) return fails ? "No, it fails" : "Yes, the coupon holds";
+  return null;
+}
+
+/** What a question of a margin of safety is told beside the answer: the result gives the load factor, not a margin. */
+export function marginNote(text: string, found: FailureAnswer, print: (value: number) => string): string | null {
+  return /\bmargins?\b/i.test(text) ? `No margin of safety is worked out here: the first ply fails at ${print(found.row.factor)} × the applied load, by ${found.row.name}.` : null;
 }
 
 /** A ply as the answer names it: "ply 4 (90°)", with its face on a shell. */
@@ -93,6 +114,15 @@ export function confirmsFailure(text: string, found: FailureAnswer, print: (valu
   const [applied, failing] = [shown(now.applied, now.reaction), shown(row.factor, row.applied, row.reaction)];
   const [before, after] = [numbers(bare.slice(0, at)), numbers(bare.slice(at))];
   return after.length > 0 && before.every((n) => applied.has(n)) && after.every((n) => failing.has(n));
+}
+
+/** Whether a message states the answer back as `confirmsFailure` reads it, with a number that is not the answer's: it is answered "No",
+ * with the loadings as they are (ADR-0099 amendment 4). */
+export function contradictsFailure(text: string, found: FailureAnswer, print: (value: number) => string): boolean {
+  if (!CONFIRMS.test(text) || DENIES.test(text) || !found.answer.appliedNow || found.row.applied === null) return false;
+  const bare = text.replace(PLY_NAMED, " ").replace(/\bfirst[- ]ply\b/gi, " ");
+  const at = bare.search(FAIL_WORD);
+  return at >= 0 && /\d/.test(bare.slice(at)) && !confirmsFailure(text, found, print);
 }
 
 export type FailureLines = {

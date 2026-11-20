@@ -2,7 +2,7 @@
   "feature": "result-values",
   "title": "A stress or a strain at a ply and a place",
   "records": ["ADR-0099", "ADR-0099 amendment 3", "ADR-0100"],
-  "watches": ["lib/result-question.ts", "lib/studio-fields.ts", "api/src/anisotropy_api/result_questions.py", "mcp-server/src/anisotropy_mcp/results.py"],
+  "watches": ["lib/result-question.ts", "lib/result-summary.ts", "lib/studio-fields.ts", "api/src/anisotropy_api/result_questions.py", "mcp-server/src/anisotropy_mcp/results.py"],
   "questions": [
     {"ask": "what is the stress at ply 7", "kind": "value", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "values", "plies": [7], "element": "123", "says": ["1182"], "never": ["Which element?"]}, "source": "the founder, 2026-11-17"},
     {"ask": "stress in ply 2", "kind": "value", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "values", "plies": [2], "columns": ["S11", "S22", "S12"], "element": "123"}},
@@ -14,7 +14,7 @@
     {"ask": "what stress does ply 4 carry", "kind": "value", "style": "loose", "page": "results", "route": "value", "answer": {"kind": "values", "plies": [4]}},
     {"ask": "strain here", "kind": "value", "style": "terse", "page": "results", "route": "value", "picked": 183, "answer": {"kind": "values", "columns": ["E11", "E22", "E12"], "element": "183"}},
     {"ask": "E11 here", "kind": "value", "style": "jargon", "page": "results", "route": "value", "answer": {"kind": "ask", "heading": "Which element?"}},
-    {"ask": "strss in ply 3", "kind": "value", "style": "typo", "page": "results", "route": "model", "answer": {"kind": "values", "plies": [3]}, "live": {"request": {"kind": "values", "quantities": ["S11", "S22", "S12"], "plies": [3]}}, "gap": "offline 10: a typo of stress is not read with no model"},
+    {"ask": "strss in ply 3", "kind": "value", "style": "typo", "page": "results", "route": "value", "answer": {"kind": "values", "plies": [3]}, "live": {"request": {"kind": "values", "quantities": ["S11", "S22", "S12"], "plies": [3]}}},
     {"ask": "shear stress in the 45 plies", "kind": "value", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S12"]}}},
     {"ask": "what is the stress in the 0 degree plies", "kind": "value", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S11", "S22", "S12"], "plies": [2, 7]}}},
     {"ask": "how much load does the 0 ply carry", "kind": "value", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S11"], "plies": [2, 7]}}},
@@ -23,9 +23,13 @@
     {"ask": "what is the stress in ply 12", "kind": "value", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "refused", "says": ["8 plies"]}},
     {"ask": "stress at element 9999", "kind": "value", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "refused", "says": ["1 to 250"]}, "mcp": {"tool": "result_values", "args": {"element": 9999}, "refused": true, "says": ["1 to 250"]}},
     {"ask": "stress in ply 2", "kind": "value", "style": "terse", "page": "setup", "route": "value", "answer": {"kind": "none", "heading": "No results to read yet"}},
-    {"ask": "what is the reaction force", "kind": "value", "style": "plain", "page": "results", "route": "model", "answer": {"says": ["16220 N"]}, "live": {"judge": "Gives the top grip's reaction, 16220 N, from the results"}, "gap": "11: the reaction is on the page but the chat cannot say it"},
-    {"ask": "what is the modulus", "kind": "value", "style": "plain", "page": "results", "route": "model", "answer": {"says": ["MPa"]}, "live": {"judge": "Gives the laminate's modulus from the results or says where the page shows it"}, "gap": "11: the modulus is not answered in the chat"},
-    {"ask": "max displacement", "kind": "value", "style": "terse", "page": "results", "route": "model", "answer": {"says": ["1 mm"]}, "gap": "11: the largest displacement is not answered in the chat"},
-    {"ask": "is ply 2 above 1000 MPa?", "kind": "yes-no", "style": "units", "page": "results", "route": "model", "live": {"judge": "Opens with Yes or No from ply 2's own σ₁ at the gauge centre, 1182 MPa; writes no number not in the results"}}
+    {"ask": "what is the reaction force", "kind": "value", "style": "plain", "page": "results", "route": "summary", "answer": {"kind": "summary", "heading": "Reaction: 16220 N", "says": ["the top grip"]}, "live": {"judge": "Gives the top grip's reaction, 16220 N, from the results"}},
+    {"ask": "what is the modulus", "kind": "value", "style": "plain", "page": "results", "route": "summary", "answer": {"kind": "refused", "says": ["ASTM D3039"]}},
+    {"ask": "max displacement", "kind": "value", "style": "terse", "page": "results", "route": "summary", "answer": {"kind": "summary", "says": ["1 mm"]}},
+    {"ask": "is ply 2 above 1000 MPa?", "kind": "yes-no", "style": "units", "page": "results", "route": "model", "live": {"judge": "Opens with Yes from ply 2's own σ₁: 1182 MPa at the gauge centre, or its largest, 1203 MPa, with the place it is read; writes no number not in the results"}},
+    {"ask": "how much force does it carry?", "kind": "value", "style": "loose", "page": "results", "route": "summary", "answer": {"kind": "summary", "says": ["16220 N"]}},
+    {"ask": "whats the stiffness of the coupon", "kind": "value", "style": "typo", "page": "results", "route": "summary", "answer": {"kind": "refused"}},
+    {"ask": "is ply 2 above 1000 MPa in σ₁ at element 125?", "kind": "yes-no", "style": "units", "page": "results", "route": "value", "answer": {"opens": "Yes", "says": ["1182 MPa"]}},
+    {"ask": "is the shear stress in ply 1 at element 125 below 10 MPa?", "kind": "yes-no", "style": "plain", "page": "results", "route": "value", "answer": {"opens": "No"}}
   ]
 }

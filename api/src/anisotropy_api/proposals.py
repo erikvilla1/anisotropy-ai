@@ -31,6 +31,7 @@ MAX_PROPOSALS = 60
 MAX_QUOTE = 400
 # Why the model proposed nothing for a part of the message (ADR-0088 amendment 1), by name; the page writes the sentence for each.
 UNREAD_REASONS = ("not_offered", "no_value", "refers_back")
+ANGLE_UNITS = {"°", "deg", "degs", "degree", "degrees"}  # as `_squash` writes them
 MAX_UNREAD = 5
 
 # The units a coupon row may be proposed in (ADR-0061): name -> (dimension, system, factor to the system's base unit). A value is converted
@@ -165,6 +166,14 @@ def _row_value(row: dict[str, Any], value: str, unit_text: str | None, quote: st
     written = numbers_written(quote)
     if abs(number) not in [abs(n) for n in written] and not (number == 0 and re.search(r"\b(zero|nil|none|nothing)\b", _plain(quote))):
         return f"{value} is not a number the quoted words write"
+    if kind == "angle":  # a ply's angle: degrees, the only unit, so a written unit is checked and dropped (ADR-0121 amendment 5)
+        if unit_text and _squash(unit_text) not in ANGLE_UNITS:
+            return f"{unit_text!r} is not degrees"
+        if unit_text and _squash(unit_text) not in _squash(quote):
+            return f"the unit {unit_text!r} is not written in the quoted words"
+        if abs(number) > 90:
+            return f"{value} is not an angle from -90 to 90 degrees"
+        return _plain(value).lstrip("+"), None
     if unit_text and _squash(unit_text) not in _squash(quote):
         return f"the unit {unit_text!r} is not written in the quoted words"
     unit = unit_named(unit_text) if unit_text else None

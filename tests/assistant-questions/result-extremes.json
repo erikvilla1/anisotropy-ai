@@ -17,6 +17,6 @@
     {"ask": "where does the 90 ply see the most tension", "kind": "which", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S22"], "plies": [4, 5], "sense": "largest"}}},
     {"ask": "max stress", "kind": "which", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "extremes"}, "live": {"judge": "Either the largest stresses or the maximum stress criterion; says which it read"}},
     {"ask": "is the largest σ₁ in the gauge section?", "kind": "yes-no", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "opens": "Yes"}, "gap": "1: a yes-or-no question about a place is answered with the value, not yes or no"},
-    {"ask": "wher is the max shear", "kind": "which", "style": "typo", "page": "results", "route": "model", "answer": {"kind": "extremes", "columns": ["S12"]}, "live": {"request": {"kind": "extreme", "quantities": ["S12"]}}, "gap": "offline 10: a typo of where is not read with no model"}
+    {"ask": "wher is the max shear", "kind": "which", "style": "typo", "page": "results", "route": "value", "answer": {"kind": "extremes", "columns": ["S12"]}, "live": {"request": {"kind": "extreme", "quantities": ["S12"]}}}
   ]
 }

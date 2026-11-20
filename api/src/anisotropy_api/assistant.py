@@ -64,7 +64,7 @@ PROPOSE_SYSTEM = (
     "converted, computed, rounded, completed or guessed (a cooling or a drop is a negative change, so you may add a minus sign); the unit "
     "copied exactly as the message writes it beside the value, or null when it writes none; and the quote, the shortest span of the message, "
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
-    "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
+    "a notation row the value is the notation as written. For an angle row the value is the ply's angle in degrees. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
     "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
     "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
@@ -145,7 +145,11 @@ ANSWER_MAX_TOKENS = 1500
 ANSWER_SYSTEM = (
     "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
     "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
-    "with an id. Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the fact sheet and the sections alone: the sheet says "
+    "with an id. Answer in at most three short, plain sentences of at most 25 words each, from the fact sheet and the sections alone. The "
+    "first sentence is the answer on its own in at most nine words, as an engineer would say it to a colleague, and the page shows it as "
+    "the heading; the others give only the one or two facts that "
+    "make it so. Nothing restates the question, and a quantity is named in words, its symbol only beside them (the stress across the "
+    "fibres, σ₂). The sheet says "
     "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
     "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
     "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "
@@ -156,16 +160,18 @@ ANSWER_SYSTEM = (
 )
 
 
-# A question asked in the FEA section before anything is set up (ADR-0124): no result, so the model is shown the sections of our theory
-# pages the question found and the kinds of work the page offers; the number guard then reads the answer against the question alone.
+# A question asked in the FEA section before anything is set up (ADR-0124), or of a coupon with no result yet (ADR-0121 amendment 5): no
+# result, so the model is shown the sections of our theory pages the question found and the kinds of work the page offers; the number
+# guard then reads the answer against the question alone.
 GENERAL_SYSTEM = (
     "You answer an engineer's question in the finite element section of a composite analysis workspace, before any model is set up. You "
     "are given the question, sections of the product's own theory pages, each with an id, and the kinds of work the workspace can set up. "
-    "Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the sections alone, "
+    "Answer in one to three short, plain sentences, the first the answer on its own in at most eight words and 60 characters, as an "
+    "engineer would say it to a colleague, and nothing that restates the question, from the sections alone, "
     "and only what was asked: leave out the grips, tabs, meshes or checks of a section unless the question is about them. Never write the "
     "word engine: say the analysis or the laminate calculation. "
     "Write no number that is not in the question, digit for digit, and never copy a number or an equation out of a section: say in words "
-    "what it means. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
+    "what it means; a ply may be named by its angle, as the 90-degree ply. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
     "names them. Set 'covered' to true only when those sections answer the question. When they do not, set it to false, say in one "
     "sentence that the theory pages do not cover it yet, and give no answer of your own. Set 'start' to the kind of work the engineer "
     "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE

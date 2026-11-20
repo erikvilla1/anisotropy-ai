@@ -321,13 +321,36 @@ export function readMesh(text: string, form: StudioForm): { rows: StudioForm; un
 /** A message applied to the form: read in the coupon's system, or in the one it names when nothing dimensioned is stated yet or the
  * message asks to switch (which clears the dimensioned rows, named in `note`); a message in another system while rows are filled
  * changes nothing and says why, so no number is read in the wrong units (ADR-0003). */
+/** One ply's angle stated by its number: "change ply 3 to 30 degrees", "ply 2 = -45°", "ply 3 at 30°" (ADR-0121 amendment 5). Only a ply
+ * the layup holds is read, never a layup's notation; in a symmetric layup ply 6 of 8 is the mirror of ply 3 and fills its row. */
+const PLY_ANGLE = [
+  /\bply\s*#?\s*(\d{1,2})(?:'s)?(?:\s+angle)?\s*(?:to|=|:|->|→)\s*([+\-−]?\d+(?:\.\d+)?)(?![\d.])(?!\s*(?:mm|in|m|n|kn|lbf|mpa|psi|ksi)\b)/i,
+  /\bply\s*#?\s*(\d{1,2})\s+(?:at\s+|is\s+)?([+\-−]?\d+(?:\.\d+)?)\s*(?:°|deg(?:rees?|s)?\b)/i,
+];
+export function readPlyAngle(text: string, form: StudioForm): { rows: StudioForm; understood: string[] } | null {
+  if (/\[/.test(text)) return null; // a layup's notation states every ply
+  const match = PLY_ANGLE.map((pattern) => pattern.exec(text)).find((m): m is RegExpExecArray => m !== null);
+  if (!match) return null;
+  const plies = pliesOf(form);
+  const count = plies.length * (form.symmetric === "yes" ? 2 : 1);
+  const n = Number(match[1]);
+  const angle = Number(match[2].replace("−", "-"));
+  if (!Number.isFinite(angle) || Math.abs(angle) > 90 || n < 1 || n > count) return null;
+  const row = n <= plies.length ? n : count + 1 - n;
+  const value = String(angle);
+  const mirror = form.symmetric === "yes" ? ` and its mirror, ply ${count + 1 - row}` : "";
+  return { rows: { [`ply_${row}`]: value }, understood: [`ply ${row}: ${value}°${mirror}`] };
+}
+
 export function applyMessage(form: StudioForm, text: string): { rows: StudioForm; understood: string[]; note: string | null } {
   const current = unitsOf(form);
   const named = unitsNamed(text);
   if (named === null || named === current) {
     const read = readMessage(text, current);
     const mesh = readMesh(text, form); // the mesh is read against the form: "finer" starts from the size it holds (ADR-0088 amendment 2)
-    return { rows: { ...read.rows, ...mesh?.rows }, understood: [...read.understood, ...(mesh?.understood ?? [])], note: mesh?.note ?? null };
+    const ply = readPlyAngle(text, form);
+    return { rows: { ...read.rows, ...mesh?.rows, ...ply?.rows }, understood: [...read.understood, ...(mesh?.understood ?? []), ...(ply?.understood ?? [])],
+      note: mesh?.note ?? null };
   }
   const stated = statedDimensioned(form);
   if (stated.length && !isSwitchRequest(text)) {
