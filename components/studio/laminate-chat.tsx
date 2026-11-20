@@ -16,8 +16,13 @@ import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
 import { workspace } from "@/lib/workspaces";
+import { takeHandoff } from "@/lib/handoff";
+import { hasWork } from "@/lib/project-store";
+import { readIntent, saysMore, type WorkTarget } from "@/lib/work-intent";
+import { SwitchAsk } from "@/components/workspace/switch-ask";
+import { tabStorage } from "./project-context";
 
-/** The coupon workspace's one name, as its tile and header write it (audit fea-screens-10). */
+/** The FEA section's one name, as its tile and header write it (audit fea-screens-10; ADR-0124). */
 const COUPON_WORKSPACE = workspace("fea").title;
 
 type Entry =
@@ -25,7 +30,9 @@ type Entry =
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
   | { id: number; role: "assistant"; kind: "ask"; step: LaminateStep }
   | { id: number; role: "assistant"; kind: "answer"; stamp: number }
-  | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer };
+  | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer }
+  // another section asked for while the problem holds work: one tap to go, the problem kept (ADR-0124)
+  | { id: number; role: "assistant"; kind: "switch"; target: WorkTarget; carried: string };
 type NewEntry = Entry extends infer E ? (E extends unknown ? Omit<E, "id"> : never) : never;
 
 /** The layups offered as one click. In a laminate problem 0° runs along x, the direction of Nx (ADR-0004). */
@@ -59,8 +66,14 @@ function PanelLink({ step, children }: { step: LaminateStep; children: ReactNode
 
 /** The laminate assistant (ADR-0060; ADR-0062, part 5): a conversation beside the panels, on the one draft they share. It offers one-click
  * choices, reads a typed line, and for anything else names the panel that asks for it; every value goes to the engine as typed. */
-export function LaminateChat({ onBack }: { onBack: () => void }) {
-  const { apiBaseUrl, draft, setDraft: storeDraft, answer, solving, stamp, solve, reset, restored } = useLaminate();
+export function LaminateChat({ onBack, onSwitch }: {
+  onBack: () => void;
+  /** Opens another section with the message carried (ADR-0124): FEA, set up as a coupon when one is asked for, or CAD. */
+  onSwitch?: (target: WorkTarget, carried: string) => void;
+}) {
+  const { apiBaseUrl, project, draft, setDraft: storeDraft, answer, solving, stamp, solve, reset, restored } = useLaminate();
+  const projectRef = useRef(project);
+  projectRef.current = project;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [model, setModel] = useState<AssistantInfo | null>(null); // a model that reads messages, when the API has one (ADR-0088)
   const [reading, setReading] = useState(false);
@@ -85,13 +98,17 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // a message carried from the start screen or another section (ADR-0124): it heads the talk, and is read when it says more
+    const carried = takeHandoff(tabStorage());
     if (draft.system) {
+      if (carried.setUp && carried.setUp !== carried.prompt) add({ role: "user", text: carried.setUp });
       add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "The problem so far", body: <p>Here is what is still needed; the panels on the left hold every row.</p> });
       ask(nextStep(draft));
     } else {
-      add({ role: "user", text: "Laminate response" });
+      if (!carried.prompt) add({ role: "user", text: carried.setUp || "Laminate response" });
       ask("units");
     }
+    if (carried.prompt) send(carried.prompt);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, solving, reading]);
@@ -141,6 +158,15 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
       title: outcome.status === 422 ? "Check the problem" : "mismatch" in outcome && outcome.mismatch ? "Solve again" : "The analysis did not run" });
   }
 
+  /** Another section asked for (ADR-0124): opened at once with the message carried when the problem holds nothing of the engineer's,
+   * asked once when it does. */
+  function openSection(target: WorkTarget, text: string) {
+    const carried = saysMore(text) || target !== "fea" ? text : "";
+    if (!hasWork(projectRef.current)) { onSwitch?.(target, carried); return; }
+    setActive(null);
+    add({ role: "assistant", kind: "switch", target, carried });
+  }
+
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string, echoed = false) {
     const step = nextStep(draftRef.current);
@@ -158,7 +184,10 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new problem|restart)\b/i.test(text)) { startOver(); return; }
-    if (/^(back|coupon|coupons|back to coupons)\b/i.test(text)) { add({ role: "user", text }); onBack(); return; }
+    if (/^back\b/i.test(text)) { add({ role: "user", text }); onBack(); return; }
+    // FEA or CAD asked for (ADR-0124): at once when the problem holds no work, else one tap to go
+    const wanted = readIntent(text);
+    if (onSwitch && wanted?.start && wanted.target !== "laminate") { add({ role: "user", text }); openSection(wanted.target, text); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : nextStep(draftRef.current);
     if (/^(solve|run|go|solve it)\b/i.test(text)) {
@@ -413,6 +442,9 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped} unread={unreadLines(entry.answer.unread)} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
+    } else if (entry.kind === "switch") {
+      content = <SwitchAsk target={entry.target} kept="laminate" onGo={() => onSwitch?.(entry.target, entry.carried)}
+        onStay={() => add({ role: "assistant", kind: "text", title: "Staying here", body: <p>Your laminate is as it was.</p> })} />;
     } else content = answerMessage(entry.stamp);
     return (
       <div className="chat-assistant" key={entry.id}>

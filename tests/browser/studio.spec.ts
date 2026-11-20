@@ -151,6 +151,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByRole("link", { name: "Open the workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("workspace-shell")).toHaveAttribute("data-assistant", "open"); // three columns, the assistant beside the model (ADR-0062)
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click(); // FEA opens blank; a coupon is picked (ADR-0124)
   await expect(page.getByTestId("empty-scene")).toBeVisible();
   await page.getByRole("button", { name: "Load example" }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
@@ -262,7 +263,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, BENDING);
   await expect(page.getByLabel("Support span (mm)", { exact: true })).toBeVisible();
@@ -307,7 +308,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, "plate");
   await expect(page.getByTestId("plate-panel")).toBeVisible();
@@ -345,7 +346,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
 test("a blocked setup names its rows and the solve stays off", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Length (mm)", { exact: true }).fill("");
   await page.getByTestId("check-button").click();
@@ -362,7 +363,7 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
 test("a standard is offered by its test, fills its size, and the check judges the specimen clause by clause (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   const titles = page.getByTestId("question-standard").locator(".ws-choice-title");
   await expect(titles).toHaveText(["ASTM D3039/D3039M-17", "ASTM D638-22", "No standard"]); // C1869 is open-hole tension: not offered here
@@ -406,7 +407,7 @@ test("a standard is offered by its test, fills its size, and the check judges th
 test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickStandard(page, "ASTM D638-22");
   await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension under ASTM D638-22");
@@ -438,7 +439,7 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
 test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: false }); // the switch off, as on the hosted tier: the product's view
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const screen = page.getByTestId("tension-screen");
   await expect(screen).toBeVisible();
   await expect(page.getByTestId("question-test")).toHaveCount(0); // one test: no test to pick, no other standard than D3039 or none
@@ -510,7 +511,7 @@ test.describe("the model tree", () => {
     page.on("pageerror", (error) => browserErrors.push(error.message));
     const calls = { checks: [] as unknown[], solves: [] as unknown[] };
     await mockApi(page, calls, { allTests: false }); // the product's view
-    await page.goto("/workspace/fea");
+    await page.goto("/workspace/fea?for=coupon");
     const screen = page.getByTestId("tension-screen");
     await expect(screen.locator(".ws-panel-title")).toHaveText(["Test", "Geometry", "Material", "Layup", "Analysis step", "Boundary conditions", "Loads",
       "Mesh", "Solve", "Results", "History"]);
@@ -617,7 +618,7 @@ test.describe("the model tree", () => {
         loads: [{ region: "Edge-Right", kind: "force", dof: 1, value: "10000", unit: "N", written_value: "10", written_unit: "kN", sense: "tension",
           quote: "pull the right edge with 10 kN" }] });
     });
-    await page.goto("/workspace/fea");
+    await page.goto("/workspace/fea?for=coupon");
     const screen = page.getByTestId("tension-screen");
     await page.getByTestId("panel-test").locator("summary").click();
     await screen.getByRole("radio", { name: "Plate", exact: true }).check();
@@ -685,7 +686,7 @@ test.describe("the model tree", () => {
   test("a customer's tree offers no plate (ADR-0089 amendment 7)", async ({ page }) => {
     const calls = { checks: [] as unknown[], solves: [] as unknown[] };
     await mockApi(page, calls, { allTests: false });
-    await page.goto("/workspace/fea");
+    await page.goto("/workspace/fea?for=coupon");
     await expect(page.getByTestId("tension-screen")).toBeVisible();
     await expect(page.getByTestId("tree-kind")).toHaveCount(0);
     await expect(page.getByTestId("chat-spec")).toHaveCount(0); // the tree says the setup: no summary strip above the model (ADR-0111)
@@ -710,7 +711,7 @@ test("a run ends without its PDF; Report (PDF) writes it when asked, says so, an
     },
     report: () => { asked += 1; pollsSince = 0; return { status: 202, body: { ...done, report: "writing" } }; },
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect.poll(() => calls.wakes ?? 0).toBe(1); // the page opened: a solver is asked for before any run (ADR-0056 amendment 11)
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
@@ -755,7 +756,7 @@ test("a run ends without its PDF; Report (PDF) writes it when asked, says so, an
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickStandard(page, "ASTM D3039/D3039M-17");
   await page.getByLabel("Strain measurement", { exact: true }).selectOption("extensometer");
@@ -777,7 +778,7 @@ test("a coupon solved under a test standard shows the quantities the standard re
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("question-test").locator("input:checked")).toHaveCount(0); // the first step asks; nothing is picked for the engineer
   await expect(page.getByTestId("setup-line")).toContainText("Start with step 1");
   await expect(page.getByTestId("waiting-geometry")).toBeVisible(); // the steps that depend on the test wait for it
@@ -794,7 +795,7 @@ test("a fresh form's choices start blank, not on their first word", async ({ pag
 test("a coupon reopens into the form and the viewer window reads a job by its address", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByLabel("Reopen a coupon", { exact: true }).selectOption("IM7-UNT-L1");
   await page.getByRole("button", { name: "Reopen", exact: true }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
@@ -827,7 +828,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const question = page.getByTestId("chat-question");
   await expect(question).toHaveAttribute("data-step", "test");
   await page.getByRole("button", { name: /^Unnotched tension/ }).click();
@@ -883,7 +884,7 @@ test("the assistant answers a question about a ply's stress from the results on 
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -948,7 +949,7 @@ test("the assistant keeps the thread: a missing place is the gauge centre, a fra
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -1064,7 +1065,7 @@ test("with a model on, a loose question about the results is read into a fixed r
     const read = readings[offer.message as string] ?? null;
     return json({ run_id: "run-q", writer: "anthropic", model: "claude-stand-in", request: read, question: null, dropped: [], reason: null });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -1192,7 +1193,7 @@ test("a question of why is answered in words from the results and our theory pag
     asked.push(body);
     return body.question in answers ? json(answers[body.question]) : json({ detail: "the service is busy" }, 503);
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -1274,7 +1275,7 @@ test("the working behind an answer is shown when asked: each formula with the so
     if (/^\/v1\/workspace\/(proposals|result-questions|result-answers)$/.test(path)) { asked += 1; return route.fulfill({ status: 503, contentType: "application/json", body: "{}" }); }
     return route.fallback();
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -1343,7 +1344,7 @@ test("the working behind an answer is shown when asked: each formula with the so
 test("a thing to fix takes its rows in the chat, and applying them checks again (ADR-0062 amendment 2)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
   await message.fill("A. Engineer");
@@ -1371,7 +1372,7 @@ test("a thing to fix takes its rows in the chat, and applying them checks again 
 test("a word that names no value sends the engineer to the panel that asks for the next thing, and a row typed there moves the conversation on (ADR-0062)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
   await message.fill("coupon");
@@ -1398,7 +1399,7 @@ test("a word that names no value sends the engineer to the panel that asks for t
 test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await hydrated(page.getByLabel("Message the coupon assistant", { exact: true }));
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
@@ -1432,7 +1433,7 @@ test("with a model on, a message is read into a card the engineer ticks: what is
         take("force", "Force applied (N)", "10000", "N", "pulled to 10 kN", "10", "kN")],
       dropped: [{ key: "tab_length", reason: "2.2 is not a number the quoted words write" }] });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
   await message.fill("an open hole tension coupon in AS4/8552, [45/0/-45/90]s, 36 mm wide and 250 mm long with a 6 mm hole, pulled to 10 kN");
@@ -1479,7 +1480,7 @@ test("a model that does not answer leaves the message to the page's patterns, an
     return json({ run_id: "run-p", writer: "template", model: null, proposals: [], conditions: [], question: null, dropped: [],
       reason: "the model could not be reached" });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
   await message.fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
@@ -1515,7 +1516,7 @@ test("the assistant says which words it could not use and why, in place of “No
     }
     return json({ ...reading, proposals: [], unread: [{ quote: "compression", reason: "not_offered" }] });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const chat = page.getByTestId("coupon-chat");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
@@ -1563,7 +1564,7 @@ async function meshScenario(page: Page, model: boolean) {
     return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null,
       supports: [], loads: [], unread: [{ quote: "coarser", reason: "no_value" }] });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   // the rows the page last asked a preview for: the new size goes to the package, which meshes it (the page computes no mesh)
   const sizeSent = () => (calls.lives.at(-1) as { values: Record<string, unknown> } | undefined)?.values.element_size;
@@ -1633,7 +1634,7 @@ test("a plate is held and loaded by talking: regions named in words, and “here
       sense: null, quote: "press here with 0.01 MPa" }],
       dropped: [{ key: "load on Edge-Left", reason: "the quoted words do not name Edge-Left, and it is not where you clicked" }] });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, "plate");
   await page.getByLabel("Length (mm)", { exact: true }).fill("100");
@@ -1721,7 +1722,7 @@ test("a plate with nothing held shows its shape, and the first hold is the edge 
     return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [],
       supports: [{ region: edge, dofs: [1, 2, 3], quote: "hold this edge" }], loads: [] });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, "plate");
   await page.getByLabel("Length (mm)", { exact: true }).fill("100");
@@ -1767,7 +1768,7 @@ test("what is applied is drawn and listed under the model before and after a run
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
   await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
@@ -1858,7 +1859,7 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByTestId("chat-units").selectOption("in-psi");
   await expect(page.getByTestId("chat-spec")).toContainText("in, psi and lbf");
   await page.getByRole("button", { name: /^Unnotched tension/ }).click();
@@ -1913,7 +1914,7 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
     const body = echoed(problem.report_units === "US" ? "laminate-answer-us" : "laminate-answer", problem);
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByTestId("laminate-choice").click();
   await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
   await expect(page.getByTestId("laminate-rail").getByTestId("panel-units")).toBeVisible();
@@ -1995,7 +1996,7 @@ test("the model is lit for presentation before a run: the sketch and the package
   page.on("console", (message) => { if (message.type() === "error" && /THREE|WebGL|shader/i.test(message.text())) browserErrors.push(message.text()); });
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   await expect(page.getByTestId("sketch-scene")).toHaveAttribute("data-mode", "presentation");
   await page.getByTestId("sketch-scene").screenshot({ path: ".local/website/screenshots/studio-sketch-lit.png" });
@@ -2010,7 +2011,7 @@ test("the model is lit for presentation before a run: the sketch and the package
 test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0074)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
   await mockApi(page, calls, { allTests: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   const rail = page.getByTestId("ws-rail");
   await rail.getByTestId("question-test").locator('input[value="fibre tow tension"]').check(); // the first step's card, as for a coupon
@@ -2066,7 +2067,7 @@ test("the fibre tow test swaps the panels for the tow's, and Calculate shows eac
 test("every settled edit is answered by our kernel live, labelled a preview, and a full run replaces it (ADR-0086)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[], lives: [] as unknown[] };
   await mockApi(page, calls, { live: true });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByRole("button", { name: "Load example" }).click();
   // no Run pressed: the complete example is answered by the live solve, with the answer card and the banner
   await expect(page.getByTestId("results")).toHaveAttribute("data-source", "live", { timeout: 10_000 });
@@ -2198,7 +2199,7 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   const jobs = { queued, running: fixture("job-running"), result: fixture("job-result-in"), done: fixture("job-done") };
   await mockApi(page, calls, { allTests: false, writer: "model", jobs: () => jobs[phase] });
   await mockExchange(page, exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS }, uploads: [uploadOf("differs")] }));
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expectNoBannedTerms(page, "a fresh start");
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
@@ -2244,7 +2245,7 @@ test("a stopped run says what happened and what to do, in plain words (ADR-0091)
     message: "stopped at CalculiX: ccx_dynamic.exe exited with code 201: *ERROR in e_c3d: nonpositive jacobian determinant in element 812",
     log_tail: ["== CalculiX", " *ERROR in e_c3d", "run_coupon: stopped at CalculiX"] };
   await mockApi(page, calls, { allTests: false, jobs: () => stopped });
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
@@ -2334,9 +2335,15 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await page.goto("/workspace");
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "browser"); // the stand-in keeps no projects, and says so
   await expect(page.getByTestId("projects-source")).toHaveText("Projects are saved in this browser only; clearing its site data removes them.");
-  await expect(page.getByTestId("workspace-tiles").locator("[data-workspace]")).toHaveCount(2); // no CAD tile (D5)
+  await expect(page.getByTestId("workspace-tiles").locator("[data-workspace]")).toHaveCount(3); // FEA, CAD and Laminate (ADR-0124)
   await expectNoBannedWords(page, "the chooser");
-  await page.goto("/workspace/fea");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  await expect(page.getByTestId("fea-start-chat")).toBeVisible();
+  await expectNoBannedWords(page, "an FEA project not set up yet");
+  await page.goto("/workspace/cad");
+  await expect(page.getByTestId("cad-chat")).toBeVisible();
+  await expectNoBannedWords(page, "the CAD section");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toHaveText("1 mm pull"); // the load the package will apply, before any check, on its tab
   await hydrated(page.getByLabel("Message the coupon assistant", { exact: true }));
@@ -2368,7 +2375,7 @@ test("no workspace page names a tool, its machinery or a record, in its head, it
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "down");
   await expect(page.getByTestId("projects-source")).toHaveText("Saved projects could not be loaded. Showing the ones in this browser. Reload to try again.");
   await expectNoBannedWords(page, "the chooser, the service down");
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");

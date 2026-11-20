@@ -42,3 +42,10 @@ export function whyLines(answer: ResultAnswer, preview: boolean): WhyLines {
   const basis = covered ? "From the results and our theory pages." : "From the results only.";
   return { prose, heading: prose[0], more: prose.slice(1), sources: covered ? sources : [], note: `${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
 }
+
+/** What the FEA assistant of a blank project shows of an answer to a question (ADR-0124): its sentences in the product's own words, as
+ * `whyLines` shows them (a sentence that names a program, or "engine", is left out, ADR-0091), and the sections it rests on. */
+export function generalLines(answer: ResultAnswer): { prose: string[]; sources: string[] } {
+  return { prose: answer.prose.map(shownSentence).filter((sentence): sentence is string => sentence !== null),
+    sources: answer.sources.map((s) => `${s.document}, ${s.title}`) };
+}

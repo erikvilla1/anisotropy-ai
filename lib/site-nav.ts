@@ -49,8 +49,8 @@ export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/stud
 const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), `${WORKSPACE_ROOT}/fea/view`];
 
 /** The app's addresses: the workspace's pages, and the four old addresses that move to it. They get the workspace's own header and no
- * footer. Any other path under `/workspace`, `/chat` or `/studio` is the 404 page, which keeps the site's header it was built with;
- * `/workspace/cad` is one since its placeholder left (decision D5, ADR-0091 amendment 2). */
+ * footer. Any other path under `/workspace`, `/chat` or `/studio` is the 404 page, which keeps the site's header it was built with.
+ * `/workspace/cad` is a section's page again (ADR-0124). */
 export function isAppPath(pathname: string): boolean {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   return APP_PAGES.includes(path) || MOVED_ADDRESSES.includes(path);

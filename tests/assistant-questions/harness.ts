@@ -4,8 +4,8 @@
  * server's tools. Nothing here computes a result: every number is read from the stored results the browser tests use. */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Fields, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
-import { asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
+import type { Fields, GeneralAnswer, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
+import { ASKING, asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
 import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
 import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
@@ -16,9 +16,12 @@ import { applyMessage, unitsNamed } from "../../lib/studio-chat";
 import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
-import { factsOf, whyLines } from "../../lib/result-why";
+import { factsOf, generalLines, whyLines } from "../../lib/result-why";
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
+import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
+import { FEA_KINDS } from "../../lib/workspaces";
+import { hasWork, newProject } from "../../lib/project-store";
 
 export const FOLDER = "tests/assistant-questions";
 
@@ -28,7 +31,11 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate"] as const;
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start"] as const;
+/** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
+ * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124). */
+export const ALL_ROUTES = [...ROUTES, ...START_ROUTES] as const;
+export type AnyRoute = (typeof ALL_ROUTES)[number];
 
 export type Kind = (typeof KINDS)[number];
 export type Style = (typeof STYLES)[number];
@@ -71,6 +78,8 @@ export type Live = {
   plate?: { supports?: string[]; loads?: string[] };
   /** Whether the theory pages hold the reason (ADR-0102). */
   covered?: boolean;
+  /** The kind of FEA work a model's answer on the start page offers to set up, or "none" (ADR-0124). */
+  start?: "coupon" | "none";
   /** Anything else the judge should hold the answer to, in words. */
   judge?: string;
 };
@@ -87,9 +96,9 @@ export type Question = {
   /** The step the chat's open question asks ("name" for "Who is running it?"). */
   asking?: string;
   /** Who answers with a model reading messages, as on the hosted site. */
-  route: RouteName;
+  route: AnyRoute;
   /** Who answers with no model, when that is pinned; otherwise the same route, or for a model's route the setup's patterns or "unread". */
-  offline?: RouteName;
+  offline?: AnyRoute;
   answer?: Expected;
   /** The theory sections a question of why finds, best first (ADR-0102). */
   sections?: string[];
@@ -146,7 +155,7 @@ export function scene(question: Question, modelReads: boolean): Scene {
     state: {
       form, readOnly: question.page === "imported" || question.page === "past", results: !!fields, facts: !!results?.facts, api: true, modelReads,
       onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: (question.asking as ChatState["step"]) ?? null,
-      about: null, thread: null, laminate: true,
+      about: null, thread: null, sections: true,
     },
   };
 }
@@ -246,7 +255,10 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     case "run": return said("said", "Running the analysis");
     case "check": return said("said", "Checking the setup");
     case "full-form": return said("said", "All inputs");
-    case "laminate": return said("said", "The laminate calculator");
+    case "section": return routed.target === "wing" ? said("said", "Wing analysis is not here yet", ["It is being built. This project stays a coupon test."])
+      // a coupon that holds the engineer's work asks first, with one tap to go (switch-ask.tsx); a blank one opens the section at once
+      : hasWork(newProject(s.form)) ? said("ask", `Open ${TARGET_TITLES[routed.target]}?`, ["Your coupon is saved under Projects, as it is now. Your message goes with you."])
+      : said("said", `Opens ${TARGET_TITLES[routed.target]}`);
     case "name": return said("rows", "Got it", [`Run by ${text}`], { rows: { filled_by: text } });
     case "model": return said("model", "Read by the model", [], { asksResults: modelAsksResults(text, s.form, !!s.fields) });
     case "unread": { const words = unreadWords(!!s.fields); return said("redirect", words.title, [words.text]); }
@@ -259,12 +271,29 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
   }
 }
 
+/** The FEA assistant's own answer on a blank project (`components/workspace/fea-start.tsx`), before any model: a question in words is
+ * answered by the API's reader (`modelAnswer`), so here it only names who answers. */
+export function startAnswer(routed: StartRoute): Said {
+  switch (routed.route) {
+    case "set-up": return said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });
+    case "not-here": return routed.target === "wing" ? said("said", "Wing analysis is not here yet", ["It is being built. A coupon test can be set up now."])
+      : said("said", "You are in FEA", ["Say what to analyse, or ask a question about it."]);
+    case "open": return said("said", `Opens ${TARGET_TITLES[routed.target]}`);
+    case "general": return said("general", "Answered in words from our theory pages", [], { named: routed.named });
+  }
+}
+
 /** A talk: the earlier messages, then the question, each routed and answered on the same scene; the chat's own memory of the last
  * question and the element last spoken of is kept as the component keeps it (`thread` and `about` in coupon-chat.tsx). */
-export function talk(question: Question, modelReads: boolean): { route: RouteName; said: Said; routed: ChatRoute } {
+export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } {
   const s = scene(question, modelReads);
-  let last: { route: RouteName; said: Said; routed: ChatRoute } | null = null;
+  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute } | null = null;
   for (const text of [...(question.after ?? []), question.ask]) {
+    if (question.page === "start") { // the FEA assistant of a blank project, which reads no setup (ADR-0124)
+      const routed = routeStart(text);
+      last = { route: routed.route, said: startAnswer(routed), routed };
+      continue;
+    }
     const routed = routeMessage(text, s.state);
     const answer = pageAnswer(text, s, routed);
     if ((routed.route === "value" || routed.route === "follow-up") && (answer.kind === "values" || answer.kind === "extremes")) {
@@ -320,7 +349,7 @@ function rules(question: Question, answer: Said): string[] {
 
 /** A request the page sends a model's reader in the API, as the page builds it (coupon-chat.tsx): the reading of a question of the results,
  * the setup's proposals, or the answer in words to a question of why. */
-export type ModelRequest = { reader: "result-questions" | "proposals" | "result-answers"; body: Record<string, unknown> };
+export type ModelRequest = { reader: "result-questions" | "proposals" | "result-answers" | "questions"; body: Record<string, unknown> };
 
 /** What the page sends a model for a question, with a model reading as on the hosted site, in the order it sends them: a question of the
  * results is read first, and the setup's proposals are asked only when that reading kept nothing (`readWithModel`). None when the page
@@ -328,6 +357,8 @@ export type ModelRequest = { reader: "result-questions" | "proposals" | "result-
 export function modelRequests(question: Question): ModelRequest[] {
   const s = scene(question, true);
   const { route } = talk(question, true);
+  // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124)
+  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: FEA_KINDS.map((k) => k.id) } }];
   if (route === "why") return s.facts ? [{ reader: "result-answers", body: { question: question.ask, facts: s.facts } }] : [];
   if (route !== "model") return [];
   const out: ModelRequest[] = [];
@@ -348,6 +379,15 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
   const text = question.ask;
   let parts: ProposalAnswer["unread"] = [];
   for (const r of readings) {
+    if (r.reader === "questions") { // as fea-start.tsx shows it: the prose, the sections it was answered from, and a kind of work offered
+      if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
+      const answer = r.response as unknown as GeneralAnswer;
+      const { prose, sources } = generalLines(answer);
+      const offered = answer.start && answer.start !== "none" ? answer.start : null;
+      return said("general", prose.length ? "Answered in words" : sources.length ? "Our theory pages hold this" : "Our theory pages do not cover that yet",
+        [...prose, ...(sources.length ? [`Read: ${sources.join("; ")}`] : []), ...(offered ? [`Offers: set up a ${offered} test`] : [])],
+        { covered: answer.covered, start: offered ?? "none", sources });
+    }
     if (r.reader === "result-answers") {
       if (!r.response) return said("failed", "No answer right now", ["That question could not be answered right now. Try again in a moment."]);
       const answer = r.response as unknown as ResultAnswer;
@@ -419,8 +459,9 @@ export function liveFaults(question: Question, readings: Reading[], answer: Said
       for (const region of want) if (!got.some((g) => sameRegion(g, region))) out.push(`no ${list === "supports" ? "support" : "load"} on the ${region}; ${list}: ${got.join(", ") || "none"}`);
     }
   }
+  if (live.start !== undefined && answer.data.start !== live.start) out.push(`offers ${String(answer.data.start)}, expected ${live.start}`);
   if (live.covered !== undefined && answer.data.covered !== live.covered) out.push(`covered ${String(answer.data.covered)}, expected ${live.covered}`);
   return out;
 }
 
-export { ROUTES };
+export { ROUTES, START_ROUTES };

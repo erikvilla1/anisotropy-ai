@@ -36,7 +36,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test("the example coupon solves end to end from the studio", async ({ page }) => {
-  await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
+  await page.goto("/workspace/fea?for=coupon"); // the rows are the left column of the workspace (ADR-0062)
   // With every test offered (ANISOTROPY_ALL_TESTS=on, ADR-0089) the left column is the form and its example; with the switch off,
   // as on the hosted tier and in the API started here, it is the tension screen (ADR-0090): a visitor gives the material and the
   // layup, and the software the rest.

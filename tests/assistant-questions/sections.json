@@ -1,0 +1,32 @@
+{
+  "feature": "sections",
+  "title": "Setting FEA up and opening another section by asking for it",
+  "records": ["ADR-0124"],
+  "watches": ["lib/work-intent.ts", "components/workspace/fea-start.tsx", "components/workspace/go-to.ts", "components/workspace/switch-ask.tsx", "api/src/anisotropy_api/general_answers.py"],
+  "questions": [
+    {"ask": "I want to test some coupons", "kind": "command", "style": "loose", "page": "start", "route": "set-up", "answer": {"heading": "Coupon test set up"}, "source": "the founder, 2026-11-19"},
+    {"ask": "you know what I want to start a wing analysis", "kind": "command", "style": "loose", "page": "start", "route": "not-here", "answer": {"heading": "Wing analysis is not here yet", "says": ["A coupon test can be set up now"]}, "source": "the founder, 2026-11-19"},
+    {"ask": "coupon testing", "kind": "command", "style": "terse", "page": "start", "route": "set-up"},
+    {"ask": "can you set up an unnotched tension coupon?", "kind": "command", "style": "plain", "page": "start", "route": "set-up"},
+    {"ask": "ABD matrix of a [0/90]s laminate", "kind": "command", "style": "jargon", "page": "start", "route": "open", "answer": {"heading": "Opens Laminate"}},
+    {"ask": "I have a step file of a bracket", "kind": "command", "style": "loose", "page": "start", "route": "open", "answer": {"heading": "Opens CAD"}},
+    {"ask": "opne CAD", "kind": "command", "style": "typo", "page": "start", "route": "open", "answer": {"heading": "Opens CAD"}},
+    {"ask": "set up FEA", "kind": "command", "style": "terse", "page": "start", "route": "not-here", "answer": {"heading": "You are in FEA"}},
+    {"ask": "What is a mesh convergence study?", "kind": "what-is", "style": "plain", "page": "start", "route": "general", "sections": ["reasons:why-the-element-size-changes-the-numbers"],
+      "live": {"covered": true, "start": "none", "judge": "Says in one to three short sentences what a mesh convergence study is (the same model solved at finer and finer meshes until the answer stops changing), from our theory pages; names no number of its own"}},
+    {"ask": "whats the diference between max stress and tsai-hill", "kind": "what-is", "style": "typo", "page": "start", "route": "general", "sections": ["reasons:why-the-failure-criteria-give-different-factors"],
+      "live": {"covered": true, "start": "none", "judge": "Says that maximum stress checks each stress against its own strength alone while Tsai-Hill adds the stresses together in one index, so Tsai-Hill usually gives the lower factor; short and plain"}},
+    {"ask": "how do I test a coupon?", "kind": "what-is", "style": "plain", "page": "start", "route": "general",
+      "live": {"start": "coupon", "judge": "Says in a line or two what a coupon test is set up from here (a test, a material, a layup, a size and a load) and offers to set one up; starts nothing on its own"}},
+    {"ask": "how is a wing spar sized?", "kind": "what-is", "style": "plain", "page": "start", "route": "general",
+      "live": {"covered": false, "start": "none", "judge": "Says plainly that our theory pages do not cover sizing a wing spar yet; does not make up a method or a number, and does not offer to set up a wing"}},
+    {"ask": "Is FEA better than a hand calc for this", "kind": "yes-no", "style": "loose", "page": "start", "route": "general",
+      "gap": "search: no theory page says when a hand calculation is enough and when FEA is needed, so the answer declines (real-model check, 2026-11-20)",
+      "live": {"start": "none", "judge": "Opens with the answer: a hand calculation (laminate theory) is enough for a flat laminate under even loads, and FEA is needed where the stress varies, at a hole, a grip or a change of shape; does not claim a number"}},
+    {"ask": "open the laminate calculator", "kind": "command", "style": "plain", "page": "setup", "route": "section", "answer": {"heading": "Open Laminate?", "says": ["Your coupon is saved"]}},
+    {"ask": "CAD please", "kind": "command", "style": "terse", "page": "blank", "route": "section", "answer": {"heading": "Opens CAD"}},
+    {"ask": "can you set up a wing analysis?", "kind": "command", "style": "plain", "page": "results", "route": "section", "answer": {"heading": "Wing analysis is not here yet", "says": ["stays a coupon test"]}},
+    {"ask": "what is the ABD matrix?", "kind": "what-is", "style": "plain", "page": "setup", "route": "model", "answer": {"never": ["Not sure what to change"]},
+      "live": {"judge": "Says in a line what the ABD matrix is (how a laminate's forces and moments relate to its strains and curvatures), or points to the Laminate section for it; changes no row of the coupon and opens nothing on its own"}}
+  ]
+}
