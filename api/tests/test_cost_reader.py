@@ -78,6 +78,25 @@ def test_a_second_run_gives_a_new_password_and_the_old_one_stops_working(databas
         new.dispose()
 
 
+@needs_test_database
+def test_a_second_run_works_for_an_owner_that_is_not_a_superuser(database):
+    # Neon's owner may create roles but is not a superuser; the first version's second run named NOSUPERUSER and was refused there
+    owner = f"{ROLE}_owner"
+    with database.begin() as connection:
+        connection.execute(text(f"CREATE ROLE {owner} WITH NOLOGIN CREATEROLE"))
+    try:
+        with database.begin() as connection:
+            connection.execute(text(f"SET LOCAL ROLE {owner}"))
+            reader_script.set_login(connection, ROLE, "first-password")
+            reader_script.set_login(connection, ROLE, "second-password")
+            assert connection.execute(text("SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname = :role"),
+                                      {"role": ROLE}).one() == (False, False, False, True)
+    finally:
+        with database.begin() as connection:
+            connection.execute(text(f"DROP ROLE IF EXISTS {ROLE}"))
+            connection.execute(text(f"DROP ROLE IF EXISTS {owner}"))
+
+
 def test_a_role_name_that_is_not_a_plain_name_is_refused():
     with pytest.raises(ValueError, match="lowercase letters"):
         reader_script.grant_reader(None, "x; DROP TABLE runs")  # refused before any connection
