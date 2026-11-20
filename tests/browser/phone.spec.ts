@@ -58,7 +58,7 @@ test("on a phone the menu opens with a tap and leads to the workspace, where a t
   await expect(nav).toBeVisible();
   await nav.getByRole("link", { name: "Workspace", exact: true }).tap();
   await expect(page).toHaveURL(/\/workspace\/?$/);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const question = page.getByTestId("chat-question");
   await expect(question).toHaveAttribute("data-step", "material"); // one test offered, so the chat opens on the material (ADR-0089)
   await question.getByRole("button", { name: "IM7 / 8552", exact: true }).tap();

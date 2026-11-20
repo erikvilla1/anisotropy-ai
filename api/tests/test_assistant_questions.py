@@ -28,6 +28,7 @@ REACHED_BY = {
     "/v1/workspace/result-questions": lambda q: bool(q.get("live", {}).get("request")),
     "/v1/workspace/result-answers": lambda q: q["route"] == "why",
     "/v1/workspace/theory-sections": lambda q: bool(q.get("sections")),
+    "/v1/workspace/questions": lambda q: q["route"] == "general",  # the FEA assistant of a blank project (ADR-0124)
 }
 
 

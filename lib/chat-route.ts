@@ -3,7 +3,7 @@ import { asksElement, readFollowUp, readResultQuestion, type ResultQuestion } fr
 import { asksWhy } from "./result-why";
 import { asksWorking } from "./result-working";
 import { isConditionOrLoad, setupAsked, termAsked, type FeaTerm, type TermQuestion } from "./fea-terms";
-import { toolNamed } from "./chat-tools";
+import { readIntent } from "./work-intent";
 import { applyMessage, isSwitchRequest, unitsNamed, type ChatStep } from "./studio-chat";
 import { unitsOf, type StudioForm } from "./studio-form";
 import { namesPlateEdit } from "./studio-plate";
@@ -19,8 +19,10 @@ export const ASKING = /^\s*(?:why|what|where|which|compare)\b/i;
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
 export const ROUTES = ["start-over", "term", "working", "why", "why-none", "value", "failure", "element", "follow-up", "read-only", "setup-fixed",
-  "run", "check", "full-form", "laminate", "name", "model", "unread", "patterns"] as const;
+  "run", "check", "full-form", "section", "name", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
+/** What the coupon chat opens, or answers is not here yet, when asked for by name (ADR-0124). */
+export type SectionAsked = "laminate" | "cad" | "wing";
 
 export type ChatRoute =
   | { route: "start-over" } // "start over": a blank coupon
@@ -37,7 +39,7 @@ export type ChatRoute =
   | { route: "run" }
   | { route: "check" }
   | { route: "full-form" }
-  | { route: "laminate" } // the laminate calculator, named (ADR-0060)
+  | { route: "section"; target: SectionAsked } // another section (Laminate, CAD) or another kind of FEA work (a wing) asked for (ADR-0124)
   | { route: "name" } // the answer to "Who is running it?"
   | { route: "model" } // a model reads it: a question of the results first, else rows of the setup (ADR-0088, ADR-0100, ADR-0101)
   | { route: "unread" } // a question of the results nothing could read: what can be asked
@@ -66,8 +68,8 @@ export type ChatState = {
   about: number | null;
   /** The last question about a value, which a fragment follows. */
   thread: ResultQuestion | null;
-  /** The laminate calculator can be opened from here. */
-  laminate: boolean;
+  /** Another section (Laminate, CAD) can be opened from here (ADR-0124). */
+  sections: boolean;
 };
 
 /** Whether a model reads a message as a question of the results before it reads it as rows of the setup (ADR-0100): with results on the
@@ -110,7 +112,12 @@ export function routeMessage(text: string, s: ChatState): ChatRoute {
   if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && s.ready) return { route: "run" };
   if (/^(check|check setup)\b/i.test(text)) return { route: "check" };
   if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) return { route: "full-form" };
-  if (s.laminate && toolNamed(text) === "laminate") return { route: "laminate" };
+  // another section, or a wing, asked for by the words every chat reads (ADR-0124): "open the laminate calculator", "CAD please",
+  // "I want to start a wing analysis". A wing is answered here, since it is FEA work not built yet; a section only where one can be opened
+  const wanted = readIntent(text);
+  if (wanted?.start && (wanted.target === "wing" || (s.sections && (wanted.target === "laminate" || wanted.target === "cad")))) {
+    return { route: "section", target: wanted.target };
+  }
   // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it
   // compression"; ADR-0088 amendment 2) or, on a plate read by a model, one that names a region or an action on it (ADR-0101 amendment 1);
   // nor is a question a name

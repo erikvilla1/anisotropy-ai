@@ -1,5 +1,6 @@
 import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
+import { COUPON_HREF } from "@/lib/workspaces";
 import "../../inner-pages.css";
 import "../services.css";
 
@@ -55,7 +56,7 @@ export default function TestPlans() {
       access={{
         text: "Describe a coupon to the assistant and the checklist judges it at once. The document itself is planned; write to us if you need one now.",
         links: [
-          { label: "Describe a coupon", href: "/workspace/fea", primary: true },
+          { label: "Describe a coupon", href: COUPON_HREF, primary: true },
           { label: "Contact us", href: "/contact" },
         ],
       }}
