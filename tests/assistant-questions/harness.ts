@@ -5,7 +5,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Fields, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
-import { ASKING, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
+import { asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
+import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, valueLines, type ResultQuestion } from "../../lib/result-question";
 import { confirmsFailure, failureAnswer, failureLines } from "../../lib/result-failure";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
@@ -183,6 +184,10 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const lines = termLines(routed.term);
       return said("term", lines.title, [lines.means, lines.here], { term: routed.term.term.id });
     }
+    case "about": {
+      const answer = aboutAnswer(routed.topic, text, { form: s.form, results: !!s.fields, readOnly: s.state.readOnly });
+      return said("about", answer.title, answer.lines, { topic: routed.topic });
+    }
     case "working": {
       const found = workingFor(s.fields, text);
       if (!s.fields || !found) return said("none", "No working to show yet");
@@ -209,6 +214,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
         { element: number, where: answer.where });
     }
     case "read-only": return s.past ? said("said", "A past run is shown as it was solved") : said("said", "An imported model is read as it stands");
+    // the setup check answers; on the page set up and checked it is ready, and a setup not yet checked is checked first
+    case "ready": return s.state.ready ? said("check", checkTitle(true, 0, true), [], { ready: true }) : said("said", "Checking the setup");
     case "setup-fixed": {
       const term = routed.term;
       const heading = isConditionOrLoad(term) ? (s.form.test === PLATE_TEST ? "Add it on the model tree" : "Set by the test")
@@ -221,7 +228,7 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     case "laminate": return said("said", "The laminate calculator");
     case "name": return said("rows", "Got it", [`Run by ${text}`], { rows: { filled_by: text } });
     case "model": return said("model", "Read by the model", [], { asksResults: modelAsksResults(text, s.form, !!s.fields) });
-    case "unread": return said("redirect", "Not a question I can read yet", ["Ask for a quantity and a place: “stress in ply 3 at element 120”, “strain here” after clicking an element, or “where is the shear stress highest?”."]);
+    case "unread": { const words = unreadWords(!!s.fields); return said("redirect", words.title, [words.text]); }
     case "patterns": {
       const read = applyMessage(s.form, text);
       if (read.understood.length) return said("rows", "Got it", read.understood, { rows: read.rows });
@@ -346,7 +353,7 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
     }
     parts = answer?.unread ?? [];
   }
-  if (s.fields && ASKING.test(text)) return pageAnswer(text, s, { route: "unread" });
+  if (asksUnread(text, !!s.fields)) return pageAnswer(text, s, { route: "unread" });
   const patterns = pageAnswer(text, s, { route: "patterns" });
   if (patterns.kind !== "rows" && parts.length) return said("redirect", "Read, but nothing to enter", unreadLines(parts).map((u) => `“${u.quote}”: ${u.words}`));
   return patterns;

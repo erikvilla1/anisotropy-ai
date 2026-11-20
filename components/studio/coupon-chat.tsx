@@ -24,7 +24,8 @@ import {
   missingIn, nextStep, parseLayup, PUSH_CHIPS, SIZE_CHIPS, stepOfKey, switchUnits, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
-import { ASKING, modelAsksResults, routeMessage } from "@/lib/chat-route";
+import { ASKING, asksUnread, modelAsksResults, routeMessage } from "@/lib/chat-route";
+import { aboutAnswer, checkTitle, unreadWords, type AboutTopic } from "@/lib/chat-about";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
@@ -52,7 +53,7 @@ type Entry = { stage?: boolean } & (
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
   | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen" }
-  | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer }
+  | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer; asked?: boolean }
   | { id: number; role: "assistant"; kind: "job"; job: string }
   | { id: number; role: "assistant"; kind: "result"; job: string }
   | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer }
@@ -283,7 +284,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <><p>Everything is stated.</p><Chips><button type="button" onClick={() => void check(formRef.current)}><Check size={14} /> Check setup</button></Chips></> });
   }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function check(values: StudioForm, lists?: PlateLists) {
+  /** `asked` when the engineer asked whether it is ready ("is my setup ok?"): the answer then opens with Yes or No. */
+  async function check(values: StudioForm, lists?: PlateLists, asked = false) {
     setActive(null);
     if (!apiBaseUrl) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "Analysis unavailable",
@@ -292,7 +294,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     try {
       const answer = await runner.check(valuesOf(values, lists));
-      add({ role: "assistant", kind: "check", answer });
+      add({ role: "assistant", kind: "check", answer, asked });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The setup could not be checked", body: <p>{error instanceof StudioError ? error.message : "Try again."}</p> });
     }
@@ -516,8 +518,22 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** A question about the results that nothing here read: what can be asked, in place of a guess at the setup. */
   function unread(text: string, echoed = false) {
-    add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Not a question I can read yet",
-      body: <p data-testid="chat-value-unread">Ask for a quantity and a place: “stress in ply 3 at element 120”, “strain here” after clicking an element, or “where is the shear stress highest?”.</p> });
+    const words = unreadWords(!!shown.fields); // with no results, what can be asked of the setup (ADR-0121 amendment 2)
+    add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: words.title,
+      body: <p data-testid="chat-value-unread">{words.text}</p> });
+  }
+
+  /** Who the assistant is, the setup's units, whether inches or a material of one's own are offered, which layup, what a coupon needs,
+   * whether von Mises suits a ply (ADR-0121 amendment 2): fixed words, and nothing changes. Another unit system named comes with its switch. */
+  function answerAbout(text: string, topic: AboutTopic) {
+    const said = aboutAnswer(topic, text, { form: formRef.current, results: !!shown.fields, readOnly: shown.readOnly });
+    const named = topic === "units-other" ? unitsNamed(text) : null;
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: said.title, body: (
+      <div data-testid="chat-about" data-topic={topic}>
+        {said.lines.map((line) => <p key={line}>{line}</p>)}
+        {named && named !== unitsOf(formRef.current) ? <Chips><button type="button" onClick={() => switchTo(named)}>Switch to {unitWords(named)}</button></Chips> : null}
+      </div>
+    ) });
   }
 
   /** A question of why, answered in words (ADR-0102): the API puts the shown result's fact sheet beside the sections of our theory pages
@@ -631,6 +647,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     switch (routed.route) {
       case "start-over": add({ role: "user", text }); startOver(); return;
       case "term": answerTerm(text, routed.term); return;
+      case "about": answerAbout(text, routed.topic); return;
       case "working": showWorking(text); return;
       case "why": void answerWhy(text, factsOf(shown.explanation)!, shown.live); return;
       case "why-none":
@@ -642,6 +659,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       case "failure": answerFailure(text); return;
       case "element": answerElement(text, routed.element, shown.fields!); return;
       case "read-only": void readOfImported(text); return;
+      case "ready": add({ role: "user", text }); void check(formRef.current, undefined, true); return;
       case "setup-fixed": answerSetup(text, routed.term); return;
       case "run": void run(); return;
       case "check": add({ role: "user", text }); void check(formRef.current); return;
@@ -699,7 +717,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
     const parts = answer?.unread ?? [];
-    if (shown.fields && ASKING.test(text)) unread(text, true); // a question nothing read is not a row of the setup
+    if (asksUnread(text, !!shown.fields)) unread(text, true); // a question nothing read is not a row of the setup (ADR-0121 amendment 2)
     else readWithPatterns(text, true, parts.length ? () => notUsed(parts) : undefined);
   }
 
@@ -911,7 +929,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
   }
 
-  function checkMessage(result: CheckAnswer, latest: boolean): ReactNode {
+  function checkMessage(result: CheckAnswer, latest: boolean, asked = false): ReactNode {
     const items = result.checklist.items;
     const blocking = items.filter((i) => i.state === "fail" || i.state === "missing");
     const warnings = items.filter((i) => i.state === "warn");
@@ -926,7 +944,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     };
     return (
       <div data-testid="chat-check" data-state={result.state}>
-        <h4>{result.state === "ready" ? "Ready to run" : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
+        <h4>{checkTitle(result.state === "ready", blocking.length, asked)}</h4>
         <p>{passed} of {items.length} checks passed.</p>
         {blocking.length ? (
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
@@ -1209,7 +1227,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       const isLive = entry.id === active && !checking;
       content = <div data-step={entry.step} data-testid={isLive ? "chat-question" : undefined}><h4>{q.title}</h4>{isLive && q.text ? <p>{q.text}</p> : null}{askWidget(entry.step, isLive)}</div>;
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
-    else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer);
+    else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer, entry.asked);
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
     else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "extremes") content = extremesMessage(entry);

@@ -1574,7 +1574,7 @@ test("the mesh is changed by talking: a written element size, and finer as half 
   const livesBefore = calls.lives.length;
   await message.fill("would a finer mesh change the answer?");
   await message.press("Enter");
-  await expect(page.getByText("Not sure what to change").last()).toBeVisible();
+  await expect(page.getByTestId("chat-value-unread").last()).toContainText("is it ready to run?"); // a question is said so (ADR-0121 amendment 2)
   await page.waitForTimeout(1_200); // longer than the preview's wait after an edit
   expect(calls.lives.length).toBe(livesBefore);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -1790,6 +1790,44 @@ test("what is applied is drawn and listed under the model before and after a run
   await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
   await expect(page.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
+  expect(browserErrors).toEqual([]);
+});
+
+test("a question is answered and changes nothing: the units, inches, who it is, a test's name, ready to run, the working (ADR-0121 amendment 2)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  const heading = () => page.getByTestId("coupon-chat").locator("h4").last();
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  // the first real-model run of the question banks (2026-11-20) found each of these answered “Not sure what to change”, or read as a change
+  await say("can I use inches?"); // asked, not told: the units stay, and the switch is one click away
+  await expect(page.getByTestId("chat-about").last()).toHaveAttribute("data-topic", "units-other");
+  await expect(heading()).toHaveText("Yes: in, psi and lbf");
+  await expect(page.getByTestId("chat-about").last().getByRole("button", { name: "Switch to in, psi and lbf" })).toBeVisible();
+  await say("what units are you using?");
+  await expect(heading()).toHaveText("mm, MPa and N");
+  await say("who made you");
+  await expect(heading()).toHaveText("Anisotropy's assistant");
+  await say("what is a tension coupon"); // a test's name, asked: what it is, and no test set
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "tension-coupon");
+  expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
+  await say("is my setup ok?"); // checked, and the answer opens with Yes or No
+  await expect(page.getByTestId("chat-check").last().locator("h4")).toHaveText("Yes, ready to run");
+  await page.getByTestId("chat-run").last().click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await say("how did you get 16740 N"); // a number of the answer, asked about: the working, never a new load of 16740 N
+  await expect(page.getByTestId("chat-working-none").or(page.getByTestId("chat-working")).last()).toBeVisible();
+  await expect(page.getByTestId("coupon-chat")).not.toContainText("16740 N force");
+  expect(calls.solves).toHaveLength(1);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "chatgpt", "abaqus"]) expect(said).not.toContain(word);
   expect(browserErrors).toEqual([]);
 });
 

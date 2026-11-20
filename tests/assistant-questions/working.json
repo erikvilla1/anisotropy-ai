@@ -17,6 +17,6 @@
     {"ask": "show me the forumla", "kind": "what-is", "style": "typo", "page": "results", "route": "working", "answer": {"kind": "working"}, "gap": "10: a typo of formula is not read"},
     {"ask": "tsai-wu working", "kind": "what-is", "style": "terse", "page": "results", "route": "working", "answer": {"kind": "refused", "heading": "No working for that criterion yet"}, "mcp": {"tool": "show_working", "args": {"criterion": "tsai_wu"}, "refused": true, "says": ["max_stress, tsai_hill"]}, "gap": "10: a criterion's working asked in two words is not read"},
     {"ask": "where does the 1.032 come from", "kind": "what-is", "style": "loose", "page": "results", "route": "working", "answer": {"kind": "working"}, "gap": "10: 'where does the number come from' is not read as a request for the working"},
-    {"ask": "how did you get 16740 N", "kind": "what-is", "style": "loose", "page": "results", "route": "working", "answer": {"kind": "working"}, "gap": "1: a question about a number of the answer is read as a new load of 16740 N"}
+    {"ask": "how did you get 16740 N", "kind": "what-is", "style": "loose", "page": "results", "route": "working", "answer": {"kind": "working"}}
   ]
 }

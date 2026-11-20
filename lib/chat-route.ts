@@ -1,3 +1,4 @@
+import { aboutAsked, type AboutTopic } from "./chat-about";
 import { asksFailure } from "./result-failure";
 import { asksElement, readFollowUp, readResultQuestion, type ResultQuestion } from "./result-question";
 import { asksWhy } from "./result-why";
@@ -16,15 +17,41 @@ import { namesPlateEdit } from "./studio-plate";
  * ply 4 in compression?" never changes the test to compression (ADR-0100). */
 export const ASKING = /^\s*(?:why|what|where|which|compare)\b/i;
 
+/** A message that asks rather than tells (ADR-0121 amendment 2): it opens with a word that asks ("what", "how", "is", "does", "should"),
+ * or it ends in a question mark and asks for nothing to be done ("can you make it 30 wide?" is a request, and is read as one). "What
+ * about" and "how about" offer a value, so they are no question. A question is never read into rows of the setup: "how did you get
+ * 16740 N" changes no load. */
+const ASKS_OPEN = /^\s*(?:why|what(?!\s+about\b)|where|which|who|whom|whose|when|how(?!\s+about\b)|compare|is|are|was|were|does|should|shall|am|(?:do|did|have|has)(?=\s+(?:you|u|i|we|they|it|this|my|the)\b))\b/i;
+const REQUEST = /^\s*(?:please|(?:can|could|would|will)\s+(?:you|u|we|i)|may\s+i|let'?s|i(?:'d|\s+would)\s+like|i\s+want)\b/i;
+export const isQuestion = (text: string): boolean => ASKS_OPEN.test(text) || (/\?\s*$/.test(text) && !REQUEST.test(text));
+
+/** A question of whether the setup is ready ("is it ready to run?", "is my setup ok?", "can I run it?", "what's missing?"): the setup is
+ * checked and the answer opens with Yes or No (ADR-0121 amendment 2). */
+const READY = [
+  /^\s*(?:is|are)\s+(?:it|this|that|the\s+(?:setup|coupon|model|form)|my\s+(?:setup|coupon|model|form)|everything|all|we|i)\s+(?:all\s+)?(?:ready|ok|okay|good|fine|set|complete|done|right|correct|valid)\b/i,
+  /^\s*(?:can|could|may)\s+(?:i|we|you)\s+(?:run|solve)(?:\s+(?:it|this|now|the\s+(?:analysis|model|coupon)))*\s*[?.!]*\s*$/i,
+  /^\s*(?:ready(?:\s+to\s+(?:run|go|solve))?|good\s+to\s+go|all\s+set)\s*\?\s*$/i,
+  /^\s*(?:is\s+)?(?:anything|something)\s+missing\b/i,
+  /^\s*what(?:'s|’s|s|\s+is|\s+are)\s+(?:still\s+)?(?:missing|left)\b/i,
+  /^\s*what\s+else\s+(?:do|does)\s+(?:you|it|i)\s+need\b/i,
+  /^\s*(?:does|do)\s+(?:it|this|my\s+setup|the\s+setup|everything)\s+look\s+(?:ok|okay|good|right|fine)\b/i,
+];
+export const asksReady = (text: string): boolean => READY.some((p) => p.test(text));
+/** "run it" alone: run when the setup is checked and ready, else check it and say what is still to fix. */
+const BARE_RUN = /^\s*(?:run|solve|go|run\s+it|solve\s+it|run\s+(?:the\s+)?analysis|run\s+the\s+model)\s*[.!]*\s*$/i;
+/** "check", and the ways it is mistyped. */
+const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\s+the\s+setup|check\s+it|verify(?:\s+(?:it|the\s+setup))?)\b/i;
+
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
-export const ROUTES = ["start-over", "term", "working", "why", "why-none", "value", "failure", "element", "follow-up", "read-only", "setup-fixed",
-  "run", "check", "full-form", "laminate", "name", "model", "unread", "patterns"] as const;
+export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "value", "failure", "element", "follow-up", "read-only", "ready",
+  "setup-fixed", "run", "check", "full-form", "laminate", "name", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 
 export type ChatRoute =
   | { route: "start-over" } // "start over": a blank coupon
   | { route: "term"; term: TermQuestion } // what an Abaqus word means, or this model's boundary conditions and loads (ADR-0110)
+  | { route: "about"; topic: AboutTopic } // who the assistant is, the units, what is offered: fixed words (ADR-0121 amendment 2)
   | { route: "working" } // the formula or the proof behind the answer (ADR-0103)
   | { route: "why" } // a question of why, answered in words from the results and the theory pages (ADR-0102)
   | { route: "why-none" } // a question of why with no result (or no API) to answer from
@@ -33,6 +60,7 @@ export type ChatRoute =
   | { route: "element"; element: number | "picked" | "last" | null } // what an element is, or where (ADR-0099 amendment 3)
   | { route: "follow-up"; question: ResultQuestion } // "now in ply 5": the question before it, with one thing changed (ADR-0099 amendment 3)
   | { route: "read-only" } // an imported model or a past run is on the page: nothing is changed by talking (ADR-0105, ADR-0109)
+  | { route: "ready" } // "is it ready to run?": the setup checked, the answer opening with Yes or No (ADR-0121 amendment 2)
   | { route: "setup-fixed"; term: FeaTerm } // "add a boundary condition" where the test fixes them (ADR-0110)
   | { route: "run" }
   | { route: "check" }
@@ -40,7 +68,7 @@ export type ChatRoute =
   | { route: "laminate" } // the laminate calculator, named (ADR-0060)
   | { route: "name" } // the answer to "Who is running it?"
   | { route: "model" } // a model reads it: a question of the results first, else rows of the setup (ADR-0088, ADR-0100, ADR-0101)
-  | { route: "unread" } // a question of the results nothing could read: what can be asked
+  | { route: "unread" } // a question nothing could read: what can be asked, never a row of the setup
   | { route: "patterns" }; // the setup's own patterns read it into rows, or point at the panel that asks for the next thing (ADR-0055)
 
 /** What the chat knows when a message arrives. */
@@ -70,6 +98,10 @@ export type ChatState = {
   laminate: boolean;
 };
 
+/** Whether a message nothing read is a question, said so with what can be asked, rather than read by the setup's patterns: with results on
+ * the page anything that opens as a question of them (ADR-0100), and anywhere a question (ADR-0121 amendment 2). */
+export const asksUnread = (text: string, results: boolean): boolean => (results && ASKING.test(text)) || isQuestion(text);
+
 /** Whether a model reads a message as a question of the results before it reads it as rows of the setup (ADR-0100): with results on the
  * page, unless the message does not open as a question and the setup's patterns read something in it. */
 export const modelAsksResults = (text: string, form: StudioForm, results: boolean): boolean =>
@@ -83,8 +115,13 @@ export function routeMessage(text: string, s: ChatState): ChatRoute {
   // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
   const term = termAsked(text);
   if (term) return { route: "term", term };
-  // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
-  if (asksWorking(text) && !edits()) return { route: "working" };
+  // who the assistant is, the units, whether a material of one's own or inches are offered, which layup: fixed words, nothing changes
+  // ("can I use inches?" switched the units before; ADR-0121 amendment 2)
+  const topic = aboutAsked(text, s.readOnly);
+  if (topic) return { route: "about", topic };
+  // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103);
+  // a question about a number of the answer is no new load: "how did you get 16740 N" (ADR-0121 amendment 2)
+  if (asksWorking(text) && (!edits() || isQuestion(text))) return { route: "working" };
   // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102); with
   // no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
   if (asksWhy(text)) return s.api && s.results && s.facts ? { route: "why" } : { route: "why-none" };
@@ -103,12 +140,15 @@ export function routeMessage(text: string, s: ChatState): ChatRoute {
   }
   // an imported model's rows are the file's (ADR-0105) and a past run is shown as it was solved (ADR-0109): nothing below reads a message into either
   if (s.readOnly) return { route: "read-only" };
+  // whether the setup is ready is the setup check's answer, said as Yes or No (ADR-0121 amendment 2)
+  if (asksReady(text)) return { route: "ready" };
   // "add a boundary condition" where the setup fixes them, "partition the coupon", "create a step": said once, nothing changes (ADR-0110).
   // On a plate read by a model, a boundary condition or a load is read into its lists instead (ADR-0101)
   const adding = setupAsked(text);
   if (adding && !(s.onPlate && isConditionOrLoad(adding)) && !edits()) return { route: "setup-fixed", term: adding };
   if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && s.ready) return { route: "run" };
-  if (/^(check|check setup)\b/i.test(text)) return { route: "check" };
+  // "run it" before the setup is ready: checked, so the engineer sees what is still to fix rather than nothing (ADR-0121 amendment 2)
+  if (CHECK.test(text) || BARE_RUN.test(text)) return { route: "check" };
   if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) return { route: "full-form" };
   if (s.laminate && toolNamed(text) === "laminate") return { route: "laminate" };
   // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it
@@ -120,6 +160,7 @@ export function routeMessage(text: string, s: ChatState): ChatRoute {
   // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
   const named = unitsNamed(text);
   if (s.modelReads && s.api && !isSwitchRequest(text) && (named === null || named === unitsOf(s.form))) return { route: "model" };
-  if (s.results && ASKING.test(text)) return { route: "unread" };
+  // a question nothing above read is said so, with what can be asked: never read into rows (ADR-0100, ADR-0121 amendment 2)
+  if (asksUnread(text, s.results)) return { route: "unread" };
   return { route: "patterns" };
 }

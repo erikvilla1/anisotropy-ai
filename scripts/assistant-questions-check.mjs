@@ -13,7 +13,7 @@ import { join } from "node:path";
 const FOLDER = "tests/assistant-questions";
 // The assistant itself, whatever bank a change touches: the chat, its routing, the API's model readers and every tool of the MCP server.
 const ASSISTANT = [
-  "components/studio/coupon-chat.tsx", "components/studio/laminate-chat.tsx", "lib/chat-route.ts", "api/src/anisotropy_api/assistant.py",
+  "components/studio/coupon-chat.tsx", "components/studio/laminate-chat.tsx", "lib/chat-route.ts", "lib/chat-about.ts", "api/src/anisotropy_api/assistant.py",
   "api/src/anisotropy_api/result_questions.py", "api/src/anisotropy_api/result_answers.py", "api/src/anisotropy_api/proposals.py",
   "api/src/anisotropy_api/plate_proposals.py", "api/src/anisotropy_api/theory.py", "mcp-server/src/",
 ];
