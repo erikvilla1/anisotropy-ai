@@ -219,7 +219,7 @@ function StrengthsUsed({ material, unit }: { material: WingMaterialShown; unit: 
         <tbody>
           {material.strengths.map((row) => (
             <tr key={row.role} data-role={row.role}>
-              <td>{STRENGTH_LABELS[row.role] ?? row.role}</td><td>{shown(row.value, 4)}</td><td>{row.basis ?? "–"}</td>
+              <td>{STRENGTH_LABELS[row.role] ?? row.role}</td><td>{shown(row.value, 4)}</td><td style={{ whiteSpace: "nowrap" }}>{row.basis ?? "–"}</td>
               <td>{row.url && row.page ? <a href={row.url} target="_blank" rel="noreferrer">p. {row.page}</a> : "–"}</td>
             </tr>
           ))}
