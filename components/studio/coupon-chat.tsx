@@ -6,7 +6,7 @@ import { allCouponTests, answerGeneral, answerResult, offeredHere, assistantInfo
   type GeneralAnswer, type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { summaryAnswer, type SummaryQuantity } from "@/lib/result-summary";
-import { factsOf, generalLines, readAt, whyLines } from "@/lib/result-why";
+import { factsOf, generalLines, headed, readAt, whyLines } from "@/lib/result-why";
 import { isConditionOrLoad, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
 import { workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
@@ -599,9 +599,10 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     }
     const { prose, sources } = generalLines(answer); // in the product's own words (ADR-0091)
     const covered = answer.covered && sources.length > 0;
-    add({ role: "assistant", kind: "text", title: prose[0] ?? "Not in our theory pages yet", body: (
+    const { heading, more } = prose.length ? headed(prose, "Answered in words") : { heading: "Not in our theory pages yet", more: [] };
+    add({ role: "assistant", kind: "text", title: heading, body: (
       <div data-testid="chat-general" data-covered={covered}>
-        {prose.slice(1).map((line, i) => <p key={i} data-testid="chat-general-sentence">{line}</p>)}
+        {more.map((line, i) => <p key={i} data-testid="chat-general-sentence">{line}</p>)}
         {!prose.length ? <p>Ask about the setup instead, for example “is it ready to run?”.</p> : covered ? <p className="chat-note">From our theory pages.</p> : null}
         {covered ? <details><summary>Details</summary><p data-testid="chat-general-sources">Our theory pages: {sources.join("; ")}.</p></details> : null}
       </div>

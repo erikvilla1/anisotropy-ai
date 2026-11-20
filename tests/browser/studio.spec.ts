@@ -1173,7 +1173,7 @@ test("a question of why is answered in words from the results and our theory pag
   // a model behind the API: its answers, as the number guard would keep them, or none
   const answers: Record<string, unknown> = {
     "why does ply 4 fail first?": { ...written, covered: true, sources: [FAILURE],
-      prose: ["Ply 4 (90 degrees) fails first by tension across its fibres: sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
+      prose: ["Ply 4 (90 degrees) fails first, across its fibres.", "Its sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
     "why is ply 4 in compression?": { ...written, covered: false, sources: [],
       prose: ["The results show ply 4 (90 degrees) at -364.8 MPa along its fibres.", "The theory pages do not explain this yet."] },
     "what does the failure index mean?": { ...written, writer: "template", model: null, covered: false, withheld: true, reason: "numbers", prose: [], sources: [FAILURE, PLIES] },
@@ -1217,8 +1217,8 @@ test("a question of why is answered in words from the results and our theory pag
   await expect(why).toHaveAttribute("data-answered", "yes");
   await expect(why).toHaveAttribute("data-covered", "yes");
   await expect(why).toHaveAttribute("data-source", "run");
-  await expect(why.getByTestId("chat-why-answer")).toHaveText("Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.");
-  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["By Tsai-Hill that is at 1.032 times the applied loading."]);
+  await expect(why.getByTestId("chat-why-answer")).toHaveText("Ply 4 (90 degrees) fails first, across its fibres.");
+  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Its σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
   await expect(why.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results and our theory pages.");
   await expect(why.getByTestId("chat-why-sources")).not.toHaveAttribute("open");
   await why.getByTestId("chat-why-sources").getByText("Details", { exact: true }).click();
@@ -1232,7 +1232,9 @@ test("a question of why is answered in words from the results and our theory pag
   await say("why is ply 4 in compression?");
   const uncovered = page.getByTestId("chat-why").last();
   await expect(uncovered).toHaveAttribute("data-covered", "no");
-  await expect(uncovered.getByTestId("chat-why-answer")).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
+  // a first sentence too long for a heading (68 characters) stands whole under a fixed one (ADR-0121 amendment 7)
+  await expect(uncovered.getByTestId("chat-why-answer")).toHaveText("Answered in words from the results");
+  await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
   await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results only.");
   await expect(uncovered.getByTestId("chat-why-sources")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");

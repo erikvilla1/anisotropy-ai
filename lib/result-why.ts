@@ -18,10 +18,20 @@ export function factsOf(explanation: { facts: Record<string, unknown> } | null |
   return facts && Object.keys(facts).length ? facts : null;
 }
 
+/** The most a heading holds, in characters (ADR-0121 amendment 7): the banks hold every heading to it. */
+export const HEADING_ROOM = 60;
+
+/** An answer's first sentence as its heading when it fits, the rest under it; a first sentence too long for a heading goes under `long`,
+ * unchanged, since the page never cuts a model's words (ADR-0121 amendment 7). */
+export function headed(prose: string[], long: string): { heading: string; more: string[] } {
+  return prose[0].length <= HEADING_ROOM ? { heading: prose[0], more: prose.slice(1) } : { heading: long, more: prose };
+}
+
 export type WhyLines = {
   /** The answer's sentences as the page shows them; none when no answer was written or none is fit to show. */
   prose: string[];
-  /** The heading: the answer's first sentence, the answer itself, or that there is none (ADR-0102 amendment 1). */
+  /** The heading: the answer's first sentence, or a fixed one when it is too long for a heading, or that there is none (ADR-0102
+   * amendment 1, ADR-0121 amendment 7). */
   heading: string;
   /** The sentences under the heading. */
   more: string[];
@@ -45,7 +55,8 @@ export function whyLines(answer: ResultAnswer, preview: boolean, place: string |
   const covered = answer.covered && sources.length > 0;
   const basis = covered ? "From the results and our theory pages." : "From the results only.";
   const read = place ? `Read in ${place}. ` : "";
-  return { prose, heading: prose[0], more: prose.slice(1), sources: covered ? sources : [], note: `${read}${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
+  return { prose, ...headed(prose, "Answered in words from the results"), sources: covered ? sources : [],
+    note: `${read}${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
 }
 
 /** What the FEA assistant of a blank project shows of an answer to a question (ADR-0124): its sentences in the product's own words, as

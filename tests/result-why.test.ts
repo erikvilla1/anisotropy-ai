@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { asksWhy, factsOf, readAt, whyLines } from "../lib/result-why";
+import { asksWhy, factsOf, headed, HEADING_ROOM, readAt, whyLines } from "../lib/result-why";
 import { readResultAnswer, StudioError, type ResultAnswer } from "../lib/studio-api";
 
 const FAILURE = { id: "engine:5-failure", document: "Laminate theory", title: "5. Failure" };
@@ -28,8 +28,9 @@ test("a question is answered from a fact sheet that holds facts, and an older re
 test("an answer is shown in the page's symbols, its first sentence the heading, with the sections it rests on named under it (ADR-0102 amendment 1)", () => {
   const lines = whyLines(answer(), false);
   assert.deepEqual(lines.prose, ["Ply 4 (90 degrees) fails first: σ₂ reaches 60.6 MPa at 1.032 times the applied loading."]);
-  assert.equal(lines.heading, lines.prose[0]);
-  assert.deepEqual(lines.more, []);
+  // a first sentence of 88 characters is too long for a heading: it stands whole under a fixed one (ADR-0121 amendment 7)
+  assert.equal(lines.heading, "Answered in words from the results");
+  assert.deepEqual(lines.more, lines.prose);
   assert.equal(lines.note, "From the results and our theory pages.");
   assert.deepEqual(lines.sources, ["Laminate theory, 5. Failure"]);
   const two = whyLines(answer({ sources: [FAILURE, PLIES], prose: ["Ply 4 fails first.", "It is loaded across its fibres."] }), true);
@@ -40,6 +41,15 @@ test("an answer is shown in the page's symbols, its first sentence the heading, 
   assert.equal(whyLines(answer(), false, readAt({ basis: "the gauge section" })).note, "Read in the gauge section. From the results and our theory pages.");
   assert.equal(readAt({ basis: "" }), null);
   assert.deepEqual(two.sources, ["Laminate theory, 5. Failure", "Finite element theory, 6. Ply stresses in material axes"]);
+});
+
+test("a first sentence that fits is the heading; a longer one stands whole under the fixed heading, never cut (ADR-0121 amendment 7)", () => {
+  const abd = "It's the laminate's stiffness matrix, linking loads to deformation."; // the fourth real run's, 67 characters
+  assert.ok(abd.length > HEADING_ROOM);
+  assert.deepEqual(headed([abd, "Its inverse gives deformation from load."], "Answered in words"),
+    { heading: "Answered in words", more: [abd, "Its inverse gives deformation from load."] });
+  const fits = "x".repeat(HEADING_ROOM);
+  assert.deepEqual(headed([fits, "More."], "Answered in words"), { heading: fits, more: ["More."] });
 });
 
 test("an answer the theory pages do not cover says so and cites nothing", () => {

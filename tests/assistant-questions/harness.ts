@@ -16,7 +16,7 @@ import { applyMessage, unitsNamed } from "../../lib/studio-chat";
 import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
-import { factsOf, generalLines, readAt, whyLines } from "../../lib/result-why";
+import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/result-why";
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
@@ -390,8 +390,9 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
       const { prose, sources } = generalLines(answer);
       if (question.page !== "start") { // as answerMeaning in coupon-chat.tsx: the first sentence as the heading, the sections under Details
         const covered = answer.covered && sources.length > 0;
-        return said("general", prose[0] ?? "Not in our theory pages yet",
-          [...prose.slice(1), ...(!prose.length ? ["Ask about the setup instead, for example “is it ready to run?”."] : covered ? ["From our theory pages."] : [])],
+        const { heading, more } = prose.length ? headed(prose, "Answered in words") : { heading: "Not in our theory pages yet", more: [] };
+        return said("general", heading,
+          [...more, ...(!prose.length ? ["Ask about the setup instead, for example “is it ready to run?”."] : covered ? ["From our theory pages."] : [])],
           { covered, sources: covered ? sources : [] });
       }
       const offered = answer.start && answer.start !== "none" ? answer.start : null;

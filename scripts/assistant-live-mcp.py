@@ -68,7 +68,7 @@ class TheoryApi(FakeApi):
 
 
 FREE_WORDS = {"question"}  # an argument the model words itself: the engineer's question put in its own words is the same question
-SHOWN = 9000  # what the judge is shown of each tool result, in characters: the numbers an answer may quote come from there
+SHOWN = 20000  # what the judge is shown of each tool result, in characters: the numbers an answer may quote come from there; the form runs to 19,000
 
 
 def called_as_asked(calls: list[dict[str, Any]], asked: dict[str, Any], defaults: dict[str, dict[str, Any]], final: str = "") -> bool:
