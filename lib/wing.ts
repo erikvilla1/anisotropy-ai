@@ -90,7 +90,8 @@ function tomlValue(value: WingValue): string {
   }
   if (typeof value === "boolean") return value ? "true" : "false";
   if (Array.isArray(value)) return `[${value.map(tomlValue).join(", ")}]`;
-  throw new Error("A table inside a list cannot be written");
+  // a table inside a list (a part's zones) is written inline: { start = 0, end = 0.4, half_stack = [0, 0, 45] }
+  return `{ ${Object.entries(value).map(([key, v]) => `${tomlKey(key)} = ${tomlValue(v)}`).join(", ")} }`;
 }
 
 /** The description as a wing file (TOML): the plain keys of each table first, then its tables, in the order they were written, so
@@ -123,7 +124,8 @@ export function wingFileName(wing: WingDescription, extension = "toml"): string 
 /** A field of the setup: where its value sits in the description, what it is, and its unit kind (null for a pure number). A
  * `list` field holds numbers typed as a list; an `optional` one may be left empty, which removes it from the description. */
 export type WingField = {
-  path: string; label: string; hint?: string; unit?: UnitKind | "speed" | "area" | "per_rad" | "chord" | "deg" | "percent"; optional?: boolean; list?: boolean;
+  path: string; label: string; hint?: string; unit?: UnitKind | "speed" | "area" | "per_rad" | "chord" | "deg" | "percent" | "span" | "ratio";
+  optional?: boolean; list?: boolean;
 };
 
 export const GEOMETRY_FIELDS: readonly WingField[] = [
@@ -144,7 +146,50 @@ export const AERO_FIELDS: readonly WingField[] = [
 export const DESIGN_RULE_FIELDS: readonly WingField[] = [
   { path: "design_rules.min_percent", label: "Least share of each direction", hint: "Of 0°, +45°, −45° and 90°. Empty: 10 %", unit: "percent", optional: true },
   { path: "design_rules.max_in_a_row", label: "Most plies of one angle in a row", hint: "Empty: 4. Thicker plies call for fewer", optional: true },
+  { path: "design_rules.drop_ratio", label: "Ply drop ratio", hint: "Run-out per thickness dropped where a zone ends. Empty: 20 to 1", unit: "ratio", optional: true },
+  { path: "design_rules.max_dropped", label: "Most plies ending at one place", hint: "Both halves counted. Empty: 2, one each side of the middle", optional: true },
 ];
+
+/** The spar caps (ADR-0124): a strip of each skin centred on each web, with its own half stack. */
+export const SPAR_CAP_FIELDS: readonly WingField[] = [
+  { path: "spar_caps.front_width", label: "Front cap width", hint: "Along the chord, centred on the front web", unit: "length" },
+  { path: "spar_caps.rear_width", label: "Rear cap width", hint: "Along the chord, centred on the rear web", unit: "length" },
+];
+/** A new pair of caps: a strip a little narrower than a tenth of the chord, with the skin's plies and two more at 0°. */
+export function newSparCaps(wing: WingDescription): WingDescription {
+  const chord = Number(valueAt(wing, "geometry.chord")) || 1;
+  const width = Number((0.1 * chord).toPrecision(2));
+  const skin = valueAt(wing, "skin.half_stack");
+  const stack = Array.isArray(skin) ? [0, ...(skin as number[])] : [0, 0, 45, -45];
+  return { front_width: width, rear_width: width, half_stack: stack };
+}
+
+/** A part's zones along the span (ADR-0124): each from `start` to `end`, fractions of the half span, with its own half stack. */
+export type WingZone = { start: number; end: number; half_stack: number[] };
+export type ZonedPart = "skin" | "spar" | "spar_caps";
+export function zonesOf(wing: WingDescription, part: ZonedPart): WingZone[] {
+  const zones = valueAt(wing, `${part}.zones`);
+  return Array.isArray(zones) ? (zones as unknown as WingZone[]) : [];
+}
+/** The part's zones replaced; none left removes the key. */
+export function withZones(wing: WingDescription, part: ZonedPart, zones: WingZone[]): WingDescription {
+  return withValue(wing, `${part}.zones`, zones.length ? (zones as unknown as WingValue) : undefined);
+}
+/** A new zone outboard of the last one: from its end (the root for the first) to 40 % further, with the part's own half stack. */
+export function newZone(wing: WingDescription, part: ZonedPart): WingZone {
+  const zones = zonesOf(wing, part);
+  const start = zones.length ? Math.max(...zones.map((z) => z.end)) : 0;
+  const stack = valueAt(wing, `${part}.half_stack`);
+  return { start: Math.min(start, 0.9), end: Math.min(1, Number((Math.min(start, 0.9) + 0.4).toFixed(2))), half_stack: Array.isArray(stack) ? (stack as number[]) : [0] };
+}
+/** A stretch of the span in words: "root to 40 %", "40 % to tip", "20 to 40 %". */
+export function spanWords(start: number, end: number): string {
+  const pct = (v: number) => `${Number((100 * v).toFixed(1))}`;
+  if (start === 0 && end === 1) return "root to tip";
+  if (start === 0) return `root to ${pct(end)} %`;
+  if (end === 1) return `${pct(start)} % to tip`;
+  return `${pct(start)} to ${pct(end)} %`;
+}
 
 export const ENVELOPE_FIELDS: readonly WingField[] = [
   { path: "envelope.gross_weight", label: "Gross weight", hint: "The whole airplane", unit: "force" },
@@ -212,6 +257,8 @@ export function unitLabel(wing: WingDescription, unit: WingField["unit"]): strin
   if (unit === "chord") return "of the chord";
   if (unit === "deg") return "°";
   if (unit === "percent") return "%";
+  if (unit === "span") return "% of span";
+  if (unit === "ratio") return "to 1";
   return UNIT_LABELS[units][unit];
 }
 
@@ -252,10 +299,11 @@ export type WingCase = {
 export type WingReport = {
   units: Record<string, string>; wing: string; passes: boolean; seconds: number;
   design: {
-    mass: number; mass_skins: number; mass_spars: number; mass_core: number; bending_stiffness: number; torsion_stiffness: number;
+    mass: number; mass_skins: number; mass_caps: number; mass_spars: number; mass_core: number; bending_stiffness: number; torsion_stiffness: number;
     first_bending_frequency: number; skin_modulus: number; spar_modulus: number; skin_thickness: number; spar_thickness: number;
     skin_buckling_load: number; skin_widths: number[]; spar_heights: number[]; shear_center: number; shear_shares: number[];
-    centroid: number[]; enclosed_area: number;
+    centroid: number[]; enclosed_area: number; cap_modulus: number | null; cap_thickness: number | null;
+    stretches: { start: number; end: number; bending_stiffness: number; torsion_stiffness: number; shear_center: number; mass_per_length: number }[];
   };
   governing: { case: number; label: string; altitude: number; check: WingCheckName; margin_ultimate: number | null } | null;
   cases: WingCase[];
@@ -264,20 +312,27 @@ export type WingReport = {
     reversal_over_dive: number | null; divergence_never: boolean; reversal_never: boolean; needs: string[];
   } | null;
   not_run: { number: number; label: string; altitude: number; needs: string }[];
-  rule_limits: { min_percent: number; max_in_a_row: number };
+  rule_limits: { min_percent: number; max_in_a_row: number; drop_ratio: number; max_dropped: number };
   rules: WingRule[];
 };
-/** A design rule judged on one layup (ADR-0123): a warning when not met, never a margin. `words` is the sentence the page shows. */
-export type WingRuleName = "ten_percent" | "in_a_row" | "balance" | "symmetry";
+/** A design rule judged on one layup (ADR-0123) or at a change of layup along the span (ADR-0124): a warning when not met, never a
+ * margin. `words` is the sentence the page shows. A stack's rule has the stretch it holds over, `span`, as fractions of the half
+ * span; a ply drop's rule has where it is, `at`. */
+export type WingRuleName = "ten_percent" | "in_a_row" | "balance" | "symmetry" | "drop_count" | "drop_ratio" | "drop_cover";
+export type WingPart = "skin" | "spar" | "cap" | "rib";
 export type WingRule = {
-  part: "skin" | "spar" | "rib"; rule: WingRuleName; met: boolean; words: string; source: string; detail: Record<string, unknown>;
+  part: WingPart; span: [number, number] | null; at: number | null; rule: WingRuleName; met: boolean; words: string; source: string;
+  detail: Record<string, unknown>;
 };
-export const RULE_NAMES: readonly WingRuleName[] = ["ten_percent", "in_a_row", "balance", "symmetry"];
+export const RULE_NAMES: readonly WingRuleName[] = ["ten_percent", "in_a_row", "balance", "symmetry", "drop_count", "drop_ratio", "drop_cover"];
 
 /** A rule's name as the page prints it; the share rule is named by its limit ("10 % rule"). */
 export function ruleTitle(rule: WingRuleName, limits: { min_percent: number }): string {
   if (rule === "ten_percent") return `${shown(limits.min_percent)} % rule`;
-  return { in_a_row: "Plies of one angle in a row", balance: "Balance", symmetry: "Symmetry" }[rule];
+  return {
+    in_a_row: "Plies of one angle in a row", balance: "Balance", symmetry: "Symmetry", drop_count: "Plies ending at one place",
+    drop_ratio: "Ply drop ratio", drop_cover: "Outside ply over the drop",
+  }[rule];
 }
 
 export type WingWall = { name: string; x: number[]; z: number[] };
@@ -285,6 +340,7 @@ export type WingViews = {
   half_span: number; chord: number;
   airfoil: { name: string; x: number[]; upper: number[]; lower: number[] };
   walls: WingWall[]; spars: number[]; spar_heights: number[]; shear_center: number; centroid: number[]; ribs: number[]; stations: number[];
+  caps?: WingWall[]; changes?: number[];
   cases: {
     number: number; altitude: number; margins: Record<WingCheckName, (number | null)[]>; deflection: (number | null)[]; twist: (number | null)[];
     root: { name: string; load: (number | null)[]; shear_flow: (number | null)[] }[];

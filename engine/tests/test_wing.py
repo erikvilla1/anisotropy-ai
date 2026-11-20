@@ -308,7 +308,7 @@ def test_a_core_adds_buckling_load_and_core_mass_and_moves_the_skins_inward():
     solid = box_section(wing_from_dict(example(**{"skin.core_thickness": None, "skin.core": None}))[0])
     cored = box_section(wing_from_dict(example())[0])
     assert 0.7 * solid.EI < cored.EI < solid.EI and 0.7 * solid.GJ < cored.GJ < solid.GJ  # the skins' mid-surface is 3 mm further in
-    assert solid.mass_core_kg == 0 and cored.mass_core_kg == pytest.approx(sum(cored.skin_widths_m) * 0.006 * 2.0 * 48.0)
+    assert solid.mass_core_kg_m == 0 and cored.mass_core_kg_m == pytest.approx(sum(cored.skin_widths_m) * 0.006 * 48.0)  # per metre
     assert cored.skin_buckling_load > 50 * solid.skin_buckling_load
 
 

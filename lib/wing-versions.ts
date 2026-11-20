@@ -5,7 +5,7 @@
  */
 import {
   AERO_FIELDS, AILERON_FIELDS, DESIGN_RULE_FIELDS, ENVELOPE_FIELDS, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS,
-  SPEED_FIELDS, WING_CORES, WING_MATERIALS, type WingDescription, type WingValue,
+  SPAR_CAP_FIELDS, SPEED_FIELDS, WING_CORES, WING_MATERIALS, spanWords, type WingDescription, type WingValue, type WingZone,
 } from "./wing";
 
 export type WingVersion = {
@@ -30,8 +30,10 @@ export const wingVersionsKey = (project: string): string => `anisotropy.wing-ver
 const ORDER: [string, string][] = [
   ["title", "Name"], ["units", "Units"], ["geometry.airfoil", "Airfoil"], ...GEOMETRY_FIELDS.map((f): [string, string] => [f.path, f.label]),
   ["material.library", "Material"], ["material.name", "Material name"], ...OWN_MATERIAL_FIELDS.map((f): [string, string] => [f.path, f.label]),
-  ["skin.half_stack", "Skin layup"], ["skin.core", "Core"], ["skin.core_thickness", "Core thickness"], ["spar.half_stack", "Spar web layup"],
-  ["rib.half_stack", "Rib layup"], ...DESIGN_RULE_FIELDS.map((f): [string, string] => [f.path, f.label]), ...AERO_FIELDS.map((f): [string, string] => [f.path, f.label]),
+  ["skin.half_stack", "Skin layup"], ["skin.zones", "Skin zones along the span"], ["skin.core", "Core"], ["skin.core_thickness", "Core thickness"],
+  ["spar.half_stack", "Spar web layup"], ["spar.zones", "Spar web zones along the span"], ...SPAR_CAP_FIELDS.map((f): [string, string] => [f.path, f.label]),
+  ["spar_caps.half_stack", "Spar cap layup"], ["spar_caps.zones", "Spar cap zones along the span"], ["rib.half_stack", "Rib layup"],
+  ...DESIGN_RULE_FIELDS.map((f): [string, string] => [f.path, f.label]), ...AERO_FIELDS.map((f): [string, string] => [f.path, f.label]),
   ...ENVELOPE_FIELDS.map((f): [string, string] => [f.path, f.label]), ["envelope.criterion", "Failure criterion"], ["envelope.airspeed", "Speeds are"],
   ["envelope.speed_unit", "Speed unit"],
   ...[...SPEED_FIELDS, ...GUST_SPEED_FIELDS, ...GUST_FACTOR_FIELDS, ...AILERON_FIELDS].map((f): [string, string] => [f.path, f.label]),
@@ -54,9 +56,14 @@ function leaves(wing: WingDescription, prefix = ""): Map<string, WingValue> {
   return found;
 }
 
-/** A value as a change line prints it: a half stack as the laminate it makes, a list with commas, a library entry by its name. */
+/** A value as a change line prints it: a half stack as the laminate it makes, zones by their stretch of the span, a list with commas, a
+ * library entry by its name. */
 function shownValue(path: string, value: WingValue | undefined): string {
   if (value === undefined || value === "") return "blank";
+  if (path.endsWith("zones") && Array.isArray(value)) {
+    const zones = value as unknown as WingZone[];
+    return zones.length ? zones.map((z) => `${spanWords(z.start, z.end)} [${z.half_stack.join("/")}]s`).join("; ") : "none";
+  }
   if (Array.isArray(value)) return path.endsWith("half_stack") ? `[${value.join("/")}]s` : value.join(", ");
   if (typeof value === "string") return NAMES[value] ?? value;
   return String(value);

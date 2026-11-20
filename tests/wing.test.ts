@@ -2,13 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, readNumber, readNumbers, RULE_NAMES, ruleTitle, valueAt, wingFileName,
-  wingToml, withValue, type WingFeCheck, type WingReport,
+  answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, newSparCaps, newZone, readNumber, readNumbers, ruleTitle, spanWords,
+  valueAt, wingFileName, wingToml, withValue, withZones, zonesOf, type WingFeCheck, type WingReport,
 } from "../lib/wing";
 
 // The wing page's own words and its wing file (ADR-0118). Every number comes from the engine; these only read, write and word it.
 const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf-8"));
 const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", "utf-8"));
+/** The example with spar caps and a cap zone from the root to 40 % (ADR-0124), written by scripts/wing-choices.py like ANSWER. */
+const CAPS = JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf-8"));
+const STACK_RULES = ["ten_percent", "in_a_row", "balance", "symmetry"];
 
 test("the example saves as the wing file the engine reads back as the example (api/tests/test_wings_api.py reads the same file)", () => {
   assert.equal(wingToml(EXAMPLE_WING), readFileSync("tests/fixtures/wing/example-saved.toml", "utf-8"));
@@ -54,8 +57,9 @@ test("the answer is worded from the engine's report: passes or how many fail, th
 
 test("the example's design rules come with its answer: four per layup, its laminates short of 90° plies, named by their limits (ADR-0123)", () => {
   const report = ANSWER.report as WingReport;
-  assert.deepEqual(report.rule_limits, { min_percent: 10, max_in_a_row: 4 });
-  assert.deepEqual(report.rules.map((r) => `${r.part} ${r.rule}`), ["skin", "spar", "rib"].flatMap((part) => RULE_NAMES.map((rule) => `${part} ${rule}`)));
+  assert.deepEqual(report.rule_limits, { min_percent: 10, max_in_a_row: 4, drop_ratio: 20, max_dropped: 2 });
+  assert.deepEqual(report.rules.map((r) => `${r.part} ${r.rule}`), ["skin", "spar", "rib"].flatMap((part) => STACK_RULES.map((rule) => `${part} ${rule}`)));
+  assert.ok(report.rules.every((r) => r.at === null && r.span?.join() === "0,1")); // one stretch each, root to tip
   assert.deepEqual(report.rules.filter((r) => !r.met).map((r) => r.part), ["skin", "spar", "rib"]); // the 10 % rule only
   assert.ok(report.rules.filter((r) => !r.met).every((r) => r.rule === "ten_percent" && r.words.includes("90°")));
   assert.equal(ruleTitle("ten_percent", report.rule_limits), "10 % rule");
@@ -65,6 +69,46 @@ test("the example's design rules come with its answer: four per layup, its lamin
   assert.match(wingToml(limits), /\[design_rules\]\nmin_percent = 15\nmax_in_a_row = 3\n/);
   assert.equal(valueAt(withValue(limits, "design_rules.min_percent", undefined), "design_rules.max_in_a_row"), 3);
   assert.equal(valueAt(withValue(withValue(limits, "design_rules.min_percent", undefined), "design_rules.max_in_a_row", undefined), "design_rules"), undefined);
+});
+
+test("spar caps and zones: the page adds caps from the skin, a zone outboard of the last, and saves the zones inline (ADR-0124)", () => {
+  const caps = newSparCaps(EXAMPLE_WING);
+  assert.deepEqual(caps, { front_width: 0.045, rear_width: 0.045, half_stack: [0, 0, 45, -45, 0] }); // a tenth of the chord, one more 0° outside
+  const capped = { ...EXAMPLE_WING, spar_caps: caps };
+  const first = newZone(capped, "spar_caps");
+  assert.deepEqual(first, { start: 0, end: 0.4, half_stack: [0, 0, 45, -45, 0] }); // from the root, with the part's own plies
+  const zoned = withZones(capped, "spar_caps", [{ ...first, half_stack: [0, 0, 0, 45, -45, 0] }]);
+  assert.deepEqual(zoned, CAPS.wing); // what the browser test sends, and the engine's answer to it
+  assert.deepEqual(newZone(zoned, "spar_caps"), { start: 0.4, end: 0.8, half_stack: [0, 0, 45, -45, 0] });
+  assert.deepEqual(newZone(withZones(zoned, "spar_caps", [{ start: 0.7, end: 0.95, half_stack: [0] }]), "spar_caps").start, 0.9); // room for a stretch
+  assert.equal(zonesOf(EXAMPLE_WING, "skin").length, 0);
+  assert.equal(valueAt(withZones(zoned, "spar_caps", []), "spar_caps.zones"), undefined); // none left, the key goes
+  assert.match(wingToml(zoned), /\n\[spar_caps\]\nfront_width = 0\.045\nrear_width = 0\.045\nhalf_stack = \[0, 0, 45, -45, 0\]\n/);
+  assert.match(wingToml(zoned), /\nzones = \[\{ start = 0, end = 0\.4, half_stack = \[0, 0, 0, 45, -45, 0\] \}\]\n/);
+  assert.equal(spanWords(0, 1), "root to tip");
+  assert.equal(spanWords(0, 0.4), "root to 40 %");
+  assert.equal(spanWords(0.4, 1), "40 % to tip");
+  assert.equal(spanWords(0.2, 0.4), "20 to 40 %");
+  assert.equal(spanWords(0.125, 0.5), "12.5 to 50 %");
+});
+
+test("the caps' rules come for each stretch and at each ply drop, every one met but the 10 % rule, with the run-out (ADR-0124)", () => {
+  const report = CAPS.report as WingReport;
+  const cap = report.rules.filter((r) => r.part === "cap");
+  assert.deepEqual(cap.map((r) => `${r.span?.join("-") ?? `at ${r.at}`} ${r.rule}`), [
+    ...STACK_RULES.map((rule) => `0-0.4 ${rule}`), ...STACK_RULES.map((rule) => `0.4-1 ${rule}`), "at 0.4 drop_count", "at 0.4 drop_ratio", "at 0.4 drop_cover",
+  ]);
+  assert.deepEqual(cap.filter((r) => !r.met).map((r) => r.rule), ["ten_percent", "ten_percent"]);
+  const ratio = cap.find((r) => r.rule === "drop_ratio");
+  assert.equal(ratio?.words, "The plies ending at 40 % of the span need 7.32 mm of run-out at 20 to 1; the thicker side runs 800 mm.");
+  assert.equal(ruleTitle("drop_count", report.rule_limits), "Plies ending at one place");
+  assert.equal(ruleTitle("drop_ratio", report.rule_limits), "Ply drop ratio");
+  assert.equal(ruleTitle("drop_cover", report.rule_limits), "Outside ply over the drop");
+  assert.deepEqual(report.design.stretches.map((s) => [s.start, s.end]), [[0, 0.8], [0.8, 2]]); // in metres, the change at 40 % of 2 m
+  assert.ok(report.design.stretches[0].bending_stiffness > report.design.stretches[1].bending_stiffness);
+  assert.ok(report.design.mass_caps > 0);
+  assert.deepEqual(CAPS.views.changes, [0.8]);
+  assert.deepEqual(CAPS.views.caps.map((c: { name: string }) => c.name), ["upper front spar cap", "lower front spar cap", "upper rear spar cap", "lower rear spar cap"]);
 });
 
 test("the finite element check is worded from its report: both lowest margins, where the model's is, and its root (ADR-0119)", () => {

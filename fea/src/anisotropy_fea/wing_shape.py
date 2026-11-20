@@ -357,6 +357,9 @@ def _mesh(gmsh, parts: list[tuple[str, int]], section: Section, element_size_m: 
 
 def build_wing_shape(wing: Wing, step_path: Path | str | None = None, element_size_m: float | None = None) -> WingShape:
     """The wing's parts as mid-surfaces; with `step_path`, its STEP file there; with `element_size_m`, its shell mesh."""
+    if wing.spar_caps is not None or wing.has_zones:
+        raise ShapeError("The shape for CAD does not draw spar caps or zones along the span yet (the hand calculation works them): "
+                         "take them out to download it")
     gmsh = _gmsh()
     if element_size_m is not None and not element_size_m > 0:
         raise ShapeError("The element size must be positive")

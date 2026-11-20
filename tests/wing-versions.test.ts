@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EXAMPLE_WING, withValue } from "../lib/wing";
+import { EXAMPLE_WING, newSparCaps, newZone, withValue, withZones } from "../lib/wing";
 import {
   MAX_WING_VERSIONS, readWingVersions, wingChanges, wingKey, wingVersionsKey, withWingCheck, withWingCheckResult, withWingVersion, writeWingVersions,
 } from "../lib/wing-versions";
@@ -26,6 +26,20 @@ test("a wing's change is said in the page's labels: a half stack as its laminate
     "Most plies of one angle in a row: blank → 3",
   ]);
   assert.equal(wingKey(withValue(EXAMPLE_WING, "source", "x")), wingKey(EXAMPLE_WING));
+});
+
+test("spar caps and zones along the span are said in the page's labels: each zone by its stretch of the span and its laminate (ADR-0124)", () => {
+  const capped = { ...EXAMPLE_WING, spar_caps: newSparCaps(EXAMPLE_WING) };
+  assert.deepEqual(wingChanges(EXAMPLE_WING, capped), [
+    "Front cap width: blank → 0.045", "Rear cap width: blank → 0.045", "Spar cap layup: blank → [0/0/45/-45/0]s",
+  ]);
+  const zoned = withZones(capped, "spar_caps", [{ ...newZone(capped, "spar_caps"), half_stack: [0, 0, 0, 45, -45, 0] }]);
+  assert.deepEqual(wingChanges(capped, zoned), ["Spar cap zones along the span: blank → root to 40 % [0/0/0/45/-45/0]s"]);
+  const two = withZones(zoned, "spar_caps", [...(zoned.spar_caps as { zones: never[] }).zones, newZone(zoned, "spar_caps")]);
+  assert.deepEqual(wingChanges(zoned, two), [
+    "Spar cap zones along the span: root to 40 % [0/0/0/45/-45/0]s → root to 40 % [0/0/0/45/-45/0]s; 40 to 80 % [0/0/45/-45/0]s",
+  ]);
+  assert.deepEqual(wingChanges(zoned, withZones(zoned, "spar_caps", [])), ["Spar cap zones along the span: root to 40 % [0/0/0/45/-45/0]s → blank"]);
 });
 
 test("versions count up, an unchanged wing adds none, the oldest go past the limit, and a check is kept on its version", () => {

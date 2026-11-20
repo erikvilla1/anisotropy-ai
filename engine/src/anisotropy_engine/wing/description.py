@@ -7,12 +7,16 @@ out of the run, each named with what it needs (ADR-0003, ADR-0115).
 Axes: y along the span from the root, x along the chord from the leading edge, z up. A layup's 0
 degree direction is the span. Layups are given as half of a symmetric laminate, the outside ply
 first; the other half mirrors it, with the core, when there is one, between the halves.
+
+A layup may change along the span in zones, each a stretch of the half span with a half stack of its own; outside its zones a
+part has its own half stack. The spar caps are a strip of each skin centred on each web, with a layup of their own (ADR-0124).
 """
 
 import math
+from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, NonNegativeFloat, PositiveFloat, model_validator
+from pydantic import BaseModel, ConfigDict, NonNegativeFloat, PositiveFloat, field_validator, model_validator
 
 from ..failure import Criterion
 from ..lamina import Lamina
@@ -53,8 +57,29 @@ class CoreMaterial(BaseModel):
     shear_strength_Pa: PositiveFloat | None = None
 
 
+class Zone(BaseModel):
+    """A stretch of the span where a part has a half stack of its own: from `start` to `end`, fractions of the half span from the
+    root (ADR-0124). The material and the core are the part's."""
+
+    model_config = _FROZEN
+
+    start: NonNegativeFloat
+    end: PositiveFloat
+    half_stack_deg: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _checked(self) -> "Zone":
+        if not self.start < self.end <= 1:
+            raise ValueError(f"A zone runs from its start to its end as fractions of the half span, 0 <= start < end <= 1; got {self.start:g} "
+                             f"to {self.end:g}")
+        if not self.half_stack_deg:
+            raise ValueError("A zone needs at least one ply in its half stack")
+        return self
+
+
 class Layup(BaseModel):
-    """A symmetric laminate by its outer half, with an optional core between the halves."""
+    """A symmetric laminate by its outer half, with an optional core between the halves, and the zones of the span where its half
+    stack is another (ADR-0124). `half_stack_deg` is the stack outside every zone; the properties below are of that stack."""
 
     model_config = _FROZEN
 
@@ -63,6 +88,16 @@ class Layup(BaseModel):
     core_thickness_m: NonNegativeFloat = 0.0  # no core: a solid laminate
     core_density_kg_m3: PositiveFloat | None = None
     core: CoreMaterial | None = None  # the core's stiffness, which the finite element model needs and the hand calculation does not
+    zones: tuple[Zone, ...] = ()  # in order from the root, none overlapping another
+
+    @field_validator("zones")
+    @classmethod
+    def _in_order(cls, zones: tuple[Zone, ...]) -> tuple[Zone, ...]:
+        ordered = tuple(sorted(zones, key=lambda zone: zone.start))
+        for inner, outer in zip(ordered, ordered[1:]):
+            if outer.start < inner.end:
+                raise ValueError(f"Two zones overlap: {inner.start:g} to {inner.end:g} and {outer.start:g} to {outer.end:g} of the half span")
+        return ordered
 
     @model_validator(mode="after")
     def _checked(self) -> "Layup":
@@ -94,6 +129,30 @@ class Layup(BaseModel):
     def fiber_thickness_m(self) -> float:
         """Thickness of the plies alone, both halves."""
         return 2 * len(self.half_stack_deg) * self.material.ply_thickness_m
+
+    def with_stack(self, half_stack_deg: tuple[float, ...]) -> "Layup":
+        """The same layup, material and core, with another half stack and no zones: what the part is inside one zone."""
+        return self.model_copy(update={"half_stack_deg": tuple(half_stack_deg), "zones": ()})
+
+    def stretches(self) -> tuple[tuple[float, float, "Layup"], ...]:
+        """The part from root to tip as (start, end, uniform layup), fractions of the half span: its zones and the stretches between
+        them; two neighbours of the same stack are one stretch."""
+        found: list[tuple[float, float, tuple[float, ...]]] = []
+        here = 0.0
+        for zone in self.zones:
+            if zone.start > here:
+                found.append((here, zone.start, self.half_stack_deg))
+            found.append((zone.start, zone.end, zone.half_stack_deg))
+            here = zone.end
+        if here < 1:
+            found.append((here, 1.0, self.half_stack_deg))
+        merged: list[tuple[float, float, tuple[float, ...]]] = []
+        for start, end, stack in found:
+            if merged and merged[-1][2] == stack:
+                merged[-1] = (merged[-1][0], end, stack)
+            else:
+                merged.append((start, end, stack))
+        return tuple((start, end, self.with_stack(stack)) for start, end, stack in merged)
 
 
 class WingGeometry(BaseModel):
@@ -151,8 +210,25 @@ class Aerodynamics(BaseModel):
         return self
 
 
+class SparCaps(BaseModel):
+    """The spar caps: a strip of the upper and of the lower skin centred on each web, as wide as given along the chord, with a layup
+    of its own in place of the skin's (ADR-0124). A cap is a solid laminate: the skin's core, when it has one, stops at its edge."""
+
+    model_config = _FROZEN
+
+    front_width_m: PositiveFloat
+    rear_width_m: PositiveFloat
+    layup: Layup
+
+    @model_validator(mode="after")
+    def _checked(self) -> "SparCaps":
+        if self.layup.core_thickness_m > 0:
+            raise ValueError("A spar cap is a solid laminate: give it no core")
+        return self
+
+
 class Wing(BaseModel):
-    """One wing: its shape, the skin, spar and rib layups and its section aerodynamics."""
+    """One wing: its shape, the skin, spar and rib layups, its spar caps and its section aerodynamics."""
 
     model_config = _FROZEN
 
@@ -163,12 +239,75 @@ class Wing(BaseModel):
     aerodynamics: Aerodynamics
     rib: Layup | None = None  # the ribs' layup, when the geometry has ribs; the hand calculation does not use it
     design_rules: RuleLimits = RuleLimits()  # the limits its layups are judged by (ADR-0123); they change no number of the analysis
+    spar_caps: SparCaps | None = None  # no caps: the skin's layup runs from spar to spar (ADR-0124)
 
     @model_validator(mode="after")
     def _checked(self) -> "Wing":
         if self.rib is not None and self.geometry.rib_spacing_m is None:
             raise ValueError("A rib layup was given but no rib spacing")
+        if self.rib is not None and self.rib.zones:
+            raise ValueError("A rib stands at one station: it has no zones along the span")
+        caps = self.spar_caps
+        if caps is not None:
+            g = self.geometry
+            front, rear = g.front_spar * g.chord_m, g.rear_spar * g.chord_m
+            if front + caps.front_width_m / 2 >= rear - caps.rear_width_m / 2:
+                raise ValueError("The spar caps meet between the spars: together they are wider than the box")
+            if front - caps.front_width_m / 2 <= 0:
+                raise ValueError("The front spar cap reaches the leading edge: make it narrower")
+            if rear + caps.rear_width_m / 2 >= g.chord_m:
+                raise ValueError("The rear spar cap reaches the trailing edge: make it narrower")
         return self
+
+    @property
+    def cap_edges_m(self) -> tuple[float, float, float, float] | None:
+        """The chord positions of the caps' edges, metres from the leading edge: front cap fore and aft, rear cap fore and aft."""
+        caps = self.spar_caps
+        if caps is None:
+            return None
+        g = self.geometry
+        front, rear = g.front_spar * g.chord_m, g.rear_spar * g.chord_m
+        return (front - caps.front_width_m / 2, front + caps.front_width_m / 2, rear - caps.rear_width_m / 2, rear + caps.rear_width_m / 2)
+
+    @property
+    def has_zones(self) -> bool:
+        return any(layup.zones for layup in (self.skin, self.spar, None if self.spar_caps is None else self.spar_caps.layup)
+                   if layup is not None)
+
+
+@dataclass(frozen=True)
+class SpanSegment:
+    """A stretch of the span over which no layup changes, metres from the root, with each part's layup there."""
+
+    start_m: float
+    end_m: float
+    skin: Layup
+    spar: Layup
+    cap: Layup | None  # None without spar caps
+
+
+def span_segments(wing: Wing) -> tuple[SpanSegment, ...]:
+    """The wing from root to tip in stretches of constant layup: a new one starts wherever any part's zone starts or ends and its
+    stack changes there (ADR-0124). A wing without zones is one segment."""
+    parts = {"skin": wing.skin.stretches(), "spar": wing.spar.stretches(),
+             "cap": None if wing.spar_caps is None else wing.spar_caps.layup.stretches()}
+    edges = sorted({0.0, 1.0} | {edge for stretches in parts.values() if stretches for start, end, _ in stretches for edge in (start, end)})
+
+    def at(stretches, middle: float) -> Layup | None:
+        if stretches is None:
+            return None
+        return next(layup for start, end, layup in stretches if start <= middle < end)
+
+    L = wing.geometry.half_span_m
+    segments: list[SpanSegment] = []
+    for start, end in zip(edges, edges[1:]):
+        middle = (start + end) / 2
+        segment = SpanSegment(start * L, end * L, at(parts["skin"], middle), at(parts["spar"], middle), at(parts["cap"], middle))
+        if segments and (segments[-1].skin, segments[-1].spar, segments[-1].cap) == (segment.skin, segment.spar, segment.cap):
+            segments[-1] = SpanSegment(segments[-1].start_m, segment.end_m, segment.skin, segment.spar, segment.cap)
+        else:
+            segments.append(segment)
+    return tuple(segments)
 
 
 class Speeds(BaseModel):

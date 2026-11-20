@@ -86,6 +86,15 @@ def test_a_core_without_its_stiffness_and_ribs_without_a_layup_are_refused():
         check_describable(example(rib=None)[0])
 
 
+CAPS = {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0]}
+
+
+@pytest.mark.parametrize("changes", [{"spar_caps": CAPS}, {"skin.zones": [{"start": 0, "end": 0.4, "half_stack": [0, 0, 45, -45, 0]}]}])
+def test_spar_caps_and_zones_along_the_span_are_refused_until_the_model_builds_them(changes):
+    with pytest.raises(WingModelError, match="does not take spar caps or zones along the span yet"):
+        check_describable(example(**changes)[0])
+
+
 WEB_14 = [45, -45, 45, -45, 45, -45, 0]  # fourteen plies through the web: one more layer than CalculiX solves, the middle pair at 0
 
 

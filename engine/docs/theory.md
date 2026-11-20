@@ -881,7 +881,7 @@ with $`\mathbf{e}`$ the direction of $`s`$. The flow is quadratic along a straig
 q_T = -\frac{T}{2A_c}, \qquad GJ = \frac{4A_c^2}{\oint \dfrac{ds}{G\,t}}
 ```
 
-The walls' own bending about their mid-surface is left out of $`EI`$: for a sandwich skin it is about $`(c/2)^2/z^2`$ of the skin's part, $`c`$ the core and $`z`$ the skin's height, 2 % on the example wing, and leaving it out raises the strains by as much. Mass is that of the walls of one side, their lengths round the cell times the plies' and the core's mass per area; the skin ahead of the front spar and behind the rear spar is in neither the stiffness nor the mass. The first bending frequency is that of a uniform cantilever of mass per length $`m'`$ (Blevins, *Formulas for Natural Frequency and Mode Shape*, 1979, Table 8-1), with $`\beta_1 = 1.8751`$ the first root of $`1 + \cos\beta\cosh\beta = 0`$:
+The walls' own bending about their mid-surface is left out of $`EI`$: for a sandwich skin it is about $`(c/2)^2/z^2`$ of the skin's part, $`c`$ the core and $`z`$ the skin's height, 2 % on the example wing, and leaving it out raises the strains by as much. Mass is that of the walls of one side, their lengths round the cell times the plies' and the core's mass per area; the skin ahead of the front spar and behind the rear spar is in neither the stiffness nor the mass, but for the outer halves of the spar caps of Section 15. The first bending frequency is that of a uniform cantilever of mass per length $`m'`$ (Blevins, *Formulas for Natural Frequency and Mode Shape*, 1979, Table 8-1), with $`\beta_1 = 1.8751`$ the first root of $`1 + \cos\beta\cosh\beta = 0`$:
 
 ```math
 f_1 = \frac{\beta_1^2}{2\pi}\sqrt{\frac{EI}{m' L^4}}
@@ -1032,6 +1032,43 @@ All four on one stack, listed from one face to the other with the core after a g
 
 Checks: `engine/tests/test_layup_rules.py`: stacks counted by hand, among them $`[0/\pm 45/90]_s`$ meeting every rule, one $`90°`$ ply in twelve (8.3 %) short of 10 % and one in ten meeting it, $`[\pm 45/0_2]_s`$ with four $`0°`$ plies across the middle, the same run broken by a core, unpaired $`+45°`$ plies, partners of another thickness, and a core off the middle; the example wing's limits changed with every analysis number the same.
 
+## 15. Spar caps and layups that change along the span (`wing/`)
+
+A spar cap is a strip of each skin centred on each web with a solid layup of its own, usually more plies at $`0°`$ to carry the bending (ADR-0124). Its width along the chord is the same from root to tip. Any layup, a skin, a spar web or the spar caps, may also change along the span: each zone is a stretch of the half span, from a start to an end as fractions of it, with a half stack of its own, and outside its zones the part keeps its own half stack. A rib stands at one station and has no zones. The wing is cut into stretches of constant layup wherever any part's stack changes, and each stretch has its own section, worked as in Section 13.
+
+In a section with caps, each stretch of a skin, a cap, the panel between the caps and the other cap, lies at its own mid-surface: the airfoil's surface moved inward by half its own thickness, so a solid cap beside a cored skin lies nearer the surface. The webs run between the caps' mid-surfaces. Where a cap's mid-surface and the skin's differ, a straight step joins them, as the skin's faces close onto the cap: the shear flow goes on through it, with the skin's $`G t`$ in $`\oint ds/(G t)`$ and its line in the outline of $`A_c`$, and it carries no spanwise load, $`E t = 0`$ in the centroid and $`EI`$. The half of each cap outside the box is an open flange. It adds to the centroid and to $`EI`$, and its shear flow is nothing at its free edge and gathers along it to the corner where it meets the cell, where the whole of it joins the cell's open flow:
+
+```math
+q_f(s) = -\frac{V}{EI}\int_{\text{free edge}}^{s} E t\left[(z - \bar{z}) - r\,(x - \bar{x})\right]ds, \qquad q_b(\text{corner}^+) = q_b(\text{corner}^-) + q_f(\text{corner})
+```
+
+The cell's open flow then comes back to nothing at the cut, since the first moment of the whole section about its centroid is nothing. The flanges are open, so the closing flow $`q_0`$ and the torque's flow $`q_T`$ run round the cell only. Every point of every stretch of wall, the flanges included, is checked ply by ply as in Section 13; a step's plies are its neighbours', checked there. The skin panel that buckles is the skin between the caps' inner edges, $`b`$ its length round the curve. The mass counts each cap's whole width, both halves, while the skin outside the box is counted nowhere, so a wing with caps reads heavier than it is by the skin their outer halves replace.
+
+The stations along the span are the equally spaced ones and every change twice, once with the section inboard of it and once with the one outboard, computed by `stations_of`. The loads of Section 13 do not depend on the section, except the torque, which each station takes about its own shear center (the stretches' shear centers differ by under a millimetre on the example). The curvature $`M/EI`$ and the rate of twist $`T/GJ`$ jump at a change, and the trapezoid rule over the two stations at one $`y`$ adds nothing, so the deflection and twist integrals of Section 13 take the jump as it is.
+
+The first bending frequency of a wing whose section changes is that of a clamped-free beam of about 200 cubic (Hermite) elements with an edge at every change, each with its stretch's $`EI`$ and mass per length $`m'`$, the consistent mass matrix (Przemieniecki, *Theory of Matrix Structural Analysis*, 1968, Sections 5.3 and 11.3), solved as $`\mathbf{K}\mathbf{v} = \omega^2\mathbf{M}\mathbf{v}`$ for its lowest $`\omega`$; it is computed by `bending_frequency`. For an element of length $`h`$:
+
+```math
+\mathbf{k} = \frac{EI}{h^3}\begin{bmatrix}12 & 6h & -12 & 6h\\ 6h & 4h^2 & -6h & 2h^2\\ -12 & -6h & 12 & -6h\\ 6h & 2h^2 & -6h & 4h^2\end{bmatrix}, \qquad
+\mathbf{m} = \frac{m' h}{420}\begin{bmatrix}156 & 22h & 54 & -13h\\ 22h & 4h^2 & 13h & -3h^2\\ 54 & 13h & 156 & -22h\\ -13h & -3h^2 & -22h & 4h^2\end{bmatrix}
+```
+
+A uniform wing keeps the closed form of Section 13, and the beam of a uniform wing cut at any station gives it again within $`2\times10^{-6}`$, the round-off of the eigenvalue. Divergence and reversal of Section 13 are worked with each stretch's section taken as the whole wing's, and the lowest dynamic pressure of each is kept, computed by `lowest_aeroelastic`. It is a simple estimate: on the safe side when one stretch is both the weaker in torsion and the one with the longer arm, and not a bound when those are different stretches.
+
+<!-- code: stations_of, bending_frequency, lowest_aeroelastic -->
+
+Where a stack changes, plies end: a ply drop. Three rules of practice judge it, warnings like those of Section 14, checked by `ply_drop_rules` on the two half stacks either side, listed from the outside. $`n_d`$ plies end, both halves counted, $`2\,(n_{\text{thick}} - n_{\text{thin}})`$ for half stacks of $`n_{\text{thick}}`$ and $`n_{\text{thin}}`$ plies; at most $`d_{\max}`$ should end at one place (default 2). The thickness tapers over a run-out, the drop ratio $`\rho`$ times the thickness that ends (default 20 to 1), which must fit in the thicker side's stretch of length $`L_{\text{thick}}`$, with $`t_p`$ the ply thickness:
+
+```math
+n_d \le d_{\max}, \qquad \rho\, n_d\, t_p \le L_{\text{thick}}
+```
+
+The plies that end are found by matching the thinner stack to the thicker one ply by ply from the outside, each ply of the thinner taken at the first ply of the thicker of the same angle; a stack that cannot be matched this way changes angle or order, not only ends, and is not a ply drop. The outside ply should run on over the ends of the others, so that no ply's edge is on the surface. A wing judges every change of its skins, spar webs and spar caps this way, by the limits of its file's `[design_rules]`, and lists the rules of every stretch of every part as in Section 14.
+
+<!-- code: ply_drop_rules -->
+
+Checks: `engine/tests/test_wing_caps.py`: a flat-sided box with caps summed by hand strip by strip (its $`EI`$, $`GJ`$ by Bredt-Batho with the steps in the loop, its enclosed area and its mass, each within $`10^{-12}`$); on NACA 2412 and 0012 boxes with caps, the shear flow with the steps put back carries a unit shear at the shear center and is nothing at every flange's free edge, and the bending load sums to the moment and to no force; zones in order, merged where alike, and the span cut where any part changes; the stations doubled at a change; the beam against the closed form; the same wing in US units. `engine/tests/test_layup_rules.py`: ply drops counted by hand, the run-out on whichever side is thicker, the outside ply ending, and a change of angle that is not a drop.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -1039,6 +1076,6 @@ Checks: `engine/tests/test_layup_rules.py`: stacks counted by hand, among them $
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
-- Design rules for ply drops (taper ratio, plies dropped per step, plies covering a drop), which need a stack that changes along the span
+- Ply drops in the stiffness: a change of layup is a step in the section, with no taper over the run-out; a drop's own stresses
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
-- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; the walls' own bending stiffness and the core's in-plane stiffness; a skin's curve in its buckling; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing
+- For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars, beyond the caps; the walls' own bending stiffness and the core's in-plane stiffness; a skin's curve in its buckling; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing

@@ -18,7 +18,10 @@ or a key the format does not know is refused by name.
 | running load, shear flow | N/m | lb/in |
 | bending and torsion stiffness | N*m^2 | lb*in^2 |
 | mass | kg | lb |
+| spar cap widths | m | in |
+| a zone's start and end | a fraction of the half span from the root | the same |
 | design rules: least share of each direction, most plies of one angle in a row | % and a count | the same |
+| design rules: ply drop ratio, most plies ending at one place | run-out per thickness dropped, and a count | the same |
 """
 
 import dataclasses
@@ -30,13 +33,14 @@ from pathlib import Path
 import numpy as np
 
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
-from ..layup_rules import RuleLimits
+from ..layup_rules import RuleLimits, ply_drop_rules
 from ..library import library_core, library_material
 from ..units import FOOT, INCH, LBF, POUND_MASS, PSI
 from .airfoil import Airfoil, naca4
 from .analysis import WingResult
 from .description import (
-    Aerodynamics, Aileron, CoreMaterial, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, Speeds, Wing, WingGeometry, WingMaterial,
+    Aerodynamics, Aileron, CoreMaterial, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, SparCaps, Speeds, Wing, WingGeometry,
+    WingMaterial, Zone,
 )
 
 KNOT = 1852 / 3600  # m/s, exact
@@ -108,7 +112,7 @@ def _airfoil(value) -> Airfoil:
                    lower=tuple(tuple(point) for point in value["lower"]))
 
 
-LAYUP_KEYS = {"core_thickness", "core_density", "core", "core_modulus", "core_shear_modulus", "core_shear_strength"}
+LAYUP_KEYS = {"core_thickness", "core_density", "core", "core_modulus", "core_shear_modulus", "core_shear_strength", "zones"}
 
 
 def _core(table: dict, si, name: str) -> tuple[CoreMaterial | None, float | None]:
@@ -131,15 +135,38 @@ def _core(table: dict, si, name: str) -> tuple[CoreMaterial | None, float | None
                          shear_strength_Pa=si(table["core_shear_strength"], "stress") if "core_shear_strength" in table else None), density)
 
 
+def _zones(value, name: str) -> tuple[Zone, ...]:
+    """[[<part>.zones]]: each a stretch of the half span, start and end as fractions of it, with its own half stack (ADR-0124)."""
+    if not isinstance(value, list) or not all(isinstance(zone, dict) for zone in value):
+        raise ValueError(f"[{name}] zones must be a list of tables, each with start, end and half_stack")
+    zones = []
+    for k, zone in enumerate(value, start=1):
+        _keys(zone, f"[{name}] zone {k}", {"start", "end", "half_stack"})
+        for key in ("start", "end"):
+            if isinstance(zone[key], bool) or not isinstance(zone[key], (int, float)):
+                raise ValueError(f"[{name}] zone {k}: {key} is a fraction of the half span, a number from 0 to 1")
+        zones.append(Zone(start=zone["start"], end=zone["end"], half_stack_deg=tuple(zone["half_stack"])))
+    return tuple(zones)
+
+
 def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
     _keys(table, f"[{name}]", {"half_stack"}, LAYUP_KEYS)
     core, density = _core(table, si, name)
     return Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
-                 core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core)
+                 core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core,
+                 zones=_zones(table["zones"], name) if "zones" in table else ())
+
+
+def _spar_caps(table: dict, material: WingMaterial, si) -> SparCaps:
+    """[spar_caps]: a strip of each skin centred on each web, its width per spar and its own half stack, solid (ADR-0124)."""
+    _keys(table, "[spar_caps]", {"front_width", "rear_width", "half_stack"}, {"zones"})
+    layup = Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
+                  zones=_zones(table["zones"], "spar_caps") if "zones" in table else ())
+    return SparCaps(front_width_m=si(table["front_width"], "length"), rear_width_m=si(table["rear_width"], "length"), layup=layup)
 
 
 def _design_rules(table: dict) -> RuleLimits:
-    """[design_rules]: the limits the layups are judged by (ADR-0123), each optional, the share in percent."""
+    """[design_rules]: the limits the layups are judged by (ADR-0123, ADR-0124), each optional, the share in percent."""
     limits = {}
     if "min_percent" in table:
         value = table["min_percent"]
@@ -153,13 +180,25 @@ def _design_rules(table: dict) -> RuleLimits:
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError("[design_rules] max_in_a_row is the most plies of one angle next to each other, a whole number of at least 1")
         limits["max_in_a_row"] = value
+    if "drop_ratio" in table:
+        value = table["drop_ratio"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= value <= 200:
+            raise ValueError("[design_rules] drop_ratio is the run-out of a ply drop per unit of the thickness it drops, from 1 to 200")
+        limits["drop_ratio"] = float(value)
+    if "max_dropped" in table:
+        value = table["max_dropped"]
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError("[design_rules] max_dropped is the most plies that end at one place, both halves counted, a whole number of at least 1")
+        limits["max_dropped"] = value
     return RuleLimits(**limits)
 
 
 def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     """The wing and its envelope in SI from a wing file's contents."""
     _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"},
-          {"source", "rib", "design_rules"})
+          {"source", "rib", "design_rules", "spar_caps"})
     if data["units"] not in WING_UNITS:
         raise ValueError(f"units must be one of {tuple(WING_UNITS)}")
     system = WING_UNITS[data["units"]]
@@ -185,8 +224,10 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
                                   pitching_moment_coefficient=aero["pitching_moment_coefficient"],
                                   lift_curve_slope_per_rad=aero.get("lift_curve_slope")),
         rib=_layup(_table(data, "rib", {"half_stack"}, LAYUP_KEYS), material, si, "rib") if "rib" in data else None,
-        design_rules=_design_rules(_table(data, "design_rules", set(), {"min_percent", "max_in_a_row"})) if "design_rules" in data
-        else RuleLimits(),
+        design_rules=_design_rules(_table(data, "design_rules", set(), {"min_percent", "max_in_a_row", "drop_ratio", "max_dropped"}))
+        if "design_rules" in data else RuleLimits(),
+        spar_caps=_spar_caps(_table(data, "spar_caps", {"front_width", "rear_width", "half_stack"}, {"zones"}), material, si)
+        if "spar_caps" in data else None,
     )
 
     env = _table(data, "envelope", {"gross_weight", "positive_load_factor", "negative_load_factor", "airspeed", "speed_unit", "altitudes",
@@ -219,9 +260,12 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
             raise ValueError('[envelope] strain_limits may only be "from-strengths"')
         lamina = material.lamina.model_copy(update={"strain_limits": strain_limits_from_strengths(material.lamina)})
         material = material.model_copy(update={"lamina": lamina})
+        caps = wing.spar_caps
         wing = wing.model_copy(update={"skin": wing.skin.model_copy(update={"material": material}),
                                        "spar": wing.spar.model_copy(update={"material": material}),
-                                       "rib": None if wing.rib is None else wing.rib.model_copy(update={"material": material})})
+                                       "rib": None if wing.rib is None else wing.rib.model_copy(update={"material": material}),
+                                       "spar_caps": None if caps is None else caps.model_copy(
+                                           update={"layup": caps.layup.model_copy(update={"material": material})})})
     envelope = FlightEnvelope(
         gross_weight_N=si(env["gross_weight"], "force"), positive_load_factor=env["positive_load_factor"],
         negative_load_factor=env["negative_load_factor"], airspeed=env["airspeed"],
@@ -255,6 +299,7 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
     u = WING_UNITS[units]
     section = result.section
     length, force, moment, load = u["length"][0], u["force"][0], u["moment"][0], u["running_load"][0]
+    mass = u["mass"][0]
     governing = result.governing
     return {
         "units": {kind: label for kind, (_, label) in u.items()} | {"speed": speed_unit, "frequency": "Hz", "twist": "deg",
@@ -263,10 +308,10 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
         "passes": result.passes,
         "seconds": result.seconds,
         "design": {
-            "mass": section.mass_kg / u["mass"][0], "mass_skins": section.mass_skins_kg / u["mass"][0],
-            "mass_spars": section.mass_spars_kg / u["mass"][0], "mass_core": section.mass_core_kg / u["mass"][0],
+            "mass": result.mass_kg() / mass, "mass_skins": result.mass_kg("skins") / mass, "mass_caps": result.mass_kg("caps") / mass,
+            "mass_spars": result.mass_kg("spars") / mass, "mass_core": result.mass_kg("core") / mass,
             "bending_stiffness": section.EI / u["stiffness"][0], "torsion_stiffness": section.GJ / u["stiffness"][0],
-            "first_bending_frequency": section.first_bending_frequency_Hz,
+            "first_bending_frequency": result.first_bending_frequency_Hz,
             "skin_modulus": section.skin.Ex / u["modulus"][0], "spar_modulus": section.spar.Ex / u["modulus"][0],
             "skin_shear_modulus": section.skin.Gxy / u["modulus"][0], "spar_shear_modulus": section.spar.Gxy / u["modulus"][0],
             "skin_thickness": section.skin.thickness_m / u["thickness"][0], "spar_thickness": section.spar.thickness_m / u["thickness"][0],
@@ -274,6 +319,13 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "spar_heights": [h / length for h in section.spar_heights_m], "shear_center": section.shear_center_m / length,
             "shear_shares": list(section.shear_shares), "centroid": [section.centroid_x_m / length, section.centroid_m / length],
             "enclosed_area": section.enclosed_area_m2 / length**2,
+            "cap_modulus": None if section.cap is None else section.cap.Ex / u["modulus"][0],
+            "cap_thickness": None if section.cap is None else section.cap.thickness_m / u["thickness"][0],
+            # root to tip, a stretch wherever a layup changes (ADR-0124); the values above are the root's
+            "stretches": [{"start": s.segment.start_m / length, "end": s.segment.end_m / length,
+                           "bending_stiffness": s.section.EI / u["stiffness"][0], "torsion_stiffness": s.section.GJ / u["stiffness"][0],
+                           "shear_center": s.section.shear_center_m / length,
+                           "mass_per_length": s.section.mass_per_length_kg_m / (mass / length)} for s in result.stretches],
         },
         "governing": None if governing is None else {
             "case": governing[0].case.number, "label": governing[0].case.label,
@@ -305,16 +357,35 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "reversal_never": result.aeroelastic.reversal_speed_m_s == math.inf,
             "needs": list(result.aeroelastic.needs)},
         "not_run": [{"number": n.number, "label": n.label, "altitude": n.altitude_m / u["altitude"][0], "needs": n.needs} for n in result.not_run],
-        "rule_limits": {"min_percent": 100 * result.wing.design_rules.min_share, "max_in_a_row": result.wing.design_rules.max_in_a_row},
-        "rules": wing_rules(result.wing),
+        "rule_limits": {"min_percent": 100 * result.wing.design_rules.min_share, "max_in_a_row": result.wing.design_rules.max_in_a_row,
+                        "drop_ratio": result.wing.design_rules.drop_ratio, "max_dropped": result.wing.design_rules.max_dropped},
+        "rules": wing_rules(result.wing, units),
     }
 
 
-def wing_rules(wing: Wing) -> list[dict]:
-    """The design rules of every layup of the wing (ADR-0123), skins, spar webs and ribs, as plain values: a warning each, never a margin."""
-    members = (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib))
-    return [{"part": part, **dataclasses.asdict(check)} for part, layup in members if layup is not None
-            for check in layup.rules(wing.design_rules)]
+def _percent_of_span(fraction: float) -> str:
+    return f"{100 * fraction:.1f}".rstrip("0").rstrip(".") + " % of the span"
+
+
+def wing_rules(wing: Wing, units: str = "SI") -> list[dict]:
+    """The design rules of every layup of the wing (ADR-0123), skins, spar webs, spar caps and ribs, as plain values: a warning each,
+    never a margin. A part whose layup changes along the span is judged on each stretch, `span` from its start to its end as
+    fractions of the half span, and at each change, `at` (ADR-0124), with its run-out in the file's thickness unit."""
+    limits, unit = wing.design_rules, WING_UNITS[units]["thickness"]
+    members = (("skin", wing.skin), ("spar", wing.spar), ("cap", None if wing.spar_caps is None else wing.spar_caps.layup), ("rib", wing.rib))
+    rules = []
+    for part, layup in members:
+        if layup is None:
+            continue
+        stretches = layup.stretches()
+        for start, end, uniform in stretches:
+            rules += [{"part": part, "span": [start, end], "at": None, **dataclasses.asdict(check)} for check in uniform.rules(limits)]
+        L = wing.geometry.half_span_m
+        for (start, edge, inboard), (_, end, outboard) in zip(stretches, stretches[1:]):
+            checks = ply_drop_rules(inboard.half_stack_deg, outboard.half_stack_deg, layup.material.ply_thickness_m,
+                                    ((edge - start) * L, (end - edge) * L), _percent_of_span(edge), limits, unit)
+            rules += [{"part": part, "span": None, "at": edge, **dataclasses.asdict(check)} for check in checks]
+    return rules
 
 
 VIEW_DIGITS = 4  # significant digits of what a page draws; the numbers it states come from wing_report in full
@@ -324,6 +395,20 @@ AIRFOIL_POINTS = 61
 def _drawn(values) -> list:
     """Values to draw, to VIEW_DIGITS significant digits; infinity and NaN (an unloaded check) as None."""
     return [None if not math.isfinite(v) else float(f"{v:.{VIEW_DIGITS}g}") for v in np.asarray(values, dtype=float).ravel()]
+
+
+def _cap_points(section) -> list[tuple[str, np.ndarray, np.ndarray]]:
+    """Each cap's mid-surface across its web, both halves, fore to aft: (name, x, z)."""
+    found = []
+    for name in ("upper front spar cap", "lower front spar cap", "upper rear spar cap", "lower rear spar cap"):
+        halves = [s for s in section.point_sets if s.label == name]
+        if halves:
+            x, z = np.concatenate([h.x_m for h in halves]), np.concatenate([h.z_m for h in halves])
+            order = np.argsort(x, kind="stable")
+            x, z = x[order], z[order]
+            keep = np.r_[True, np.diff(x) > 0]  # the point over the web is in both halves
+            found.append((name, x[keep], z[keep]))
+    return found
 
 
 def wing_views(result: WingResult, units: str) -> dict:
@@ -367,6 +452,9 @@ def wing_views(result: WingResult, units: str) -> dict:
         "spars": [v / length for v in section.spar_x_m], "spar_heights": [v / length for v in section.spar_heights_m],
         "shear_center": section.shear_center_m / length, "centroid": [section.centroid_x_m / length, section.centroid_m / length],
         "ribs": [v / length for v in g.rib_stations_m],
+        # each spar cap at the root, upper and lower, both halves, as the root's section puts it (ADR-0124)
+        "caps": [{"name": name, "x": _drawn(x / length), "z": _drawn(z / length)} for name, x, z in _cap_points(section)],
+        "changes": [s.segment.end_m / length for s in result.stretches[:-1]],  # where a layup changes along the span
         "stations": _drawn(result.cases[0].stations.y / length) if result.cases else [],
         "cases": cases,
     }

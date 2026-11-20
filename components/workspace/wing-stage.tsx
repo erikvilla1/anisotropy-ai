@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CATEGORICAL, CRITICAL, DIVERGING, ramp, SEQUENTIAL } from "@/lib/studio-colors";
 import {
-  answerWords, CHECK_NAMES, CHECK_WORDS, feProgress, feWords, handAndModel, marginText, shown, unitText, whereWords,
+  answerWords, CHECK_NAMES, CHECK_WORDS, feProgress, feWords, handAndModel, marginText, shown, spanWords, unitText, whereWords,
   type HandAndModel, type WingAnswer, type WingCheckName, type WingFeCheck, type WingFeReport, type WingReport, type WingViews,
 } from "@/lib/wing";
 import { useWing } from "./wing-context";
@@ -29,8 +29,8 @@ function marginsAlong(views: WingViews, index: number, check: CheckChoice): (num
   });
 }
 
-/** The wing from above, root on the left: the box between the spars coloured by margin along the span, the ribs, and the line of
- * shear centres. */
+/** The wing from above, root on the left: the box between the spars coloured by margin along the span, the ribs, the line of
+ * shear centres, the spar caps' edges and where a layup changes along the span (ADR-0124). */
 function Planform({ views, margins, governingAt, units }: { views: WingViews; margins: (number | null)[]; governingAt: number | null; units: string }) {
   const width = 640, pad = 34;
   const scale = Math.min((width - 2 * pad) / views.half_span, 220 / views.chord);
@@ -52,6 +52,14 @@ function Planform({ views, margins, governingAt, units }: { views: WingViews; ma
       ))}
       {[front, rear].map((x, i) => <line key={i} x1={X(0)} x2={X(views.half_span)} y1={Y(x)} y2={Y(x)} className="wing-spar" />)}
       {views.ribs.map((y, i) => <line key={i} x1={X(y)} x2={X(y)} y1={Y(0)} y2={Y(views.chord)} className="wing-rib" />)}
+      {(views.caps ?? []).filter((cap) => cap.name.startsWith("upper")).flatMap((cap) => [Math.min(...cap.x), Math.max(...cap.x)]).map((x, i) => (
+        <line key={`cap-${i}`} x1={X(0)} x2={X(views.half_span)} y1={Y(x)} y2={Y(x)} className="wing-cap-edge"><title>Spar cap edge</title></line>
+      ))}
+      {(views.changes ?? []).map((y, i) => (
+        <line key={`change-${i}`} x1={X(y)} x2={X(y)} y1={Y(front) - 6} y2={Y(rear) + 6} className="wing-change">
+          <title>{`The plies change here, ${shown(y, 3)} ${units} from the root`}</title>
+        </line>
+      ))}
       <line x1={X(0)} x2={X(views.half_span)} y1={Y(views.shear_center)} y2={Y(views.shear_center)} className="wing-sc" />
       {governingAt !== null ? <circle cx={X(governingAt)} cy={Y((front + rear) / 2)} r={6} className="wing-governing" /> : null}
       <line x1={X(0)} x2={X(0)} y1={Y(0) - 8} y2={Y(views.chord) + 8} className="wing-root" />
@@ -107,6 +115,11 @@ function Section({ views, index, field, units }: { views: WingViews; index: numb
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="wing-svg" role="img" aria-label={`The root section with the ${label} round the box`} data-testid="wing-section">
       <polygon points={outline} className="wing-airfoil" />
+      {(views.caps ?? []).map((cap) => (
+        <polyline key={cap.name} points={cap.x.map((x, i) => `${X(x)},${Z(cap.z[i])}`).join(" ")} className="wing-cap" data-testid={`wing-cap-${cap.name.replace(/ /g, "-")}`}>
+          <title>{`${cap.name[0].toUpperCase()}${cap.name.slice(1)}`}</title>
+        </polyline>
+      ))}
       {views.walls.map((wall, w) => wall.x.slice(0, -1).map((x, i) => (
         <line key={`${w}-${i}`} x1={X(x)} y1={Z(wall.z[i])} x2={X(wall.x[i + 1])} y2={Z(wall.z[i + 1])} stroke={colour(root[w][field][i])} strokeWidth={6} strokeLinecap="round">
           <title>{`${wall.name}: ${label} ${shown(root[w][field][i], 4)} ${unitText(units.running_load)}`}</title>
@@ -123,12 +136,23 @@ function Section({ views, index, field, units }: { views: WingViews; index: numb
   );
 }
 
+/** EI and GJ: one value for a wing whose plies do not change along the span, else one a stretch, root to tip (ADR-0124). */
+function stiffness(d: WingReport["design"], u: WingReport["units"]): [string, string][] {
+  const stretches = d.stretches ?? [];
+  if (stretches.length < 2) {
+    return [["Bending stiffness EI", `${shown(d.bending_stiffness)} ${unitText(u.stiffness)}`], ["Torsion stiffness GJ", `${shown(d.torsion_stiffness)} ${unitText(u.stiffness)}`]];
+  }
+  const span = stretches[stretches.length - 1].end;
+  const each = (key: "bending_stiffness" | "torsion_stiffness") =>
+    stretches.map((s) => `${shown(s[key])} from ${spanWords(s.start / span, s.end / span)}`).join("; ") + ` ${unitText(u.stiffness)}`;
+  return [["Bending stiffness EI", each("bending_stiffness")], ["Torsion stiffness GJ", each("torsion_stiffness")]];
+}
+
 function Design({ report }: { report: WingReport }) {
   const d = report.design, u = report.units, a = report.aeroelastic;
   const rows: [string, string][] = [
-    ["Mass, one side", `${shown(d.mass)} ${unitText(u.mass)} (skins ${shown(d.mass_skins, 3)}, spars ${shown(d.mass_spars, 3)}, core ${shown(d.mass_core, 3)})`],
-    ["Bending stiffness EI", `${shown(d.bending_stiffness)} ${unitText(u.stiffness)}`],
-    ["Torsion stiffness GJ", `${shown(d.torsion_stiffness)} ${unitText(u.stiffness)}`],
+    ["Mass, one side", `${shown(d.mass)} ${unitText(u.mass)} (skins ${shown(d.mass_skins, 3)}${d.mass_caps ? `, spar caps ${shown(d.mass_caps, 3)}` : ""}, spars ${shown(d.mass_spars, 3)}, core ${shown(d.mass_core, 3)})`],
+    ...stiffness(d, u),
     ["First bending frequency", `${shown(d.first_bending_frequency, 3)} Hz`],
     ["Shear center", `${shown(d.shear_center)} ${unitText(u.length)} from the leading edge`],
     ["Shear carried", `front web ${Math.round(d.shear_shares[0] * 100)} %, rear web ${Math.round(d.shear_shares[1] * 100)} %, curved skins the rest`],

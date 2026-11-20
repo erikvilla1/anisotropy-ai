@@ -377,6 +377,9 @@ def _rows(values, per_line: int = 12) -> list[str]:
 def check_describable(wing: Wing) -> None:
     """Refuse a wing the model cannot build: a core without its stiffness, ribs without a layup, a part of more layers than
     CalculiX solves."""
+    if wing.spar_caps is not None or wing.has_zones:
+        raise WingModelError("The finite element check does not take spar caps or zones along the span yet (the hand calculation does): "
+                             "take them out to run it")
     for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)):
         if layup is not None and layup.core_thickness_m > 0 and layup.core is None:
             raise WingModelError(f"The finite element model needs the {name} core's stiffness: name a library core in [{name}] "

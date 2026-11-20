@@ -91,6 +91,14 @@ def test_ribs_stand_at_the_root_every_spacing_and_the_tip():
     assert rib_stations(example(**{"geometry.rib_spacing": None, "rib": None})) == ()
 
 
+@pytest.mark.parametrize("changes", [{"spar_caps": {"front_width": 0.045, "rear_width": 0.045, "half_stack": [0, 0, 45, -45, 0]}},
+                                     {"spar.zones": [{"start": 0.5, "end": 1, "half_stack": [45, -45, 0]}]}])
+def test_spar_caps_and_zones_along_the_span_are_refused_until_the_shape_draws_them(changes, tmp_path):
+    with pytest.raises(ShapeError, match="does not draw spar caps or zones along the span yet"):
+        build_wing_shape(example(**changes), tmp_path / "wing.step")
+    assert not (tmp_path / "wing.step").exists()
+
+
 def test_a_skin_thicker_than_the_airfoil_or_a_spar_aft_of_the_skins_meeting_is_refused():
     with pytest.raises(ShapeError, match="thicker than the airfoil"):
         mid_surface_section(example(**{"skin.core_thickness": 60.0}))

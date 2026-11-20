@@ -106,7 +106,7 @@ def test_the_wing_reports_the_rules_of_every_layup_and_they_change_no_number():
     wing, envelope = wing_from_dict(example())
     assert wing.design_rules == RuleLimits()
     report = wing_report(analyze_wing(wing, envelope), "SI", "m/s")
-    assert report["rule_limits"] == {"min_percent": 10.0, "max_in_a_row": 4}
+    assert report["rule_limits"] == {"min_percent": 10.0, "max_in_a_row": 4, "drop_ratio": 20.0, "max_dropped": 2}
     assert [(r["part"], r["rule"]) for r in report["rules"]] == [(part, rule) for part in ("skin", "spar", "rib")
                                                                  for rule in ("ten_percent", "in_a_row", "balance", "symmetry")]
     skin = {r["rule"]: r for r in report["rules"] if r["part"] == "skin"}
@@ -116,7 +116,7 @@ def test_the_wing_reports_the_rules_of_every_layup_and_they_change_no_number():
     strict, strict_envelope = wing_from_dict(example({"min_percent": 20, "max_in_a_row": 2}))
     assert strict.design_rules == RuleLimits(min_share=0.2, max_in_a_row=2)
     other = wing_report(analyze_wing(strict, strict_envelope), "SI", "m/s")
-    assert other["rule_limits"] == {"min_percent": 20.0, "max_in_a_row": 2}
+    assert other["rule_limits"] == {"min_percent": 20.0, "max_in_a_row": 2, "drop_ratio": 20.0, "max_dropped": 2}
     assert {key: other[key] for key in ("passes", "design", "governing", "cases")} == {key: report[key] for key in ("passes", "design", "governing", "cases")}
     spar = {r["rule"]: r for r in other["rules"] if r["part"] == "spar"}
     assert not spar["in_a_row"]["met"]  # [45/-45/0/0]s: four 0 plies at the middle, two allowed
@@ -137,3 +137,62 @@ def test_an_empty_design_rules_table_keeps_the_defaults():
     assert wing.design_rules == RuleLimits()
     wing, _ = wing_from_dict(example({"max_in_a_row": 3.0}))  # a page that sends 3 as 3.0
     assert wing.design_rules.max_in_a_row == 3
+
+
+# ----------------------------------------------------------------------------------------------- ply drops (ADR-0124)
+
+def drops(inboard, outboard, room=(0.8, 1.2), **limits):
+    from anisotropy_engine.layup_rules import ply_drop_rules
+    return {r.rule: r for r in ply_drop_rules(inboard, outboard, 1.25e-4, room, "40 % of the span", RuleLimits(**limits))}
+
+
+def test_one_ply_ending_each_side_under_a_running_outside_ply_meets_every_drop_rule():
+    found = drops([0, 0, 0, 45, -45, 0], [0, 0, 45, -45, 0])
+    assert all(r.met for r in found.values())
+    assert found["drop_count"].words == "2 plies end at 40 % of the span, 1 each side of the middle; at most 2 at one place."
+    assert found["drop_ratio"].detail["run_out_m"] == pytest.approx(20 * 2 * 1.25e-4)  # the whole laminate's change, both halves
+    assert found["drop_ratio"].words == "The plies ending at 40 % of the span need 5 mm of run-out at 20 to 1; the thicker side runs 800 mm."
+    assert found["drop_cover"].detail["ending"] == [3]  # matched from the outside: the third 0° is the one that ends
+    assert found["drop_cover"].words == "The outside ply runs on over the plies ending at 40 % of the span (ply 3 of the inboard half stack)."
+
+
+def test_too_many_plies_at_one_place_too_little_room_and_the_outside_ply_ending_are_warnings():
+    found = drops([0, 45, -45, 0, 0], [45, -45, 0], room=(0.001, 1.0))
+    assert not found["drop_count"].met and found["drop_count"].detail["dropped"] == 4
+    assert found["drop_count"].words == "4 plies end at 40 % of the span; at most 2 at one place: end the others a little further along."
+    assert not found["drop_ratio"].met and "more than the 1 mm of the thicker side" in found["drop_ratio"].words
+    assert not found["drop_cover"].met and found["drop_cover"].detail["ending"][0] == 1
+    assert drops([0, 45, -45, 0, 0], [45, -45, 0], max_dropped=4)["drop_count"].met
+
+
+def test_the_thicker_side_takes_the_run_out_whichever_side_of_the_change_it_is():
+    outboard = drops([0, 45], [0, 0, 45], room=(0.8, 0.002))
+    assert outboard["drop_ratio"].detail["thicker"] == "outboard" and outboard["drop_ratio"].detail["room_m"] == 0.002
+    assert not outboard["drop_ratio"].met  # 5 mm of run-out in 2 mm
+    assert drops([0, 45], [0, 0, 45], room=(0.8, 0.002), drop_ratio=8)["drop_ratio"].met
+
+
+def test_plies_that_change_angle_or_order_are_not_a_ply_drop():
+    found = drops([0, 45, -45, 0], [45, 0, -45])
+    assert not found["drop_cover"].met and found["drop_cover"].detail["pure"] is False
+    assert found["drop_cover"].words.startswith("At 40 % of the span the plies change angle or order, not only end")
+    same = drops([0, 45], [45, 0])  # as many plies, in another order
+    assert same["drop_count"].met and same["drop_ratio"].met and not same["drop_cover"].met
+    assert same["drop_count"].words == "No plies end at 40 % of the span: the stack keeps its number of plies."
+
+
+@pytest.mark.parametrize("limits", [{"drop_ratio": 0.5}, {"drop_ratio": 500}, {"max_dropped": 0}, {"max_dropped": 2.5}])
+def test_drop_limits_out_of_range_are_refused(limits):
+    with pytest.raises(ValidationError):
+        RuleLimits(**limits)
+
+
+def test_drop_limits_come_from_the_wing_file_and_go_back_in_its_report():
+    data = tomllib.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["design_rules"] = {"drop_ratio": 15, "max_dropped": 4}
+    report = wing_report(analyze_wing(*wing_from_dict(data)), "SI", "m/s")
+    assert report["rule_limits"] == {"min_percent": 10.0, "max_in_a_row": 4, "drop_ratio": 15.0, "max_dropped": 4}
+    for bad, message in (({"drop_ratio": 0}, "drop_ratio is the run-out"), ({"max_dropped": 1.5}, "max_dropped is the most plies")):
+        data["design_rules"] = bad
+        with pytest.raises(ValueError, match=message):
+            wing_from_dict(data)

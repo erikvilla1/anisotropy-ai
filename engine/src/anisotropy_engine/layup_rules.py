@@ -9,6 +9,12 @@ Four rules, each judged on the plies alone:
 - balance: as many plies at -theta as at +theta, so stretching does not shear the laminate (A16 = A26 = 0);
 - symmetry: the stack mirrors about its middle, so stretching does not bend it (B = 0).
 
+Where a part's stack changes along the span (ADR-0124), the change is a ply drop, judged by three more rules on the two stacks:
+
+- plies dropped at one place: no more than a number of plies end at one place, both halves counted;
+- the ply drop ratio: the plies that end need a run-out of the ratio times the change of thickness, and it must fit in the thicker side;
+- the outside ply over the drop: the thinner stack is the thicker one with plies taken out, and the outside ply of each face runs on.
+
 A rule not met is a warning, not a failure: nothing else in the engine reads these results, and no
 number of an analysis changes with them. The limits are the designer's to set (`RuleLimits`); the
 defaults are common practice, and thicker plies usually call for fewer of one angle in a row. Plies are
@@ -25,25 +31,32 @@ from pydantic import BaseModel, ConfigDict, Field
 from .laminate import Ply
 from .summary import ANGLE_TOLERANCE_DEG, RELATIVE_TOLERANCE, is_balanced, is_symmetric
 
-RuleName = Literal["ten_percent", "in_a_row", "balance", "symmetry"]
-RULES: tuple[RuleName, ...] = ("ten_percent", "in_a_row", "balance", "symmetry")
+RuleName = Literal["ten_percent", "in_a_row", "balance", "symmetry", "drop_count", "drop_ratio", "drop_cover"]
+RULES: tuple[RuleName, ...] = ("ten_percent", "in_a_row", "balance", "symmetry")  # the rules of one stack
+DROP_RULES: tuple[RuleName, ...] = ("drop_count", "drop_ratio", "drop_cover")  # the rules of a change of stack
 DIRECTIONS = (0.0, 45.0, -45.0, 90.0)  # the four directions of the 10 % rule
 SOURCES: dict[RuleName, str] = {
     "ten_percent": "MIL-HDBK-17-3F, Volume 3: a laminate carried by its fibers in every direction",
     "in_a_row": "Common practice: plies of one angle together crack apart more easily; thicker plies call for fewer",
     "balance": "Laminate theory: a balanced laminate does not shear when stretched (A16 = A26 = 0)",
     "symmetry": "Laminate theory: a symmetric laminate does not bend when stretched (B = 0)",
+    "drop_count": "Common practice: plies ending together leave a step where the plies start to part; end a few at a time",
+    "drop_ratio": "Common practice: a change of thickness tapered over many times its height carries the load past it smoothly",
+    "drop_cover": "Common practice: a ply that runs on over the ends of the dropped plies holds them down",
 }
 MINUS = "−"
 
 
 class RuleLimits(BaseModel):
-    """The limits of the rules: the least share of the plies in each of the four directions, and the most plies of one angle in a row."""
+    """The limits of the rules: the least share of the plies in each of the four directions, the most plies of one angle in a row,
+    the run-out of a ply drop per unit of the thickness it drops, and the most plies that end at one place, both halves counted."""
 
     model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
     min_share: float = Field(default=0.10, gt=0, le=0.25)  # four directions cannot each hold more than a quarter
     max_in_a_row: int = Field(default=4, ge=1, strict=True)
+    drop_ratio: float = Field(default=20.0, ge=1, le=200)  # run-out length over thickness dropped: 20 to 1
+    max_dropped: int = Field(default=2, ge=1, strict=True)  # a symmetric drop ends a ply in each half: 2 is one each side
 
 
 @dataclass(frozen=True)
@@ -51,7 +64,8 @@ class RuleCheck:
     """One rule judged on one stack: whether it is met, one plain sentence that says what was found, where the rule comes from, and the
     numbers behind the sentence (`detail`): for the 10 % rule each direction's share of the plies; for plies in a row the longest run,
     its angle and its first and last ply counted from the first ply given; for balance the plies at each off-axis angle; for symmetry
-    the first ply that does not mirror its partner."""
+    the first ply that does not mirror its partner; for a ply drop the plies that end, the run-out they need and the room for it, and
+    which plies of the thicker half stack end."""
 
     rule: RuleName
     met: bool
@@ -171,3 +185,79 @@ def layup_rules(plies: Sequence[Ply], limits: RuleLimits | None = None, core_aft
         raise ValueError("The core must have plies on both sides")
     limits = RuleLimits() if limits is None else limits
     return (ten_percent_rule(plies, limits), in_a_row_rule(plies, limits, core_after), balance_rule(plies), symmetry_rule(plies, core_after))
+
+
+def _length(value_m: float, unit: tuple[float, str]) -> str:
+    value = value_m / unit[0]
+    return f"{value:,.0f} {unit[1]}" if value >= 100 else f"{value:.3g} {unit[1]}"
+
+
+def _kept(thick: Sequence[float], thin: Sequence[float]) -> list[int] | None:
+    """The plies of the thicker half stack that the thinner one keeps, matched in order from the outside, by fiber direction; None
+    when the thinner stack is not the thicker one with plies taken out."""
+    kept, k = [], 0
+    for angle in thin:
+        direction = _direction(angle)
+        while k < len(thick) and _direction(thick[k]) != direction:
+            k += 1
+        if k == len(thick):
+            return None
+        kept.append(k)
+        k += 1
+    return kept
+
+
+def ply_drop_rules(inboard: Sequence[float], outboard: Sequence[float], ply_thickness_m: float, room_m: tuple[float, float], where: str,
+                   limits: RuleLimits | None = None, unit: tuple[float, str] = (1e-3, "mm")) -> tuple[RuleCheck, RuleCheck, RuleCheck]:
+    """The three rules of a change of half stack from `inboard` to `outboard` (outside ply first) at `where` (words: "40 % of the
+    span"). `room_m` is how far each side runs from the change before its stack changes again, inboard and outboard, metres; the
+    run-out of the plies that end lies on the thicker side. Lengths in the words are in `unit` (metres per unit, its label)."""
+    limits = RuleLimits() if limits is None else limits
+    if not inboard or not outboard:
+        raise ValueError("A ply drop needs a stack on each side")
+    thicker_inboard = len(inboard) >= len(outboard)
+    thick, thin = (inboard, outboard) if thicker_inboard else (outboard, inboard)
+    room = room_m[0] if thicker_inboard else room_m[1]
+    half = len(thick) - len(thin)
+    dropped = 2 * half  # both halves of the symmetric laminate
+    kept = _kept(thick, thin)
+    ending = [] if kept is None else [k + 1 for k in range(len(thick)) if k not in kept]
+    side = "inboard" if thicker_inboard else "outboard"
+
+    detail = {"dropped": dropped, "max_dropped": limits.max_dropped}
+    if dropped == 0:
+        count = RuleCheck("drop_count", True, f"No plies end at {where}: the stack keeps its number of plies.", SOURCES["drop_count"], detail)
+    elif dropped <= limits.max_dropped:
+        count = RuleCheck("drop_count", True, f"{dropped} plies end at {where}, {half} each side of the middle; at most {limits.max_dropped} "
+                          "at one place.", SOURCES["drop_count"], detail)
+    else:
+        count = RuleCheck("drop_count", False, f"{dropped} plies end at {where}; at most {limits.max_dropped} at one place: end the others "
+                          "a little further along.", SOURCES["drop_count"], detail)
+
+    change = dropped * ply_thickness_m
+    run_out = limits.drop_ratio * change
+    detail = {"thickness_change_m": change, "run_out_m": run_out, "room_m": room, "drop_ratio": limits.drop_ratio, "thicker": side}
+    ratio = f"{limits.drop_ratio:g} to 1"
+    if dropped == 0:
+        taper = RuleCheck("drop_ratio", True, f"Nothing tapers at {where}: no plies end there.", SOURCES["drop_ratio"], detail)
+    elif run_out <= room:
+        taper = RuleCheck("drop_ratio", True, f"The plies ending at {where} need {_length(run_out, unit)} of run-out at {ratio}; the thicker side "
+                          f"runs {_length(room, unit)}.", SOURCES["drop_ratio"], detail)
+    else:
+        taper = RuleCheck("drop_ratio", False, f"The plies ending at {where} need {_length(run_out, unit)} of run-out at {ratio}, more than the "
+                          f"{_length(room, unit)} of the thicker side.", SOURCES["drop_ratio"], detail)
+
+    detail = {"ending": ending, "thicker": side, "pure": kept is not None}
+    if kept is None:
+        cover = RuleCheck("drop_cover", False, f"At {where} the plies change angle or order, not only end: the thinner stack should be the "
+                          "thicker one with plies taken out.", SOURCES["drop_cover"], detail)
+    elif dropped == 0:
+        cover = RuleCheck("drop_cover", True, f"The same plies run on past {where}.", SOURCES["drop_cover"], detail)
+    elif 1 in ending:
+        cover = RuleCheck("drop_cover", False, f"The outside ply ends at {where}: keep a ply running on over the ends of the others.",
+                          SOURCES["drop_cover"], detail)
+    else:
+        plies = f"ply {ending[0]}" if half == 1 else f"plies {_and([str(k) for k in ending])}"
+        cover = RuleCheck("drop_cover", True, f"The outside ply runs on over the plies ending at {where} ({plies} of the {side} half "
+                          "stack).", SOURCES["drop_cover"], detail)
+    return count, taper, cover

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AERO_FIELDS, AILERON_FIELDS, DESIGN_RULE_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
-  feProgress, readNumber, readNumbers, ruleTitle, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName,
-  wingToml, type WingDescription, type WingField, type WingShape, type WingValue,
+  feProgress, newSparCaps, newZone, readNumber, readNumbers, ruleTitle, shown, SPAR_CAP_FIELDS, spanWords, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt,
+  WING_CORES, WING_MATERIALS, wingFileName, wingToml, withZones, zonesOf, type WingDescription, type WingField, type WingPart, type WingRule, type WingShape,
+  type WingValue, type WingZone, type ZonedPart,
 } from "@/lib/wing";
 import { shapeWing, StudioError } from "@/lib/studio-api";
 import { useWing } from "./wing-context";
@@ -223,31 +224,150 @@ function LayupFields({ member, title }: { member: "skin" | "spar" | "rib"; title
       {choice ? <WingNumber field={{ path: `${member}.core_thickness`, label: "Core thickness", unit: "thickness" }} /> : null}
       {choice === "own" ? <WingNumber field={{ path: `${member}.core_density`, label: "Core density", unit: "density", hint: "Its weight only; the hand calculation leaves the core's own stiffness out" }} /> : null}
       {thickness !== undefined && !choice ? <button type="button" className="studio-text-button" onClick={() => setValue(`${member}.core_thickness`, undefined)}>Remove the core thickness</button> : null}
+      {member === "rib" ? null : <ZonesFields part={member} />}
       <LayupRules member={member} />
     </fieldset>
   );
 }
 
-/** The design rules of one layup as the engine judged them (ADR-0123): each rule met or a warning, the sentence that says why, and
- * where the rule comes from. A warning changes no margin. */
-function LayupRules({ member }: { member: "skin" | "spar" | "rib" }) {
+/** The spar caps (ADR-0124): a strip of each skin centred on each web, its width per spar and its own half stack, which may change
+ * along the span in zones. A wing without caps offers to add them. */
+function SparCapFields() {
+  const { wing, replace } = useWing();
+  const caps = valueAt(wing, "spar_caps");
+  if (caps === undefined) {
+    return (
+      <fieldset className="wing-fieldset" data-testid="wing-spar_caps">
+        <legend>Spar caps</legend>
+        <p className="studio-hint">A strip of each skin over each web with plies of its own, usually more at 0°, to carry the bending.</p>
+        <button type="button" className="studio-text-button" onClick={() => replace({ ...wing, spar_caps: newSparCaps(wing) })} data-testid="wing-add-caps">
+          Add spar caps
+        </button>
+      </fieldset>
+    );
+  }
+  function remove() {
+    const next = { ...wing };
+    delete next.spar_caps;
+    replace(next);
+  }
+  return (
+    <fieldset className="wing-fieldset" data-testid="wing-spar_caps">
+      <legend>Spar caps</legend>
+      <div className="wing-grid">{SPAR_CAP_FIELDS.map((f) => <WingNumber key={f.path} field={f} />)}</div>
+      <WingNumber field={{ path: "spar_caps.half_stack", label: "Half stack", hint: "The cap's plies in place of the skin's, outside ply first; solid, no core", list: true, unit: "deg" }} />
+      <ZonesFields part="spar_caps" />
+      <button type="button" className="studio-text-button" onClick={remove} data-testid="wing-remove-caps">Remove the spar caps</button>
+      <LayupRules member="cap" />
+    </fieldset>
+  );
+}
+
+/** A part's zones along the span (ADR-0124): each a stretch from root to tip, in % of the half span, with its own half stack. Outside
+ * its zones the part has its own half stack. Where a zone starts or ends, plies end: a ply drop, judged by the design rules. */
+function ZonesFields({ part }: { part: ZonedPart }) {
+  const { wing, replace } = useWing();
+  const zones = zonesOf(wing, part);
+  return (
+    <div className="wing-zones" data-testid={`wing-zones-${part}`}>
+      {zones.map((zone, k) => <ZoneRow key={k} part={part} index={k} zone={zone} />)}
+      <button type="button" className="studio-text-button" data-testid={`wing-add-zone-${part}`}
+        onClick={() => replace(withZones(wing, part, [...zones, newZone(wing, part)]))}>
+        {zones.length ? "Add another zone" : "Change the plies along the span"}
+      </button>
+    </div>
+  );
+}
+
+function ZoneRow({ part, index, zone }: { part: ZonedPart; index: number; zone: WingZone }) {
+  const { wing, revision, setValue, replace } = useWing();
+  const textsOf = (z: WingZone) => ({ start: String(Number((100 * z.start).toFixed(2))), end: String(Number((100 * z.end).toFixed(2))), half_stack: z.half_stack.join(", ") });
+  const [texts, setTexts] = useState(textsOf(zone));
+  const [bad, setBad] = useState("");
+  const shownRevision = useRef(revision);
+  useEffect(() => {
+    if (shownRevision.current === revision) return;
+    shownRevision.current = revision;
+    setTexts(textsOf(zone)); setBad("");
+  }, [revision, zone]);
+  const id = `wing-${part}-zone-${index}`;
+  function typed(key: "start" | "end" | "half_stack", text: string) {
+    const next = { ...texts, [key]: text };
+    setTexts(next);
+    const start = readNumber(next.start), end = readNumber(next.end), stack = readNumbers(next.half_stack);
+    if (start === null || end === null) { setBad("From and to are percentages of the half span."); return; }
+    if (stack === null) { setBad("Numbers separated by commas."); return; }
+    setBad("");
+    const zones = zonesOf(wing, part).map((z, k) => (k === index ? { start: start / 100, end: end / 100, half_stack: stack } : z));
+    setValue(`${part}.zones`, zones as unknown as WingValue);
+  }
+  function remove() {
+    replace(withZones(wing, part, zonesOf(wing, part).filter((_, k) => k !== index)));
+  }
+  return (
+    <div className="wing-zone" data-testid={id}>
+      <span className="wing-zone-head">Zone {index + 1}<button type="button" className="studio-text-button" onClick={remove} data-testid={`${id}-remove`}>Remove</button></span>
+      <div className="wing-grid">
+        {(["start", "end"] as const).map((key) => (
+          <div key={key} className="studio-field wing-field">
+            <label htmlFor={`${id}-${key}`}>{key === "start" ? "From" : "To"}</label>
+            <span className="wing-input">
+              <input id={`${id}-${key}`} type="text" inputMode="decimal" autoComplete="off" value={texts[key]} onChange={(e) => typed(key, e.target.value)} data-testid={`${id}-${key}`} />
+              <span className="wing-unit">{unitLabel(wing, "span")}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="studio-field wing-field">
+        <label htmlFor={`${id}-half_stack`}>Half stack</label>
+        <span className="wing-input">
+          <input id={`${id}-half_stack`} type="text" autoComplete="off" value={texts.half_stack} onChange={(e) => typed("half_stack", e.target.value)} data-testid={`${id}-half_stack`} />
+          <span className="wing-unit">°</span>
+        </span>
+        {bad ? <span className="studio-hint wing-bad" role="alert">{bad}</span> : <span className="studio-hint">0 % is the root, 100 % the tip</span>}
+      </div>
+    </div>
+  );
+}
+
+/** The design rules of one part as the engine judged them (ADR-0123): each rule met or a warning, the sentence that says why, and
+ * where the rule comes from. A warning changes no margin. A part whose plies change along the span has its rules for each stretch
+ * and at each change, a ply drop (ADR-0124), each group under where it holds. */
+function LayupRules({ member }: { member: WingPart }) {
   const { answer } = useWing();
   if (!answer?.report.rules) return null;
   const rules = answer.report.rules.filter((r) => r.part === member);
   if (!rules.length) return null;
+  const pct = (v: number) => `${Number((100 * v).toFixed(1))}`;
+  const groups: { key: string; heading: string; rules: WingRule[] }[] = [];
+  for (const r of rules) {
+    const key = r.span ? `${pct(r.span[0])}-${pct(r.span[1])}` : `at-${pct(r.at ?? 0)}`;
+    const heading = r.span ? `From ${spanWords(r.span[0], r.span[1])}` : `Ply drop at ${pct(r.at ?? 0)} % of the span`;
+    const group = groups.find((g) => g.key === key);
+    if (group) group.rules.push(r);
+    else groups.push({ key, heading, rules: [r] });
+  }
+  const single = groups.length === 1;
   return (
-    <ul className="wing-rules" data-testid={`wing-rules-${member}`}>
-      {rules.map((r) => (
-        <li key={r.rule} data-testid={`wing-rule-${member}-${r.rule}`} data-met={r.met}>
-          <span className="wing-rule-head">
-            <span className={`studio-badge studio-badge-${r.met ? "pass" : "warn"}`}>{r.met ? "met" : "warning"}</span>
-            <span className="wing-rule-title">{ruleTitle(r.rule, answer.report.rule_limits)}</span>
-          </span>
-          <span className="wing-rule-words">{r.words}</span>
-          <span className="wing-rule-source">{r.source}</span>
-        </li>
+    <div className="wing-rule-groups" data-testid={`wing-rules-${member}`}>
+      {groups.map((g) => (
+        <div key={g.key} data-testid={single ? undefined : `wing-rules-${member}-${g.key}`}>
+          {single ? null : <p className="wing-rules-where">{g.heading}</p>}
+          <ul className="wing-rules">
+            {g.rules.map((r) => (
+              <li key={r.rule} data-testid={single ? `wing-rule-${member}-${r.rule}` : `wing-rule-${member}-${g.key}-${r.rule}`} data-met={r.met}>
+                <span className="wing-rule-head">
+                  <span className={`studio-badge studio-badge-${r.met ? "pass" : "warn"}`}>{r.met ? "met" : "warning"}</span>
+                  <span className="wing-rule-title">{ruleTitle(r.rule, answer.report.rule_limits)}</span>
+                </span>
+                <span className="wing-rule-words">{r.words}</span>
+                <span className="wing-rule-source">{r.source}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -400,6 +520,7 @@ export function WingRail() {
       <MaterialPanel />
       <StepPanel id="wing-layup" step={4} title="Layup" state={rules.state} word="rules met" note={rules.note}>
         <LayupFields member="skin" title="Skins" />
+        <SparCapFields />
         <LayupFields member="spar" title="Spar webs" />
         {ribs ? <LayupFields member="rib" title="Ribs" /> : null}
         <fieldset className="wing-fieldset" data-testid="wing-design-rules">

@@ -9,6 +9,9 @@ const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json"
 /** The finite element check's report of the example wing (ADR-0119), as the fea package's tool writes it; fea/tests/test_wing_check.py
  * checks that it has the tool's shape. */
 const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", "utf-8"));
+/** The engine's answer to the example with the spar caps the page adds and a cap zone from the root to 40 % (ADR-0124), written and
+ * checked like ANSWER. */
+const CAPS = JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf-8"));
 const WINGS = /\/v1\/wings\/(analyze|shape|checks(\/[0-9a-f-]+)?)$|\/v1\/wake$/;
 const CHECK_ID = "0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00";
 /** How the check stands at each look: queued when started, then running at its second stage, then done with the report. */
@@ -283,6 +286,40 @@ test("each layup shows its design rules, met or a warning, and the limits typed 
   await expect(layup.locator("summary")).toContainText("rules met");
   await page.getByLabel("Most plies of one angle in a row").fill("");
   await expect.poll(() => sent.at(-1)?.wing?.design_rules).toBeUndefined(); // emptied, the usual limits again
+});
+
+test("spar caps are added over the webs, a zone along the span changes their plies, and the rules come for each stretch and the drop (ADR-0124)", async ({ page }) => {
+  const sent = await playWings(page, (body) => ({ status: 200, body: body.wing?.spar_caps ? CAPS : ANSWER }));
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  const caps = page.getByTestId("wing-spar_caps");
+  await caps.getByTestId("wing-add-caps").click();
+  await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toEqual({ front_width: 0.045, rear_width: 0.045, half_stack: [0, 0, 45, -45, 0] });
+  await expect(caps.getByLabel("Front cap width")).toHaveValue("0.045");
+  await caps.getByTestId("wing-add-zone-spar_caps").click();
+  const zone = caps.getByTestId("wing-spar_caps-zone-0");
+  await expect(zone.getByTestId("wing-spar_caps-zone-0-start")).toHaveValue("0");
+  await expect(zone.getByTestId("wing-spar_caps-zone-0-end")).toHaveValue("40");
+  await zone.getByTestId("wing-spar_caps-zone-0-half_stack").fill("0, 0, 0, 45, −45, 0");
+  await expect.poll(() => sent.at(-1)?.wing).toEqual(CAPS.wing); // one more 0° ply each side of the middle, root to 40 %
+  await expect(caps.getByTestId("wing-rules-cap-0-40")).toContainText("From root to 40 %");
+  await expect(caps.getByTestId("wing-rules-cap-40-100")).toContainText("From 40 % to tip");
+  const drop = caps.getByTestId("wing-rules-cap-at-40");
+  await expect(drop).toContainText("Ply drop at 40 % of the span");
+  await expect(drop.locator("li")).toHaveCount(3);
+  await expect(caps.getByTestId("wing-rule-cap-at-40-drop_ratio")).toHaveAttribute("data-met", "true");
+  await expect(caps.getByTestId("wing-rule-cap-at-40-drop_ratio")).toContainText("7.32 mm of run-out at 20 to 1");
+  await expect(caps.getByTestId("wing-rule-cap-at-40-drop_cover")).toContainText("The outside ply runs on");
+  await expect(page.getByTestId("wing-rules-skin").locator("li")).toHaveCount(4); // the skin itself does not change
+  await expect(page.getByTestId("wing-section").getByTestId("wing-cap-upper-front-spar-cap")).toBeAttached();
+  await expect(page.getByTestId("wing-planform").locator("line.wing-change")).toHaveCount(1);
+  await expect(page.getByTestId("wing-design")).toContainText("spar caps 1.13");
+  await expect(page.getByTestId("wing-design")).toContainText("from root to 40 %; ");
+  await zone.getByTestId("wing-spar_caps-zone-0-remove").click();
+  await expect.poll(() => (sent.at(-1)?.wing?.spar_caps as Record<string, unknown> | undefined)?.zones).toBeUndefined();
+  await caps.getByTestId("wing-remove-caps").click();
+  await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toBeUndefined();
+  await expect(caps.getByTestId("wing-add-caps")).toBeVisible();
 });
 
 test("the wing workspace names no tool, no machinery and no record, with every panel open, the shape built and the check made (ADR-0091, ADR-0118, ADR-0119)", async ({ page }) => {
