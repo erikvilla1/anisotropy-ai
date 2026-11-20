@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -40,6 +40,7 @@ mesh = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "mapdl-archive" },
     { name = "matplotlib" },
     { name = "pytest" },
 ]
@@ -56,6 +57,7 @@ provides-extras = ["mesh"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "mapdl-archive", specifier = ">=0.4.2" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "pytest", specifier = ">=8" },
 ]
@@ -361,6 +363,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/c4/1407df7512a5b36cc79840e01710dc575733c461b13ab866cae77eaf87f3/kiwisolver-1.5.1-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:482676e5bd48d70ac99d9fc78863469845421e01184fa83f1f9366dc49f7e974", size = 134002, upload-time = "2026-08-28T10:28:08.881Z" },
     { url = "https://files.pythonhosted.org/packages/16/45/c37a21ad5c0ab581a93c55ad544721aaa1f0ae94edb29c6a678a23d013e6/kiwisolver-1.5.1-graalpy312-graalpy250_312_native-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:072bdb15a3c19a5b5dbc8f8fb1f4e1884bf4f3507eeb4cc6334401274d37a5c0", size = 194292, upload-time = "2026-08-28T10:28:11.06Z" },
     { url = "https://files.pythonhosted.org/packages/a6/c1/69f00d627949580e43d57af0aa465df46868d7c29801c137a55374101294/kiwisolver-1.5.1-graalpy312-graalpy250_312_native-win_amd64.whl", hash = "sha256:a5a00665d1a0e26763a7338d7e911d4598fbc1d50dd0d6b7919b7dc6c5d6569f", size = 73362, upload-time = "2026-08-28T10:28:12.449Z" },
+]
+
+[[package]]
+name = "mapdl-archive"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6e/ec/e988f685a82ccfc650bf785710580646ca8639470a51df30f2258c5dd3be/mapdl_archive-0.4.2.tar.gz", hash = "sha256:9e0d36a309333303e935cdc72cef522c81e46e4fe53b2e64e305126e2b288cb9", size = 162215, upload-time = "2026-09-08T22:48:15.595Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/38/242bfe5a066f969d0a510fb3e967e45ea154f5c673f51a3718ce92c4dead/mapdl_archive-0.4.2-cp312-abi3-macosx_10_14_x86_64.whl", hash = "sha256:81649887bf99f3ed024fa310f87671c23ff5b80c087f264ad6430e7ec9af5150", size = 299346, upload-time = "2026-09-08T22:48:08.159Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/50/de39c8a0b06071be6156cc2ea6d0994cc354b29ec126a02409875d64d800/mapdl_archive-0.4.2-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:801ab98400f0c23b8f934b3fde51083939887542a1d21044fd7a6cbf4724cda5", size = 292609, upload-time = "2026-09-08T22:48:09.535Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/d6/5c4a9e904f0f0c12652abd11183e4b0fb8bca0f359788a1cd150316df8c0/mapdl_archive-0.4.2-cp312-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:0ede718b355ba51ad2cb87272bdda4e87176841c567ce6b9dc90edecdb46208d", size = 355832, upload-time = "2026-09-08T22:48:10.977Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/49/264bee47d2c6772166452ab467808019bc2f2afed56be49dfaeaa390d68c/mapdl_archive-0.4.2-cp312-abi3-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0d2aff768abec095b256f016d42e56d2498f4fb86a0213ad7eba820e815c3cb4", size = 314921, upload-time = "2026-09-08T22:48:12.451Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/97/0e3d7e9a6a834924dce7a4c030bb19a6845c2b9645626d0a94691ab9e929/mapdl_archive-0.4.2-cp312-abi3-win_amd64.whl", hash = "sha256:73f8f941fedc600b7a0dad87840a24be3f564626a236fe2850bb4ac22b1b6f55", size = 537649, upload-time = "2026-09-08T22:48:14.156Z" },
 ]
 
 [[package]]

@@ -46,6 +46,7 @@ The equations behind each module, and the function that computes each one, are i
 | `course_excel.py` | Reads the course Excel input template into a case |
 | `sandwich.py` | Stiffness of a panel of two laminated faces on a core that carries no in-plane load |
 | `wing/` | A straight two-spar composite wing worked as a beam (ADR-0115): `description.py` (the wing and its flight envelope), `airfoil.py`, `atmosphere.py`, `loads.py` (seventeen flight cases, Schrenk's lift, shear, moment, torque), `section.py` (the box between the spars), `analysis.py` (every case at every station, ply checks, buckling, margins), `aeroelastic.py` (divergence and aileron reversal, ADR-0115 amendment 1), `flutter.py` (a typical-section flutter estimate by the k method, ADR-0117) and `wing_file.py` (a wing as a file, in SI or US units) |
+| `repair/` | A stepped lap bond between a patch and the laminate it covers, worked as a shear-lag model (ADR-0130): `step_lap.py` (the patch's force at every step boundary, the adhesive's shear stress, the load at its elastic limit, the strength of a long lap with a yielding adhesive) and `lap_file.py` (a lap as a file, in any of the unit systems) |
 
 For a one-page guide to writing a case and reading the printout, see [docs/engine-cheat-sheet.md](../docs/engine-cheat-sheet.md).
 
@@ -68,6 +69,10 @@ For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_
 Failure checks always include maximum stress when all five strengths are supplied. A temperature change stays fixed while the mechanical loads scale; a `[failure]` table holds chosen loads fixed as well. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
 
 For required moments under a curvature constraint, run `uv run python examples/laminate_calculator.py validation/cases/constructed-flat-cross-ply.toml`. The new `forces_curvature` case mode accepts known force resultants and prescribed curvature; zero curvature requests flatness. See the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md) for the matching API operation and numerical verification policy.
+
+## A bonded repair's stepped lap
+
+`anisotropy_engine.repair` works the bond between a patch and the laminate it covers along one line (ADR-0130): `uv run python examples/step_lap_calculator.py validation/repair_cases/constructed-flush-three-step-repair.toml` prints the patch's force at every step boundary, the adhesive's shear stress at the ends of every step, each adherend's largest stress and the load at which the largest shear stress reaches the adhesive's strength. A file states its units, the adhesive, the steps from the patch's tip to the end of the laminate, and the load per unit width; the keys are at the top of `src/anisotropy_engine/repair/lap_file.py`. The equations are in `docs/theory.md` Section 16, with what the calculation leaves out: peel, bending and a yielding adhesive in a stepped lap among them. Laps checked against a closed form are in `validation/repair_cases/`; a course example or a joint of your own belongs in the repository's ignored `.local/repair/cases/`, where the same test runs it.
 
 ## A wing
 

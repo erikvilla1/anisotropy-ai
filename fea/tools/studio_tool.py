@@ -8,6 +8,7 @@
     uv run python tools/studio_tool.py fixtures <values.json> --out <dir>   # live + the mesh study: the files the browser tests read
     uv run python tools/studio_tool.py tow <values.json> --out <dir>        # a fibre tow record (ASTM D4018): tow.json, its checklist and result
     uv run python tools/studio_tool.py import <model.inp> --units mm-MPa --out <dir>   # a model brought in as an Abaqus deck: read, drawn and solved
+    uv run python tools/studio_tool.py model <values.json> --program ansys --out <dir> # the model as a file for Abaqus or Ansys, no solve
 
 `check` judges a values file the way `tools/run_coupon.py` will (`checks.setup_checklist`) and exits 0 whatever it finds: the
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
@@ -23,7 +24,12 @@ when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it 
 brought (ADR-0105) and the unit system it is written in, and writes import.json (the state, `refused`, `read` or `solved`, the reason
 with its line, and what the reader took and skipped) and, for a deck that was taken, preview.json, and for one our kernel solved,
 fields.json, summary.json and explanation.json, as `live` writes them; it exits 0 whatever it finds, and `serve` answers it too, for a
-request {"deck": <path>, "units": <system>, "name": <the file's name>, "out": <folder>}. Nothing here computes a result: the modules named do.
+request {"deck": <path>, "units": <system>, "name": <the file's name>, "out": <folder>}. `model` writes the model the rows build as a
+file another program reads (ADR-0129), `--program abaqus` (the input deck a run writes) or `ansys` (a Mechanical APDL input file):
+checklist.json always, and, when nothing blocks but the full run's own tools, model.json (the state `written`, the file's name, its
+program, units, size and SHA-256) and the file beside it; a model the program's writer refuses is `refused` with the reason. Nothing is
+solved. `serve` answers it for a request {"values": <path>, "out": <folder>, "model": <program>}. Nothing here computes a result: the
+modules named do.
 """
 
 from __future__ import annotations
@@ -33,7 +39,9 @@ import time
 _STARTED = time.perf_counter()  # the imports below are most of a live solve's start-up (ADR-0086)
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -55,11 +63,14 @@ from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.tow_test import tow_answer
 from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
+from anisotropy_fea.write_ansys import AnsysWriterError, write_ansys
 
 IMPORT_SECONDS = time.perf_counter() - _STARTED
 # The full run's own tools: CalculiX, which checks our result, and the document builder. Our kernel needs neither, so a live solve goes
 # ahead without them; the checklist still says so, and the full run stays blocked until they are installed (ADR-0086).
 RUN_ONLY = ("solver", "document")
+# The programs a model is written for on request (ADR-0129): the writer and how the file's name ends.
+MODEL_PROGRAMS = {"abaqus": (write_abaqus, "-abaqus.inp"), "ansys": (write_ansys, "-ansys.cdb")}
 
 
 def write_json(path: Path, data) -> Path:
@@ -92,7 +103,10 @@ def serve(root: Path) -> None:
                 print(json.dumps(answer), file=answers, flush=True)
                 continue
             with enabled.every_test(request.get("every") is True):  # a founder's request (ADR-0089 amendment 5); the next is judged anew
-                answer = {"state": live(Path(request["values"]), Path(request["out"]), request_root(request, root), started=started)}
+                if "model" in request:  # the model as a file for another program (ADR-0129): nothing is solved
+                    answer = {"state": model_file(Path(request["values"]), request["model"], Path(request["out"]), request_root(request, root))}
+                else:
+                    answer = {"state": live(Path(request["values"]), Path(request["out"]), request_root(request, root), started=started)}
         except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
             answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
         print(json.dumps(answer), file=answers, flush=True)
@@ -235,6 +249,42 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     return checklist.state
 
 
+def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
+    """The model the rows build, as a file another program reads (ADR-0129): the text the program's writer gives for the model the setup
+    check built, the same model a live solve and a run use. checklist.json always; model.json and the file when it is written. Returns
+    `written`, `blocked` (the check stops it, as it stops a solve) or `refused` (the writer cannot state this model). Nothing is solved
+    and nothing is kept in the coupons' folders."""
+    if program not in MODEL_PROGRAMS:
+        raise IntakeError(f"a model is written for {' or '.join(MODEL_PROGRAMS)}; got {program!r}")
+    write, ending = MODEL_PROGRAMS[program]
+    try:
+        form = read_input(values_path)
+    except IntakeError as exc:
+        write_json(out / "checklist.json", unreadable(values_path, str(exc)).as_dict())
+        print(f"blocked: {exc}")
+        return "blocked"
+    checklist, model, _ = setup_checklist(form, root)
+    write_json(out / "checklist.json", checklist.as_dict())
+    if not solvable(checklist, model):
+        print(f"{checklist.state}: no model written")
+        return "blocked"
+    units = deck_units_of(model.spec.units)
+    try:
+        text = write(model)
+    except AnsysWriterError as exc:
+        write_json(out / "model.json", {"state": "refused", "program": program, "problem": str(exc)})
+        print(f"refused: {exc}")
+        return "refused"
+    stem = re.sub(r"[^A-Za-z0-9._-]", "-", (model.spec.coupon.designation if model.spec.coupon else None) or "model")
+    data = text.encode("utf-8")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / (stem + ending)).write_bytes(data)
+    write_json(out / "model.json", {"state": "written", "program": program, "name": stem + ending, "units": units, "bytes": len(data),
+                                    "sha256": hashlib.sha256(data).hexdigest(), "nodes": model.mesh.node_count, "elements": model.mesh.element_count})
+    print(f"written: {stem + ending}, {len(data)} bytes, {model.mesh.node_count} nodes and {model.mesh.element_count} elements in {units}")
+    return "written"
+
+
 def imported(deck_path: Path, units: str, out: Path, name: str | None = None, started: float | None = None) -> str:
     """A model brought in as an Abaqus deck (ADR-0105): import.json always, with the state and what was read or why not; preview.json for
     a deck that was taken; fields.json, summary.json and explanation.json for one our kernel solved. Returns the state. No file is kept."""
@@ -299,6 +349,10 @@ def main() -> None:
     p.add_argument("--units", required=True, help="the unit system the deck is written in: mm-MPa, m-Pa, in-psi or in-ksi")
     p.add_argument("--name", help="the file's name as the engineer sent it (default the path's)")
     p.add_argument("--out", type=Path, required=True)
+    p = commands.add_parser("model", help="the model a values file builds, as a file for Abaqus or Ansys; nothing is solved")
+    p.add_argument("values", type=Path)
+    p.add_argument("--program", required=True, choices=sorted(MODEL_PROGRAMS))
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     with enabled.every_test(args.every_test):
         answer_command(args)
@@ -318,6 +372,8 @@ def answer_command(args: argparse.Namespace) -> None:
             serve(args.root)
         elif args.command == "import":
             imported(args.deck, args.units, args.out, args.name)
+        elif args.command == "model":
+            model_file(args.values, args.program, args.out, args.root)
         elif args.command == "tow":
             answer = tow_answer(args.values)
             write_json(args.out / "tow.json", answer)

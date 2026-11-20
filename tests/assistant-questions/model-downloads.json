@@ -1,0 +1,25 @@
+{
+  "feature": "model-downloads",
+  "title": "Asking for the model as a file for Abaqus or Ansys",
+  "records": ["ADR-0129"],
+  "watches": ["lib/model-file.ts", "components/studio/model-download.tsx"],
+  "questions": [
+    {"ask": "download abaqus model", "kind": "command", "style": "terse", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)", "as it is set up now"], "never": ["Ansys"]}, "source": "the founder, 2026-11-20: \"Download abaqus model, or download ansys model\""},
+    {"ask": "download ansys model", "kind": "command", "style": "terse", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Ansys input file (.cdb)", "has not been run in Ansys yet"]}, "source": "the founder, 2026-11-20"},
+    {"ask": "download ansys model", "kind": "command", "style": "terse", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "heading": "Not as an Ansys file yet", "says": ["being checked in Ansys", "Abaqus input file (.inp)"], "never": ["Ansys input file (.cdb)"]}},
+    {"ask": "can I get this as an ansys file?", "kind": "yes-no", "style": "plain", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "export the model", "kind": "command", "style": "plain", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)", "Ansys input file (.cdb)"]}},
+    {"ask": "export the model", "kind": "command", "style": "plain", "page": "results", "route": "model-file", "answer": {"kind": "model-file", "says": ["Abaqus input file (.inp)"], "never": ["Ansys"]}},
+    {"ask": "give me the inp", "kind": "command", "style": "jargon", "page": "ready", "route": "model-file", "answer": {"kind": "model-file", "says": ["Abaqus input file (.inp)"]}},
+    {"ask": "donwload ansys modle", "kind": "command", "style": "typo", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"], "never": ["Abaqus"]}},
+    {"ask": "i need the model for ansys mechanical", "kind": "command", "style": "loose", "page": "results", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "how do i get the abaqus file", "kind": "what-is", "style": "plain", "page": "results", "route": "model-file", "answer": {"kind": "model-file", "heading": "Download the model", "says": ["Abaqus input file (.inp)"]}},
+    {"ask": "cdb please", "kind": "command", "style": "terse", "page": "ready", "ansys": true, "route": "model-file", "answer": {"kind": "model-file", "says": ["Ansys input file (.cdb)"]}},
+    {"ask": "export to abaqus", "kind": "command", "style": "jargon", "page": "imported", "route": "model-file", "answer": {"kind": "model-file", "heading": "Set up a coupon to download its model", "never": ["(.inp)"]}},
+    {"ask": "download the model", "kind": "command", "style": "plain", "page": "past", "route": "model-file", "answer": {"kind": "model-file", "heading": "Set up a coupon to download its model"}},
+    {"ask": "can you run this in ansys", "kind": "off-topic", "style": "jargon", "page": "results", "ansys": true, "route": "about", "answer": {"kind": "about", "heading": "Solved here"}},
+    {"ask": "import an ansys model", "kind": "command", "style": "plain", "page": "ready", "route": "model", "offline": "patterns", "live": {"judge": "Bringing a model in is not a download: the answer must not offer a file to download."}},
+    {"ask": "what is an abaqus input file", "kind": "what-is", "style": "plain", "page": "results", "route": "model", "offline": "unread", "live": {"judge": "A question about what the file is, not a request for it: no file is offered."}},
+    {"ask": "download the report", "kind": "command", "style": "plain", "page": "results", "route": "model", "offline": "patterns", "live": {"judge": "The report is not the model file: no model file is offered."}}
+  ]
+}

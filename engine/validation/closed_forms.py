@@ -357,3 +357,102 @@ def straight_sandwich_wing(case: dict) -> dict:
 WING_CASES = {
     "constructed-straight-sandwich-wing": straight_sandwich_wing,
 }
+
+
+# ----------------------------------------------------------------------------------------- the stepped lap cases
+
+def _lap_steps(case: dict) -> tuple[list[dict], float, float, float]:
+    """Each step with its lambda and P, the adhesive's G / eta and the load, in the case's own units, which are consistent
+    (mm, MPa and N/mm; or in, psi and lb/in), so nothing is converted."""
+    if case["units"] not in ("mm-MPa", "psi"):
+        raise ValueError("a stepped lap case is stated in a consistent system: mm-MPa or psi")
+    g, eta, load = case["adhesive"]["shear_modulus"], case["adhesive"]["thickness"], case["applied"]["load"]
+    steps = []
+    for row in case["steps"]:
+        so, si = row["outer_modulus"] * row["outer_thickness"], row["inner_modulus"] * row["inner_thickness"]
+        steps.append({**row, "lam": np.sqrt(g / eta * (1 / so + 1 / si)), "shared": load * so / (so + si)})
+    return steps, g, eta, load
+
+
+def stepped_lap(case: dict) -> dict:
+    """A stepped lap by the general solution of each step (ADR-0130), a different route from the engine's tridiagonal
+    system in the boundary forces: with x from a step's start and L its length, the outer adherend's force is
+
+        N(x) = P + a exp(lam (x - L)) + b exp(-lam x)
+
+    and the 2m constants come from one linear system: N = 0 at the tip, N = the load at the end, and N and dN/dx (the
+    adhesive's shear stress) continuous at every boundary between steps. The largest stress of an adherend in a step is
+    looked for at the step's ends and, by bisection, where the shear stress changes sign inside it."""
+    steps, _, _, load = _lap_steps(case)
+    m = len(steps)
+    decay = [np.exp(-s["lam"] * s["length"]) for s in steps]
+    matrix, right = np.zeros((2 * m, 2 * m)), np.zeros(2 * m)
+    matrix[0, 0], matrix[0, 1], right[0] = decay[0], 1.0, -steps[0]["shared"]  # N = 0 at the tip
+    for k in range(m - 1):
+        n, row = k + 1, 1 + 2 * k
+        matrix[row, 2 * k: 2 * k + 4] = [1.0, decay[k], -decay[n], -1.0]  # N continuous
+        right[row] = steps[n]["shared"] - steps[k]["shared"]
+        matrix[row + 1, 2 * k: 2 * k + 4] = [steps[k]["lam"], -steps[k]["lam"] * decay[k], -steps[n]["lam"] * decay[n], steps[n]["lam"]]  # dN/dx continuous
+    matrix[-1, -2], matrix[-1, -1], right[-1] = 1.0, decay[-1], load - steps[-1]["shared"]  # N = the load at the end
+    constants = np.linalg.solve(matrix, right).reshape(m, 2)
+
+    def force(k: int, x: float) -> float:
+        s, (a, b) = steps[k], constants[k]
+        return s["shared"] + a * np.exp(s["lam"] * (x - s["length"])) + b * np.exp(-s["lam"] * x)
+
+    def shear(k: int, x: float) -> float:
+        s, (a, b) = steps[k], constants[k]
+        return s["lam"] * (a * np.exp(s["lam"] * (x - s["length"])) - b * np.exp(-s["lam"] * x))
+
+    ends = [[shear(k, 0.0), shear(k, s["length"])] for k, s in enumerate(steps)]
+    peak = max((value for pair in ends for value in pair), key=abs)
+    stresses = []
+    for k, s in enumerate(steps):
+        places = [0.0, s["length"]]
+        if ends[k][0] * ends[k][1] < 0:  # the shear stress changes sign once inside the step: the force turns there
+            low, high = 0.0, s["length"]
+            for _ in range(200):
+                middle = (low + high) / 2
+                low, high = (middle, high) if shear(k, low) * shear(k, middle) > 0 else (low, middle)
+            places.append((low + high) / 2)
+        outer = [force(k, x) for x in places]
+        stresses.append([max(outer, key=abs) / s["outer_thickness"], max((load - f for f in outer), key=abs) / s["inner_thickness"]])
+    answer = {
+        "lambda_length": [float(s["lam"] * s["length"]) for s in steps],
+        "shared_forces": [float(s["shared"]) for s in steps],
+        "boundary_forces": [0.0] + [float(force(k, 0.0)) for k in range(1, m)] + [float(load)],
+        "shear_at_ends": [[float(a), float(b)] for a, b in ends],
+        "peak_shear": float(peak),
+        "adherend_stresses": [[float(a), float(b)] for a, b in stresses],
+    }
+    if "shear_strength" in case["adhesive"]:
+        answer["elastic_limit_load"] = float(abs(load) * case["adhesive"]["shear_strength"] / abs(peak))
+    if "double_lap" in case:
+        answer["double_lap_strength"] = ductile_double_lap(case)
+    return answer
+
+
+def ductile_double_lap(case: dict) -> float:
+    """The strength of a long double lap with an elastic-perfectly plastic adhesive, worked zone by zone for one bondline
+    between half the inner adherend and one outer adherend (ADR-0130). With y the adhesive's shear strain, s the distance
+    from an end of the overlap and v = dy/ds: v' = k tau(y), k = (1 / eta)(1 / Sa + 1 / Sb).
+    1. Far inside a long overlap the strain dies away, so in the elastic zone y = ye exp(-lam s) and, where that zone
+       starts, v = -lam ye, with lam^2 = k G.
+    2. Across the plastic zone tau = tau_p, so v^2 rises by 2 k tau_p for each unit of strain: at the end of the overlap,
+       where the strain is ye + yp, v^2 = (lam ye)^2 + 2 k tau_p yp.
+    3. At the end where adherend a carries the whole load T and adherend b none, v = -T / (eta Sa), which gives T.
+    The weaker of the two ends governs, and the joint has two bondlines."""
+    g, eta = case["adhesive"]["shear_modulus"], case["adhesive"]["thickness"]
+    tau_p, plastic = case["adhesive"]["shear_strength"], case["adhesive"].get("plastic_strain", 0.0)
+    lap = case["double_lap"]
+    half_inner, outer = lap["inner_modulus"] * lap["inner_thickness"] / 2, lap["outer_modulus"] * lap["outer_thickness"]
+    k = (1 / half_inner + 1 / outer) / eta
+    elastic = tau_p / g
+    slope = np.sqrt(k * g * elastic**2 + 2 * k * tau_p * plastic)
+    return float(2 * min(eta * half_inner * slope, eta * outer * slope))
+
+
+LAP_CASES = {
+    "constructed-flush-three-step-repair": stepped_lap,
+    "constructed-single-step-lap-and-double-lap": stepped_lap,
+}

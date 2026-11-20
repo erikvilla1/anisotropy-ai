@@ -7,6 +7,8 @@ import { join } from "node:path";
 import type { Fields, GeneralAnswer, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
 import { ASKING, asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
 import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
+import { modelFileAnswer } from "../../lib/model-file";
+import { MODEL_FILE_LABELS } from "../../lib/studio-api";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
 import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
 import { summaryAnswer } from "../../lib/result-summary";
@@ -100,6 +102,8 @@ export type Question = {
   picked?: number;
   /** The step the chat's open question asks ("name" for "Who is running it?"). */
   asking?: string;
+  /** The Ansys file is offered to whoever asks, as to a founder's sign-in (ADR-0129); a customer's view without it. */
+  ansys?: boolean;
   /** Who answers with a model reading messages, as on the hosted site. */
   route: AnyRoute;
   /** Who answers with no model, when that is pinned; otherwise the same route, or for a model's route the setup's patterns or "unread". */
@@ -155,7 +159,7 @@ const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported(
 
 /** The page a question is asked on: the setup, the results shown and the chat's state, with or without a model reading. */
 export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<string, unknown> | null; state: ChatState; past: boolean; imported: boolean;
-  picked: number | null };
+  picked: number | null; ansys: boolean };
 
 export function scene(question: Question, modelReads: boolean): Scene {
   const example = exampleForm("2026-11-19");
@@ -165,6 +169,7 @@ export function scene(question: Question, modelReads: boolean): Scene {
   const picked = question.picked !== undefined && fields ? fields.mesh.element_labels.findIndex((l) => l.split(".").pop() === String(question.picked)) : -1;
   return {
     form, fields, facts: factsOf(results?.explanation) ?? null, past: question.page === "past", imported: question.page === "imported", picked: picked >= 0 ? picked : null,
+    ansys: question.ansys === true,
     state: {
       form, readOnly: question.page === "imported" || question.page === "past", results: !!fields, facts: !!results?.facts, api: true, modelReads,
       onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: (question.asking as ChatState["step"]) ?? null,
@@ -212,6 +217,10 @@ function valueOnly(s: Scene, question: ResultQuestion): Said {
 export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
   switch (routed.route) {
     case "start-over": return said("said", "A new coupon");
+    case "model-file": { // as answerModelFile in coupon-chat.tsx: fixed words, and one button per file offered
+      const answer = modelFileAnswer(routed.program, { ansys: s.ansys, readOnly: s.state.readOnly });
+      return said("model-file", answer.title, [...answer.lines, ...answer.offers.map((program) => MODEL_FILE_LABELS[program])], { offers: answer.offers, program: routed.program });
+    }
     case "term": {
       if (routed.term.ofModel) return said("term", routed.term.term.id === "load" ? "Loads" : "Boundary conditions", [], { term: routed.term.term.id });
       const lines = termLines(routed.term);

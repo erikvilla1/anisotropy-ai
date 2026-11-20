@@ -1,0 +1,36 @@
+title = "Analytical check: one step between unlike adherends, and a long double lap with a ductile adhesive"
+source = "Constructed analytical check, not a printed problem and not a design: a lap of one step, 1 in long, between a 0.040 in adherend of 10 Msi and a 0.063 in adherend of 16 Msi, bonded by a 0.005 in layer; and a long double lap of the same adhesive with a plastic shear strain of 0.5, between a 0.125 in inner adherend and two 0.040 in outer ones; round values of our own. The closed forms are validation/closed_forms.py `stepped_lap` (for one step it is Volkersen's solution for unlike adherends) and `ductile_double_lap` (the elastic-perfectly plastic adhesive worked zone by zone, which gives Hart-Smith's strength of a long double lap, NASA CR-112235, 1973)."
+units = "psi"
+
+[adhesive]
+shear_modulus = 60000.0
+thickness = 0.005
+shear_strength = 5000.0
+plastic_strain = 0.5
+
+[[steps]]
+length = 1.0
+outer_thickness = 0.040
+outer_modulus = 10.0e6
+inner_thickness = 0.063
+inner_modulus = 16.0e6
+
+[applied]
+load = 1000.0
+
+[double_lap]
+inner_thickness = 0.125
+inner_modulus = 16.0e6
+outer_thickness = 0.040
+outer_modulus = 10.0e6
+
+[expected]
+tolerance = 1e-9
+lambda_length = [6.4733887497]
+shared_forces = [284.090909091]
+boundary_forces = [0.0, 1000.0]
+shear_at_ends = [[1853.35045209, 4640.05883513]]
+peak_shear = 4640.05883513
+adherend_stresses = [[25000.0, 15873.015873]]
+elastic_limit_load = 1077.57254329
+double_lap_strength = 7788.8809637

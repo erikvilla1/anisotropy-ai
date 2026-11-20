@@ -17,6 +17,7 @@ mesh = [
 
 [dependency-groups]
 dev = [
+    "mapdl-archive>=0.4.2",
     "matplotlib>=3.11.2",
     "pytest>=8",
 ]

@@ -9,6 +9,8 @@ import { readIntent } from "./work-intent";
 import { applyMessage, isSwitchRequest, unitsNamed, type ChatStep } from "./studio-chat";
 import { unitsOf, type StudioForm } from "./studio-form";
 import { namesPlateEdit } from "./studio-plate";
+import { modelFileAsked } from "./model-file";
+import type { ModelProgram } from "./studio-api";
 
 /** Who answers a message in the coupon chat (ADR-0121): the page's own readers in a fixed order, then a model where one reads, then the
  * setup's patterns. `components/studio/coupon-chat.tsx` sends every message through `routeMessage` and answers by the route it returns, so
@@ -45,7 +47,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
-export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
+export const ROUTES = ["start-over", "model-file", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
   "ready", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 /** What the coupon chat opens when asked for by name (ADR-0124): another section, or the wing's page under FEA (ADR-0118 amendment 1). */
@@ -53,6 +55,7 @@ export type SectionAsked = "laminate" | "cad" | "wing";
 
 export type ChatRoute =
   | { route: "start-over" } // "start over": a blank coupon
+  | { route: "model-file"; program: ModelProgram | null } // the model as a file for the engineer's own program, by the same buttons as the menu (ADR-0129)
   | { route: "term"; term: TermQuestion } // what an Abaqus word means, or this model's boundary conditions and loads (ADR-0110)
   | { route: "about"; topic: AboutTopic } // who the assistant is, the units, what is offered: fixed words (ADR-0121 amendment 2)
   | { route: "working" } // the formula or the proof behind the answer (ADR-0103)
@@ -133,6 +136,10 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   const text = spelled(typed);
   const edits = () => applyMessage(s.form, text).understood.length > 0;
   if (!s.readOnly && /^(start over|reset|new coupon|restart)\b/i.test(text)) return { route: "start-over" };
+  // the model as a file for the engineer's own program ("download the Ansys model", "export to Abaqus"): the menu's own buttons, before
+  // anything reads a program's name as a question about another program (ADR-0129)
+  const file = modelFileAsked(text);
+  if (file) return { route: "model-file", program: file.program };
   // what an Abaqus word means, or this model's own boundary conditions and loads: fixed words, no model, with or without a result (ADR-0110)
   const term = termAsked(text);
   if (term) return { route: "term", term };
