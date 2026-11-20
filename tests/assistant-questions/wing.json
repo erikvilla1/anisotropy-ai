@@ -1,9 +1,9 @@
 {
   "feature": "wing",
   "title": "Designing and checking a composite wing box",
-  "records": ["ADR-0115", "ADR-0118"],
-  "watches": [],
-  "waiting": "The wing's chat is not built yet: the wing page and its check are in draft PR #244, and a chat that edits a wing is a later step. These are the questions it must answer when it lands.",
+  "records": ["ADR-0115", "ADR-0118", "ADR-0123", "ADR-0125", "ADR-0126", "ADR-0127"],
+  "watches": ["engine/docs/references/design-rules.md", "engine/docs/references/test-methods.md", "engine/docs/references/allowables.md"],
+  "waiting": "The wing's chat is not built yet: the wing page and its check are in draft PR #244, and a chat that edits a wing is a later step. These are the questions it must answer when it lands. The reference pages it will search are built (ADR-0127), and the section each question about a rule, a test or an allowable finds first is pinned in api/tests/test_theory.py.",
   "questions": [
     {"ask": "Add 2 0° plies to the spar caps from the root to 40% span", "kind": "change", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Proposes two 0° plies on both spar caps from 0 to 40% span for the engineer to tick; names the ply drop at 40% span and its ramp ratio; says whether the caps still meet the 10% rule and the limit on consecutive plies of one angle; writes no number that is not the wing's or the rule's"}, "source": "the founder, 2026-11-19"},
     {"ask": "what allowables are you using for the spar caps?", "kind": "what-is", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Names the material, the dataset and whether the strengths are mean or B-basis values, with the source"}},

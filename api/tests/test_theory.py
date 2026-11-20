@@ -3,7 +3,13 @@ words the pages do not hold."""
 
 from __future__ import annotations
 
-from anisotropy_api.theory import MAX_SECTION_CHARS, SOURCES, find, of_subject, sections, split, words_of
+import json
+import re
+from pathlib import Path
+
+from anisotropy_api.theory import MAX_SECTION_CHARS, SOURCES, find, of_subject, sections, split, wing_sections, words_of
+
+REPO = Path(__file__).resolve().parents[2]
 
 PAGE = """# A page
 
@@ -90,8 +96,68 @@ def test_the_wings_sections_are_read_but_searched_only_by_their_subject():
     # ADR-0102 amendment 1: no chat answers a question about a wing yet, so its sections are kept out of what a question is matched against
     wing = of_subject("wing")
     assert {s.id for s in wing} >= {"engine:13-wing", "engine:15-spar-caps-and-layups-that-change-along-the-span", "fea:10-the-wing-in-calculix"}
-    assert all(s.subject == "wing" for s in wing) and set(wing) | set(of_subject()) == set(sections())
+    assert all(s.subject == "wing" for s in wing) and set(wing) | set(of_subject("references")) | set(of_subject()) == set(sections())
     assert "engine:14-design-rules-of-a-stack" in {s.id for s in of_subject()}  # a laminate's rules are not the wing's alone
     question = "why do spar caps carry the bending?"
     assert all(s.subject == "" for s, _ in find(question, limit=10))
     assert find(question, among=wing)[0][0].id == "engine:15-spar-caps-and-layups-that-change-along-the-span"
+
+
+def test_a_sections_other_words_find_it_as_its_titles_do_and_are_never_shown():
+    page = "# A page\n\n## Ply drops\n\n<!-- also: taper, run-out -->\n\nWhere plies end along the span.\n\n## Balance\n\nPlus and minus pairs.\n"
+    drops, balance = split("page", "A page", page, "references")
+    assert drops.also == "taper, run-out" and "also" not in drops.text and "taper" not in drops.shown and balance.also == ""
+    assert drops.subject == balance.subject == "references"
+    assert [s.id for s, _ in find("what taper ratio?", (drops, balance))] == ["page:ply-drops"]
+    assert find("what run-out does it need?", (drops, balance))[0][0] is drops
+
+
+# The wing's questions about rules, tests and allowables (tests/assistant-questions/wing.json, waiting for the wing's chat) and the
+# reference section each must find first among what the wing's chat searches (ADR-0127). The value in the answer is the wing's or the
+# record's; the section only explains it.
+WING_ASKS = {
+    "what ply drop ratio should I use?": "rules:ply-drops-how-long-the-run-out-is",
+    "how many 0° plies can I stack together?": "rules:plies-of-one-angle-in-a-row",
+    "does my skin meet the 10% rule?": "rules:the-10-rule",
+    "which ASTM test gives the compression allowable?": "tests:compression-along-the-fibres",
+    "what allowables are you using for the spar caps?": "allowables:which-strengths-a-wing-used",
+}
+# Other words for the same subjects, as engineers type them: each finds its section first.
+OTHER_WORDS = {
+    "what taper should a ply drop-off have": "rules:ply-drops",
+    "how many plies can I drop at one place": "rules:ply-drops-how-many-plies-end-at-one-place",
+    "max consecutive same angle plies": "rules:plies-of-one-angle-in-a-row",
+    "what is the ten percent rule": "rules:the-10-rule",
+    "should I use A-basis or B-basis": "allowables:which-basis-to-use-where",
+    "what does B-basis mean": "allowables:mean-b-basis-and-a-basis",
+    "what is a B-estimate": "allowables:b-basis-values-and-b-estimates",
+    "hot wet knockdown": "allowables:environment-hot-wet-and-cold",
+    "how is the margin of safety calculated": "allowables:design-values-and-the-margin-of-safety",
+    "what is CAI": "tests:impact-and-compression-after-impact-astm-d7136-d7136m-astm-d7137-d7137m",
+    "what test gives the shear strength": "tests:in-plane-shear-astm-d3518-d3518m-astm-d5379-d5379m",
+}
+
+
+def test_the_reference_pages_are_searched_only_with_the_wings_sections_and_answer_the_wings_questions_first():
+    references = of_subject("references")
+    assert {s.source for s in references} == {"rules", "tests", "allowables"} and len(references) >= 20
+    assert set(wing_sections()) == set(references) | set(of_subject("wing"))
+    asked = {q["ask"] for q in json.loads((REPO / "tests" / "assistant-questions" / "wing.json").read_text(encoding="utf-8"))["questions"]}
+    assert set(WING_ASKS) <= asked  # the bank's own words
+    for question, section in {**WING_ASKS, **OTHER_WORDS}.items():
+        found = [s.id for s, _ in find(question, among=wing_sections(), limit=3)]
+        assert found[0] == section, (question, found)
+        assert all(s.subject == "" for s, _ in find(question, limit=10)), question  # a coupon's chat never finds them
+
+
+def test_the_reference_pages_cite_their_sources_name_no_program_and_hold_no_value_of_a_material():
+    library = json.loads((REPO / "engine" / "src" / "anisotropy_engine" / "data" / "material-library.json").read_text(encoding="utf-8"))
+    values = {f"{p['sourceValue']:g}" for d in library["datasets"] for p in d["properties"] if p.get("sourceValue") and p["sourceValue"] >= 1}
+    for section in of_subject("references"):
+        assert "Sources: " in section.text, section.title  # each section names where it comes from
+        assert section.also, section.title  # every section names the other words it is asked by
+        assert not any(name in section.text for name in ("Abaqus", "CalculiX", "PrePoMax", "Ansys", "Claude", "`")), section.title
+        cited = re.sub(r"\b(?:sections?|equation|paragraph|Table|definition)\s+\S+", "", section.text)  # where in a source, not a value
+        numbers = set(re.findall(r"\d+\.\d+", cited))
+        assert not numbers & values, (section.title, numbers & values)  # a value is read from the record, never from a page
+
