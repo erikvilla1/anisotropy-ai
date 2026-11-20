@@ -1,0 +1,60 @@
+# The site's and the workspace's browser specs in Firefox, once a week on main (ADR-0114 amendment 3). Every pull request runs them in
+# Chromium and in WebKit (tests.yml); Firefox moved here because it has a small share of visitors and has not yet found a fault in the
+# product that the other two missed. A failure here mails whoever last changed the schedule below and fixes go in a pull request as usual.
+# `workflow_dispatch` runs it by hand from the Actions tab; a pull request that changes this file or the Playwright setup runs it too,
+# so a change to it is seen working before it merges.
+name: Firefox weekly
+
+on:
+  schedule:
+    # Sundays at 10:17 UTC, about 2 AM in California. Off the hour, when GitHub's scheduled runs queue the longest.
+    - cron: "17 10 * * 0"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/firefox-weekly.yml
+      - playwright.config.ts
+      - playwright.site.config.ts
+
+# The actions are pinned to commits (ADR-0114); no job here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: firefox-weekly-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  firefox:
+    # One job per suite (ADR-0114 amendment 2), so the two run side by side. Firefox retries a failed test once on CI (playwright.config.ts).
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [site, studio]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Playwright's own image, as in tests.yml (ADR-0114 amendment 2); bump its tag and digest with @playwright/test.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --user 1001 --ipc=host
+    env:
+      NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
+      BROWSER: firefox
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # On a virtual display: Firefox runs with its window, as without one it gives no WebGL (playwright.config.ts).
+      # The workspace's specs play the API from tests/fixtures/studio.
+      - name: The ${{ matrix.suite }} specs
+        run: xvfb-run -a npm run test:${{ matrix.suite }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: firefox-${{ matrix.suite }}-results
+          path: test-results/
+          retention-days: 7
