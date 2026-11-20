@@ -1876,7 +1876,7 @@ def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> 
 
 def _ansys_model(request: Request) -> bool:
     """Whether the model may be downloaded as an Ansys file by this request (ADR-0129): where the import is, the machine's switch or a
-    founder's sign-in, because the file has not been run in Ansys yet. The founder's word opens it to everyone, here."""
+    founder's sign-in, because the founder has not opened it to everyone yet (one coupon's file has run in Ansys, ADR-0129 amendment 2). His word opens it, here."""
     return _imports(request)
 
 

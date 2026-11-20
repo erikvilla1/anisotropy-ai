@@ -1969,7 +1969,7 @@ test("the model downloads as a file for the engineer's own program, from the men
   expect(asked.map((a) => a.program)).toEqual(["ansys", "abaqus"]);
   await say("donwload ansys modle"); // typed fast
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
-  await expect(page.getByTestId("chat-model-file").last()).toContainText("has not been run in Ansys yet");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
   await say("export the model"); // no program named: every file offered
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus ansys");
   // a setup the package cannot write is said in its own words, and nothing is saved
