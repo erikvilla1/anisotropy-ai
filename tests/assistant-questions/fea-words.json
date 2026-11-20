@@ -1,0 +1,24 @@
+{
+  "feature": "fea-words",
+  "title": "Another program's words: boundary conditions, loads, steps and their names",
+  "records": ["ADR-0110", "ADR-0111"],
+  "watches": ["lib/fea-terms.ts", "lib/applied.ts", "lib/model-tree.ts"],
+  "questions": [
+    {"ask": "what is encastre", "kind": "what-is", "style": "jargon", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Encastre", "term": "encastre"}},
+    {"ask": "what does XSYMM mean", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "heading": "XSYMM", "term": "symmetry"}},
+    {"ask": "what is U2", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "heading": "U2", "term": "degree-of-freedom"}},
+    {"ask": "what is CF2", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "heading": "CF2", "term": "concentrated-force"}},
+    {"ask": "what is a mesh seed", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "term": "seed"}},
+    {"ask": "what is a remote displacement", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "term": "boundary-condition"}},
+    {"ask": "what is a fixed support in ansys", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term", "term": "encastre", "heading": "Fixed support"}, "gap": "8: an Ansys word is answered under the Abaqus heading"},
+    {"ask": "what are the boundary conditions", "kind": "what-is", "style": "plain", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Boundary conditions", "term": "boundary-condition"}},
+    {"ask": "what loads are applied", "kind": "what-is", "style": "plain", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Loads", "term": "load"}, "gap": "10: 'what loads are applied' is not read as the model's own loads"},
+    {"ask": "add a boundary condition", "kind": "change", "style": "plain", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Set by the test", "term": "boundary-condition"}},
+    {"ask": "apply a pressure of 2 MPa on the top face", "kind": "change", "style": "units", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Set by the test", "term": "pressure"}},
+    {"ask": "partition the coupon", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Already partitioned", "term": "partition"}},
+    {"ask": "create a step", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "One static step", "term": "step"}},
+    {"ask": "add a contact between the tabs", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Not offered yet", "term": "interaction"}},
+    {"ask": "what is a reference point", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term"}, "gap": "10: a common pre-processor word is not in the glossary"},
+    {"ask": "whats a shell element", "kind": "what-is", "style": "typo", "page": "setup", "route": "term", "answer": {"kind": "term"}, "gap": "10: what a shell element is, is not in the glossary"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "feature": "plate",
+  "title": "Holding and loading a plate by talking",
+  "records": ["ADR-0101", "ADR-0101 amendment 2", "ADR-0110"],
+  "watches": ["lib/studio-plate.ts", "api/src/anisotropy_api/plate_proposals.py", "lib/proposals.ts"],
+  "questions": [
+    {"ask": "fix the left edge", "kind": "change", "style": "plain", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["left edge"]}}},
+    {"ask": "XSYMM on the left edge", "kind": "change", "style": "jargon", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["left edge"]}}},
+    {"ask": "clamp the bottom edge", "kind": "change", "style": "plain", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["bottom edge"]}}},
+    {"ask": "hold the bottom edge in y only", "kind": "change", "style": "loose", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["bottom edge"]}, "judge": "Holds the bottom edge along y alone"}},
+    {"ask": "pin the hole", "kind": "change", "style": "terse", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["hole"]}}},
+    {"ask": "fix the lefft edge", "kind": "change", "style": "typo", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["left edge"]}}},
+    {"ask": "10 kN tension on the right edge", "kind": "change", "style": "units", "page": "plate", "route": "model", "answer": {"never": ["test: unnotched tension"]}, "live": {"plate": {"loads": ["right edge"]}}, "gap": "offline 1: with no model, a load on a plate's edge switches the test to tension"},
+    {"ask": "500 N along x on the top edge", "kind": "change", "style": "units", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"loads": ["top edge"]}}},
+    {"ask": "apply 2 MPa pressure on the face", "kind": "change", "style": "units", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"loads": ["face"]}}},
+    {"ask": "encastre the left edge and CF2 = 500 N on the right edge", "kind": "change", "style": "jargon", "page": "plate", "route": "model", "answer": {"never": ["test:"]}, "live": {"plate": {"supports": ["left edge"], "loads": ["right edge"]}}},
+    {"ask": "add a boundary condition", "kind": "change", "style": "plain", "page": "plate", "route": "model", "offline": "setup-fixed", "answer": {"heading": "Add it on the model tree"}},
+    {"ask": "what are the boundary conditions", "kind": "what-is", "style": "plain", "page": "plate", "route": "term", "answer": {"kind": "term", "term": "boundary-condition"}}
+  ]
+}
