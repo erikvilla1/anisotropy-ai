@@ -5,9 +5,10 @@ feature by feature, what holds, what is weak and what fails, and what changed si
 
 What keeps it cheap: an answer is stored under the exact request, so a run pays only for requests whose question, instructions, schema
 or model changed since the last; the rest go in one batch at half price, with the instructions cached; the judge is the small model;
-and the run stops before it would pass its budget. `--dry-run` counts the requests still to pay for and sends nothing.
+and the run stops before it would pass its budget. `--now` sends everything at once at full price instead, for a report in minutes
+rather than when the batch ends. `--dry-run` counts the requests still to pay for and sends nothing.
 
-    uv run --project api python scripts/assistant-live.py [--features coupon-setup,result-values] [--budget 3] [--dry-run]
+    uv run --project api python scripts/assistant-live.py [--features coupon-setup,result-values] [--budget 3] [--now] [--dry-run]
 
 It needs ANTHROPIC_API_KEY. The GitHub workflow "Assistant check" runs it by hand, before a feature is merged.
 """
@@ -83,7 +84,8 @@ def judge_request(model: str, item: dict[str, Any]) -> dict[str, Any]:
               "and what the question's author expects of a good answer. Grade what the engineer sees, not the reasoning behind it. "
               "'holds' meets every criterion that applies and the expectation; 'weak' meets the expectation but misses a criterion in a "
               "small way; 'fails' misses the expectation or a criterion in a way the engineer would notice. Name the criteria missed by "
-              "number, and say why in one short sentence.\n\n" + criteria())
+              "number, and say why in one short sentence. The product is called Anisotropy: its own name is not a tool, vendor or model name "
+              "under criterion 8.\n\n" + criteria())
     return {"model": model, "max_tokens": 2000, "system": system, "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
             "messages": [{"role": "user", "content": json.dumps(item, ensure_ascii=False, indent=1)}]}
 
@@ -177,7 +179,8 @@ def report(rows: list[dict[str, Any]], before: dict[str, str], header: list[str]
         lines += [f"### {feature}", ""]
         for r in bad:
             known = f" Known gap: {r['gap']}." if r.get("gap") else ""
-            lines.append(f"- **{r['verdict']}**: “{r['ask']}” ({r['where']}). {r['why']}.{known} Shown: {r['shown']}")
+            aside = f" Set aside by the API: {r['aside']}." if r.get("aside") else ""
+            lines.append(f"- **{r['verdict']}**: “{r['ask']}” ({r['where']}). {r['why']}.{known}{aside} Shown: {r['shown']}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -188,7 +191,7 @@ def main() -> int:
     parser.add_argument("--budget", type=float, default=3.0, help="the most this run may spend, in dollars")
     parser.add_argument("--store", type=Path, default=ROOT / ".local" / "assistant-live", help="where answers are kept between runs")
     parser.add_argument("--report", type=Path, default=None, help="where the report goes (default: in the store's folder)")
-    parser.add_argument("--now", action="store_true", help="send one by one at full price rather than in a batch")
+    parser.add_argument("--now", action="store_true", help="send everything at once at full price rather than in a half-price batch: done in minutes, about twice the cost")
     parser.add_argument("--no-mcp", action="store_true", help="leave out the questions an MCP client answers")
     parser.add_argument("--dry-run", action="store_true", help="count the requests still to pay for and send nothing")
     args = parser.parse_args()
@@ -229,14 +232,19 @@ def main() -> int:
             if (q["live"] or {}).get("judge") or said["kind"] == "why":
                 item = {"question": q["ask"], "page": q["page"], "the chat showed": {"heading": said["heading"], "lines": said["lines"]},
                         "a good answer": (q["live"] or {}).get("judge") or "Answers why in one to three short sentences from the result's facts"}
-            items.append((q, s, "chat", f"{q['page']} page", " · ".join([said["heading"], *said["lines"]])[:300], s["faults"], item))
+            # an answer the API's guard set aside shows no prose of the model's; its reason says why, which the page never shows
+            aside = "; ".join(r["response"]["reason"] for r in readings[s["id"]] if (r.get("response") or {}).get("withheld") and r["response"].get("reason"))
+            items.append((q, s, "chat", f"{q['page']} page", " · ".join([said["heading"], *said["lines"]])[:300], s["faults"], item, aside))
         for m in mcp_out["results"]:
             q = by_id[m["id"]]
             final = m["final"] or ""
-            item = {"question": q["ask"], "where": "an engineer's own assistant, on our MCP server's tools", "tools it called": m["tools"],
+            # what the tools returned goes with them: a number the answer quotes from there is the engine's, not typed (criterion 4)
+            item = {"question": q["ask"], "where": "an engineer's own assistant, on our MCP server's tools",
+                    **({"what the engineer told it before the question": m["before"]} if m.get("before") else {}),
+                    **({"what its tools returned before the question": m["held"]} if m.get("held") else {}), "tools it called": m["tools"],
                     "its answer": final, "a good answer": (q["live"] or {}).get("judge") or f"Answers from what {q['mcp']['tool']} returned, its numbers as given"}
-            items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item))
-        for _, _, _, _, _, faults, item in items:
+            items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item, ""))
+        for _, _, _, _, _, faults, item, _ in items:
             if item is not None and not faults:
                 request = judge_request(JUDGE_MODEL, item)
                 to_judge[key_of(request)] = request
@@ -246,7 +254,7 @@ def main() -> int:
         return 3
 
     rows = []
-    for q, _, side, where, shown_text, faults, item in items:
+    for q, _, side, where, shown_text, faults, item, aside in items:
         graded = None
         if item is not None and not faults:
             answer = store.get(key_of(judge_request(JUDGE_MODEL, item)))
@@ -257,7 +265,7 @@ def main() -> int:
                 graded = {"verdict": "weak", "criteria": [], "why": "the judge gave no grade in this run"}
         verdict, why = verdict_of(faults, graded)
         rows.append({"key": f"{q['id']}:{side}", "feature": q["feature"], "ask": q["ask"], "where": where, "verdict": verdict, "why": why.rstrip("."),
-                     "shown": shown_text, "gap": q.get("gap")})
+                     "shown": shown_text, "gap": q.get("gap"), "aside": aside})
     summary = args.store / "summary.json"
     before = json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else {}
     header = [f"# Assistant check with a real model, {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC", "",

@@ -51,7 +51,8 @@ const SUBSCRIPTS: Record<string, string> = { "₁": "1", "₂": "2" };
 const ELEMENT = /\b(?:element|elem|el)\b\.?\s*(?:#|no\.?|number)?\s*(\d{1,9})\b/;
 const PICKED = /\b(?:here|this (?:element|spot|place|point|one)|that element|(?:the )?(?:picked|selected|clicked|highlighted) (?:element|one))\b/;
 const PLY = /\b(?:ply|layer|lamina)\b\.?\s*(?:#|no\.?|number)?\s*(\d{1,4})\b/;
-const STRESS_WORD = /\bstress(?:es)?\b/;
+// "strss in ply 3" is read as "stress in ply 3": the ways it is mistyped (ADR-0099 amendment 4)
+const STRESS_WORD = /\b(?:stress(?:es)?|stresss|strss|stres|stess|strees|sress|stresess)\b/;
 // "strain gauge", "strain device" and "strain length" are rows of the setup, not questions about a result
 const STRAIN_WORD = /\bstrains?\b(?!\s+(?:gau?ge|device|length))/;
 /** A component named by its code or symbol: it stands for itself, whatever else the message says. */
@@ -98,6 +99,8 @@ function columnsOf(text: string): string[] {
   // "Mises stress" names Mises alone; a plain "stress" is the ply's own three components
   if (STRESS_WORD.test(text.replace(/\b(?:mis+es|tresca|principal)\s+stress(?:es)?\b/g, " "))) inWords(["S11", "S22", "S12"]);
   if (STRAIN_WORD.test(text)) inWords(["E11", "E22", "E12"]);
+  // "the max shear", with no stress or strain named, is the in-plane shear stress (ADR-0099 amendment 4)
+  if (!columns.size && SHEAR.test(text)) columns.add("S12");
   return PROBE_COLUMNS.filter((c) => columns.has(c));
 }
 
@@ -386,7 +389,10 @@ export function extremeLines(block: ResultExtremes["blocks"][number], region: st
   const row = block.rows[block.best];
   const words = extremeWords(block.column, block.sense);
   const tied = block.tied.length ? [`tied with ${block.tied.length > 1 ? "plies" : "ply"} ${block.tied.join(", ")}`] : [];
-  return { headline: `${words.charAt(0).toUpperCase()}${words.slice(1)}: ${print(row.value)}${unit ? ` ${unit}` : ""}`,
+  // "the most tension" read as the largest σ₁ of a ply in compression everywhere: the largest is the least compression, and is said so
+  const signed = !UNSIGNED.has(block.column) && RESULT_COLUMNS[block.column]?.stress && !COMPARISON_ONLY.has(block.column);
+  const all = signed && block.sense === "largest" && row.value < 0 ? ", all in compression" : signed && block.sense === "smallest" && row.value > 0 ? ", all in tension" : "";
+  return { headline: `${words.charAt(0).toUpperCase()}${words.slice(1)}: ${print(row.value)}${unit ? ` ${unit}` : ""}${all}`,
     facts: [plyLabel(row), `element ${row.label}`, region.replace(/^the /, ""), ...tied] };
 }
 
@@ -398,4 +404,31 @@ export function valueLines(answer: ResultValues, unit: string, print: (value: nu
   const value = row.values[0];
   return { headline: value === null ? `No ${symbol} written here` : `${symbol} = ${print(value)}${unit ? ` ${unit}` : ""}`,
     facts: [plyLabel(row), `element ${answer.label}`, ...(answer.place === "gauge centre" ? ["gauge centre"] : [])] };
+}
+
+const THRESHOLD = /\b(above|over|more than|greater than|higher than|bigger than|larger than|exceed(?:s|ing)?|beyond|below|under|less than|lower than|smaller than)\s+(-?\d+(?:\.\d+)?)\s*([a-z]+)?/i;
+const YES_NO = /^\s*(?:is|are|does|do|did|will|would|was|were|has|have)\b/i;
+
+/** A yes-or-no question of a value against a number ("is ply 2 above 1000 MPa?"), answered from the one value the answer gives:
+ * "Yes, 1203 MPa is above 1000 MPa" (ADR-0099 amendment 4). Null when the message asks no such thing, the answer gives more than one
+ * value, or the number is in a unit other than the value's, since the page converts nothing. A largest magnitude, and a shear, is compared
+ * by its size; any other value with its sign, so −364.8 MPa is below 100 MPa. */
+export function thresholdVerdict(text: string, answer: ResultAnswer, unit: string, print: (value: number | null) => string): string | null {
+  const asked = THRESHOLD.exec(text);
+  if (!asked || !YES_NO.test(text)) return null;
+  if (asked[3] && /^(?:mpa|gpa|kpa|pa|psi|ksi|msi|n|kn|lbf|mm|in|m)$/i.test(asked[3]) && asked[3].toLowerCase() !== unit.toLowerCase()) return null;
+  let value: number | null = null;
+  if (answer.kind === "values" && answer.rows.length === 1 && answer.columns.length === 1) {
+    value = answer.rows[0].values[0];
+    if (value !== null && UNSIGNED.has(answer.columns[0])) value = Math.abs(value); // a shear's sign is its direction, not its size
+  } else if (answer.kind === "extremes" && answer.blocks.length === 1) {
+    const block = answer.blocks[0];
+    value = block.sense === "magnitude" || UNSIGNED.has(block.column) ? Math.abs(block.rows[block.best].value) : block.rows[block.best].value;
+  }
+  if (value === null) return null;
+  const limit = Number(asked[2]);
+  const above = !/^(?:below|under|less|lower|smaller)/i.test(asked[1]);
+  const holds = above ? value > limit : value < limit;
+  const u = unit ? ` ${unit}` : "";
+  return `${holds ? "Yes" : "No"}, ${print(value)}${u} is ${holds ? "" : "not "}${above ? "above" : "below"} ${asked[2]}${u}`;
 }

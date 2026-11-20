@@ -55,9 +55,22 @@ def test_an_answer_with_no_number_of_its_own_stands_with_the_sections_it_names()
     assert asked.prose and not asked.withheld  # a number the engineer wrote may be said back
 
 
+@pytest.mark.parametrize("answer", [
+    "In a tension coupon the 90-degree ply usually cracks first, across its fibres.",
+    "The 0° plies carry most of the load and the ±45° plies the shear.",
+    "A -45 degree ply mirrors a 45 degree one.",
+])
+def test_a_ply_named_by_its_angle_stands_in_an_answer_with_no_result(answer):
+    # "explain first ply failure" was set aside on the fourth real run (2026-11-20) for naming the 90-degree ply: no value, a kind of ply
+    kept = general_guard(raw(answer), "explain first ply failure", FOUND, [])
+    assert kept.prose and not kept.withheld
+
+
 @pytest.mark.parametrize("answer, offending", [
     ("A shell element has 4 nodes and 5 degrees of freedom at each.", "4"),  # a number of the theory pages is said in words, never copied
     ("Refine until the answer moves by less than 2 %.", "2"),
+    ("The 90-degree ply fails at 60 MPa across its fibres.", "60"),  # the ply's angle is read past, a value is not
+    ("Turn the fibres 37 degrees off the load.", "37"),  # only the angles a layup is written in
 ])
 def test_an_answer_with_a_number_not_in_the_question_is_set_aside(answer, offending):
     kept = general_guard(raw(answer), QUESTION, FOUND, ["coupon"])

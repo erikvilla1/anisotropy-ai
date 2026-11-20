@@ -26,8 +26,11 @@
     {"ask": "open the laminate calculator", "kind": "command", "style": "plain", "page": "setup", "route": "section", "answer": {"heading": "Open Laminate?", "says": ["Your coupon is saved"]}},
     {"ask": "CAD please", "kind": "command", "style": "terse", "page": "blank", "route": "section", "answer": {"heading": "Opens CAD"}},
     {"ask": "can you set up a wing analysis?", "kind": "command", "style": "plain", "page": "results", "route": "section", "answer": {"heading": "Wing analysis is not here yet", "says": ["stays a coupon test"]}},
-    {"ask": "what is the ABD matrix?", "kind": "what-is", "style": "plain", "page": "setup", "route": "model", "answer": {"never": ["Not sure what to change"]},
-      "gap": "1: a what-is question the model reads as no change gets “Not sure what to change” (cause 1 of the first real run, 2026-11-19)",
-      "live": {"judge": "Says in a line what the ABD matrix is (how a laminate's forces and moments relate to its strains and curvatures), or points to the Laminate section for it; changes no row of the coupon and opens nothing on its own"}}
+    {"ask": "what is the ABD matrix?", "kind": "what-is", "style": "plain", "page": "setup", "route": "general", "answer": {"kind": "general", "never": ["Not sure what to change"]},
+      "live": {"judge": "Says in a line what the ABD matrix is (how a laminate's forces and moments relate to its strains and curvatures), or points to the Laminate section for it; changes no row of the coupon and opens nothing on its own"}},
+    {"ask": "what does tsai-hill mean", "kind": "what-is", "style": "terse", "page": "setup", "route": "general", "answer": {"kind": "general"},
+      "live": {"judge": "Says in a line that Tsai-Hill judges a ply by its three stresses together against its strengths; writes no number; changes nothing"}},
+    {"ask": "explain first ply failure", "kind": "what-is", "style": "terse", "page": "setup", "route": "general", "answer": {"kind": "general"},
+      "live": {"judge": "Says in a line that it is the loading at which the first ply reaches a failure criterion, and that it is not the coupon's ultimate strength; changes nothing"}}
   ]
 }

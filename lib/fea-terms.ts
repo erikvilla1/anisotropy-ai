@@ -2,7 +2,9 @@
  * what Anisotropy does with it (ADR-0110, amendment 1). One term holds every program's name for the same thing, so "encastre" and
  * "fixed support", "seed" and "edge sizing", "set" and "named selection" are one answer. The assistant answers "what is a partition?"
  * or "what does a frictionless support mean?" from here: fixed words, no model, with or without a result. A request to add one ("add a
- * boundary condition") on a model whose setup fixes it is answered here too, and changes nothing.
+ * boundary condition") on a model whose setup fixes it is answered here too, and changes nothing. The words a coupon is tested and laid
+ * up by are here too, "tension coupon", "ASTM D3039", "the 10% rule": asked what one is, the chat says so and sets no test (ADR-0121
+ * amendment 2).
  *
  * Nothing here is taken from a manual: the meanings are ours, written for this product. */
 
@@ -18,6 +20,8 @@ export type FeaTerm = {
   here: string;
   /** A name that means one thing of several, said on its own: "U2 is the move along y." */
   exact?: Record<string, string>;
+  /** A word with nothing of this model's own to list, so "what is the 10% rule?" asks what it is, as "what is a 10% rule?" does. */
+  general?: boolean;
 };
 
 export const FEA_TERMS: FeaTerm[] = [
@@ -95,6 +99,15 @@ export const FEA_TERMS: FeaTerm[] = [
     means: "The force a boundary condition must take to hold the model as it is told.",
     here: "Shown with the results, at the grip that is held.",
     exact: { rf1: "RF1 is the reaction force along x.", rf2: "RF2 is the reaction force along y.", rf3: "RF3 is the reaction force along z." } },
+  { id: "tension-coupon", title: "Tension coupon", names: ["tension coupon", "tension coupons", "tensile coupon", "tensile coupons", "tension test", "tensile test", "tension specimen", "tensile specimen", "unnotched tension", "unnotched tension coupon", "unnotched tension test", "coupon", "coupons", "test coupon", "test coupons"],
+    means: "A flat strip of the laminate, gripped at both ends and pulled along its length, to measure its stiffness and the load at which it fails.",
+    here: "Here the bottom grip is held and the top grip pulled, as in the test machine. Say “tension coupon” to set one up.", general: true },
+  { id: "d3039", title: "ASTM D3039", names: ["astm d3039", "d3039", "astm d3039m", "d3039m", "astm d3039/d3039m", "d3039/d3039m", "astm d3039/d3039m-17", "d3039 standard", "the d3039 standard"],
+    means: "The ASTM test method for the tensile properties of polymer matrix composites: a straight-sided strip, usually with bonded tabs, pulled to failure.",
+    here: "Choose it under Test and the coupon takes the standard's size; without it you give your own size.", general: true },
+  { id: "ten-percent-rule", title: "The 10% rule", names: ["10% rule", "10 % rule", "10 percent rule", "ten percent rule", "10-percent rule", "ten-percent rule"],
+    means: "A layup guideline: at least 10% of the plies in each of the 0°, ±45° and 90° directions, so the laminate is not weak in any direction.",
+    here: "The setup does not check it; the layup is yours. The quasi-isotropic [45/0/-45/90]s meets it, with a quarter of the plies in each.", general: true },
 ];
 
 const plain = (text: string) => text.toLowerCase().normalize("NFC").replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
@@ -129,9 +142,9 @@ export function termAsked(text: string): TermQuestion | null {
     const found = pattern.exec(text);
     if (!found) continue;
     const phrase = plain(found[1]).replace(IN_PROGRAM, "");
-    const ofModel = !meaning && OWN.test(phrase);
     const term = termNamed(phrase.replace(OWN, "").replace(OWN, ""));
     if (!term) continue;
+    const ofModel = !meaning && OWN.test(phrase) && !term.general;
     if (ofModel && !["boundary-condition", "load"].includes(term.id)) return null;
     if (!meaning && !ofModel && /^(?:show|list)\b/i.test(text)) return null; // "show load" asks for nothing we can show
     return { term, name: plain(phrase.replace(OWN, "").replace(OWN, "")).replace(/^(?:an?|the)\s+/, ""), ofModel };

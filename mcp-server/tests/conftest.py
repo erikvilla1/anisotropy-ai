@@ -14,6 +14,7 @@ from anisotropy_mcp.server import build
 
 REPO = Path(__file__).resolve().parents[2]
 STUDIO = REPO / "tests" / "fixtures" / "studio"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SECTIONS = [{"id": "engine:5-failure", "document": "Laminate theory", "title": "5. Failure", "text": "Tsai-Hill combines the stresses of a ply."}]
 
 
@@ -44,7 +45,8 @@ class FakeApi:
                 {"material_id": "as4-3501", "name": "AS4 / 3501-6", "dataset_id": "maddocks-1995-table-6-2", "dataset": "NASA CR-199802 1995", "primary": False,
                  "rights": "open-publisher", "elastic_inputs": False}])
         if path == "/v1/materials/im7-8552":
-            return httpx.Response(200, json={"material_id": "im7-8552", "E1_pa": 162095743962.38818, "dataset_asked": request.url.params.get("dataset")})
+            dataset = request.url.params.get("dataset")  # the API's own answer for the primary dataset (api/tests/test_library_api.py keeps it so)
+            return httpx.Response(200, json={**fixture("material-im7-8552.json", FIXTURES), **({"dataset_asked": dataset} if dataset else {})})
         if path.startswith("/v1/materials/"):
             return httpx.Response(404, json={"detail": f"unknown library material {path.rsplit('/', 1)[1]!r}"})
         if path == "/v1/coupon-tests":
