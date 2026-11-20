@@ -69,10 +69,10 @@ async function playWings(page: Page, answer: (body: Sent) => { status: number; b
 test("a new wing opens on the example and shows the engine's answer, drawings and every case (ADR-0118)", async ({ page }) => {
   const sent = await playWings(page);
   await page.goto("/workspace");
-  const tiles = page.getByTestId("workspace-tiles");
-  await expect(tiles.locator("[data-workspace]")).toHaveCount(3);
-  await tiles.locator("[data-workspace=wing]").click();
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click(); // a wing is FEA work (ADR-0118 amendment 1)
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=wing]").click();
   await expect(page).toHaveURL(/\/workspace\/wing\/?$/);
+  await expect(page.locator(".ws-title span")).toHaveText("FEA · Wing analysis");
   const answer = page.getByTestId("wing-answer");
   await expect(answer.getByRole("heading", { level: 2 })).toHaveText("Passes the 34 cases run");
   await expect(answer).toContainText("Lowest margin +0.097: skin strength, upper skin, at the root, 0° ply, longitudinal compression");
@@ -223,7 +223,9 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   looks = LOOKS;
   await playWings(page);
   await page.goto("/workspace");
-  await page.getByTestId("workspace-tiles").locator("[data-workspace=wing]").click();
+  await page.getByRole("textbox", { name: "What do you want to work on?" }).fill("design a wing"); // the start box opens it (ADR-0124)
+  await page.getByRole("textbox", { name: "What do you want to work on?" }).press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/wing\/?$/);
   await expect(page.getByTestId("wing-answer")).toBeVisible();
   const history = page.getByTestId("panel-wing-history");
   await expect(history.locator(".ws-panel-note")).toHaveText("version 1"); // the wing as it started
@@ -251,10 +253,13 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   const first = page.getByTestId("workspace-projects").locator("tr[data-kind=wing]");
   await expect(first).toHaveCount(1);
   await expect(first).toContainText("First wing");
-  await expect(first).toContainText("Wing design");
+  await expect(first).toContainText("FEA · Wing analysis");
   await expect(first).toContainText("2 m half span, 0.45 m chord");
   await expect(first).toContainText("IM7 / 8552");
-  await page.getByTestId("workspace-tiles").locator("[data-workspace=wing]").click(); // a second wing starts from the example
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  await page.getByTestId("fea-start-chat").getByRole("textbox").fill("set up a wing analysis"); // the FEA assistant opens it
+  await page.getByTestId("fea-start-chat").getByRole("textbox").press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/wing\/?$/); // a second wing starts from the example, since the first holds work
   await expect(page.getByTestId("project-name")).toHaveValue("Example straight wing");
   await page.getByLabel("Half span").fill("3");
   await expect(page.getByTestId("panel-wing-history").locator(".ws-panel-note")).toHaveText("version 2");

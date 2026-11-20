@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
+import { couponProjects, isUuid, newFeaProject, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
+import type { FeaAnalysis } from "@/lib/workspaces";
 import { takeRunToOpen } from "@/lib/run-history";
 import { offeredHere, type Offered, type TowAnswer } from "@/lib/studio-api";
 import type { StudioForm } from "@/lib/studio-form";
@@ -37,6 +38,8 @@ export type ProjectContextValue = {
   setForm(next: StudioForm | ((form: StudioForm) => StudioForm)): void;
   setPlate(next: PlateLists): void;
   setSpecimens(next: TowSpecimenRow[]): void;
+  /** Sets the FEA project up for a kind of work (ADR-0124): a blank project becomes a coupon in place, its name and history kept. */
+  setAnalysis(analysis: FeaAnalysis): void;
   setTowAnswer(next: TowAnswer | null): void;
   rename(name: string): void;
   replace(project: CouponProject): void;
@@ -91,9 +94,22 @@ export function tabStorage(): Storage | null {
   try { return typeof window === "undefined" ? null : window.sessionStorage; } catch { return null; }
 }
 
+/** The kind of work the address asks the FEA page to be set up for (ADR-0124): `?for=coupon`, or a library material sent from its page
+ * (`?material=`), which only a coupon takes. None otherwise, and on the server, which has no address. */
+function askedFor(): FeaAnalysis | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("for") === "coupon" || params.has("material") ? "coupon" : null;
+}
+
+/** The project the FEA page opens: the newest FEA project kept, or a blank one (ADR-0124); one not set up yet is set up for the kind the
+ * address asks for. */
 function initial(): { project: CouponProject; restored: boolean } {
   const kept = couponProjects(readProjects(browserStorage()));
-  return kept.length ? { project: kept[0], restored: true } : { project: newProject(), restored: false };
+  const asked = askedFor();
+  const start = kept.length ? { project: kept[0], restored: true } : { project: asked === "coupon" ? newProject() : newFeaProject(), restored: false };
+  if (asked && start.project.analysis === "none") start.project = { ...start.project, analysis: asked };
+  return start;
 }
 
 function projectReducer(project: CouponProject, action: ProjectAction | { type: "form-fn"; fn: (form: StudioForm) => StudioForm }): CouponProject {
@@ -127,6 +143,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   }, []);
   const setPlate = useCallback((next: PlateLists) => dispatch({ type: "plate", plate: next }), []);
   const setSpecimens = useCallback((next: TowSpecimenRow[]) => dispatch({ type: "specimens", specimens: next }), []);
+  const setAnalysis = useCallback((analysis: FeaAnalysis) => dispatch({ type: "analysis", analysis }), []);
   const [towAnswer, setTowAnswer] = useState<TowAnswer | null>(null);
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
@@ -142,14 +159,16 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   const offersAll = allTests || (plates && project.form.test === PLATE_TEST); // a founder's plate is offered every row (ADR-0089 amendment 7)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests, offersAll); // our kernel answers each settled edit (ADR-0086)
+  const asked = useRef<FeaAnalysis | null | undefined>(undefined);
+  if (asked.current === undefined) asked.current = askedFor();
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
-    (found) => { if (found.kind === "fea") replace(found); });
+    (found) => { if (found.kind === "fea") replace(asked.current && found.analysis === "none" ? { ...found, analysis: asked.current } : found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, imports, plates, offersAll, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
-    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
+    setForm, setPlate, setSpecimens, setAnalysis, setTowAnswer, rename, replace, run, imported, past, picked, setPicked, place, showPlace, proposed, setProposed,
     emphasis, setEmphasis, view, showField, shownField, setShownField, versions,
-  }), [apiBaseUrl, allTests, imports, plates, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run, imported, past, picked, place, showPlace, proposed,
+  }), [apiBaseUrl, allTests, imports, plates, offersAll, project, towAnswer, setForm, setPlate, setSpecimens, setAnalysis, rename, replace, run, imported, past, picked, place, showPlace, proposed,
     emphasis, view, showField, shownField, versions]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }

@@ -39,6 +39,7 @@ from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for, model_
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .plate_proposals import PLATE_SYSTEM, KeptPlate, plate_guard, plate_schema, plate_view
 from .proposals import model_view_of_form, source_guard
+from .general_answers import general_guard, general_schema, general_view
 from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
 from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
@@ -64,7 +65,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    GeneralAnswerResponse, GeneralQuestionRequest, ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -1903,6 +1904,37 @@ def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Re
                                     covered=kept.covered, withheld=False, reason=None)
 
     return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
+
+
+@app.post("/v1/workspace/questions", response_model=GeneralAnswerResponse)
+def answer_general_question(asked: GeneralQuestionRequest, actor: Actor, request: Request, response: Response) -> GeneralAnswerResponse:
+    """A question asked in the FEA section before anything is set up, answered in words (ADR-0124): from the sections of our theory pages
+    the question's words find, with the kind of work it asks to set up when it names one of those offered. The model's answer is kept
+    only when every number in it is the question's (the why answers' guard, ADR-0102), and the sections it rests on come back by name.
+    With no model, or an answer set aside, no prose comes back and the sections found do, so the page says where to read. Recorded with
+    the question and the model's name when one wrote (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    kinds = list(dict.fromkeys(asked.kinds))
+    found = [section for section, _ in find_theory(asked.question, limit=SECTIONS_SHOWN)]
+    calls: list[ModelCall] = []
+
+    def named(sections) -> list[TheorySource]:
+        return [TheorySource(id=s.id, document=s.document, title=s.title) for s in sections]
+
+    def compute() -> GeneralAnswerResponse:
+        reading = _billed(calls, assistant.answer_general(general_view(asked.question, found, kinds), general_schema([s.id for s in found], kinds)))
+        if reading.raw is None:
+            return GeneralAnswerResponse(run_id=None, writer=reading.writer, model=None, prose=[], sources=named(found), covered=False, withheld=False,
+                                         reason=reading.reason, start=None)
+        kept = general_guard(reading.raw, asked.question, found, kinds)
+        if not kept.prose:  # set aside by the guard: no prose of the model's is shown, and the page says where to read
+            return GeneralAnswerResponse(run_id=None, writer="template", model=None, prose=[], sources=named(found), covered=False,
+                                         withheld=kept.withheld, reason=kept.reason, start=kept.start)
+        return GeneralAnswerResponse(run_id=None, writer=reading.writer, model=reading.model, prose=list(kept.prose), sources=named(kept.sources),
+                                     covered=kept.covered, withheld=False, reason=None, start=kept.start)
+
+    return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
                     calls=calls)
 
 

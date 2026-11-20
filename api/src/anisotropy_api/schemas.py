@@ -1085,6 +1085,30 @@ class TheorySource(Contract):
     title: str
 
 
+class GeneralQuestionRequest(Contract):
+    """A question asked in the FEA section before anything is set up (ADR-0124): the question, and the kinds of work the page offers to
+    set up, which the model may name. No result, no rows and no name go with it."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    kinds: Annotated[list[Literal["coupon", "wing"]], Field(max_length=4)] = []
+
+
+class GeneralAnswerResponse(Contract):
+    """An answer in words to a question asked before a setup (ADR-0124). `prose` is the model's, kept only when every number in it is the
+    question's; `sources` are the theory sections it rests on, or with no prose the sections found. `start` is a kind of work the
+    question asks to set up, from those offered, which the page offers as a button; null when it names none."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    prose: list[str]
+    sources: list[TheorySource]
+    covered: bool
+    withheld: bool
+    reason: str | None
+    start: str | None
+
+
 class ResultAnswerResponse(Contract):
     """An answer in words to a question about a result (ADR-0102). `prose` is the model's, kept only when every number in it is the fact
     sheet's or the question's; `sources` are the theory sections it rests on. With no model, or an answer the guard set aside

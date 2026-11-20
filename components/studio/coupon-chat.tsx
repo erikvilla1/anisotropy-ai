@@ -24,14 +24,17 @@ import {
   missingIn, nextStep, parseLayup, PUSH_CHIPS, SIZE_CHIPS, stepOfKey, switchUnits, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
-import { ASKING, modelAsksResults, routeMessage } from "@/lib/chat-route";
+import { ASKING, modelAsksResults, routeMessage, type SectionAsked } from "@/lib/chat-route";
 import { printed } from "@/lib/studio-colors";
 import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
 import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
 import { tab, TAB_OF_STEP, tabOfKey, tabToFix, type TabId } from "@/lib/model-tree";
 import { revealPanel, showPanel } from "@/components/workspace/panels/step-panel";
-import { handoffKey } from "../home-composer";
-import { useProject } from "./project-context";
+import { takeHandoff } from "@/lib/handoff";
+import { hasWork } from "@/lib/project-store";
+import { saysMore, TARGET_TITLES } from "@/lib/work-intent";
+import { SwitchAsk } from "@/components/workspace/switch-ask";
+import { tabStorage, useProject } from "./project-context";
 import { resultsOnPage } from "./use-imported-model";
 import { runWhen } from "@/lib/run-history";
 import { TOW_TEST } from "@/lib/studio-tow";
@@ -68,28 +71,29 @@ type Entry = { stage?: boolean } & (
   // what an element is and where it sits, said from the fields (ADR-0099 amendment 3)
   | { id: number; role: "assistant"; kind: "element"; answer: ElementFacts; from: Fields }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
-  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean });
+  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean }
+  // another section asked for while the coupon holds work: one tap to go, the coupon kept (ADR-0124)
+  | { id: number; role: "assistant"; kind: "switch"; target: Switchable; carried: string });
+/** The sections a coupon's chat opens on request (ADR-0124), and the wing's page under FEA (ADR-0118 amendment 1). */
+type Switchable = "laminate" | "cad" | "wing";
 /** The project's own cards: a question, a check, a run and its results, a proposal. Their buttons act on the project. */
 const PROJECT_KINDS = new Set(["ask", "check", "job", "result", "proposal"]);
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
-/** What another page handed over: a message typed on the home page (session storage, or ?prompt= when storage is blocked) and a
- * library material (?material=), each used once. */
-function readHandoff(): { prompt: string; material: string } {
+/** What another page handed over: a message typed on the home page, the start screen or another section (session storage, or ?prompt=
+ * when storage is blocked), the message that set a blank FEA project up as a coupon (ADR-0124), and a library material (?material=),
+ * each used once. */
+function readHandoff(): { prompt: string; setUp: string; material: string } {
   const params = new URLSearchParams(window.location.search);
-  let prompt = params.get("prompt") ?? "";
-  try {
-    const stored = window.sessionStorage.getItem(handoffKey);
-    if (stored) {
-      window.sessionStorage.removeItem(handoffKey);
-      const payload = JSON.parse(stored) as { prompt?: unknown };
-      if (typeof payload.prompt === "string") prompt = payload.prompt;
-    }
-  } catch { /* storage blocked: the address carries the message */ }
+  const carried = takeHandoff(tabStorage());
+  const prompt = carried.prompt || params.get("prompt") || "";
   const material = libraryOptions.some((m) => m.id === params.get("material")) ? params.get("material")! : "";
-  if (params.has("prompt") || params.has("material")) window.history.replaceState(null, "", window.location.pathname);
-  return { prompt: prompt.trim().slice(0, 2000), material };
+  if (params.has("prompt") || params.has("material")) {
+    params.delete("prompt"); params.delete("material");
+    window.history.replaceState(null, "", window.location.pathname + (params.size ? `?${params}` : ""));
+  }
+  return { prompt: prompt.trim().slice(0, 2000), setUp: carried.setUp, material };
 }
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
@@ -136,12 +140,14 @@ function PanelLink({ id, children }: { id: PanelId | TabId; children: ReactNode 
 
 /** The coupon assistant (ADR-0055; ADR-0062, part 5): a conversation beside the panels, on the one project they share. It offers one-click
  * choices, reads a typed line into the rows, checks and runs the setup, and for anything else names the panel that asks for it. */
-export function CouponChat({ apiBaseUrl, onLaminate }: {
+export function CouponChat({ apiBaseUrl, onSwitch }: {
   apiBaseUrl: string;
-  /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
-  onLaminate?: () => void;
+  /** Opens another section with the message carried (ADR-0124): Laminate, a stack under loads per unit width (ADR-0060), or CAD. */
+  onSwitch?: (target: Switchable, carried: string) => void;
 }) {
-  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { project, form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, plates, picked, showPlace, imported, past, setProposed, versions } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const projectRef = useRef(project);
+  projectRef.current = project;
   const lastSaid = useRef<string | null>(null); // the engineer's last message: the reason a change it led to is kept with its version (ADR-0113)
   const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
   plateRef.current = plate;
@@ -219,6 +225,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     // a library material sent from its page, or a message typed on the home page, starts the conversation
     const handoff = readHandoff();
+    if (handoff.setUp) { // a blank FEA project set up as a coupon (ADR-0124): the message that did it heads the talk, which reads on
+      add(...(handoff.setUp === handoff.prompt ? [] : [{ role: "user", text: handoff.setUp } as NewEntry]),
+        { role: "assistant", kind: "text", title: "Coupon test set up", body: <p data-testid="chat-set-up">The model tree on the left now holds a coupon&apos;s tabs. Ask anything about FEA here too.</p> });
+    }
     if (handoff.material) {
       setForm({ ...start, library: handoff.material });
       add({ role: "assistant", kind: "text", title: `Material: ${materialName(handoff.material)}`, body: <p>From the material library. Change it any time.</p> });
@@ -366,6 +376,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         body: <p>Cleared {cleared.map((key) => labelOf(key, units).replace(/ \(.*\)$/, "")).join(", ")}: give them again in {unitWords(units)}.</p> });
       proceed(next);
     }
+  }
+
+  /** Another section asked for (ADR-0124): opened at once with the message carried when the coupon holds nothing of the engineer's,
+   * asked once when it does; a wing is not here yet. */
+  function openSection(target: SectionAsked, text: string) {
+    if (!onSwitch) return;
+    const carried = saysMore(text) ? text : "";
+    if (!hasWork(projectRef.current)) { onSwitch(target, carried); return; }
+    setActive(null);
+    add({ role: "assistant", kind: "switch", target, carried });
   }
 
   function startOver() {
@@ -625,7 +645,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     // who answers is the page's fixed order (ADR-0121), in one place the question banks try (lib/chat-route.ts)
     const routed = routeMessage(text, {
       form: formRef.current, readOnly: shown.readOnly, results: !!shown.fields, facts: !!factsOf(shown.explanation), api: !!apiBaseUrl,
-      modelReads: !!model?.proposes, onPlate: onPlateNow, ready: checked?.state === "ready", about: about.current, thread: thread.current, laminate: !!onLaminate,
+      modelReads: !!model?.proposes, onPlate: onPlateNow, ready: checked?.state === "ready", about: about.current, thread: thread.current, sections: !!onSwitch,
       step: current && current.role === "assistant" && current.kind === "ask" ? current.step : null,
     });
     switch (routed.route) {
@@ -646,7 +666,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       case "run": void run(); return;
       case "check": add({ role: "user", text }); void check(formRef.current); return;
       case "full-form": add({ role: "user", text }); showPanel("advanced"); return;
-      case "laminate": add({ role: "user", text }); onLaminate?.(); return;
+      case "section": add({ role: "user", text }); openSection(routed.target, text); return; // at once when the coupon holds no work, else one tap (ADR-0124)
       case "name": answer(text, { filled_by: text }); return;
       case "model": void readWithModel(text); return;
       case "unread": unread(text); return;
@@ -794,8 +814,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               <span className="chat-note">Results come back in these units.</span>
             </p>
             <div className="chat-choice-grid">
-              {onLaminate ? (
-                <button type="button" className="chat-choice chat-choice-wide" data-testid="laminate-choice" onClick={onLaminate}>
+              {onSwitch ? (
+                <button type="button" className="chat-choice chat-choice-wide" data-testid="laminate-choice" onClick={() => { add({ role: "user", text: TARGET_TITLES.laminate }); openSection("laminate", ""); }}>
                   <strong><Calculator size={14} /> {chatTool("laminate").title}</strong><span>{chatTool("laminate").detail}</span>
                 </button>
               ) : null}
@@ -1217,6 +1237,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "failure") content = failureMessage(entry);
     else if (entry.kind === "element") content = elementMessage(entry);
     else if (entry.kind === "working") content = workingMessage(entry);
+    else if (entry.kind === "switch") {
+      content = <SwitchAsk target={entry.target} kept="coupon" onGo={() => onSwitch?.(entry.target, entry.carried)}
+        onStay={() => add({ role: "assistant", kind: "text", title: "Staying here", body: <p>Your coupon is as it was.</p> })} />;
+    }
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
@@ -1236,9 +1260,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   const onPlateNow = (allTests || plates) && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
   const hereNow = onPlateNow ? here() : [];
   return (
-    <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
+    <section className="chat-pane" aria-label="FEA assistant" data-testid="coupon-chat">
       <div className="chat-pane-top">
-        <span><span className="status-dot" /> Coupon assistant</span>
+        <span><span className="status-dot" /> FEA assistant <span className="chat-tag" data-testid="chat-kind">{TARGET_TITLES.coupon}</span></span>
         <span>
           {allTests && !shown.readOnly ? <button type="button" className="chat-link" onClick={() => showPanel("advanced")}><TableProperties size={13} /> All inputs</button> : null}
           {shown.readOnly ? null : <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>}

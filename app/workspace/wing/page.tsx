@@ -4,7 +4,7 @@ import "../../studio/studio.css";
 import "../workspace.css";
 
 export const metadata: Metadata = {
-  title: "Wing design",
+  title: "Wing analysis",
   description: "A composite wing worked over its flight envelope as you change it: margins of every case, stiffness, mass and the section's shear flow.",
 };
 
