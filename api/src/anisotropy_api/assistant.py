@@ -156,6 +156,20 @@ ANSWER_SYSTEM = (
 )
 
 
+# A question asked in the FEA section before anything is set up (ADR-0124): no result, so the model is shown the sections of our theory
+# pages the question found and the kinds of work the page offers; the number guard then reads the answer against the question alone.
+GENERAL_SYSTEM = (
+    "You answer an engineer's question in the finite element section of a composite analysis workspace, before any model is set up. You "
+    "are given the question, sections of the product's own theory pages, each with an id, and the kinds of work the workspace can set up. "
+    "Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the sections alone. "
+    "Write no number that is not in the question, digit for digit, and never copy a number or an equation out of a section: say in words "
+    "what it means. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
+    "names them. Set 'covered' to true only when those sections answer the question. When they do not, set it to false, say in one "
+    "sentence that the theory pages do not cover it yet, and give no answer of your own. Set 'start' to the kind of work the engineer "
+    "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE
+)
+
+
 @dataclass(frozen=True)
 class Reading:
     """What a writer read from a message (ADR-0088): the model's answer as parsed, before the source guard; None when no model read it,
@@ -205,6 +219,8 @@ class Assistant(Protocol):
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
     def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -296,6 +312,10 @@ class TemplateAssistant:
 
     def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The template writes no answer to a question: the page names the theory sections found (ADR-0102)."""
+        return Reading(None, "template", None)
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template writes no answer to a question asked before a setup either: the page names the sections found (ADR-0124)."""
         return Reading(None, "template", None)
 
 
@@ -414,6 +434,12 @@ class ClaudeAssistant:
         """The model's answer to a question about a result (ADR-0102), as JSON in the schema asked for and not yet judged: the number guard
         reads its text. `view` is what the model may see: the question, the result's fact sheet and the theory sections found."""
         return self._read("answer_question", ANSWER_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's answer to a question asked in the FEA section before a setup (ADR-0124), as JSON in the schema asked for and not
+        yet judged. `view` is the question, the theory sections found and the kinds of work offered. Billed as `answer_question`, the
+        one feature for questions answered from the theory pages (ADR-0120)."""
+        return self._read("answer_question", GENERAL_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is

@@ -95,3 +95,42 @@ test("a project goes to the server as the page states it and comes back whole; t
   assert.equal(localNewer[0].name, "mine"); // the browser's edit after the server's copy stands
   assert.ok(isUuid(coupon.id) && !isUuid("m3kz9-abc"));
 });
+
+// ADR-0124: an FEA project starts blank and is set up for a kind of work; a project kept before there were kinds is a coupon
+
+test("an FEA project starts set up for nothing, is set up in place, and travels to the server and back with its kind", async () => {
+  const { hasWork, newFeaProject } = await import("../lib/project-store");
+  const blank = newFeaProject("2026-11-20T10:00:00.000Z", "f1");
+  assert.equal(blank.kind, "fea");
+  assert.equal(blank.analysis, "none");
+  assert.equal(projectTitle(blank), "Untitled FEA");
+  assert.equal(newProject().analysis, "coupon");
+  const coupon = reduce(blank, { type: "analysis", analysis: "coupon" }, "2026-11-20T10:01:00.000Z");
+  assert.equal(coupon.analysis, "coupon");
+  assert.equal(coupon.id, "f1");
+  assert.equal(coupon.updated, "2026-11-20T10:01:00.000Z");
+  assert.equal(projectTitle(coupon), "Untitled coupon");
+  assert.equal(uploadOf(blank).content.analysis, "none");
+  assert.equal("analysis" in uploadOf(coupon).content, false); // a coupon says nothing, as it did before
+  const record = (content: Record<string, unknown>): ProjectRecord => ({ id: "f1", kind: "fea", name: "", content, form_version: FORM_VERSION, units: null,
+    created_at: "2026-11-20T10:00:00Z", updated_at: "2026-11-20T10:00:00Z", jobs: [] } as unknown as ProjectRecord);
+  assert.equal((projectOfRecord(record({ form: blankForm(), plate: {}, analysis: "none" })) as { analysis: string }).analysis, "none");
+  assert.equal((projectOfRecord(record({ form: blankForm(), plate: {} })) as { analysis: string }).analysis, "coupon");
+  const store = memory();
+  store.setItem(PROJECTS_KEY, JSON.stringify([{ ...newProject(blankForm(), "2026-11-01T00:00:00.000Z", "old"), analysis: undefined }]));
+  assert.equal(couponProjects(readProjects(store))[0].analysis, "coupon"); // kept before there were kinds
+  assert.equal(hasWork(blank), false);
+});
+
+test("a project holds work once a row is the engineer's, a plate holds a support, or a laminate a material or a layup", async () => {
+  const { hasWork } = await import("../lib/project-store");
+  const fresh = newProject(blankForm(), "2026-11-20T10:00:00.000Z", "c1");
+  assert.equal(hasWork(fresh), false);
+  assert.equal(hasWork({ ...fresh, form: { ...fresh.form, filled_by: "Erik", date: "2026-11-20" } }), false); // the chat fills these itself
+  assert.equal(hasWork({ ...fresh, form: { ...fresh.form, library: "im7-8552" } }), true);
+  assert.equal(hasWork({ ...fresh, plate: { ...fresh.plate, supports: [{ region: "left", dofs: [1] }] } as never }), true);
+  const laminate = newLaminateProject(blankDraft(), "2026-11-20T10:00:00.000Z", "l1");
+  assert.equal(hasWork(laminate), false);
+  assert.equal(hasWork({ ...laminate, draft: { ...laminate.draft, system: "SI" } }), false); // the units alone are no work
+  assert.equal(hasWork({ ...laminate, draft: { ...laminate.draft, layup: { notation: "[0/90]s" } as never } }), true);
+});

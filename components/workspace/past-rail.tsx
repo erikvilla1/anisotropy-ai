@@ -12,7 +12,7 @@ import { StepPanel } from "./panels/step-panel";
 /** The left column while a past analysis has the stage (ADR-0109): which run it is and its answer, its files, and its inputs to take up
  * again. The run is shown as it stored itself; the project's rows are changed only by "Use these inputs". */
 export function PastRail({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { past, form, setForm, setPlate, run, allTests } = useProject();
+  const { past, form, setForm, setPlate, setAnalysis, project, run, allTests } = useProject();
   const { job, fields, values, busy, problem } = past;
   const words = answerWords(readJobAnswer(job?.answer), printed);
 
@@ -20,6 +20,7 @@ export function PastRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     if (!values) return;
     setForm({ ...formFromValues(values), filled_by: form.filled_by, date: today() });
     setPlate(plateFromValues(values));
+    if (project.analysis === "none") setAnalysis("coupon"); // a blank FEA project takes the run's coupon (ADR-0124)
     run.reset(); // the project's last check and run were of other rows
     past.close();
   }

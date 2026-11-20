@@ -740,6 +740,22 @@ export async function answerResult(apiBase: string, question: string, facts: Rec
   return readResultAnswer(payload);
 }
 
+/** An answer in words to a question asked in FEA before anything is set up (ADR-0124): as a result's answer, from our theory pages
+ * alone, and `start`, a kind of work the question asks to set up from those offered, which the page offers as a button. */
+export type GeneralAnswer = ResultAnswer & { start: string | null };
+
+export function readGeneralAnswer(payload: unknown): GeneralAnswer {
+  const answer = readResultAnswer(payload) as GeneralAnswer;
+  if (!isTextOrNull((payload as Record<string, unknown>).start)) throw unreadable("the answer");
+  return answer;
+}
+
+/** A question asked in FEA before anything is set up, answered from our theory pages (ADR-0124); `kinds` are those the page offers. */
+export async function answerGeneral(apiBase: string, question: string, kinds: string[], signal?: AbortSignal): Promise<GeneralAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/questions`, { method: "POST", headers, body: JSON.stringify({ question, kinds }), signal }, "the answer");
+  return readGeneralAnswer(payload);
+}
+
 /** What the API offers this visitor (ADR-0089): `all`, every coupon test; `imports`, bringing a model in as a file (ADR-0105), which a
  * founder's sign-in is offered where the tests are not (amendment 6); `plates`, a plate set up on the model tree, held and loaded on any
  * edge or face, offered where the import is (amendment 7). */

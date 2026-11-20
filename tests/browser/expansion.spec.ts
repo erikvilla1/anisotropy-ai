@@ -4,7 +4,7 @@ import { hydrated } from "./hydrated";
 import { pageErrors } from "./page-errors";
 
 test("a negative load stays negative so the setup check can refuse it (ADR-0003)", async ({ page }) => {
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await hydrated(page.getByRole("textbox", { name: "Message the coupon assistant" }));
   await page.getByRole("textbox", { name: "Message the coupon assistant" }).fill("Unnotched tension, apply -20 kN");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -40,7 +40,7 @@ test("navigation routes load directly with research-focused About", async ({
     "documented answer",
   );
   await page.getByRole("link", { name: "Coupon analysis" }).click();
-  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await expect(page).toHaveURL(/\/workspace\/fea\/?\?for=coupon$/); // FEA set up for a coupon (ADR-0124)
   await page.reload();
   // One test is offered for now (ADR-0089), so the assistant's first question is the material, as workspace.spec.ts reads it.
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
