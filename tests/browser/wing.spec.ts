@@ -75,7 +75,7 @@ test("a new wing opens on the example and shows the engine's answer, drawings an
   await expect(page.locator(".ws-title span")).toHaveText("FEA · Wing analysis");
   const answer = page.getByTestId("wing-answer");
   await expect(answer.getByRole("heading", { level: 2 })).toHaveText("Passes the 34 cases run");
-  await expect(answer).toContainText("Lowest margin +0.097: skin strength, upper skin, at the root, 0° ply, longitudinal compression");
+  await expect(answer).toContainText("Lowest margin +0.059 on B-basis strengths: skin strength, upper skin, at the root, 0° ply, longitudinal compression");
   expect(sent[0].wing).toEqual(ANSWER.wing); // the description itself, as the wing file reads
   await expect(page.getByTestId("wing-planform")).toBeVisible();
   await expect(page.getByTestId("wing-section")).toBeVisible();
@@ -188,7 +188,7 @@ test("the finite element check runs in the background, shows its stage, then set
   await expect(page.getByTestId("wing-fe-status")).toHaveText("Solving the flight loads (2 of 3)…");
   await expect(page.getByTestId("wing-fe-start")).toBeDisabled();
   expect(checks[0].wing).toEqual(ANSWER.wing); // the description as it stands
-  await expect(page.getByTestId("wing-fe-headline")).toHaveText("Lowest margin +0.146 by the finite element model, +0.154 by the hand calculation.");
+  await expect(page.getByTestId("wing-fe-headline")).toHaveText("Lowest margin +0.106 by the finite element model, +0.114 by the hand calculation, on B-basis strengths.");
   await expect(page.getByTestId("wing-fe")).toContainText("skin strength, upper skin, 0.0611 m from the root, 0.139 m from the leading edge, 0° ply, longitudinal compression, case 6");
   await expect(page.getByTestId("wing-fe-status")).toHaveText(`Checked in ${Math.round(CHECK.seconds.total)} s.`);
   await expect(page.getByTestId("panel-wing-fe")).toHaveAttribute("data-state", "pass");
@@ -247,7 +247,7 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   await page.getByTestId("wing-fe-start").click();
   await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
   expect((checks[0] as Record<string, unknown>).project_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-  await expect(page.getByTestId("wing-version-4")).toContainText("Checked: Lowest margin +0.146");
+  await expect(page.getByTestId("wing-version-4")).toContainText("Checked: Lowest margin +0.106");
 
   await page.goto("/workspace");
   const first = page.getByTestId("workspace-projects").locator("tr[data-kind=wing]");
@@ -346,6 +346,38 @@ test("spar caps are added over the webs, a zone along the span changes their pli
   await caps.getByTestId("wing-remove-caps").click();
   await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toBeUndefined();
   await expect(caps.getByTestId("wing-add-caps")).toBeVisible();
+});
+
+test("the margins use the material's B-basis strengths, each shown with its basis and its report's page, and test means are a choice labelled as such (ADR-0126)", async ({ page }) => {
+  const MEANS = { ...ANSWER, report: { ...ANSWER.report, material: { ...ANSWER.report.material, strength_basis: "mean", dataset: "NCAMP 2019 · measured means", estimates: [] } } };
+  const sent = await playWings(page, (body) => ({ status: 200, body: (body.wing?.material as Record<string, unknown> | undefined)?.strengths === "B-basis" ? ANSWER : MEANS }));
+  await page.goto("/workspace/wing");
+  const answer = page.getByTestId("wing-answer");
+  await expect(answer).toContainText("on B-basis strengths");
+  expect((sent[0].wing?.material as Record<string, unknown>).strengths).toBe("B-basis");
+  const material = page.getByTestId("panel-wing-material");
+  await material.locator("summary").click();
+  await expect(page.getByTestId("wing-material-strengths")).toHaveValue("B-basis");
+  const table = page.getByTestId("wing-strengths");
+  await expect(table).toContainText("The margins use B-basis strengths, from Hexcel 8552 IM7 unidirectional prepreg");
+  const f1t = table.locator("tr[data-role=F1t]");
+  await expect(f1t).toContainText("Tension along the fibres");
+  await expect(f1t).toContainText("2,228"); // 323.09 ksi in MPa
+  await expect(f1t).toContainText("B-basis");
+  await expect(f1t.getByRole("link", { name: "p. 35" })).toHaveAttribute("href", /NCP-RP-2009-028.*#page=35$/);
+  await expect(table.locator("tr[data-role=F1c]")).toContainText("B-estimate");
+  await expect(table.locator("tr[data-role=F1c]").getByRole("link", { name: "p. 46" })).toBeVisible();
+  await expect(table).toContainText("Compression along the fibres and In-plane shear: B-estimates.");
+  // test means: the file says nothing, and the answer says what they are
+  await page.getByTestId("wing-material-strengths").selectOption("mean");
+  await expect.poll(() => (sent.at(-1)?.wing?.material as Record<string, unknown>).strengths).toBeUndefined();
+  await expect(answer).toContainText("on test-mean strengths, not design values");
+  // another material offers its means only; coming back to IM7 / 8552 brings its B-basis strengths again
+  await page.getByTestId("wing-material-library").selectOption("t650-5320-1");
+  await expect(page.getByTestId("wing-material-strengths")).toHaveCount(0);
+  await expect.poll(() => sent.at(-1)?.wing?.material).toEqual({ library: "t650-5320-1" });
+  await page.getByTestId("wing-material-library").selectOption("im7-8552");
+  await expect.poll(() => sent.at(-1)?.wing?.material).toEqual({ library: "im7-8552", strengths: "B-basis" });
 });
 
 test("the wing workspace names no tool, no machinery and no record, with every panel open, the shape built and the check made (ADR-0091, ADR-0118, ADR-0119)", async ({ page }) => {

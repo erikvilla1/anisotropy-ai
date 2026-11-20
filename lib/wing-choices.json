@@ -12,7 +12,8 @@
    "rib_spacing": 0.5
   },
   "material": {
-   "library": "im7-8552"
+   "library": "im7-8552",
+   "strengths": "B-basis"
   },
   "skin": {
    "half_stack": [
@@ -44,7 +45,7 @@
    "lift_curve_slope": 6.0
   },
   "envelope": {
-   "gross_weight": 3000.0,
+   "gross_weight": 2700.0,
    "positive_load_factor": 3.8,
    "negative_load_factor": -1.52,
    "airspeed": "equivalent",
@@ -85,31 +86,53 @@
  "materials": [
   {
    "id": "im7-8552",
-   "name": "IM7 / 8552"
+   "name": "IM7 / 8552",
+   "bases": [
+    "mean",
+    "B-basis"
+   ]
   },
   {
    "id": "t650-5320-1",
-   "name": "T650 / 5320-1"
+   "name": "T650 / 5320-1",
+   "bases": [
+    "mean"
+   ]
   },
   {
    "id": "im7-bt250e-6",
-   "name": "IM7 / BT250E-6"
+   "name": "IM7 / BT250E-6",
+   "bases": [
+    "mean"
+   ]
   },
   {
    "id": "t1100gc-tc380",
-   "name": "T1100GC / TC380"
+   "name": "T1100GC / TC380",
+   "bases": [
+    "mean"
+   ]
   },
   {
    "id": "ims65-ep2190",
-   "name": "IMS65 / EP2190"
+   "name": "IMS65 / EP2190",
+   "bases": [
+    "mean"
+   ]
   },
   {
    "id": "t650-5320-1-pw",
-   "name": "T650 PW / 5320-1"
+   "name": "T650 PW / 5320-1",
+   "bases": [
+    "mean"
+   ]
   },
   {
    "id": "7781-ea9396",
-   "name": "7781 / EA 9396"
+   "name": "7781 / EA 9396",
+   "bases": [
+    "mean"
+   ]
   }
  ],
  "cores": [

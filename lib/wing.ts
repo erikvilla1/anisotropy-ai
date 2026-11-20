@@ -10,7 +10,9 @@ export type WingValue = string | number | boolean | WingValue[] | WingDescriptio
 export type WingDescription = { [key: string]: WingValue };
 
 export const EXAMPLE_WING: WingDescription = choices.example as unknown as WingDescription;
-export const WING_MATERIALS: readonly { id: string; name: string }[] = choices.materials;
+/** The library's materials a wing can name, each with the bases of strengths it offers: "mean", and "B-basis" where the library holds
+ * the material's B-basis strengths (ADR-0126). */
+export const WING_MATERIALS: readonly { id: string; name: string; bases: string[] }[] = choices.materials;
 export const WING_CORES: readonly { id: string; name: string }[] = choices.cores;
 
 export type WingUnits = "SI" | "US";
@@ -296,8 +298,15 @@ export type WingCase = {
   dynamic_pressure: number; root_shear: number; root_moment: number; root_torque: number; tip_deflection: number; tip_twist: number;
   checks: Record<WingCheckName, WingCheck>;
 };
+/** The strengths the margins use (ADR-0126): their basis, the library dataset and report they come from, and each value in the file's
+ * stress unit with its basis, page and link; "estimates" names those that are B-estimates. A typed material has no source. */
+export type WingStrengthBasis = "B-basis" | "mean" | "typed";
+export type WingMaterialShown = {
+  name: string; strength_basis: WingStrengthBasis; dataset: string | null; source: string | null; estimates: string[];
+  strengths: { role: string; value: number; basis?: string; key?: string; page?: number; url?: string; source_value?: number; source_unit?: string }[];
+};
 export type WingReport = {
-  units: Record<string, string>; wing: string; passes: boolean; seconds: number;
+  units: Record<string, string>; wing: string; passes: boolean; seconds: number; material: WingMaterialShown;
   design: {
     mass: number; mass_skins: number; mass_caps: number; mass_spars: number; mass_core: number; bending_stiffness: number; torsion_stiffness: number;
     first_bending_frequency: number; skin_modulus: number; spar_modulus: number; skin_thickness: number; spar_thickness: number;
@@ -392,7 +401,21 @@ export function whereWords(check: WingCheck, units: Record<string, string>): str
   return parts.join(", ");
 }
 
-/** The answer in one line and its facts, worded from the engine's report: what governs, where, and in which case. */
+/** A ply strength's name in words, by the engine's role. */
+export const STRENGTH_LABELS: Record<string, string> = {
+  F1t: "Tension along the fibres", F1c: "Compression along the fibres", F2t: "Tension across the fibres", F2c: "Compression across the fibres",
+  F6: "In-plane shear",
+};
+
+/** The basis of the strengths the margins use, in words (ADR-0126): "B-basis strengths", "test-mean strengths, not design values". */
+export function strengthWords(material: WingMaterialShown | undefined): string {
+  if (!material) return "";
+  if (material.strength_basis === "B-basis") return "B-basis strengths";
+  if (material.strength_basis === "mean") return "test-mean strengths, not design values";
+  return "the strengths typed in";
+}
+
+/** The answer in one line and its facts, worded from the engine's report: what governs, where, and in which case, on which strengths. */
 export function answerWords(report: WingReport): { verdict: string; detail: string; facts: string[] } {
   const ran = report.cases.length;
   const waiting = report.not_run.length;
@@ -404,7 +427,8 @@ export function answerWords(report: WingReport): { verdict: string; detail: stri
   const check = governing?.checks[g.check];
   const failing = report.cases.filter((c) => CHECK_NAMES.some((n) => (c.checks[n].margin_ultimate ?? 0) < 0)).length;
   const verdict = report.passes ? `Passes the ${ran} case${ran === 1 ? "" : "s"} run` : `Fails ${failing} of the ${ran} case${ran === 1 ? "" : "s"} run`;
-  const detail = `Lowest margin ${marginText(g.margin_ultimate)}: ${CHECK_WORDS[g.check].toLowerCase()}${check ? `, ${whereWords(check, report.units)}` : ""}, case ${g.case} (${g.label}).`;
+  const basis = strengthWords(report.material);
+  const detail = `Lowest margin ${marginText(g.margin_ultimate)}${basis ? ` on ${basis}` : ""}: ${CHECK_WORDS[g.check].toLowerCase()}${check ? `, ${whereWords(check, report.units)}` : ""}, case ${g.case} (${g.label}).`;
   const facts = [`${ran} case${ran === 1 ? "" : "s"} run`];
   if (waiting) facts.push(`${waiting} waiting for inputs`);
   return { verdict, detail, facts };
@@ -422,6 +446,8 @@ export type FeWhere = {
 /** The check's report as the API sends it, in the wing file's units: the model's numbers beside the hand calculation's. */
 export type WingFeReport = {
   wing: string;
+  /** The strengths both margins use (ADR-0126); a check made before it was reported has none. */
+  strength_basis?: WingStrengthBasis;
   units: Record<string, string>;
   model: { elements: number; nodes: number; element_size: number; skins: string; equations: number | null };
   seconds: { build: number; static: number; modes: number; total: number };
@@ -482,7 +508,8 @@ export function feWords(report: WingFeReport): { headline: string; where: string
   const fe = report.lowest, hand = report.lowest_hand, root = report.lowest_root;
   const length = unitText(report.units.length);
   return {
-    headline: `Lowest margin ${marginText(fe.margin_ultimate)} by the finite element model, ${marginText(hand.margin_ultimate)} by the hand calculation.`,
+    headline: `Lowest margin ${marginText(fe.margin_ultimate)} by the finite element model, ${marginText(hand.margin_ultimate)} by the hand calculation`
+      + `${report.strength_basis ? `, on ${strengthWords({ strength_basis: report.strength_basis } as WingMaterialShown)}` : ""}.`,
     where: `The model's: ${FE_CHECK_WORDS[fe.check] ?? fe.check}, ${feWhereWords(fe, report.units)}, case ${fe.case} (${fe.label}). `
       + `Both are read from ${shown(report.root_zone, 3)} ${length} out, one web height from the root.`,
     root: `The model holds the root fully clamped, which raises the stresses within about one web height of it; a real root gives a little. `

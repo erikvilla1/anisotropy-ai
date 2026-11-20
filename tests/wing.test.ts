@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, newSparCaps, newZone, readNumber, readNumbers, ruleTitle, spanWords,
-  valueAt, wingFileName, wingToml, withValue, withZones, zonesOf, type WingFeCheck, type WingReport,
+  STRENGTH_LABELS, strengthWords, valueAt, WING_MATERIALS, wingFileName, wingToml, withValue, withZones, zonesOf, type WingFeCheck, type WingMaterialShown, type WingReport,
 } from "../lib/wing";
 
 // The wing page's own words and its wing file (ADR-0118). Every number comes from the engine; these only read, write and word it.
@@ -46,7 +46,7 @@ test("the answer is worded from the engine's report: passes or how many fail, th
   const report = ANSWER.report as WingReport;
   const words = answerWords(report);
   assert.equal(words.verdict, "Passes the 34 cases run");
-  assert.equal(words.detail, "Lowest margin +0.097: skin strength, upper skin, at the root, 0° ply, longitudinal compression, 0.152 m from the leading edge, case 6 (Positive high angle of attack).");
+  assert.equal(words.detail, "Lowest margin +0.059 on B-basis strengths: skin strength, upper skin, at the root, 0° ply, longitudinal compression, 0.152 m from the leading edge, case 6 (Positive high angle of attack).");
   const first = report.cases[0];
   const failing: WingReport = { ...report, passes: false, cases: [{ ...first, checks: { ...first.checks, "web buckling": { ...first.checks["web buckling"], margin_ultimate: -0.25 } } }, ...report.cases.slice(1)] };
   assert.equal(answerWords(failing).verdict, "Fails 1 of the 34 cases run");
@@ -118,13 +118,28 @@ test("the finite element check is worded from its report: both lowest margins, w
   assert.equal(feProgress(at({ stage: null })), "Starting…");
   assert.equal(feProgress(at({ stage: "build" })), "Building the model (1 of 3)…");
   assert.equal(feProgress(at({ stage: "modes" })), "Vibration modes and flutter (3 of 3)…");
-  assert.equal(feProgress(at({ state: "done", report: CHECK })), "Checked in 28 s.");
+  assert.equal(feProgress(at({ state: "done", report: CHECK })), "Checked in 21 s.");
   assert.equal(feProgress(at({ state: "refused", message: "The wing has ribs but no rib layup" })), "The wing has ribs but no rib layup");
   assert.equal(feProgress(at({ state: "stopped" })), FE_STOPPED);
   const words = feWords(CHECK);
-  assert.equal(words.headline, "Lowest margin +0.146 by the finite element model, +0.154 by the hand calculation.");
+  assert.equal(words.headline, "Lowest margin +0.106 by the finite element model, +0.114 by the hand calculation, on B-basis strengths.");
   assert.equal(words.where, "The model's: skin strength, upper skin, 0.0611 m from the root, 0.139 m from the leading edge, 0° ply, longitudinal compression, "
     + "case 6 (Positive high angle of attack). Both are read from 0.046 m out, one web height from the root.");
-  assert.match(words.root, /At the root itself the model's lowest is −0\.142 \(skin strength, lower skin, case 7\)\.$/);
+  assert.match(words.root, /At the root itself the model's lowest is −0\.221 \(skin strength, lower skin, case 7\)\.$/);
   assert.equal(handAndModel({ hand: 0.15379, fe: null }, marginText), "+0.154\u00a0· –");
 });
+
+test("the margins say which strengths they use, and only a material with B-basis strengths offers them (ADR-0126)", () => {
+  const im7 = WING_MATERIALS.find((m) => m.id === "im7-8552")!;
+  assert.deepEqual(im7.bases, ["mean", "B-basis"]);
+  assert.ok(WING_MATERIALS.filter((m) => m.id !== "im7-8552").every((m) => m.bases.join() === "mean"));
+  assert.equal(valueAt(EXAMPLE_WING, "material.strengths"), "B-basis");
+  const material = ANSWER.report.material as WingMaterialShown;
+  assert.equal(strengthWords(material), "B-basis strengths");
+  assert.equal(strengthWords({ ...material, strength_basis: "mean" }), "test-mean strengths, not design values");
+  assert.equal(strengthWords({ ...material, strength_basis: "typed" }), "the strengths typed in");
+  assert.deepEqual(material.estimates, ["F1c", "F6"]);
+  assert.deepEqual(material.strengths.map((r) => r.role), ["F1t", "F1c", "F2t", "F2c", "F6"]);
+  assert.equal(STRENGTH_LABELS.F6, "In-plane shear");
+});
+

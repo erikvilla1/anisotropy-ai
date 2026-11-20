@@ -34,13 +34,13 @@ import numpy as np
 
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
 from ..layup_rules import RuleLimits, ply_drop_rules
-from ..library import library_core, library_material
+from ..library import library_core, library_material, strength_dataset
 from ..units import FOOT, INCH, LBF, POUND_MASS, PSI
 from .airfoil import Airfoil, naca4
 from .analysis import WingResult
 from .description import (
-    Aerodynamics, Aileron, CoreMaterial, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, SparCaps, Speeds, Wing, WingGeometry,
-    WingMaterial, Zone,
+    Aerodynamics, Aileron, CoreMaterial, FlightEnvelope, GustLoadFactors, GustSpeeds, Layup, SparCaps, Speeds, StrengthSource, Wing,
+    WingGeometry, WingMaterial, Zone,
 )
 
 KNOT = 1852 / 3600  # m/s, exact
@@ -77,10 +77,21 @@ def _keys(table: dict, where: str, required: set[str], optional: set[str] = froz
         raise ValueError(f"{where} has unknown keys {', '.join(unknown)}")
 
 
+STRENGTH_BASES = ("mean", "B-basis")
+
+
 def _material(table: dict, si) -> WingMaterial:
-    """A library material by its id, or one typed in full. The library's ply thickness or density may be replaced by a typed one."""
+    """A library material by its id, or one typed in full. The library's ply thickness or density may be replaced by a typed one.
+
+    `strengths = "B-basis"` takes the strengths from the material's B-basis dataset and everything else from its means (ADR-0126);
+    `"mean"`, the default, takes them from the dataset named, or the material's primary one."""
     if "library" in table:
-        _keys(table, "[material]", {"library"}, {"dataset", "ply_thickness", "density"})
+        _keys(table, "[material]", {"library"}, {"dataset", "strengths", "ply_thickness", "density"})
+        basis = table.get("strengths", "mean")
+        if basis not in STRENGTH_BASES:
+            raise ValueError(f'[material] strengths must be "mean" or "B-basis", not {basis!r}')
+        if basis != "mean" and "dataset" in table:
+            raise ValueError("[material]: give dataset or strengths, not both: the B-basis strengths have a dataset of their own")
         record = library_material(table["library"], table.get("dataset"))
         thickness = si(table["ply_thickness"], "thickness") if "ply_thickness" in table else record.ply_thickness_m
         density = si(table["density"], "density") if "density" in table else record.density_kg_per_m3
@@ -88,9 +99,14 @@ def _material(table: dict, si) -> WingMaterial:
             raise ValueError(f"[material]: the library record of {table['library']!r} has no ply thickness; give ply_thickness")
         if density is None:
             raise ValueError(f"[material]: the library record of {table['library']!r} has no density; give density")
-        if record.lamina.strengths is None:
+        strengths = record if basis == "mean" else library_material(table["library"], strength_dataset(table["library"], basis))
+        if strengths.lamina.strengths is None:
             raise ValueError(f"[material]: the library record of {table['library']!r} has no complete strengths")
-        return WingMaterial(name=record.name, lamina=record.lamina, ply_thickness_m=thickness, density_kg_m3=density)
+        sources = tuple(StrengthSource(role=v.role, key=v.key, basis=v.basis, source_value=v.source_value, source_unit=v.source_unit,
+                                       page=v.page, url=v.reference_url) for v in strengths.values if v.role in STRENGTHS)
+        return WingMaterial(name=record.name, lamina=record.lamina.model_copy(update={"strengths": strengths.lamina.strengths}),
+                            ply_thickness_m=thickness, density_kg_m3=density, strength_basis=basis, strength_dataset=strengths.dataset,
+                            strength_citation=strengths.citation, strength_sources=sources)
     _keys(table, "[material]", {"name", "E1", "E2", "G12", "nu12", *STRENGTHS, "ply_thickness", "density"})
     lamina = Lamina(E1=si(table["E1"], "modulus"), E2=si(table["E2"], "modulus"), G12=si(table["G12"], "modulus"), nu12=table["nu12"],
                     strengths=Strengths(**{name: si(table[name], "stress") for name in STRENGTHS}))
@@ -305,6 +321,7 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
         "units": {kind: label for kind, (_, label) in u.items()} | {"speed": speed_unit, "frequency": "Hz", "twist": "deg",
                                                                     "dynamic_pressure": "psi" if units == "US" else "Pa"},
         "wing": result.wing.name,
+        "material": wing_material(result.wing.skin.material, units),
         "passes": result.passes,
         "seconds": result.seconds,
         "design": {
@@ -361,6 +378,22 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
                         "drop_ratio": result.wing.design_rules.drop_ratio, "max_dropped": result.wing.design_rules.max_dropped},
         "rules": wing_rules(result.wing, units),
     }
+
+
+def wing_material(material: WingMaterial, units: str = "SI") -> dict:
+    """The ply material as a page shows it: its name, the basis of the strengths the margins use (ADR-0126), and each strength in the
+    file's stress unit with its basis, page and link. "estimates" names the strengths whose basis is a B-estimate."""
+    stress = WING_UNITS[units]["stress"][0]
+    strengths = material.lamina.strengths
+    by_role = {source.role: source for source in material.strength_sources}
+    rows = [{"role": role, "value": getattr(strengths, role) / stress,
+             **({} if role not in by_role else {"basis": by_role[role].basis, "key": by_role[role].key, "page": by_role[role].page,
+                                                 "url": by_role[role].url, "source_value": by_role[role].source_value,
+                                                 "source_unit": by_role[role].source_unit})}
+            for role in STRENGTHS]
+    return {"name": material.name, "strength_basis": material.strength_basis, "dataset": material.strength_dataset,
+            "source": material.strength_citation, "strengths": rows,
+            "estimates": [row["role"] for row in rows if row.get("basis") == "B-estimate"]}
 
 
 def _percent_of_span(fraction: float) -> str:

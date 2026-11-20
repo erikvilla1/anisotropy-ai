@@ -382,7 +382,7 @@ def test_margins_follow_the_strength_ratio_and_the_two_factors():
 
 
 def test_the_calculation_is_linear_in_the_weight_for_the_maneuver_cases():
-    light, heavy = run(), run(**{"envelope.gross_weight": 6000.0})
+    light, heavy = run(), run(**{"envelope.gross_weight": 5400.0})  # twice the example's 2700 N
     a, b = light.cases[7], heavy.cases[7]  # the negative maneuver corner: no gust, no aileron
     assert b.root_moment == pytest.approx(2 * a.root_moment)
     assert b.tip_deflection == pytest.approx(2 * a.tip_deflection)
@@ -436,7 +436,7 @@ def test_the_example_wing_passes_and_reports_in_its_own_units():
     assert result.passes is True
     report = wing_report(result, "SI", "m/s")
     assert report["units"]["moment"] == "N*m" and report["units"]["deflection"] == "mm"
-    assert report["cases"][5]["speed"] == pytest.approx(44.8) and report["cases"][5]["root_shear"] == pytest.approx(5700.0)
+    assert report["cases"][5]["speed"] == pytest.approx(44.8) and report["cases"][5]["root_shear"] == pytest.approx(5130.0)  # 3.8 x 2700 N / 2
     assert report["governing"]["case"] == 6 and report["governing"]["margin_ultimate"] > 0
     us = wing_report(result, "US", "mph")
     assert us["design"]["mass"] == pytest.approx(report["design"]["mass"] / 0.45359237)
@@ -479,7 +479,7 @@ def test_a_wing_in_us_units_is_the_same_wing():
     si = run()
     data = example(**{"units": "US", "geometry.half_span": 2.0 / 0.0254, "geometry.chord": 0.45 / 0.0254, "geometry.rib_spacing": 0.5 / 0.0254,
                       "skin.core_thickness": 6.0 / 25.4,
-                      "envelope.gross_weight": 3000.0 / LBF,
+                      "envelope.gross_weight": 2700.0 / LBF,
                       "envelope.altitudes": [0.0, 3000.0 / FOOT], "envelope.aileron.span_start": 1.2 / 0.0254,
                       "envelope.aileron.span_end": 1.9 / 0.0254, "envelope.gust.wing_area": 1.8 / 0.0254**2})
     us = analyze_wing(*wing_from_dict(data))
@@ -504,6 +504,9 @@ def test_a_wing_in_us_units_is_the_same_wing():
     ({"spar.core": "divinycell-h45"}, "A core material was given without a core thickness"),
     ({"skin.half_stack": []}, "at least one ply"),
     ({"material.library": "no-such-material"}, "unknown library material"),
+    ({"material.strengths": "A-basis"}, 'strengths must be "mean" or "B-basis"'),
+    ({"material.dataset": "ncamp-im7-8552-2019-rtd-measured-v1"}, "give dataset or strengths, not both"),
+    ({"material.library": "as4-8552", "material.ply_thickness": 0.18, "material.density": 1580.0}, r"holds no B-basis strengths for 'as4-8552'; materials with them: \['im7-8552'\]"),
     ({"envelope.speeds.cruise": -50.0}, "greater than 0"),
     ({"envelope.speeds.climb": 30.0}, r"\[envelope.speeds\] has unknown keys climb"),
 ])
@@ -561,3 +564,43 @@ def test_the_web_buckling_check_divides_the_bays_load_by_the_webs_shear_flow():
         assert check.strength_ratio == pytest.approx(stations.web_buckling_ratio.min())
     thin = run(**{"spar.half_stack": [45, -45, 0]})
     assert thin.section.web_buckling_loads[0] < 0.5 * section.web_buckling_loads[0]  # bending stiffness grows as the cube of thickness
+
+
+def test_the_example_wing_takes_its_strengths_at_b_basis_from_the_statistical_report_and_says_so():
+    """ADR-0126: the strengths are the library's B-basis dataset's, each with its basis and page; stiffness, ply and density stay the
+    means', so only the margins move."""
+    from anisotropy_engine.library import library_material, strength_dataset
+    from anisotropy_engine.wing.wing_file import wing_material
+
+    basis_id = strength_dataset("im7-8552", "B-basis")
+    assert basis_id == "ncamp-im7-8552-2019-rtd-bbasis-v1"
+    b_wing, envelope = wing_from_dict(example())
+    m_wing, _ = wing_from_dict(example(**{"material.strengths": "mean"}))
+    plain_wing, _ = wing_from_dict(example(**{"material.strengths": None}))
+    assert plain_wing.skin.material == m_wing.skin.material  # "mean" is the default
+    b, m = b_wing.skin.material, m_wing.skin.material
+    assert b.strength_basis == "B-basis" and m.strength_basis == "mean"
+    assert b.lamina.strengths == library_material("im7-8552", basis_id).lamina.strengths
+    assert b.lamina.model_copy(update={"strengths": None}) == m.lamina.model_copy(update={"strengths": None})
+    assert (b.ply_thickness_m, b.density_kg_m3) == (m.ply_thickness_m, m.density_kg_m3)
+    for role in ("F1t", "F1c", "F2t", "F2c", "F6"):
+        assert getattr(b.lamina.strengths, role) < getattr(m.lamina.strengths, role), role
+
+    shown = wing_material(b, "US")
+    assert shown["strength_basis"] == "B-basis" and shown["dataset"] == "NCAMP 2019 · B-basis"
+    assert "NCP-RP-2009-028" in shown["source"]
+    rows = {row["role"]: row for row in shown["strengths"]}
+    assert rows["F1t"]["value"] == pytest.approx(323.09) and rows["F1t"]["basis"] == "B-basis" and rows["F1t"]["page"] == 35
+    assert rows["F1t"]["url"].endswith("#page=35")
+    assert rows["F1c"]["key"] == "F1c-derived" and rows["F1c"]["value"] == pytest.approx(218.20) and rows["F1c"]["page"] == 46
+    assert rows["F6"]["key"] == "F12-5pct" and rows["F6"]["value"] == pytest.approx(11.47) and rows["F6"]["page"] == 50
+    assert shown["estimates"] == ["F1c", "F6"]
+    typed = wing_material(m.model_copy(update={"strength_basis": "typed", "strength_sources": (), "strength_dataset": None,
+                                               "strength_citation": None}))
+    assert typed["strength_basis"] == "typed" and "basis" not in typed["strengths"][0] and typed["estimates"] == []
+
+    on_b, on_m = analyze_wing(b_wing, envelope), analyze_wing(m_wing, envelope)
+    assert on_b.section.EI == on_m.section.EI and on_b.mass_kg() == on_m.mass_kg()
+    assert on_b.governing[1].margin_ultimate < on_m.governing[1].margin_ultimate
+    assert on_b.passes  # the example carries 2700 N on B-basis strengths
+

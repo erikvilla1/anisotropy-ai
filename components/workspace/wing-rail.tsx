@@ -5,7 +5,7 @@ import {
   AERO_FIELDS, AILERON_FIELDS, DESIGN_RULE_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
   feProgress, newSparCaps, newZone, readNumber, readNumbers, ruleTitle, shown, SPAR_CAP_FIELDS, spanWords, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt,
   WING_CORES, WING_MATERIALS, wingFileName, wingToml, withZones, zonesOf, type WingDescription, type WingField, type WingPart, type WingRule, type WingShape,
-  type WingValue, type WingZone, type ZonedPart,
+  type WingValue, type WingZone, type ZonedPart, STRENGTH_LABELS, strengthWords, type WingMaterialShown,
 } from "@/lib/wing";
 import { shapeWing, StudioError } from "@/lib/studio-api";
 import { useWing } from "./wing-context";
@@ -169,13 +169,19 @@ function AirfoilField() {
 }
 
 function MaterialPanel() {
-  const { wing, replace } = useWing();
+  const { wing, replace, setValue, answer } = useWing();
   const library = valueAt(wing, "material.library");
   const own = library === undefined;
+  const bases = WING_MATERIALS.find((m) => m.id === library)?.bases ?? ["mean"];
+  const basis = String(valueAt(wing, "material.strengths") ?? "mean");
+  // a library material is picked with its B-basis strengths where the library holds them (ADR-0126)
   function pick(id: string) {
-    const material: WingDescription = id ? { library: id } : Object.fromEntries(OWN_MATERIAL_KEYS.map((k) => [k, k === "name" ? "My material" : 0])) as WingDescription;
+    const offers = WING_MATERIALS.find((m) => m.id === id)?.bases ?? [];
+    const material: WingDescription = id ? { library: id, ...(offers.includes("B-basis") ? { strengths: "B-basis" } : {}) }
+      : Object.fromEntries(OWN_MATERIAL_KEYS.map((k) => [k, k === "name" ? "My material" : 0])) as WingDescription;
     replace({ ...wing, material });
   }
+  const used = answer?.report.material;
   return (
     <StepPanel id="wing-material" step={3} title="Material" open={false} note={own ? String(valueAt(wing, "material.name") ?? "typed") : WING_MATERIALS.find((m) => m.id === library)?.name ?? String(library)}>
       <div className="studio-field wing-field">
@@ -186,8 +192,41 @@ function MaterialPanel() {
         </select>
         <span className="studio-hint">A library material brings its ply thickness, density and strengths with their sources.</span>
       </div>
+      {!own && bases.length > 1 ? (
+        <div className="studio-field wing-field">
+          <label htmlFor="wing-material-strengths">Strengths</label>
+          <select id="wing-material-strengths" value={basis} data-testid="wing-material-strengths"
+            onChange={(e) => setValue("material.strengths", e.target.value === "mean" ? undefined : e.target.value)}>
+            {bases.includes("B-basis") ? <option value="B-basis">B-basis, for design</option> : null}
+            <option value="mean">Test means</option>
+          </select>
+          <span className="studio-hint">B-basis: a value 90 % of the material exceeds, with 95 % confidence. The margins use the strengths chosen here.</span>
+        </div>
+      ) : null}
+      {!own && used && used.strength_basis !== "typed" ? <StrengthsUsed material={used} unit={unitText(answer!.report.units.stress)} /> : null}
       {own ? <><WingText path="material.name" label="Material name" /><Fields fields={OWN_MATERIAL_FIELDS} /></> : null}
     </StepPanel>
+  );
+}
+
+/** The strengths the last answer's margins used, each with its basis and the page of its report (ADR-0126). */
+function StrengthsUsed({ material, unit }: { material: WingMaterialShown; unit: string }) {
+  return (
+    <div className="wing-strengths" data-testid="wing-strengths">
+      <p className="studio-muted">The margins use {strengthWords(material)}{material.source ? <>, from {material.source}</> : null}.</p>
+      <table className="wing-table">
+        <thead><tr><th>Strength</th><th>{unit}</th><th>Basis</th><th>Page</th></tr></thead>
+        <tbody>
+          {material.strengths.map((row) => (
+            <tr key={row.role} data-role={row.role}>
+              <td>{STRENGTH_LABELS[row.role] ?? row.role}</td><td>{shown(row.value, 4)}</td><td>{row.basis ?? "–"}</td>
+              <td>{row.url && row.page ? <a href={row.url} target="_blank" rel="noreferrer">p. {row.page}</a> : "–"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {material.estimates.length ? <p className="studio-hint">{material.estimates.map((r) => STRENGTH_LABELS[r] ?? r).join(" and ")}: B-estimates. The report recommends no B-basis value for {material.estimates.length === 1 ? "it" : "them"}, so the estimate from its own table is used.</p> : null}
+    </div>
   );
 }
 

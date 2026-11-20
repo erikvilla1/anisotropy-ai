@@ -12,6 +12,7 @@ rib_spacing = 0.5
 
 [material]
 library = "im7-8552"
+strengths = "B-basis"
 
 [skin]
 half_stack = [0, 45, -45, 0]
@@ -30,7 +31,7 @@ pitching_moment_coefficient = -0.05
 lift_curve_slope = 6
 
 [envelope]
-gross_weight = 3000
+gross_weight = 2700
 positive_load_factor = 3.8
 negative_load_factor = -1.52
 airspeed = "equivalent"

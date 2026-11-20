@@ -232,7 +232,7 @@ def test_a_wing_with_caps_and_zones_in_us_units_is_the_same_wing():
     data["geometry"] |= {"half_span": 2.0 / inch, "chord": 0.45 / inch, "rib_spacing": 0.5 / inch}
     data["skin"]["core_thickness"] = 6.0 / 25.4
     data["spar_caps"] |= {"front_width": 0.045 / inch, "rear_width": 0.045 / inch}
-    data["envelope"] |= {"gross_weight": 3000.0 / LBF, "altitudes": [0.0, 3000.0 / FOOT]}
+    data["envelope"] |= {"gross_weight": 2700.0 / LBF, "altitudes": [0.0, 3000.0 / FOOT]}
     data["envelope"]["aileron"] |= {"span_start": 1.2 / inch, "span_end": 1.9 / inch}
     data["envelope"]["gust"]["wing_area"] = 1.8 / inch**2
     us = analyze_wing(*wing_from_dict(data))

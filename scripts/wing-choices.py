@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes lib/wing-choices.json, what the wing workspace (ADR-0118) offers before it asks the engine anything: the example wing
 file as the engine reads it, and the library materials and cores a wing can name (a material with a ply thickness, a density and
-all five strengths; a sandwich core). Also writes the browser test's answer to the example wing,
+all five strengths, with the bases of strengths it offers; a sandwich core). Also writes the browser test's answer to the example wing,
 tests/fixtures/wing/example-answer.json: the engine's report and drawings, as the API sends them, with the run time fixed so the
 file does not change from run to run; and its answer to the example with the spar caps the page adds and a cap zone from the root to
 40 % of the span with one more 0° ply each side of the middle (ADR-0125), tests/fixtures/wing/caps-answer.json.
@@ -29,6 +29,8 @@ CAPS_ANSWER = ROOT / "tests" / "fixtures" / "wing" / "caps-answer.json"
 
 def choices() -> dict:
     materials, cores, seen = [], [], set()
+    # the bases of strengths each material offers beside its means (ADR-0126): "B-basis" when the library holds that dataset
+    bases = {d["material_id"]: d["strength_basis"] for d in list_datasets() if d["strength_basis"]}
     for dataset in list_datasets():
         material_id = dataset["material_id"]
         if material_id in seen:
@@ -46,7 +48,7 @@ def choices() -> dict:
         except ValueError:
             continue
         if record.ply_thickness_m and record.density_kg_per_m3 and record.lamina.strengths is not None:
-            materials.append({"id": material_id, "name": record.name})
+            materials.append({"id": material_id, "name": record.name, "bases": ["mean", *([bases[material_id]] if material_id in bases else [])]})
     return {"example": tomllib.loads(EXAMPLE.read_text(encoding="utf-8")), "materials": materials, "cores": cores}
 
 

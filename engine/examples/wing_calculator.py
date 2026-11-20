@@ -47,6 +47,13 @@ def main() -> None:
             print(f"  {label} at {a[f'{key}_speed']:.4g} {u['speed']}" + ("" if ratio is None else f", {ratio:.2f} x the dive speed"))
     for need in a["needs"]:
         print(f"  not run: needs {need}")
+    m = report["material"]
+    basis = {"B-basis": "B-basis strengths", "mean": "test-mean strengths, not design values", "typed": "the strengths typed in the file"}
+    print(f"\nStrengths of {m['name']}: {basis[m['strength_basis']]}" + (f" ({m['dataset']})" if m["dataset"] else ""))
+    for row in m["strengths"]:
+        print(f"  {row['role']:>3} {row['value']:.4g} {u['stress']}" + (f"  {row['basis']}, p. {row['page']}" if "basis" in row else ""))
+    if m["estimates"]:
+        print(f"  {', '.join(m['estimates'])}: B-estimates, the report recommends no B-basis value for them")
     print(f"\nMargins at ultimate load ({envelope.ultimate_factor:g} x limit)" + (f" and at proof load ({envelope.proof_factor:g} x limit)" if proof else ""))
     header = f"{'case':>4} {'':32} {'alt ' + u['altitude']:>8} {'V ' + u['speed']:>8} {'n':>6} {'M root ' + u['moment']:>14} {'tip ' + u['deflection']:>9} | {'skin':>8} {'spar':>8} {'skin buc':>8} {'web buc':>8}"
     print(header + (f" | {'proof, lowest':>13}" if proof else ""))

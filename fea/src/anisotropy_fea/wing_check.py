@@ -164,6 +164,7 @@ def check_report(solved: Solved, units: str, speed_unit: str) -> dict:
     section, model = solved.section, solved.model
     return {
         "wing": solved.wing.name,
+        "strength_basis": solved.wing.skin.material.strength_basis,  # the strengths both margins use (ADR-0126)
         "units": {kind: u[kind][1] for kind in ("length", "thickness", "deflection", "stiffness", "altitude", "mass")}
         | {"speed": speed_unit, "frequency": "Hz", "twist": "deg", "mass_per_length": f"{u['mass'][1]}/{u['length'][1]}"},
         "model": {"elements": int(model.mesh.elements.shape[0]), "nodes": int(model.mesh.nodes.shape[0]),

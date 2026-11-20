@@ -28,8 +28,23 @@ from .atmosphere import TROPOPAUSE_M
 _FROZEN = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
 
+class StrengthSource(BaseModel):
+    """Where one of a library material's strengths comes from: its basis, the record and the page (ADR-0126)."""
+
+    model_config = _FROZEN
+
+    role: str  # F1t, F1c, F2t, F2c or F6
+    key: str  # the library property it came from: "F1c-derived", "F12-5pct"
+    basis: str  # "B-basis", "B-estimate", "Measured mean", ...
+    source_value: float
+    source_unit: str
+    page: int
+    url: str
+
+
 class WingMaterial(BaseModel):
-    """A ply material with what a wing needs beside its stiffness: strengths, cured ply thickness and density."""
+    """A ply material with what a wing needs beside its stiffness: strengths, cured ply thickness and density. A library material says
+    which of its datasets gave the strengths and on what basis (ADR-0126); a typed one says "typed"."""
 
     model_config = _FROZEN
 
@@ -37,6 +52,10 @@ class WingMaterial(BaseModel):
     lamina: Lamina
     ply_thickness_m: PositiveFloat
     density_kg_m3: PositiveFloat
+    strength_basis: str = "typed"  # "B-basis", "mean" or "typed"
+    strength_dataset: str | None = None  # the library dataset's label, "NCAMP 2019 · B-basis"
+    strength_citation: str | None = None  # the report the strengths come from
+    strength_sources: tuple[StrengthSource, ...] = ()
 
     @model_validator(mode="after")
     def _has_strengths(self) -> "WingMaterial":

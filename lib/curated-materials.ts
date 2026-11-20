@@ -1,7 +1,7 @@
 import publishedReferences from "./published-material-references.json";
 import type { MaterialFeed } from "./material-evidence";
 import { dualUnits, englishStressUnit, propertyDisplayValue } from "./property-units";
-import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedCarbonIM7BBasis, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
 import { modernGlassAdditions, supplierAdditions } from "./material-property-additions";
 import { textbookMaterials } from "./textbook-materials";
 import { textbookPages, textbookSource } from "./textbook-source";
@@ -31,6 +31,8 @@ export type CitedMaterial = {
   reviewedOn?: string;
   recordRevision?: string;
   elasticInputs?: { E1: string; E2: string; G12: string; nu12: string };
+  /** The basis of the dataset's strengths when it is a set of design values beside the material's means (ADR-0126). */
+  strengthBasis?: "B-basis";
 };
 
 const accessed = "2026-10-01";
@@ -298,7 +300,7 @@ export function exportFileName(material: CitedMaterial) {
 
 export function materialDatasets(material: CitedMaterial): CitedMaterial[] {
   if (material.id === "as4-3501") return [as4Textbook, as4Model];
-  if (material.id === "im7-8552") return [qualifiedCarbonIM7, nasaCarbonIM7];
+  if (material.id === "im7-8552") return [qualifiedCarbonIM7, qualifiedCarbonIM7BBasis, nasaCarbonIM7];
   return material.id === "7781-e765" ? [qualifiedGlass, ncamp] : [material];
 }
 

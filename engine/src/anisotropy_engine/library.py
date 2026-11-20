@@ -109,7 +109,7 @@ def load_library() -> dict:
 def list_datasets() -> list[dict]:
     """Every dataset: material id and name, dataset id and label, whether it has elastic inputs."""
     return [{"material_id": d["materialId"], "name": d["name"], "dataset_id": d["datasetId"],
-             "dataset": d["dataset"], "primary": d["primary"], "rights": d["source"]["rights"],
+             "dataset": d["dataset"], "primary": d["primary"], "strength_basis": d.get("strengthBasis"), "rights": d["source"]["rights"],
              "elastic_inputs": d["elasticInputs"] is not None}
             for d in load_library()["datasets"]]
 
@@ -127,6 +127,17 @@ def find_dataset(material_id: str, dataset_id: str | None = None) -> dict:
             return d
     raise ValueError(f"material {material_id!r} has no dataset {dataset_id!r}; "
                      f"its datasets are {[d['datasetId'] for d in datasets]}")
+
+
+def strength_dataset(material_id: str, basis: str) -> str:
+    """The id of a material's dataset of design strengths at a basis ("B-basis"), kept beside its means (ADR-0126); refused by name
+    when the library holds none for that material."""
+    find_dataset(material_id)  # an unknown material is refused with the known ones
+    found = [d["datasetId"] for d in load_library()["datasets"] if d["materialId"] == material_id and d.get("strengthBasis") == basis]
+    if not found:
+        held = sorted({d["materialId"] for d in load_library()["datasets"] if d.get("strengthBasis") == basis})
+        raise ValueError(f"the library holds no {basis} strengths for {material_id!r}; materials with them: {held}")
+    return found[0]
 
 
 def _si(prop: dict, allowed_units: set[str] | None = None) -> tuple[float, str]:

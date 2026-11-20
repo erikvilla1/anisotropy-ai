@@ -11,7 +11,8 @@ rear_spar = 0.65
 rib_spacing = 0.5        # m: ribs at the root, every 0.5 m, and at the tip
 
 [material]
-library = "im7-8552"     # ply thickness, density and strengths come from the library record
+library = "im7-8552"     # stiffness, ply thickness and density come from the library record
+strengths = "B-basis"    # the margins use the B-basis strengths of its qualification report, not the test means
 
 [skin]
 half_stack = [0, 45, -45, 0]   # degrees from the span, outside ply first; the other half mirrors it
@@ -30,7 +31,7 @@ pitching_moment_coefficient = -0.05
 lift_curve_slope = 6.0   # per radian, the section's: divergence and aileron reversal use it
 
 [envelope]
-gross_weight = 3000.0    # N
+gross_weight = 2700.0    # N: on B-basis strengths the example carries 2700 N with a positive margin
 positive_load_factor = 3.8
 negative_load_factor = -1.52
 airspeed = "equivalent"  # the speeds below are equivalent airspeeds

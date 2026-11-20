@@ -4,7 +4,7 @@ import { materials } from "../lib/materials";
 import { curatedMaterials, archivedMaterialReasons, couponWorkspaceMaterialIds, currentMaterial, exportCitedMaterial, exportFileName, materialDatasets } from "../lib/curated-materials";
 import { provenanceOf } from "../lib/source-provenance";
 import { libraryOptions } from "../lib/studio-form";
-import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass } from "../lib/qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedCarbonIM7BBasis, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass } from "../lib/qualification-materials";
 import { dualUnits } from "../lib/property-units";
 import published from "../lib/published-material-references.json";
 import type { MaterialFeed } from "../lib/material-evidence";
@@ -260,10 +260,36 @@ test("T1100GC / TC380 and IMS65 / EP2190 records use the measured room-temperatu
   assert.equal(new Set(curatedMaterials.map(m => m.id)).size, curatedMaterials.length);
 });
 
+test("the IM7 / 8552 B-basis strengths sit beside its means, each from the statistical report's tables with its page, two marked B-estimates (ADR-0126)", () => {
+  const m = qualifiedCarbonIM7BBasis;
+  const value = (key: string) => m.properties.find(p => p.key === key)!;
+  assert.equal(m.id, "im7-8552");
+  assert.equal(m.strengthBasis, "B-basis");
+  assert.equal(qualifiedCarbonIM7.strengthBasis, undefined);
+  assert.ok(!curatedMaterials.includes(m)); // a dataset of the material, not a material of its own
+  assert.equal(m.source.revision, "NCP-RP-2009-028 · Rev B");
+  assert.equal(provenanceOf(m.source.id).sha256, "6313ba07cc0205aa0677f0a1f6233952f847fc4f0b093acc98f2d2a1bcd9628d");
+  // Table 3-1 (p. 35): the recommended values at room temperature, dry
+  for (const [key, v] of [["F1t", 323.09], ["F2t", 7.59], ["F2c", 36.45], ["F12-offset", 6.87], ["SBS", 15.10]] as const) {
+    assert.equal(value(key).value, v, key);
+    assert.equal(value(key).sourcePage, 35, key);
+    assert.equal(value(key).basis, "B-basis", key);
+  }
+  // no recommended value: the property's own table, as a B-estimate
+  assert.deepEqual([value("F1c-derived").value, value("F1c-derived").sourcePage, value("F1c-derived").basis], [218.20, 46, "B-estimate"]);
+  assert.deepEqual([value("F12-5pct").value, value("F12-5pct").sourcePage, value("F12-5pct").basis], [11.47, 50, "B-estimate"]);
+  // the moduli and the ply are the means' own, so only the strengths change
+  for (const key of ["E1t", "E2t", "nu12", "G12", "tply"]) assert.equal(value(key).value, qualifiedCarbonIM7.properties.find(p => p.key === key)!.value, key);
+  // every strength is below its mean
+  for (const key of ["F1t", "F1c-derived", "F2t", "F2c", "F12-5pct", "F12-offset", "SBS"]) {
+    assert.ok(value(key).value < qualifiedCarbonIM7.properties.find(p => p.key === key)!.value, key);
+  }
+});
+
 test("NASA 2023 IM7 / 8552 dataset sits beside the NCAMP record with printed averages, page offsets and its own monitored report", () => {
   const m = nasaCarbonIM7;
   const value = (key: string) => m.properties.find(p => p.key === key)!;
-  assert.deepEqual(materialDatasets(qualifiedCarbonIM7).map(d => d.datasetId), [qualifiedCarbonIM7.datasetId, m.datasetId]);
+  assert.deepEqual(materialDatasets(qualifiedCarbonIM7).map(d => d.datasetId), [qualifiedCarbonIM7.datasetId, qualifiedCarbonIM7BBasis.datasetId, m.datasetId]);
   assert.ok(!curatedMaterials.includes(m)); // A second dataset of an existing material, not a 21st material.
   assert.equal(m.id, "im7-8552");
   assert.equal(value("E1t").value, 23.105148);
