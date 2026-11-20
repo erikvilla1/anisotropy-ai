@@ -30,7 +30,7 @@ test("the chat keeps a coupon across messages and starts over on request", async
 }) => {
   // This page is served with no API behind it, so it offers the unnotched tension coupon alone (ADR-0089) and its chat
   // asks for the material and the layup, the software choosing the rest (ADR-0090).
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
   const size = page.getByTestId("panel-geometry").locator(".ws-panel-note"); // the tree says the setup tab by tab (ADR-0111)
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // no test to pick: the first question
@@ -110,8 +110,9 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
   // Inside the header's navigation: the footer has a Workspace link too (ADR-0077 amendment 13).
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/workspace\/?$/);
-  await page.getByRole("button", { name: /New coupon fea project/i }).click();
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click(); // FEA opens blank; a coupon is picked (ADR-0124)
   await expect(
     page.getByRole("textbox", { name: "Message the coupon assistant" }),
   ).toBeVisible();

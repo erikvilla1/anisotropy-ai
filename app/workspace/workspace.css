@@ -207,3 +207,31 @@
 @media (max-width: 600px) { .ws-tow-stats { grid-template-columns: minmax(0, 1fr); } .ws-specimen-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .studio-alert > p { margin: 0; }
 .studio-alert .ws-import-notes { color: inherit; margin-top: 4px; }
+
+/* The three sections and an FEA project not set up yet (ADR-0124): the start box over the tiles, the empty model tree with what it can
+   be set up for, the empty centre, the kind of work beside the assistant's name, and CAD, which is being built. */
+.ws-tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ws-tile[data-planned="true"] h3::after { content: "Being built"; font-family: var(--font); font-size: 10.5px; letter-spacing: .4px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: auto; }
+.ws-start-box { display: grid; gap: 10px; margin: 6px 0 22px; }
+.ws-start-box form { display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 10px 12px; }
+.ws-start-box form:focus-within { border-color: #565656; }
+.ws-start-box textarea { flex: 1; min-width: 0; resize: none; background: transparent; border: 0; color: var(--text); font: inherit; font-size: 15px; line-height: 1.5; }
+.ws-start-box textarea:focus { outline: none; }
+.ws-start-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-start-chips button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 13px; cursor: pointer; }
+.ws-start-chips button:hover { border-color: var(--muted); }
+.ws-start-pick { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.ws-start-pick p { margin: 0; font-size: 13px; }
+.ws-start-kind { text-align: left; background: transparent; color: inherit; font: inherit; }
+.ws-start-kind svg { grid-row: span 2; align-self: center; color: var(--muted); }
+.ws-start-kind:hover { border-color: var(--muted); }
+.ws-tree-blank { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ws-tree-blank li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 8px; font-family: var(--heading); font-size: 14px; color: var(--muted); }
+.ws-tree-blank .ws-panel-note { margin-left: auto; }
+.ws-start-stage { display: grid; place-items: center; align-content: center; gap: 10px; min-height: 420px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); text-align: center; padding: 24px; }
+.ws-start-stage p { margin: 0; font-size: 14px; }
+.chat-tag { font-size: 11px; letter-spacing: .3px; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+@media (max-width: 1100px) {
+  .ws-tiles-3 { grid-template-columns: minmax(0, 1fr); }
+  .ws-start-stage { min-height: 200px; }
+}

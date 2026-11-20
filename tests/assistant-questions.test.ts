@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { banks, faults, KINDS, PAGES, pageGap, ROUTES, STYLES, talk, type Bank, type Question } from "./assistant-questions/harness";
+import { ALL_ROUTES, banks, faults, KINDS, PAGES, pageGap, STYLES, talk, type Bank, type Question } from "./assistant-questions/harness";
 
 // The question banks of the assistant (ADR-0121), played against the page's own readers: who answers each question, and what the page
 // says when no model reads it. A question of the results is answered from the stored results the browser tests use; a question a model
@@ -35,8 +35,8 @@ test("every bank is well formed: its kinds, styles and pages are known, it names
       assert.ok((KINDS as readonly string[]).includes(q.kind), `${where}: kind ${q.kind}`);
       assert.ok((STYLES as readonly string[]).includes(q.style), `${where}: style ${q.style}`);
       assert.ok((PAGES as readonly string[]).includes(q.page), `${where}: page ${q.page}`);
-      assert.ok((ROUTES as readonly string[]).includes(q.route), `${where}: route ${q.route}`);
-      if (q.offline) assert.ok((ROUTES as readonly string[]).includes(q.offline), `${where}: offline route ${q.offline}`);
+      assert.ok((ALL_ROUTES as readonly string[]).includes(q.route), `${where}: route ${q.route}`);
+      if (q.offline) assert.ok((ALL_ROUTES as readonly string[]).includes(q.offline), `${where}: offline route ${q.offline}`);
       if (q.route === "model" && !bank.waiting) assert.ok(q.live || q.answer || q.offline || q.mcp, `${where}: a question a model reads says what the model should make of it`);
     }
   }
@@ -54,7 +54,7 @@ test("each bank asks enough, in enough ways: ten questions or more, two kinds, t
 
 test("every way the chat answers is asked at least once: a new route brings its questions", () => {
   const taken = new Set(live.flatMap((bank) => bank.questions.flatMap((q) => [q.route, ...(q.offline ? [q.offline] : [])])));
-  const missing = ROUTES.filter((route) => !taken.has(route));
+  const missing = ALL_ROUTES.filter((route) => !taken.has(route));
   assert.deepEqual(missing, [], `routes no question takes: ${missing.join(", ")}`);
 });
 

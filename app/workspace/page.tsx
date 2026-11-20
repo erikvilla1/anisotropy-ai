@@ -5,10 +5,11 @@ import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "Workspace",
-  description: "Your coupon projects, and the tools to analyze them.",
+  description: "Say what you want to work on, or pick FEA, CAD or Laminate; your projects and analyses.",
 };
 
-/** The workspace's front door (ADR-0062): the projects kept in this browser and one tile per kind of work. */
+/** The workspace's front door (ADR-0062, ADR-0124): a box that reads what you want to work on, one tile per section, the projects kept
+ * in this browser and on the account, and the finished analyses. */
 export default function WorkspacePage() {
   return (
     <main id="main" className="studio-page ws-page">

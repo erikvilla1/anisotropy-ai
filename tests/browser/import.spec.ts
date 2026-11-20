@@ -50,7 +50,7 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   const sent: { url: string; name: string | null; bytes: number }[] = [];
   const others: string[] = [];
   await mockApi(page, sent, others);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await page.getByTestId("import-open").click();
   const rail = page.getByTestId("import-rail");
   await expect(rail).toBeVisible();
@@ -149,7 +149,7 @@ test("a model brought in as a file is read, solved as it stands and asked about,
 
 test("where one workflow is offered, a model cannot be imported (ADR-0089)", async ({ page }) => {
   await mockApi(page, [], [], false);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expect(page.getByTestId("import-open")).toHaveCount(0);
 });
@@ -157,7 +157,7 @@ test("where one workflow is offered, a model cannot be imported (ADR-0089)", asy
 test("a founder's sign-in keeps the product's own screen, the tension coupon alone, with the import on it (ADR-0089 amendment 6)", async ({ page }) => {
   const sent: { url: string; name: string | null; bytes: number }[] = [];
   await mockApi(page, sent, [], false, true);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   await expect(page.getByTestId("tension-screen")).toBeVisible(); // no list of tests: the screen every customer sees
   await expect(page.getByTestId("studio-form")).toHaveCount(0);
   await page.getByTestId("import-open").click();

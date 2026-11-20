@@ -4,11 +4,12 @@ import "../../studio/studio.css";
 import "../workspace.css";
 
 export const metadata: Metadata = {
-  title: "Coupon FEA",
-  description: "Set up a composite coupon test, run the analysis and review every ply's results.",
+  title: "FEA",
+  description: "Set up a composite model, run the analysis and review every ply's results. Starts blank: say what you want to analyse.",
 };
 
-/** The coupon FEA workspace (ADR-0062): three columns on one project. `?material=` and `?prompt=` start the assistant's conversation. */
+/** The FEA section (ADR-0062, ADR-0124): three columns on one project, blank until the chat or a pick sets it up. `?for=coupon` and
+ * `?material=` open it set up for a coupon; `?prompt=` starts the assistant's conversation. */
 export default function FeaWorkspacePage() {
   return (
     <main id="main" className="studio-page ws-app">

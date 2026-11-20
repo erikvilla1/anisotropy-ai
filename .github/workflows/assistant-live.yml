@@ -47,7 +47,7 @@ jobs:
           true
       - name: Ask the model
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_QUESTION_CHECKER || secrets.ANTHROPIC_API_KEY }}
           FEATURES: ${{ inputs.features }}
           BUDGET: ${{ inputs.budget }}
         run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET"

@@ -57,8 +57,8 @@ test("an unknown address gets the site's own 404 page, with one title and the sk
 test("an unknown address under an old one or under the workspace keeps the 404 page's own header and footer", async ({ page }) => {
   const hydration: string[] = [];
   page.on("console", (m) => { if (m.type() === "error" && /hydrat/i.test(m.text())) hydration.push(m.text()); });
-  // /workspace/cad was the CAD placeholder until decision D5 (ADR-0091 amendment 2)
-  for (const path of ["/studio/x", "/workspace/cad"]) {
+  // /workspace/cad is a section again (ADR-0124); an address under it is not
+  for (const path of ["/studio/x", "/workspace/cad/x"]) {
     await page.goto(path);
     await expect(page.locator("main#main h1"), path).toHaveText("Page not found");
     await expect(page.locator(".site-header:not(.chat-site-header)"), path).toBeVisible();
@@ -124,7 +124,7 @@ test.describe("on a phone", () => {
   });
 
   test("the viewer's header links back to the projects", async ({ page }) => {
-    await page.goto("/workspace/fea/view"); // the CAD page that also did is gone (decision D5, ADR-0091 amendment 2)
+    await page.goto("/workspace/fea/view"); // the sections' pages carry "All projects" in their own toolbar
     await expect(page.locator(".site-header").getByRole("link", { name: "All projects" })).toHaveAttribute("href", "/workspace");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });

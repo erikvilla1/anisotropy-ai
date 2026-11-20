@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, Box, ClipboardList, FileText, Layers3, ScanLine, 
 import { ClosingBand } from "@/components/closing-band";
 import { MediaSlot } from "@/components/media-slot";
 import { serviceHref, services, statusLabel, type Service } from "@/lib/services";
+import { COUPON_HREF } from "@/lib/workspaces";
 import "../inner-pages.css";
 import "./services.css";
 
@@ -55,7 +56,7 @@ export default function Services() {
           </div>
         </div>
         <div className="page-opening-links">
-          <Link href="/workspace/fea">
+          <Link href={COUPON_HREF}>
             <Layers3 size={24} strokeWidth={1.4} aria-hidden="true" />
             <div>
               <span>OPEN THE WORKSPACE</span>
