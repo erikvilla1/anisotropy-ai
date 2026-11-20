@@ -92,11 +92,23 @@ def test_the_page_of_reasons_names_no_program_and_writes_no_value_of_a_result():
         assert not [n for n in __import__("re").findall(r"\d+\.\d+", section.text)], section.title  # no decimal number: nothing to copy as a result
 
 
+def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
+    # ADR-0102 amendment 5: no chat answers a question about a repair yet, and its words ("the 0° ply carries", "the load") are a coupon's too
+    repair = of_subject("repair")
+    assert {s.id for s in repair} == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair"}
+    assert set(repair) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
+    for question in ("how come the 0 ply carries most of the load", "why does the adhesive's shear stress peak at the end of a step?"):
+        assert all(s.subject == "" for s, _ in find(question, limit=10)), question
+    assert find("why does the adhesive's shear stress peak at the end of a step?", among=repair)[0][0].id == "engine:16-stepped-lap-bond"
+    assert find("how stiff is a patch ply at an angle on a ledge?", among=repair)[0][0].id == "engine:17-stepped-patch-repair"
+
+
 def test_the_wings_sections_are_read_but_searched_only_by_their_subject():
     # ADR-0102 amendment 4: no chat answers a question about a wing yet, so its sections are kept out of what a question is matched against
     wing = of_subject("wing")
     assert {s.id for s in wing} >= {"engine:13-wing", "engine:15-spar-caps-and-layups-that-change-along-the-span", "fea:10-the-wing-in-calculix"}
-    assert all(s.subject == "wing" for s in wing) and set(wing) | set(of_subject("references")) | set(of_subject()) == set(sections())
+    assert all(s.subject == "wing" for s in wing)
+    assert set(wing) | set(of_subject("references")) | set(of_subject("repair")) | set(of_subject()) == set(sections())
     assert "engine:14-design-rules-of-a-stack" in {s.id for s in of_subject()}  # a laminate's rules are not the wing's alone
     question = "why do spar caps carry the bending?"
     assert all(s.subject == "" for s, _ in find(question, limit=10))

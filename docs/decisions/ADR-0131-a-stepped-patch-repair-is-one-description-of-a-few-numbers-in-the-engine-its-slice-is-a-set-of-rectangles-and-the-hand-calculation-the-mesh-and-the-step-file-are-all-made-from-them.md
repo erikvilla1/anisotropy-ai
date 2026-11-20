@@ -50,7 +50,7 @@ Run in the cloud container on 2026-11-20:
 
 - `engine/src/anisotropy_engine/repair/description.py` (`Repair`, `RepairMaterial`, `RepairError`), `section.py` (`Region`, `regions`, `region_at`, `areas`, `volumes`, `bond_lengths`, `check_regions`), `patch_lap.py` (`stretching_matrix`, `shared_stiffnesses`, `lap_steps`, `repair_lap`), `repair_file.py` (`repair_from_dict`, `repair_report`).
 - `fea/src/anisotropy_fea/repair_shape.py`: `slice_mesh`, `SliceMesh`, `build_repair_shape`, `RepairShape`, `read_step_volumes`, and the command `python -m anisotropy_fea.repair_shape <repair.toml> --step <file.step>`.
-- `engine/docs/theory.md` Section 17 with its code markers; the three modules among those the manual prints.
+- `engine/docs/theory.md` Section 17 with its code markers; the three modules among those the manual prints. Sections 16 and 17 are kept out of a coupon chat's search of the theory pages ([ADR-0102](ADR-0102-a-question-of-why-about-a-result-is-answered-in-words-from-the-results-fact-sheet-and-the-matching-sections-of-our-own-theory-pages-named-under-the-answer.md) amendment 5).
 - `engine/validation/patch_repair_cases/` (two cases), `stepped_patch_repair` in `engine/validation/closed_forms.py`, `engine/tests/test_patch_repair.py`, `fea/tests/test_repair_shape.py`, `engine/examples/example-patch-repair.toml`, `engine/examples/patch_repair_calculator.py`.
 
 ## Consequences

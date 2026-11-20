@@ -1136,9 +1136,9 @@ Not covered: peel stresses and the bending of an eccentric load path; the variat
 
 Checks: `engine/tests/test_step_lap.py`. The cases of `engine/validation/repair_cases/` are worked without the engine in `engine/validation/closed_forms.py` by another route, the general solution of every step with its two constants from one linear system, and agree within $`10^{-9}`$; the yielding double lap is worked there zone by zone. One step equals Volkersen's formula; the shear stress integrates to the load and is the slope of the force; a uniform step cut in five gives the same answer; matching adherends give the same stresses from both ends; a step two metres long neither overflows nor loads its middle, and its elastic limit is the long overlap's; and the yielding bond's equation, marched inward by Runge-Kutta from the governing end, holds at 0.999 of the strength and fails at 1.001.
 
-## 17. Stepped patch repair (`repair/description.py`, `repair/section.py`, `repair/patch_lap.py`)
+## 17. Stepped patch repair (`repair/`)
 
-A repair stated by a few numbers, the slice through it, and the stepped lap it makes (ADR-0131). A round piece of damage is cut out of a flat laminate from its top face in $`n`$ steps. The deepest step has the damage's diameter $`d`$, and each step above it is cut wider by the step length $`L`$ all round, which leaves a ledge to bond to. Steps are counted from the top face, step 1 the widest, and step $`j`$ is cut at the radius computed by `Repair.cut_radius_m`:
+A repair stated by a few numbers, the slice through it, and the stepped lap it makes (ADR-0131). The description is `repair/description.py`, the slice `repair/section.py` and the lap `repair/patch_lap.py`. A round piece of damage is cut out of a flat laminate from its top face in $`n`$ steps. The deepest step has the damage's diameter $`d`$, and each step above it is cut wider by the step length $`L`$ all round, which leaves a ledge to bond to. Steps are counted from the top face, step 1 the widest, and step $`j`$ is cut at the radius computed by `Repair.cut_radius_m`:
 
 ```math
 R_j = \frac{d}{2} + (n - j)\,L
