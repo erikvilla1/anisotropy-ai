@@ -103,7 +103,7 @@ def read_back(text: str) -> dict:
             assert rest[0] == "1"
             data["keyopt"][int(rest[1])] = int(rest[2])
         elif head in ("/PREP7", "/TITLE", "/UNITS", "ET", "LOCAL", "CSYS", "TB", "SECTYPE", "SECOFFSET", "FINISH", "/SOLU", "ANTYPE", "NLGEOM", "OUTRES",
-                      "SOLVE", "/POST1", "SET", "PRRSOL", "PRNSOL"):
+                      "SOLVE", "/POST1", "SET", "FCTYP", "PRRSOL", "PRNSOL"):
             data["commands"].append(line)
         else:
             raise AssertionError(f"a command the reader does not know: {line}")
@@ -155,7 +155,10 @@ def test_strength_limits_are_negative_in_compression_and_leave_the_thickness_unc
     unstated = write_ansys(dataclasses.replace(model, material=dataclasses.replace(model.material, f12_star=None)))
     assert 10 not in read_back(unstated)["tbdata"] and "states no Tsai-Wu interaction term" in unstated
     plain = write_ansys(dataclasses.replace(model, material=dataclasses.replace(model.material, strengths=None, f12_star=None)))
-    assert "TB,FCLI" not in plain and "TBDATA" not in plain
+    assert "TB,FCLI" not in plain and "TBDATA" not in plain and "FCTYP" not in plain
+    # Mechanical APDL 2026 R1 lists no failure measure while the maximum strain criterion is asked for and no strain limit is stated
+    text = write_ansys(model)
+    assert text.index("SET,LAST") < text.index("FCTYP,DELE,ALL\nFCTYP,ADD,SMAX\n") < text.index("PRRSOL")
 
 
 def test_a_layer_angle_is_counted_from_the_length_axis_in_the_element_system():

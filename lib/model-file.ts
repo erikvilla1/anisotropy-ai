@@ -66,5 +66,5 @@ export function modelFileAnswer(program: ModelProgram | null, c: ModelFileContex
   const offers: ModelProgram[] = program ? [program] : c.ansys ? ["abaqus", "ansys"] : ["abaqus"];
   return { title: "Download the model", offers,
     lines: ["The model as it is set up now: the mesh, the layup, the material, the supports and the loads, ready to run in your own copy of the program.",
-      ...(offers.includes("ansys") ? ["The Ansys file has not been run in Ansys yet. Compare its reaction with the one shown here before relying on it."] : [])] };
+      ...(offers.includes("ansys") ? ["The Ansys file was checked in Ansys on one tension coupon. Compare its reaction with the one shown here before relying on it."] : [])] };
 }

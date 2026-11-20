@@ -1,6 +1,6 @@
 # ADR-0129: The model on the page downloads as a file for the engineer's own program, one writer per program over the neutral model, and the Ansys file is offered to founders only until it has run in Ansys
 
-- Status: Proposed; three questions beside the download answered in fixed words since amendment 1
+- Status: Proposed; three questions beside the download answered in fixed words since amendment 1; one coupon's Ansys file run in Mechanical APDL, and the file names the maximum stress criterion, since amendment 2; the Ansys file is everyone's since amendment 3
 - Date: 2026-11-20
 - Decided by: Founder, 2026-11-20 ("essentially what i want is the ability to produce ansys models as well the same way we are able to create abaqus models, our software or browser is FEA or CAD going on but upon request of the user say they ask the AI or something shows with, Download abaqus model, or download ansys model etc.", his ask; then "Downloads, then repair hand calc", his choice on the card "Start building now, and with which piece first?", whose plan has founders seeing the Ansys file and customers keeping the Abaqus one until his check in Ansys). The file's format, its commands, the names of its components, the wording and the gate are the drafter's | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md), [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md), [ADR-0091](ADR-0091-the-workspace-speaks-to-the-customer-in-the-products-own-words-mapped-in-the-page-and-guarded-by-a-test.md), [ADR-0094](ADR-0094-models-move-to-and-from-abaqus-through-a-connector-under-the-users-own-abaqus-and-one-versioned-bundle-compared-privately.md), [ADR-0111](ADR-0111-the-fea-workspace-sets-a-model-up-in-a-model-tree-on-the-left-in-the-words-of-any-finite-element-program-and-the-chat-changes-the-same-tabs.md), [ADR-0121](ADR-0121-the-assistant-is-held-to-question-banks-per-feature-checked-free-on-every-pull-request-and-by-a-real-model-before-a-feature-merges.md), `fea/src/anisotropy_fea/write_ansys.py`, `fea/tools/studio_tool.py`, `api/src/anisotropy_api/main.py`, `lib/model-file.ts`, `components/studio/model-download.tsx`
@@ -97,3 +97,50 @@ A grip whose reference point may turn, or that carries a moment, is refused with
 - A model brought in from a program whose files are not read here ("import an ansys model", "can I upload a nastran file?"): that it cannot be brought in yet, to set the coupon up here, and that the other way works. Ansys is named back; another program is not (ADR-0091). An Abaqus file brought in keeps its own answer (ADR-0105).
 
 **Evidence.** `tests/assistant-questions/model-downloads.json` now holds 20 questions, the three with the good answer and three more in other words; `npx tsx --test tests/assistant-questions.test.ts` 20 passed, `npx tsx --test tests/model-file.test.ts` 4 passed, `npm test` 489 passed and 1 skipped (2026-11-20). No question of this bank is read by a model any more (`scripts/assistant-live.py --features model-downloads --dry-run`: "No live question"), so there is no second real-model run to make. No evidence yet from a user's own words for these three.
+
+## Amendment 2, 2026-11-20 (one coupon's Ansys file run in Mechanical APDL: it agrees with ours; the file now names the maximum stress criterion; who sees the Ansys file is unchanged; not yet confirmed by the founder)
+
+**Context.** The founder asked for the check to be run for him on his machine ("merge and driv eit for me", 2026-11-20, after the offer "Run the Ansys file once in Mechanical APDL on your PC, or tell me to drive it with you"). The file of the public example coupon (IM7/8552 [45/0/-45/90]s, 250 x 25 mm, 56 mm tabs, 1200 four-node shells, mm-MPa) was run in batch in Mechanical APDL 2026 R1 (build 26.1, "Ansys Mechanical Enterprise Academic Research", the school's licence on the founder's machine), pulled by 1 mm and, as a second file, by 16,000 N. Both read in and solved with no warning. One thing failed: asked for the failure measures of a layer (`PRESOL,FAIL`) with the criteria left at Ansys's own choice, it answered "One or more materials (such as material 1) do not have all required stress or strain strength limits defined. Therefore, no failure criteria are computed." and, in batch, stopped. The file states stress limits (`TB,FCLI` option 1) and no strain limits.
+
+**Options.** (1) Leave the file as it is and tell the engineer to name the criterion: the first thing an engineer asks of a composite in Ansys ends in an error whose cause is not in view. Rejected. (2) Write strain limits too, each strength over its modulus: those are numbers the lamina does not state and nobody measured. Rejected. (3) Name the maximum stress criterion in the file's own post-processing (`FCTYP,DELE,ALL`, `FCTYP,ADD,SMAX`), the one criterion the stated limits serve and the page shows. Chosen. The Tsai-Wu measure stays unnamed: Ansys works it with its own interaction term of -1 unless the coupon states one, and that value is not ours.
+
+**Decision.**
+
+- The writer adds `FCTYP,DELE,ALL` and `FCTYP,ADD,SMAX` after `SET,LAST` when the material states strengths, with a comment that says why.
+- The file is taken as checked in Ansys for what was run: an unnotched tension strip of four-node layered shells in mm-MPa, its grips held and moved or held and pulled by a force through a coupled set. Still unchecked there: a pressure (`SFE`, its face and sign), the eight-node shell, a force on nodal grips, a file in metres and pascals, a coupon that states a Tsai-Wu term, reading the file through the window's File menu, and Workbench's External Model.
+- The page's line beside the Ansys download becomes "The Ansys file was checked in Ansys on one tension coupon. Compare its reaction with the one shown here before relying on it."
+- Who sees the Ansys file does not change: founders and a machine with every test switched on, until the founder's word opens it.
+
+**Evidence.** Runs of 2026-11-20 on the founder's machine, 0 warnings in each; the outputs stay on that machine (`im7check.out`, `im7fail.out`, `im7force.out`, `im7v2.out`) and the inputs are in the project's files, outside the repository. Ours is the kernel's run of the same rows and, for the ply stresses, laminate theory under its reaction.
+
+| Pulled by 1 mm | Mechanical APDL | Ours |
+| --- | --- | --- |
+| Reaction at the top grip, N | 16,210.30 | 16,211.75 |
+| Movement at the gauge centre, mm | 0.50000 | 0.5 |
+| Ply 1 (45°): σ1, σ2, τ12, MPa | 413.62, 29.582, -44.911 | 413.65, 29.58, -44.92 |
+| Ply 2 (0°) | 1180.6, 0.0548, 0.00004 | 1180.76, 0.05, 0 |
+| Ply 3 (-45°) | 413.62, 29.582, 44.911 | 413.65, 29.58, 44.92 |
+| Ply 4 (90°) | -353.42, 59.108, -0.00004 | -353.46, 59.11, 0 |
+
+The reaction differs by 0.009 % and no stress by more than 0.03 %; plies 5 to 8 mirror plies 4 to 1. The sign of the shear in the 45° and -45° plies is ours, so the angles, coordinate system 11, the element system and the order of the layers read as written (`SLIST` lists the eight layers bottom-first as the coupon states them; `CSLIST` gives system 11 its x along global y and its y along global -x).
+
+- The strength table: with the maximum stress criterion named, the measure at the gauge centre is 0.49272, 0.46146, 0.49272 and 0.92281 in plies 1 to 4, each the governing stress over its limit (44.911 / 91.149, 1180.6 / 2558.5, 59.108 / 64.052). Over the whole model the largest in ply 4 is 1.0765 in element 281 (and its three mirror images), where ours is 1.0732 in the same element and ply: 0.3 % apart, the cause not examined (the corner values Ansys lists in that element run from 0.908 to 1.245).
+- Pulled by 16,000 N: the top grip is one coupled set of 319 nodes that all move 0.987027 mm, where ours is 0.986939 mm (0.009 %, the same ratio as the reactions above); the bottom grip's reaction is -16,000 N; the ply stresses are those of the first run times 0.98703.
+- The file as the writer gives it now, with the two `FCTYP` lines inside it, ran the same day with 0 warnings and 0 errors: the same reactions (16,210 N at each grip as `PRRSOL` prints them), and `PRESOL,FAIL` asked after the file had ended, with no criterion named again, lists 0.49272, 0.46146, 0.49272 and 0.92281 for plies 1 to 4. The measures of the two lines above were made on the first file with the same two commands given after it.
+- `cd fea && uv run pytest -q tests/test_write_ansys.py tests/test_studio_tool.py`: 32 passed; `npx tsx --test tests/model-file.test.ts tests/assistant-questions.test.ts`: 24 passed (2026-11-20).
+- No evidence yet from an engineer's own Ansys, from the window rather than batch, or from any model but this coupon.
+
+## Amendment 3, 2026-11-20 (the Ansys file is offered to everyone; confirmed by the founder)
+
+**Context.** With the runs of amendment 2 reported to him, the founder was asked "Open the Ansys download to customers now that it checks out?" and chose "Open it with the fix" (his card choice, 2026-11-20), the option that adds the opening to the pull request of amendment 2's fix. A customer sets up one kind of model, the unnotched tension coupon (ADR-0089), pulled by a displacement or a force, on four-node shells: the kind that ran in Ansys.
+
+**Options.** (1) Keep the file with founders until a plate, a pressure and Workbench have run in Ansys too: none of those is a customer's model today. Not chosen. (2) Offer it to everyone, with the page's line that says how far it is checked. Chosen by the founder. (3) Offer it to everyone and take the line away: one coupon in one release of Ansys is not grounds for that. Rejected.
+
+**Decision.**
+
+- The API offers the Ansys file to every request: `_ansys_model` answers true, and `GET /v1/coupon-tests` says `ansys_model` true to everyone. The 403 "The Ansys model is not offered yet." and the page's "Not as an Ansys file yet" stay in the code for the day the file must be closed again, which is one line in `_ansys_model`.
+- The menu and the assistant offer both files to a customer. The line "The Ansys file was checked in Ansys on one tension coupon. Compare its reaction with the one shown here before relying on it." stays beside every Ansys download.
+- What a founder can set up and a customer cannot (a plate with a pressure, ADR-0089 amendment 6) still writes an Ansys file whose pressure has not run in Ansys; the list of amendment 2 stands.
+
+**Evidence.** `cd api && uv run pytest -q tests/test_coupon_model_api.py tests/test_coupon_tests.py`: 34 passed, 1 skipped (a request with no sign-in gets the file; a closed file is 403). Three browser scenarios in Chromium, `BROWSER_CHANNEL=chromium npx playwright test -c playwright.studio.config.ts -g "ADR-0129"`: 3 passed, among them a customer who is offered both files by the menu and by asking, with the customer's view checked for words it must not show, and the closed state (2026-11-20). No evidence yet from a customer's own Ansys.
+

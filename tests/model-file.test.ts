@@ -53,11 +53,11 @@ test("a file coming in, work done elsewhere, a question about a file, and the re
   assert.equal(programNamed("input"), null);
 });
 
-test("the answer offers the files this visitor may have, says what the Ansys file is not yet, and stays in the product's words (ADR-0129, ADR-0091)", () => {
+test("the answer offers the files this visitor may have, says how far the Ansys file is checked, and stays in the product's words (ADR-0129, ADR-0091)", () => {
   const all = modelFileAnswer(null, { ansys: true, readOnly: false });
   assert.equal(all.title, "Download the model");
   assert.deepEqual(all.offers, ["abaqus", "ansys"]);
-  assert.match(all.lines.join(" "), /has not been run in Ansys yet/);
+  assert.match(all.lines.join(" "), /was checked in Ansys on one tension coupon/);
 
   const one = modelFileAnswer("abaqus", { ansys: true, readOnly: false });
   assert.deepEqual(one.offers, ["abaqus"]);

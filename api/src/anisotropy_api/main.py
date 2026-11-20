@@ -651,8 +651,7 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
     """The model the rows build, as a file another program reads (ADR-0129): `program=abaqus` gives the Abaqus input deck a run writes,
     `program=ansys` a Mechanical APDL input file of the same model. The fea package judges the rows as a live solve does and writes the
     file; nothing is solved and nothing is kept. The answer is the file, named in `Content-Disposition`. The Abaqus file is everyone's;
-    the Ansys file is offered where the import is, the machine's switch or a founder's sign-in, until it has been run in Ansys: 403
-    otherwise. 422 when the setup check stops the model, with its first reason, or the program's writer cannot state it; 429, 504 and
+    the Ansys file is too since ADR-0129 amendment 3 (403 if it is closed again, `_ansys_model`). 422 when the setup check stops the model, with its first reason, or the program's writer cannot state it; 429, 504 and
     503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256."""
     if program == "ansys" and not _ansys_model(request):
         raise HTTPException(status_code=403, detail="The Ansys model is not offered yet.")
@@ -1875,9 +1874,10 @@ def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> 
 
 
 def _ansys_model(request: Request) -> bool:
-    """Whether the model may be downloaded as an Ansys file by this request (ADR-0129): where the import is, the machine's switch or a
-    founder's sign-in, because the file has not been run in Ansys yet. The founder's word opens it to everyone, here."""
-    return _imports(request)
+    """Whether the model may be downloaded as an Ansys file by this request (ADR-0129): everyone's since amendment 3, on the founder's
+    word after one coupon's file ran in Ansys and agreed with ours (amendment 2). It was offered where the import is until then; a
+    False here closes it again, and the route answers 403."""
+    return True
 
 
 def _imports(request: Request) -> bool:

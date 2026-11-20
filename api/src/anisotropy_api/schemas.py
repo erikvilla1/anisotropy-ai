@@ -1173,7 +1173,7 @@ class CouponTests(Contract):
     all: bool
     imports: bool = False
     plates: bool = False
-    ansys_model: bool = False  # whether the model may be downloaded as an Ansys file (ADR-0129): offered where the import is, until it has been run in Ansys
+    ansys_model: bool = False  # whether the model may be downloaded as an Ansys file (ADR-0129): everyone's since amendment 3
 
 
 class AssistantInfo(Contract):
