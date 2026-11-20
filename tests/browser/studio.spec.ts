@@ -506,6 +506,21 @@ test("the tension screen takes the material and the layup, builds the model, say
 test.describe("the model tree", () => {
   test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 }); // its pictures are looked at by people
 
+  /** Keeps, in the page, the id of every tab the assistant marks as changed from now on. The mark lasts 1.8 s, which a slow runner can
+   * spend before an assertion first looks (PR #252's studio-browser run), so the test asks whether it was put on, not whether it is on. */
+  const watchMarks = (page: Page) =>
+    page.evaluate(() => {
+      const marked: string[] = [];
+      (window as unknown as { marked: string[] }).marked = marked;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          const element = record.target as HTMLElement;
+          if (element.classList.contains("ws-panel-changed")) marked.push(element.id);
+        }
+      }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    });
+  const marked = (page: Page) => page.evaluate(() => (window as unknown as { marked: string[] }).marked);
+
   test("the setup is a model tree in the words of any finite element program; a tab lights its part of the model and a change in the chat opens its tab (ADR-0111)", async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -526,10 +541,11 @@ test.describe("the model tree", () => {
     const mesh = page.getByTestId("panel-mesh");
     await expect(mesh).not.toHaveAttribute("open", "");
     const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await watchMarks(page);
     await message.fill("use 4 mm elements");
     await message.press("Enter");
     await expect(mesh).toHaveAttribute("open", "");
-    await expect(mesh).toHaveClass(/ws-panel-changed/);
+    await expect.poll(() => marked(page)).toContain("panel-mesh");
     await expect(page.locator("#studio-element_size")).toHaveValue("4");
     await expect(mesh.locator(".ws-panel-note")).toContainText("4 mm elements"); // and the count once the preview has meshed it
     await page.screenshot({ path: ".local/website/screenshots/model-tree-chat-change.png" });
@@ -638,10 +654,11 @@ test.describe("the model tree", () => {
     await message.press("Enter");
     const card = page.getByTestId("proposal-card").last();
     await expect(card.locator("[data-key='support:0']")).toContainText("Edge-Left");
+    await watchMarks(page);
     await card.getByTestId("proposal-apply").click();
     const conditions = page.getByTestId("panel-conditions");
     await expect(conditions).toHaveAttribute("open", "");
-    await expect(conditions).toHaveClass(/ws-panel-changed/);
+    await expect.poll(() => marked(page)).toContain("panel-conditions");
     await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Left holds x, y, z, tilt about x, tilt about y, rotation about z");
     await expect(page.getByTestId("plate-supports")).toContainText("θx"); // the directions in no program's notation on the tree
     await expect(page.getByTestId("plate-supports")).not.toContainText("UR1");
