@@ -23,6 +23,10 @@ Behind the sign-in each person has a folder of coupons of their own (ADR-0106): 
 from their signed-in email (`root_of`), and in the store under a prefix of that key. A job, a check, the list and a coupon's values
 read and write the folder of the person who asked, and the tools are started with it; with no sign-in (the local API) there is one
 folder, .local/fea/, as before.
+
+A wing's finite element check is a job of the same kind (ADR-0119): its row's inputs say `kind = "wing"` and hold the wing's
+description, the tool is `anisotropy_fea.wing_check`, and it names no coupon, so it takes no gate and no coupon's folder. It goes
+through the same queue, solvers, limits, heartbeat and receipt; its one file, the check's report, is filed under the job's own key.
 """
 
 from __future__ import annotations
@@ -49,7 +53,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
                       sweep_stale, update_job)
-from .storage import ObjectStore, content_type, input_key, owner_key, store_file, store_folder, store_job, sync
+from .storage import ObjectStore, content_type, input_key, job_output_key, owner_key, store_file, store_folder, store_job, sync
 
 REPO = Path(__file__).resolve().parents[3]
 FEA = REPO / "fea"
@@ -77,6 +81,8 @@ LIVE_KEYS = ("checklist", "preview", "fields", "explanation", "kernel_summary", 
 # the result's, which the tool reports before it draws and builds the package (ADR-0064)
 DOCUMENT_SOURCE = "document_source"  # the report as LaTeX with its figures, kept by a run that wrote no PDF (fea/tools/run_coupon.py, ADR-0064 amendment 3)
 DOCUMENT_TIMEOUT_S = 300.0  # Tectonic on one report takes half a minute on the hosted tier; past this it is stopped
+WING = "wing"  # the kind of a wing's finite element check, in its row's inputs (ADR-0119)
+WING_DESCRIPTION = "wing.json"  # the description as the check's tool reads it, in the job's folder
 # The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
 CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
@@ -180,6 +186,18 @@ def wing_shape_command() -> list[str] | None:
     ADR-0118), or None when uv is not on PATH."""
     uv = shutil.which("uv")
     return None if uv is None else [uv, "run", "--project", str(FEA), "--extra", "mesh", "python", "-m", "anisotropy_fea.wing_shape"]
+
+
+def wing_check_command() -> list[str] | None:
+    """`uv run --project fea --extra mesh python -m anisotropy_fea.wing_check`, a wing's finite element check as a job (ADR-0119),
+    or None when uv is not on PATH."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "--extra", "mesh", "python", "-m", "anisotropy_fea.wing_check"]
+
+
+def is_wing(job: "Job") -> bool:
+    """Whether a job is a wing's finite element check (ADR-0119), as its row's inputs say."""
+    return (job.inputs or {}).get("kind") == WING
 
 
 def typesetter() -> str | None:
@@ -312,15 +330,16 @@ class CouponJobs:
 
     def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
                  store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None,
-                 role: str | None = None, owners_root: Path | None = None):
+                 role: str | None = None, owners_root: Path | None = None, wing: list[str] | None = None):
         """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
         2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
         the coupons made with no sign-in, .local/fea/ by default, and `owners_root` where each signed-in person's folder of coupons
         is (ADR-0106), .local/fea-owners/ by default and beside a `local_root` that is given. `per_day`, with the table, is the hosted
         tier's per-user limit: one running job per
         person and at most that many a day (ADR-0056); None means no such limit. `role` is the job queue's (ADR-0056 amendment 3):
-        "queue" files jobs for the queue, "solver" runs the queued job it is given; None runs every job here."""
-        self.command, self.recorder, self.root, self.studio = command, recorder, root, studio
+        "queue" files jobs for the queue, "solver" runs the queued job it is given; None runs every job here. `wing` is the wing
+        check's command line without its arguments (ADR-0119); None refuses a wing's check."""
+        self.command, self.recorder, self.root, self.studio, self.wing = command, recorder, root, studio, wing
         self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
         self.owners_root = owners_root or (OWNERS_FEA if local_root is None else local_root.with_name(local_root.name + "-owners"))
         if per_day is not None and table is None:
@@ -501,6 +520,56 @@ class CouponJobs:
                    snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [],
                              "message": "queued"})
 
+    def start_wing(self, actor: str, inputs: dict, user_email: str | None = None) -> Job:
+        """Start a wing's finite element check (ADR-0119): `inputs` hold the kind, the wing's title and its description, which the
+        engine has read already. Like a coupon job it is refused while another runs here, within the per-user limits, and with the
+        queue it is filed for a solver: the description travels in the row, so nothing is filed in the store first."""
+        if self.role == "solver":
+            raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
+        if inputs.get("kind") != WING or not isinstance(inputs.get("description"), dict):
+            raise ValueError("a wing's check starts from its kind and its description")
+        if self.role == "queue":
+            self.sweep()
+            if self.per_day is not None:
+                self._within_limits(actor, user_email)
+            job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
+            try:
+                insert_job(self.table, job_id=job_id, actor=actor, user_email=user_email, inputs=inputs, started_at=now, process=self.process, state="queued")
+            except SQLAlchemyError as exc:
+                raise JobRefused(f"the job could not be registered in the jobs table, so it was not queued: {str(exc).splitlines()[0]}") from exc
+            return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email,
+                       snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [], "message": "queued"})
+        if self.wing is None:
+            raise JobRefused("uv is not on PATH; a wing's check runs anisotropy_fea.wing_check through `uv run --project fea --extra mesh`")
+        if self.per_day is not None:
+            self._within_limits(actor, user_email)
+        with self.lock:
+            busy = next((job for job in self.jobs.values() if job.state == "running"), None)
+            if busy is not None:
+                print(f"wing check refused: {busy.id} is running; one runs at a time", flush=True)
+                raise JobBusy(busy.id)
+            job_id = uuid.uuid4()
+            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email)
+            job.folder.mkdir(parents=True)
+            self.jobs[job.id] = job
+        if self.table is not None:
+            try:
+                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process)
+            except SQLAlchemyError as exc:
+                with self.lock:
+                    del self.jobs[job.id]
+                shutil.rmtree(job.folder, ignore_errors=True)
+                raise JobRefused(f"the job could not be registered in the jobs table, so it was not started: {str(exc).splitlines()[0]}") from exc
+        threading.Thread(target=self._run, args=(job, self._wing_args(job)), name=f"wing-check-{job.id}", daemon=True).start()
+        return job
+
+    def _wing_args(self, job: Job) -> list[str]:
+        """The wing check's command line for a job whose folder exists: its description written there first."""
+        description = job.folder / WING_DESCRIPTION
+        description.write_text(json.dumps(job.inputs["description"]), encoding="utf-8")
+        return [*self.wing, str(description), "--out", str(job.folder / "model"), "--result", str(job.folder / "outcome.json"),
+                "--progress", str(job.folder / PROGRESS)]
+
     def _within_limits(self, actor: str, user_email: str | None) -> None:
         """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
         started since midnight UTC, whatever became of them. Refused with the reason the page shows, in the person's words (ADR-0091
@@ -518,13 +587,17 @@ class CouponJobs:
             raise JobLimited(f"You have started {started} {'analysis' if started == 1 else 'analyses'} today, the most allowed per day. You can "
                              "start another after midnight UTC, or contact us for a higher limit.")
 
+    def _tool_name(self, job: Job) -> str:
+        """The tool a job runs, as its console and a status name it."""
+        return (self.wing or ["anisotropy_fea.wing_check"])[-1] if is_wing(job) else Path((self.command or ["run_coupon.py"])[-1]).name
+
     def _run(self, job: Job, args: list[str]) -> None:
         result = job.folder / "outcome.json"
         try:
             with job.log.open("wb") as log:
                 done = subprocess.run(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email), check=False)
             outcome = json.loads(result.read_text(encoding="utf-8")) if result.is_file() else {
-                "status": "stopped", "message": f"{Path(self.command[-1]).name} exited with code {done.returncode} and wrote no outcome; "
+                "status": "stopped", "message": f"{self._tool_name(job)} exited with code {done.returncode} and wrote no outcome; "
                                                 "the end of its console says why", "coupon": None, "attempt": None, "outputs": {}}
         except (OSError, json.JSONDecodeError) as exc:
             outcome = {"status": "stopped", "message": f"the job could not run: {exc}", "coupon": None, "attempt": None, "outputs": {}}
@@ -548,6 +621,13 @@ class CouponJobs:
                                                                           f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
                 else:
                     print(f"coupon job {job.id}: the stopped run's files could not be copied to storage: {str(exc).splitlines()[0]}", flush=True)
+        elif state == "done" and self.store is not None and is_wing(job):  # a wing's check names no coupon: its report under the job's own key
+            try:
+                job.stored = self._store_wing(job, outcome)
+            except Exception as exc:  # as above: no result the store does not hold
+                state = "stopped"
+                outcome = {**outcome, "status": "stopped", "message": f"the job ended ({outcome.get('message')}) but its files could not be copied "
+                                                                      f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
         try:
             run_id = self.recorder(job, state, outcome)
         except RecordingFailed as exc:  # no result without its receipt (ADR-0026)
@@ -585,6 +665,17 @@ class CouponJobs:
         folder = self.root_of(job.user_email) / coupon
         if folder.is_dir():
             store_folder(self.store, folder, coupon, owner)
+        return stored
+
+    def _store_wing(self, job: Job, outcome: dict) -> dict[str, str]:
+        """A wing check's files into the store under the job's own key (ADR-0119): the report, by its key."""
+        stored = {}
+        for key, text in (outcome.get("outputs") or {}).items():
+            path = repository_path(text)
+            if self._servable(job, path):
+                object_key = job_output_key(str(job.id), path.name)
+                self.store.put(object_key, path, content_type(path))
+                stored[key] = object_key
         return stored
 
     def package_archive(self, job: Job) -> Path:
@@ -808,6 +899,8 @@ class CouponJobs:
 
     def _solve_steps(self, job: Job, source: str, options: list[str]) -> tuple[dict, str | None]:
         """Run the tool with the gate; returns the outcome, and the reason when the job goes back to the queue instead."""
+        if is_wing(job):
+            return self._solve_wing(job), None
         argument = source
         started = time.monotonic()
         if "/" in source:  # an object key: the form or the values as sent, filed by the API's container
@@ -853,6 +946,22 @@ class CouponJobs:
             "status": "stopped", "message": f"{Path(self.command[-1]).name} exited with code {process.returncode} and wrote no outcome; the end of "
                                             "its console says why", "coupon": None, "attempt": None, "outputs": {}}
         return outcome, None
+
+    def _solve_wing(self, job: Job) -> dict:
+        """A solver's wing check (ADR-0119): no coupons to bring level and no gate, since it names none; the tool run to its end, killable
+        by the per-job timeout like a coupon's."""
+        if self.wing is None:
+            return {"status": "stopped", "message": "uv is not on PATH; a wing's check runs anisotropy_fea.wing_check", "coupon": None, "attempt": None,
+                    "outputs": {}}
+        args, result = self._wing_args(job), job.folder / "outcome.json"
+        with job.log.open("wb") as log:
+            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email))
+            with self.lock:
+                job.process = process
+            process.wait()
+        return json.loads(result.read_text(encoding="utf-8")) if result.is_file() else {
+            "status": "stopped", "message": f"{self._tool_name(job)} exited with code {process.returncode} and wrote no outcome; the end of its console says why",
+            "coupon": None, "attempt": None, "outputs": {}}
 
     def _first_hold(self, job: Job, process: subprocess.Popen) -> str | None:
         """Wait until the tool holds for the first time, or ends. "unnamed" when it holds before naming the coupon (the tool since ADR-0056

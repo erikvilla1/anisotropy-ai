@@ -1379,6 +1379,24 @@ class WingAnswer(Contract):
     views: dict[str, Any]
 
 
+class WingCheckOutput(Contract):
+    """A wing's finite element check as it stands (ADR-0119): `queued` until a solver takes it, `running` with its stage (build, solve,
+    modes), then `done` with the check's report in the wing file's units, `refused` with the reason the description cannot be checked,
+    or `stopped` with what to do. `message` is shown as it is; the causes of a stop stay in the log."""
+
+    job_id: str
+    state: Literal["queued", "running", "done", "stopped", "refused"]
+    wing: str | None = None
+    started_at: str
+    finished_at: str | None = None
+    stage: str | None = None
+    stages_done: list[str] = []
+    stages: list[str] = []
+    message: str | None = None
+    run_id: str | None = None
+    report: dict[str, Any] | None = None
+
+
 class WingShapeAnswer(Contract):
     """A wing's shape for a CAD program (ADR-0116, ADR-0118): its STEP file's text, in millimetres with every part named, and the
     part table in the wing file's units: each part's layup, the thickness to thicken it to, its area and mass."""

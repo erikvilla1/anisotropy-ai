@@ -17,7 +17,7 @@ from anisotropy_engine.wing.section import box_section
 from anisotropy_fea.calculix import find_ccx
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.wing_model import (
-    PATTERNS, SKINS, WEBS, WingModelError, build_wing_model, buckling_cases, case_factors, check_describable, element_loads,
+    MAX_LAYERS, PATTERNS, SKINS, WEBS, WingModelError, build_wing_model, buckling_cases, case_factors, check_describable, element_loads,
     fe_cases, fe_section, layers, panel_buckling, read_modes, run_modes, run_wing_model, schrenk_lift, serendipity,
     strip_pressure, typical_section,
 )
@@ -84,6 +84,21 @@ def test_a_core_without_its_stiffness_and_ribs_without_a_layup_are_refused():
         check_describable(example(**{"skin.core": None, "skin.core_density": 48.0})[0])
     with pytest.raises(WingModelError, match="no rib layup"):
         check_describable(example(rib=None)[0])
+
+
+WEB_14 = [45, -45, 45, -45, 45, -45, 0]  # fourteen plies through the web: one more layer than CalculiX solves, the middle pair at 0
+
+
+def test_past_the_solvers_limit_plies_of_one_angle_side_by_side_are_one_layer():
+    wing, _ = example(**{"spar.half_stack": WEB_14})
+    stack, ply = layers(wing.spar), wing.spar.material.ply_thickness_m
+    assert len(stack) == MAX_LAYERS == 13
+    assert [layer.angle_deg for layer in stack] == [45, -45, 45, -45, 45, -45, 0, -45, 45, -45, 45, -45, 45]
+    assert stack[6].thickness_m == pytest.approx(2 * ply) and sum(layer.thickness_m for layer in stack) == pytest.approx(14 * ply)
+    assert len(layers(example()[0].spar)) == 8, "within the limit every ply stays a layer, the middle pair too"
+    check_describable(wing)
+    with pytest.raises(WingModelError, match="at most 13 layers through a part.*the spar layup makes 15"):
+        check_describable(example(**{"spar.half_stack": [*WEB_14, 90]})[0])
 
 
 # ----------------------------------------------------------------------------------------------- the model, Gmsh only
@@ -176,6 +191,18 @@ def solved(box_model, tmp_path_factory):
     if find_ccx() is None:
         pytest.skip("CalculiX not found")
     return run_wing_model(box_model, tmp_path_factory.mktemp("wing"))
+
+
+@needs_gmsh
+@needs_ccx
+def test_a_fourteen_ply_web_is_solved_as_thirteen_layers(tmp_path):
+    """CalculiX stops on a section of 14 layers (MAX_LAYERS); the joined pair keeps the web's stiffness and the solve goes through."""
+    wing, envelope = example(**{"spar.half_stack": WEB_14})
+    model = build_wing_model(wing, envelope, COARSE, skins="box")
+    sections = model.deck.split("*SHELL SECTION")[1:]
+    assert max(sum(", PLY, " in line or ", CORE_" in line for line in block.splitlines()[1:]) for block in sections) == MAX_LAYERS
+    results = run_wing_model(model, tmp_path)
+    assert results.point_layer.max() == MAX_LAYERS - 1 and np.isfinite(results.displacement["lift"]).all()
 
 
 @needs_gmsh

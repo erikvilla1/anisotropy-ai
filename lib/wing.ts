@@ -313,3 +313,88 @@ export function answerWords(report: WingReport): { verdict: string; detail: stri
   if (waiting) facts.push(`${waiting} waiting for inputs`);
   return { verdict, detail, facts };
 }
+
+// ------------------------------------------------------------------------------- the finite element check (ADR-0119)
+
+/** One value by the hand calculation and by the finite element model. */
+export type HandAndModel = { hand: number | null; fe: number | null };
+/** Where a lowest margin is: the case, the check and, for the model's, the part, the point and the ply. */
+export type FeWhere = {
+  case: number; label: string; altitude: number; check: string; margin_ultimate: number | null;
+  part?: string | null; station?: number | null; chord?: number | null; ply_angle?: number | null; mode?: string | null;
+};
+/** The check's report as the API sends it, in the wing file's units: the model's numbers beside the hand calculation's. */
+export type WingFeReport = {
+  wing: string;
+  units: Record<string, string>;
+  model: { elements: number; nodes: number; element_size: number; skins: string; equations: number | null };
+  seconds: { build: number; static: number; modes: number; total: number };
+  root_zone: number;
+  lowest: FeWhere; lowest_hand: FeWhere; lowest_root: FeWhere;
+  cases: { number: number; label: string; altitude: number; tip_deflection: HandAndModel; tip_twist: HandAndModel; skin: HandAndModel;
+    spar: HandAndModel; rib: number | null; core: number | null; root: HandAndModel }[];
+  not_run: number;
+  modes: { number: number; frequency: number; kind: string; part: string }[];
+  beam: { shear_center: HandAndModel; torsion_stiffness: HandAndModel; first_bending_frequency: HandAndModel; mass_per_length: number; center_of_mass: number };
+  divergence_speed: HandAndModel | null;
+  flutter: null | { required: number | null; airspeed: string; bending_frequency: number; torsion_frequency: number;
+    altitudes: { altitude: number; speed: number | null; frequency: number | null; times_required: number | null }[] };
+  buckling: { case: number; label: string; altitude: number; part: string; station: number; factor: number; margin_ultimate: number | null;
+    hand_skin: number | null; hand_web: number | null }[];
+};
+export type FeCheckState = "queued" | "running" | "done" | "stopped" | "refused";
+/** The check as it stands, as the API sends it. */
+export type WingFeCheck = {
+  job_id: string; state: FeCheckState; wing: string | null; started_at: string; finished_at: string | null; stage: string | null;
+  stages_done: string[]; stages: string[]; message: string | null; run_id: string | null; report: WingFeReport | null;
+};
+
+/** The check's steps in words, by the tool's names for them. */
+export const FE_STAGES: Record<string, string> = { build: "Building the model", solve: "Solving the flight loads", modes: "Vibration modes and flutter" };
+/** The model's checks in words. */
+export const FE_CHECK_WORDS: Record<string, string> = {
+  "skin plies": "skin strength", "spar plies": "spar web strength", "rib plies": "rib strength", "core shear": "core shear",
+};
+/** What a stop says when the service sends no words of its own. */
+export const FE_STOPPED = "The check could not be finished. Start it again; if it keeps failing, contact us.";
+
+/** Where the check stands, in one line. */
+export function feProgress(check: WingFeCheck): string {
+  if (check.state === "queued") return "Waiting to start…";
+  if (check.state === "running") {
+    const at = check.stage ? check.stages.indexOf(check.stage) : -1;
+    return check.stage && at >= 0 ? `${FE_STAGES[check.stage] ?? "Working"} (${at + 1} of ${check.stages.length})…` : "Starting…";
+  }
+  if (check.state === "done" && check.report) return `Checked in ${Math.max(1, Math.round(check.report.seconds.total))} s.`;
+  return check.message ?? FE_STOPPED;
+}
+
+/** Where one of the model's lowest margins is, in words: the part, the point, the ply and how it fails. */
+export function feWhereWords(where: FeWhere, units: Record<string, string>): string {
+  const parts: string[] = [];
+  if (where.part) parts.push(where.part.toLowerCase());
+  if (where.station !== null && where.station !== undefined) parts.push(`${shown(where.station, 3)} ${unitText(units.length)} from the root`);
+  if (where.chord !== null && where.chord !== undefined) parts.push(`${shown(where.chord, 3)} ${unitText(units.length)} from the leading edge`);
+  if (where.ply_angle !== null && where.ply_angle !== undefined) parts.push(`${where.ply_angle}° ply`);
+  if (where.mode && where.mode !== where.check) parts.push(where.mode.replace(/_/g, " "));
+  return parts.join(", ");
+}
+
+/** The check in a few lines, from its report: the lowest margin by the model and by the hand calculation, where the model's is, and
+ * what the model says at the root itself, where its clamp raises the stresses. Every number is the report's. */
+export function feWords(report: WingFeReport): { headline: string; where: string; root: string } {
+  const fe = report.lowest, hand = report.lowest_hand, root = report.lowest_root;
+  const length = unitText(report.units.length);
+  return {
+    headline: `Lowest margin ${marginText(fe.margin_ultimate)} by the finite element model, ${marginText(hand.margin_ultimate)} by the hand calculation.`,
+    where: `The model's: ${FE_CHECK_WORDS[fe.check] ?? fe.check}, ${feWhereWords(fe, report.units)}, case ${fe.case} (${fe.label}). `
+      + `Both are read from ${shown(report.root_zone, 3)} ${length} out, one web height from the root.`,
+    root: `The model holds the root fully clamped, which raises the stresses within about one web height of it; a real root gives a little. `
+      + `At the root itself the model's lowest is ${marginText(root.margin_ultimate)} (${FE_CHECK_WORDS[root.check] ?? root.check}, ${(root.part ?? "").toLowerCase()}, case ${root.case}).`,
+  };
+}
+
+/** The hand calculation's and the model's values side by side, as a cell prints them: a narrow cell breaks after the dot. */
+export function handAndModel(pair: HandAndModel, print: (value: number | null) => string): string {
+  return `${print(pair.hand)}\u00a0· ${print(pair.fe)}`;
+}

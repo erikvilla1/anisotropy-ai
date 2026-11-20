@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AERO_FIELDS, AILERON_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
-  readNumber, readNumbers, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName, wingToml,
+  feProgress, readNumber, readNumbers, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName, wingToml,
   type WingDescription, type WingField, type WingShape, type WingValue,
 } from "@/lib/wing";
 import { shapeWing, StudioError } from "@/lib/studio-api";
@@ -277,6 +277,34 @@ function LoadsPanel() {
 
 /** The left column of the wing workspace (ADR-0118): the description's tables as the steps of an FEA setup, in the general words of
  * the model tree (ADR-0111). Every change is worked at once; the Solve step says how the last calculation went. */
+/** The wing's finite element check (ADR-0117, ADR-0119): started on request, in the background like a coupon run, from the description as
+ * it stands; its stage shows here and its answer in the centre. Opening the panel starts a machine on the hosted tier, so the check does
+ * not wait for one. */
+function FeCheckPanel() {
+  const { feCheck, feCheckStale, feProblem, startFeCheck, wakeChecks, problem, apiBaseUrl } = useWing();
+  const [starting, setStarting] = useState(false);
+  const running = feCheck !== null && (feCheck.state === "queued" || feCheck.state === "running");
+  const done = feCheck?.state === "done" && feCheck.report !== null;
+  async function start() {
+    setStarting(true);
+    try { await startFeCheck(); } finally { setStarting(false); }
+  }
+  const status = feProblem || (feCheck ? feProgress(feCheck) + (done && feCheckStale ? " The wing has changed since; check it again to see the change." : "") : "");
+  return (
+    <StepPanel id="wing-fe" step={9} title="Finite element check" open={false}
+      state={done && !feCheckStale ? "pass" : "none"} word="checked" onToggle={(open) => { if (open) wakeChecks(); }}>
+      <p className="studio-hint">Solves the wing&apos;s finite element model under every flight case that runs and for its first vibration modes, and sets it
+        beside the hand calculation. The skins count between the spars, as the hand calculation counts them. It runs in the background; keep working meanwhile.</p>
+      <div className="studio-buttons">
+        <button type="button" className="studio-button" onClick={() => void start()} disabled={starting || running || Boolean(problem) || !apiBaseUrl}
+          data-testid="wing-fe-start">{done || feCheck?.state === "stopped" || feCheck?.state === "refused" ? "Check again" : "Check with the finite element model"}</button>
+      </div>
+      {status ? <p className={feProblem || feCheck?.state === "refused" || feCheck?.state === "stopped" ? "studio-alert" : "studio-status"}
+        role={feProblem ? "alert" : "status"} data-testid="wing-fe-status">{status}</p> : null}
+    </StepPanel>
+  );
+}
+
 /** The wing's shape for a CAD program (ADR-0116, ADR-0118): built on request, from the description as it stands, by the engine's
  * reading and the fea package's shape builder; the page saves the STEP file and lists each part's thickness, which a STEP file
  * cannot hold. */
@@ -301,7 +329,7 @@ function ShapePanel() {
   }
   const table = shape?.parts;
   return (
-    <StepPanel id="wing-shape" step={9} title="Shape for CAD" note="STEP" open={false}>
+    <StepPanel id="wing-shape" step={10} title="Shape for CAD" note="STEP" open={false}>
       <p className="studio-hint">The skins, spar webs and ribs as surfaces at their mid-thickness, every part named, in millimetres. Any CAD program that reads STEP files opens it.</p>
       <div className="studio-buttons">
         <button type="button" className="studio-button" onClick={() => void build()} disabled={building || !apiBaseUrl} data-testid="wing-step">Download STEP</button>
@@ -350,6 +378,7 @@ export function WingRail() {
         {problem ? <p className="studio-alert" role="alert" data-testid="wing-problem">{problem}</p> : null}
         <p className="studio-status" role="status" data-testid="wing-status">{status}</p>
       </StepPanel>
+      <FeCheckPanel />
       <ShapePanel />
     </div>
   );

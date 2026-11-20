@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { answerWords, EXAMPLE_WING, marginText, readNumber, readNumbers, valueAt, wingFileName, wingToml, withValue, type WingReport } from "../lib/wing";
+import {
+  answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, readNumber, readNumbers, valueAt, wingFileName, wingToml, withValue,
+  type WingFeCheck, type WingReport,
+} from "../lib/wing";
 
 // The wing page's own words and its wing file (ADR-0118). Every number comes from the engine; these only read, write and word it.
 const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf-8"));
+const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", "utf-8"));
 
 test("the example saves as the wing file the engine reads back as the example (api/tests/test_wings_api.py reads the same file)", () => {
   assert.equal(wingToml(EXAMPLE_WING), readFileSync("tests/fixtures/wing/example-saved.toml", "utf-8"));
@@ -46,4 +50,22 @@ test("the answer is worded from the engine's report: passes or how many fail, th
   assert.equal(answerWords({ ...report, cases: [], governing: null }).verdict, "No case could run yet");
   assert.equal(marginText(-0.25), "−0.250");
   assert.equal(marginText(null), "–");
+});
+
+test("the finite element check is worded from its report: both lowest margins, where the model's is, and its root (ADR-0119)", () => {
+  const at = (look: Partial<WingFeCheck>): WingFeCheck => ({ job_id: "j", state: "running", wing: "w", started_at: "", finished_at: null, stage: null,
+    stages_done: [], stages: ["build", "solve", "modes"], message: null, run_id: null, report: null, ...look });
+  assert.equal(feProgress(at({ state: "queued" })), "Waiting to start…");
+  assert.equal(feProgress(at({ stage: null })), "Starting…");
+  assert.equal(feProgress(at({ stage: "build" })), "Building the model (1 of 3)…");
+  assert.equal(feProgress(at({ stage: "modes" })), "Vibration modes and flutter (3 of 3)…");
+  assert.equal(feProgress(at({ state: "done", report: CHECK })), "Checked in 28 s.");
+  assert.equal(feProgress(at({ state: "refused", message: "The wing has ribs but no rib layup" })), "The wing has ribs but no rib layup");
+  assert.equal(feProgress(at({ state: "stopped" })), FE_STOPPED);
+  const words = feWords(CHECK);
+  assert.equal(words.headline, "Lowest margin +0.146 by the finite element model, +0.154 by the hand calculation.");
+  assert.equal(words.where, "The model's: skin strength, upper skin, 0.0611 m from the root, 0.139 m from the leading edge, 0° ply, longitudinal compression, "
+    + "case 6 (Positive high angle of attack). Both are read from 0.046 m out, one web height from the root.");
+  assert.match(words.root, /At the root itself the model's lowest is −0\.142 \(skin strength, lower skin, case 7\)\.$/);
+  assert.equal(handAndModel({ hand: 0.15379, fe: null }, marginText), "+0.154\u00a0· –");
 });

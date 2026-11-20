@@ -58,6 +58,9 @@ ANGLE_STEP_DEG = 2.0  # the fibre axes of a curved skin follow its normal to wit
 PARALLEL_TOLERANCE = math.sin(math.radians(2.0))  # how far an element's normal may lean toward its 0 degree direction
 POINTS_IN_PLANE = 4  # an S8R composite shell expands to one C3D20R brick: 4 points in the plane ...
 POINTS_PER_LAYER = 2  # ... and 2 through each layer, numbered by level from the bottom up (fea/checks/calculix-conventions.toml)
+# CalculiX 2.21 as Ubuntu 24.04 builds it (the solver image's) stops with "stack smashing detected" on a composite shell section
+# of 14 layers or more, and solves 13 (tried 2026-11-20 on the D3039 check's deck and on the wing's, ADR-0117 amendment 1).
+MAX_LAYERS = 13
 PATTERNS = ("lift", "moment", "aileron lift", "aileron moment")
 SKINS = ("Upper skin", "Lower skin")
 WEBS = ("Front spar", "Rear spar")
@@ -240,10 +243,22 @@ def fibre_axes(group: Group, angle_deg: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def layers(layup: Layup) -> list[Layer]:
-    """The layup's layers from one face to the other; a symmetric layup reads the same from either side."""
+    """The layup's layers from one face to the other; a symmetric layup reads the same from either side. Every ply is a layer of
+    its own unless that makes more than MAX_LAYERS: then neighbouring plies at one angle are one layer of their summed thickness,
+    which is the same stiffness, its stresses read at two points through the pair instead of two in each."""
     face = [Layer(layup.material.ply_thickness_m, "PLY", float(angle)) for angle in layup.half_stack_deg]
     core = [Layer(layup.core_thickness_m, "CORE", 0.0)] if layup.core_thickness_m > 0 else []
-    return face + core + face[::-1]
+    stack = face + core + face[::-1]
+    if len(stack) <= MAX_LAYERS:
+        return stack
+    joined = [stack[0]]
+    for layer in stack[1:]:
+        last = joined[-1]
+        if layer.material == last.material == "PLY" and layer.angle_deg == last.angle_deg:
+            joined[-1] = Layer(last.thickness_m + layer.thickness_m, "PLY", layer.angle_deg)
+        else:
+            joined.append(layer)
+    return joined
 
 
 # ---------------------------------------------------------------------------------------------------------------- loads
@@ -360,13 +375,19 @@ def _rows(values, per_line: int = 12) -> list[str]:
 
 
 def check_describable(wing: Wing) -> None:
-    """Refuse a wing the model cannot build: a core without its stiffness, ribs without a layup."""
+    """Refuse a wing the model cannot build: a core without its stiffness, ribs without a layup, a part of more layers than
+    CalculiX solves."""
     for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)):
         if layup is not None and layup.core_thickness_m > 0 and layup.core is None:
             raise WingModelError(f"The finite element model needs the {name} core's stiffness: name a library core in [{name}] "
                                  "(core = \"divinycell-h45\") or give core_modulus and core_shear_modulus")
     if wing.geometry.rib_spacing_m is not None and wing.rib is None:
         raise WingModelError("The wing has ribs but no rib layup: add a [rib] table with its half_stack")
+    for name, layup in (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib)):
+        if layup is not None and (count := len(layers(layup))) > MAX_LAYERS:
+            raise WingModelError(f"The finite element model holds at most {MAX_LAYERS} layers through a part, the core and plies "
+                                 f"of one angle side by side counting as one; the {name} layup makes {count}. Take plies out, "
+                                 "or put plies of one angle next to each other")
 
 
 def _model_lines(model: WingModel) -> list[str]:
@@ -375,7 +396,7 @@ def _model_lines(model: WingModel) -> list[str]:
     material = wing.skin.material
     lamina = material.lamina
     out = ["*HEADING", f"Wing {wing.name}: written by anisotropy_fea.wing_model (ADR-0117); units mm, N, MPa, t/mm^3",
-           f"** {mesh.elements.shape[0]} S8R shells at {model.element_size_m / MM:g} mm, every ply a layer; one static step per load pattern",
+           f"** {mesh.elements.shape[0]} S8R shells at {model.element_size_m / MM:g} mm, every ply a layer (plies of one angle side by side joined past {MAX_LAYERS}); one static step per load pattern",
            "*NODE, NSET=NALL"]
     out += [f"{k + 1}, {_num(x / MM)}, {_num(y / MM)}, {_num(z / MM)}" for k, (x, y, z) in enumerate(mesh.nodes)]
     out.append("*ELEMENT, TYPE=S8R, ELSET=EALL")

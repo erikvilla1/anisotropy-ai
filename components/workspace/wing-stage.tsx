@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { CATEGORICAL, CRITICAL, DIVERGING, ramp, SEQUENTIAL } from "@/lib/studio-colors";
 import {
-  answerWords, CHECK_NAMES, CHECK_WORDS, marginText, shown, unitText, whereWords,
-  type WingAnswer, type WingCheckName, type WingReport, type WingViews,
+  answerWords, CHECK_NAMES, CHECK_WORDS, feProgress, feWords, handAndModel, marginText, shown, unitText, whereWords,
+  type HandAndModel, type WingAnswer, type WingCheckName, type WingFeCheck, type WingFeReport, type WingReport, type WingViews,
 } from "@/lib/wing";
 import { useWing } from "./wing-context";
 
@@ -173,6 +173,95 @@ function Cases({ report, selected, onSelect }: { report: WingReport; selected: n
   );
 }
 
+const MODE_WORDS: Record<string, string> = { bending: "bending", torsion: "torsion", "fore and aft": "fore and aft", local: "a panel's own" };
+
+/** The finite element check beside the hand calculation (ADR-0119): the lowest margins by both, every case side by side, the wing as a
+ * beam, its first modes, flutter and the panel that buckles first. Every number is the check's report; the page picks and words. */
+function FeResults({ check, stale }: { check: WingFeCheck; stale: boolean }) {
+  const report = check.report;
+  if (!report) {
+    return (
+      <section className="studio-panel" data-testid="wing-fe">
+        <h3>Finite element check</h3>
+        <p className={check.state === "refused" || check.state === "stopped" ? "studio-alert" : "studio-muted"} role="status">{feProgress(check)}</p>
+      </section>
+    );
+  }
+  return <FeReport report={report} stale={stale} />;
+}
+
+/** A cell of the hand calculation's value over the model's. */
+function Pair({ pair, print }: { pair: HandAndModel; print: (value: number | null) => string }) {
+  const low = (v: number | null) => print === marginText && v !== null && v < 0;
+  return <td><span className={low(pair.hand) ? "wing-negative" : undefined}>{print(pair.hand)}</span><br /><span className={low(pair.fe) ? "wing-negative" : undefined}>{print(pair.fe)}</span></td>;
+}
+
+function FeReport({ report, stale }: { report: WingFeReport; stale: boolean }) {
+  const u = report.units;
+  const words = feWords(report);
+  const deflection = (v: number | null) => shown(v, 3);
+  const beam: [string, string, string][] = [
+    ["Shear center", `${shown(report.beam.shear_center.hand)} · ${shown(report.beam.shear_center.fe)}`, `${unitText(u.length)} from the leading edge`],
+    ["Torsion stiffness GJ", handAndModel(report.beam.torsion_stiffness, (v) => shown(v)), unitText(u.stiffness)],
+    ["First bending frequency", handAndModel(report.beam.first_bending_frequency, (v) => shown(v, 3)), "Hz"],
+  ];
+  if (report.divergence_speed) beam.push(["Divergence speed", handAndModel(report.divergence_speed, (v) => (v === null ? "never" : shown(v, 4))), `${u.speed}, equivalent`]);
+  return (
+    <section className="studio-panel wing-fe" data-testid="wing-fe" data-state={stale ? "stale" : "current"}>
+      <h3>Finite element check</h3>
+      <p data-testid="wing-fe-headline"><strong>{words.headline}</strong></p>
+      <p>{words.where}</p>
+      {stale ? <p className="studio-alert" role="status">This check is for the wing as it was when it started. The wing has changed since; check it again to see the change.</p> : null}
+      <p className="studio-muted">{words.root}</p>
+      <details className="wing-fe-more">
+        <summary>Every case: hand calculation above, model below</summary>
+      <div className="wing-table-wrap">
+        <table className="studio-table wing-cases" data-testid="wing-fe-cases">
+          <thead><tr><th>Case</th><th>Tip deflection, {unitText(u.deflection)}</th><th>Skin strength</th><th>Spar web strength</th><th>At the root</th></tr></thead>
+          <tbody>{report.cases.map((c) => {
+            const governing = c.number === report.lowest.case && c.altitude === report.lowest.altitude;
+            return (
+              <tr key={`${c.number}@${c.altitude}`} data-governing={governing ? "true" : undefined}>
+                <td>{c.number} {c.label}<span className="wing-case-line">{shown(c.altitude, 5)} {u.altitude}</span></td>
+                <Pair pair={c.tip_deflection} print={deflection} />
+                <Pair pair={c.skin} print={marginText} />
+                <Pair pair={c.spar} print={marginText} />
+                <Pair pair={c.root} print={marginText} />
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      </div>
+      </details>
+      <h4>The wing as a beam, hand calculation · model</h4>
+      <table className="studio-table wing-design" data-testid="wing-fe-beam">
+        <tbody>{beam.map(([k, v, unit]) => <tr key={k}><th scope="row">{k}</th><td>{v} {unit}</td></tr>)}</tbody>
+      </table>
+      <h4>Vibration modes</h4>
+      <p data-testid="wing-fe-modes">{report.modes.map((m) => `${m.number}: ${shown(m.frequency, 3)} Hz, ${MODE_WORDS[m.kind] ?? m.kind}`).join(" · ")}</p>
+      {report.flutter ? (
+        <p data-testid="wing-fe-flutter">Flutter, from the first bending ({shown(report.flutter.bending_frequency, 3)} Hz) and torsion ({shown(report.flutter.torsion_frequency, 3)} Hz) modes: {report.flutter.altitudes.map((a) =>
+          `${shown(a.altitude, 5)} ${u.altitude}: ${a.speed === null ? "none found" : `${shown(a.speed, 4)} ${u.speed}${a.times_required !== null ? `, ${shown(a.times_required, 3)} × the flutter speed asked for` : ""}`}`).join("; ")}.</p>
+      ) : <p className="studio-muted">No torsion mode among the first modes, so no flutter estimate.</p>}
+      {report.buckling.length ? (
+        <>
+          <h4>Panel buckling under the hardest cases</h4>
+          <table className="studio-table" data-testid="wing-fe-buckling">
+            <thead><tr><th>Case</th><th>Panel</th><th>Buckles at</th><th>Margin, model</th><th>Hand: skin · web</th></tr></thead>
+            <tbody>{report.buckling.map((b) => (
+              <tr key={`${b.case}@${b.altitude}`}><td>{b.case} {b.label}</td><td>{b.part.toLowerCase()} bay at {shown(b.station, 3)} {unitText(u.length)}</td>
+                <td>{shown(b.factor, 3)} × limit load</td><td>{marginText(b.margin_ultimate)}</td><td>{marginText(b.hand_skin)} · {marginText(b.hand_web)}</td></tr>
+            ))}</tbody>
+          </table>
+          <p className="studio-muted">A web&apos;s bay is judged on its mean load, which leaves out its own bending; for the webs the hand calculation&apos;s check is the one to go by.</p>
+        </>
+      ) : null}
+      <p className="studio-muted">{report.model.elements.toLocaleString("en-US")} shell elements of {shown(report.model.element_size, 3)} {unitText(u.thickness)}, every ply a layer; the root clamped; solved in {Math.max(1, Math.round(report.seconds.total))} s.
+        {report.not_run ? ` ${report.not_run} case${report.not_run === 1 ? "" : "s"} still wait for inputs, as in the hand calculation.` : ""}</p>
+    </section>
+  );
+}
+
 /** The centre of the wing workspace (ADR-0118): the answer in one line, the wing from above and its root section for the chosen case,
  * the margins along the span, the design summary and every case's margins. Every number is the engine's; the page picks and draws. */
 export function WingStage() {
@@ -189,6 +278,7 @@ export function WingStage() {
 
 function Answer({ answer, stale, problem }: { answer: WingAnswer; stale: boolean; problem: string }) {
   const { report, views } = answer;
+  const { feCheck, feCheckStale } = useWing();
   const governingIndex = useMemo(() => Math.max(0, report.cases.findIndex((c) => report.governing && c.number === report.governing.case && c.altitude === report.governing.altitude)), [report]);
   const [chosen, setChosen] = useState<number | null>(null);
   const [check, setCheck] = useState<CheckChoice>("lowest");
@@ -208,6 +298,7 @@ function Answer({ answer, stale, problem }: { answer: WingAnswer; stale: boolean
         <p className="studio-muted">{words.facts.join(" · ")}{stale ? " · updating for your last change" : ""}</p>
         {problem ? <p className="studio-alert" role="alert">{problem} The results below are for the last wing that could be worked.</p> : null}
       </section>
+      {feCheck ? <FeResults check={feCheck} stale={feCheckStale} /> : null}
       {chosenCase ? (
         <section className="studio-panel wing-views">
           <div className="wing-toolbar">

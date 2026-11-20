@@ -128,6 +128,12 @@ uv run --project fea --extra mesh python -m anisotropy_fea.wing_model engine/exa
 
 prints every case beside the hand calculation, in about 20 s at 40 mm. The equations are in `docs/theory.md` Section 10.
 
+`anisotropy_fea.wing_check` is the same check as a job runs it from the wing page (ADR-0119): the skins between the spars, one report in the wing file's units (`wing-check.json`: the lowest margins by the model and by hand, every case side by side, the wing as a beam, the modes, flutter and panel buckling), the progress after each stage and the outcome at the end, as `tools/run_coupon.py` writes them. A description the engine or the model refuses ends `refused` (exit 2):
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_check wing.json --out check --result outcome.json --progress progress.json
+```
+
 ## Abaqus field reports
 
 The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/<coupon>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.

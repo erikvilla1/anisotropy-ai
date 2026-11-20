@@ -44,7 +44,7 @@ from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command, wing_shape_command)
+                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, runner_command, studio_command, wing_check_command, wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
@@ -58,7 +58,7 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingRequest, WingShapeAnswer,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingCheckOutput, WingRequest, WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -87,17 +87,18 @@ PAIRING_CODES = "/v1/pairing-codes"  # a one-time code that a signed-in page han
 PAIRING_MINUTES = 10
 ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
 ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
+WING_CHECKS = "/v1/wings/checks"  # a wing's finite element check, a job like a coupon run (ADR-0119)
 
 
 def job_recorder(app: FastAPI):
     """The receipt of an ended coupon job, written as every run is (ADR-0026): solved with the tool's outcome, or rejected with
-    its message."""
+    its message. A wing's check is recorded at its own address (ADR-0119), its description among the inputs."""
     def record(job: Job, state: str, outcome: dict) -> uuid.UUID | None:
         engine = getattr(app.state, "records", None)
         if engine is None:
             return None
         try:
-            return record_run(engine, actor=job.actor, endpoint=COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
+            return record_run(engine, actor=job.actor, endpoint=WING_CHECKS if is_wing(job) else COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
                               api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
                               response={**outcome, "job_id": str(job.id)} if state == "done" else None,
                               error=None if state == "done" else outcome["message"], user_email=job.user_email)
@@ -135,7 +136,7 @@ async def lifespan(app: FastAPI):
         if orphans:
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
-                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role)
+                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command())
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # our kernel's answer to every edit (ADR-0086): warm workers, started on the first live request
     app.state.live = LiveSolver(studio_command(), Path(tempfile.gettempdir()) / "anisotropy-live", settings.live_workers)
@@ -1643,6 +1644,82 @@ def wing_shape_endpoint(problem: WingRequest, actor: Actor, request: Request, re
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return WingShapeAnswer(run_id=None if run_id is None else str(run_id), step=step, parts=parts)
+
+
+# What the page shows of a wing's check that did not end done, in its own words (ADR-0091 amendment 2): the cause goes to the log.
+CHECK_STOPPED = "The check could not be finished. Start it again; if it keeps failing, contact us."
+CHECK_UNREAD = "The check's result could not be read right now. Try again in a minute."
+WING_REPORT = "wing_check"  # the key the check's tool lists its report under (anisotropy_fea.wing_check.OUTPUT_KEY)
+
+
+def _wing_check(request: Request, jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    """A wing's check by its id when it is the requester's; 404 in the same words as for none, a coupon job included."""
+    job = _known_job(request, jobs, job_id)
+    if not is_wing(job):
+        raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
+    return job
+
+
+def _wing_check_output(jobs: CouponJobs, job: Job) -> WingCheckOutput:
+    """The check as it stands, and once done its report, read here from the job's file (the disk or the store)."""
+    with jobs.lock:
+        state, outcome, progress = job.state, dict(job.outcome or {}), dict(job.progress() or {})
+    message, report = None, None
+    if state == "queued":
+        message = progress.get("message")
+    elif state == "refused":
+        message = outcome.get("message")  # the reason the description cannot be checked, in the engine's or the model's words
+    elif state == "stopped":
+        print(f"wing check {job.id} stopped: {outcome.get('message')}", flush=True)
+        message = CHECK_STOPPED
+    elif state == "done":
+        try:
+            report = json.loads(jobs.output_file(job, WING_REPORT).read_text(encoding="utf-8"))
+        except (KeyError, OSError, ValueError, PermissionError) as exc:
+            print(f"wing check {job.id}: its report could not be read: {exc}", flush=True)
+            message = CHECK_UNREAD
+    return WingCheckOutput(job_id=str(job.id), state=state, wing=(job.inputs or {}).get("wing"), started_at=job.started_at.isoformat(),
+                           finished_at=None if job.finished_at is None else job.finished_at.isoformat(), stage=progress.get("stage"),
+                           stages_done=list(progress.get("done") or []), stages=list(progress.get("stages") or []), message=message,
+                           run_id=None if job.run_id is None else str(job.run_id), report=report)
+
+
+@app.post(WING_CHECKS, status_code=202, response_model=WingCheckOutput)
+def start_wing_check(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingCheckOutput:
+    """A wing's finite element check (ADR-0117, ADR-0119), started from the wing workspace like a coupon run: the engine reads the
+    description first, so a wing the page could not work is refused in the same words and at once; then the check runs in the
+    background, through the job queue on the hosted tier, half a minute for the example. Poll the Location until the state is
+    neither queued nor running; once done the answer holds the check's report in the wing file's units. The same limits as a
+    coupon run apply: one at a time here, and the hosted tier's per-user limits (409, 429). Its receipt is a run record at this
+    address, written when it ends."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
+        wing, _ = wing_from_dict(data)
+    except (ValueError, TypeError, KeyError) as exc:
+        detail = str(exc) or exc.__class__.__name__
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    jobs = _coupon_jobs(request)
+    try:
+        job = jobs.start_wing(actor, {"kind": WING, "wing": wing.name, "description": data}, user_email=getattr(request.state, "user_email", None))
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except JobRefused as exc:
+        print(f"wing check not started: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="The check could not be started right now. Try again in a minute.") from exc
+    response.headers["Location"] = f"{WING_CHECKS}/{job.id}"
+    if job.state == "queued":
+        response.headers[ENQUEUE_HEADER] = str(job.id)
+    return _wing_check_output(jobs, job)
+
+
+@app.get(WING_CHECKS + "/{job_id}", response_model=WingCheckOutput)
+def wing_check(job_id: uuid.UUID, request: Request) -> WingCheckOutput:
+    """A wing's check as it stands: its state and stage, and once done its report (ADR-0119)."""
+    jobs = _coupon_jobs(request)
+    return _wing_check_output(jobs, _wing_check(request, jobs, job_id))
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

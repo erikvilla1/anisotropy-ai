@@ -265,3 +265,11 @@
 .wing-case-line { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .wing-cases td:first-child { white-space: normal; min-width: 20ch; }
 .wing-cases .chat-link { text-align: left; }
+/* The finite element check beside the hand calculation (ADR-0119) */
+.wing-fe h4 { margin: 14px 0 6px; font-size: 14px; font-weight: 600; }
+.wing-fe-more { margin-top: 10px; }
+.wing-fe-more > summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.wing-fe-more[open] > summary { margin-bottom: 6px; }
+.wing-fe .wing-cases tr { cursor: default; }
+.wing-fe .wing-cases td { white-space: normal; } /* a pair breaks after its dot, so the root column fits the centre */
+.wing-fe .wing-cases td:first-child { min-width: 16ch; }

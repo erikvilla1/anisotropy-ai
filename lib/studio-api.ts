@@ -2,7 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
-import type { WingAnswer, WingDescription, WingShape } from "./wing";
+import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { Checklist, StudioValues } from "./studio-form";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
@@ -638,6 +638,27 @@ export async function shapeWing(apiBaseUrl: string, request: { wing: WingDescrip
     throw unreadable("the wing's shape: not a shape");
   }
   return payload as unknown as WingShape;
+}
+
+/** The check's answer as the page reads it: a state it knows, its stage, and once done a report with its lowest margins and cases. */
+export function readWingFeCheck(payload: unknown): WingFeCheck {
+  const states = ["queued", "running", "done", "stopped", "refused"];
+  if (!isObject(payload) || typeof payload.job_id !== "string" || !states.includes(String(payload.state)) || typeof payload.started_at !== "string"
+    || !Array.isArray(payload.stages) || !Array.isArray(payload.stages_done)) throw unreadable("the wing's check");
+  const report = payload.report;
+  if (report !== null && report !== undefined && (!isObject(report) || !Array.isArray(report.cases) || !isObject(report.lowest)
+    || !isObject(report.lowest_hand) || !isObject(report.units))) throw unreadable("the wing's check: not a report");
+  return { ...(payload as unknown as WingFeCheck), report: (report ?? null) as WingFeCheck["report"] };
+}
+
+/** Start the wing's finite element check (ADR-0119), a job like a coupon run: the description as it stands, read by the engine first, so a
+ * wing the calculation refuses is refused here in the same words. Poll it with `getWingFeCheck` until it is neither queued nor running. */
+export async function startWingFeCheck(apiBaseUrl: string, wing: WingDescription, signal?: AbortSignal): Promise<WingFeCheck> {
+  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks`, { method: "POST", headers, body: JSON.stringify({ wing }), signal }, "starting the wing's check"));
+}
+
+export async function getWingFeCheck(apiBaseUrl: string, jobId: string, signal?: AbortSignal): Promise<WingFeCheck> {
+  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the wing's check", JOB_GONE));
 }
 
 // ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)
