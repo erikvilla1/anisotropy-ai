@@ -1106,6 +1106,14 @@ Both displacements are continuous from one step to the next, so the shear stress
 
 <!-- code: boundary_forces, step_lap -->
 
+A lap may instead end at a plane of symmetry that both adherends cross, as under the middle of a patch over a cavity that does not go through every ply (Section 17). The two halves pull alike, so nothing slips there and the shear stress is zero. The outer adherend's force at the end, $`N_m`$, is then one more unknown, and its equation is the shear stress at the end of the last step set to zero:
+
+```math
+(\alpha_m - \beta_m)\,N_{m-1} + (\alpha_m + \beta_m)\,N_m = 2\alpha_m P_m
+```
+
+For one step of length $`L`$ this gives $`N(L) = P\,(1 - 1/\cosh\lambda L)`$ and $`\tau(0) = P\,\lambda\tanh\lambda L`$: the outer adherend never takes more than its share $`P`$, and takes all of it only when the step is long.
+
 The model is linear, so the load at which the largest shear stress reaches the adhesive's shear strength $`\tau_p`$ is the applied load scaled, computed by `elastic_limit_load`. For a ductile adhesive this is where yielding starts, not failure. The largest stress of an adherend in a step is its largest force over its thickness, the force taken at the step's ends and where $`\tau = 0`$ inside it.
 
 ```math
@@ -1128,6 +1136,59 @@ Not covered: peel stresses and the bending of an eccentric load path; the variat
 
 Checks: `engine/tests/test_step_lap.py`. The cases of `engine/validation/repair_cases/` are worked without the engine in `engine/validation/closed_forms.py` by another route, the general solution of every step with its two constants from one linear system, and agree within $`10^{-9}`$; the yielding double lap is worked there zone by zone. One step equals Volkersen's formula; the shear stress integrates to the load and is the slope of the force; a uniform step cut in five gives the same answer; matching adherends give the same stresses from both ends; a step two metres long neither overflows nor loads its middle, and its elastic limit is the long overlap's; and the yielding bond's equation, marched inward by Runge-Kutta from the governing end, holds at 0.999 of the strength and fails at 1.001.
 
+## 17. Stepped patch repair (`repair/description.py`, `repair/section.py`, `repair/patch_lap.py`)
+
+A repair stated by a few numbers, the slice through it, and the stepped lap it makes (ADR-0131). A round piece of damage is cut out of a flat laminate from its top face in $`n`$ steps. The deepest step has the damage's diameter $`d`$, and each step above it is cut wider by the step length $`L`$ all round, which leaves a ledge to bond to. Steps are counted from the top face, step 1 the widest, and step $`j`$ is cut at the radius computed by `Repair.cut_radius_m`:
+
+```math
+R_j = \frac{d}{2} + (n - j)\,L
+```
+
+<!-- code: Repair.cut_radius_m -->
+
+Each step removes the same number of plies, of thickness $`g`$ together. The cavity is lined with adhesive of thickness $`\eta`$ and filled with one group of patch plies for each step, group 1 at the top; unless the description says otherwise the patch is the laminate's own material in the angles of the plies removed. Cover plies may lie over the patch and a ring of the laminate around it, reaching $`c`$ past the widest cut.
+
+**The slice.** The repair is cut along the load through its middle, and one half is described, $`r`$ from the middle outward and $`z`$ up from the bottom face of a laminate of thickness $`h`$. Every part is a rectangle there:
+
+- a laminate ply runs outward from the radius its step is cut at, or from the middle when no step cuts it;
+- the adhesive lies on each ledge, up each cut face, over the floor of a cavity that does not go through every ply, and between the cover plies and the laminate;
+- patch group $`j`$ fills step $`j`$ inside the adhesive, out to $`R_j - \eta`$, and sits on the bondline, so the whole patch is raised by $`\eta`$ and its top plies stand $`\eta`$ above the laminate's top face; the cover plies lie flat over them;
+- a cut through every ply has nothing under its deepest patch plies: the space of one bondline is left empty there.
+
+The rectangles are computed by `regions`. What lies at one point is computed by `region_at`, by another route, first the level and then the radius, and a description whose two routes disagree anywhere is refused, checked by `check_regions`.
+
+<!-- code: regions, region_at, check_regions -->
+
+The repair is round, so in the panel a part of the repair is its rectangle swept about the middle, of volume $`\pi (r_1^2 - r_0^2)(z_1 - z_0)`$, and a laminate ply is the panel's slab less the disc its step cuts. The area of each kind of part in the half slice, its volume in the panel and the lengths of the bondline are computed by `areas`, `volumes` and `bond_lengths`. With $`a`$ the half length of the panel and $`t_c`$ the thickness of the cover plies, the areas are
+
+```math
+A_{\text{laminate}} = a\,h - \sum_j R_j\,g, \qquad A_{\text{patch}} = \sum_j (R_j - \eta)\,g, \qquad A_{\text{cover}} = (R_1 + c)\,t_c
+```
+
+```math
+A_{\text{adhesive}} = \sum_j R_j\,g + \eta\,(R_1 - \eta) - A_{\text{patch}} + \eta\,(c + \eta)\,[\text{cover}] - \eta\,(R_n - \eta)\,[\text{through}]
+```
+
+The second term of the adhesive's area is the top of the patch above the laminate's face, which the patch's own area counts; the bracketed terms apply with cover plies and with a cut through every ply.
+
+<!-- code: areas, volumes, bond_lengths -->
+
+**The lap.** Along the slice from the repair's edge inward, the patch and the laminate are bonded ledge by ledge, and each stretch is one step of a stepped lap (Section 16): under the cover plies' overlap, the cover plies over the whole laminate; on the ledge of step $`j`$, the cover plies and patch groups 1 to $`j`$ over the laminate less the plies steps 1 to $`j`$ removed; and over the floor, the whole patch over the plies left under it, as far as the repair's middle. The middle is a plane of symmetry, so the lap ends there with no shear stress. A cut through every ply has no floor, and its lap ends at the deepest cut, where the laminate ends and the patch carries the whole load. The steps are computed by `lap_steps`.
+
+An adherend's stiffness in a step has to count plies at an angle. Where the load has passed across, the patch and the laminate strain alike, as one bonded section pulled along $`x`$ and free to contract and to shear as a whole. With $`A_o`$ and $`A_i`$ the stretching matrices of the two stacks (Section 3) and $`a = (A_o + A_i)^{-1}`$, that strain per unit load is the first column of $`a`$, so the outer stack carries the fraction $`f`$ of the load and the two stiffnesses are computed by `shared_stiffnesses`:
+
+```math
+f = (A_o\,a)_{11}, \qquad S_o = \frac{f}{a_{11}}, \qquad S_i = \frac{1 - f}{a_{11}}
+```
+
+They add up to the section's own stiffness $`1/a_{11}`$, so the force $`P`$ the patch carries where the strains are alike is exact. A ply at an angle counts for what it carries inside the bonded section, held from shearing by the plies around it: a 45° ply over a quasi-isotropic laminate carries about two and a half times what it would alone. A stack of plies all at 0° gets $`E_1 t`$. Coupling of stretching with bending is left out, as the lap model leaves bending out. The repair's lap under a load, solved, is computed by `repair_lap`.
+
+<!-- code: lap_steps, shared_stiffnesses, repair_lap -->
+
+Not covered, and refused where the description could state it: patch plies thicker or thinner than the laminate's, a scarf (a taper without ledges), steps of different lengths, a repair that is not round, a curved laminate, and a backing under a cut through every ply. The lap is one line through a round repair: it does not see the load that flows around the repair in the panel, the stress concentration at the cut, or anything that changes around the repair's edge. The length bonded on a ledge is taken as the step length; the adhesive on the cut faces carries no load in the lap. The finite element model of the slice is a later step. A repair's file and its report in a unit system are read and written by `repair/repair_file.py`.
+
+Checks: `engine/tests/test_patch_repair.py`. The cases of `engine/validation/patch_repair_cases/`, cross-ply laminates so that the stiffnesses can be written by hand, are worked without the engine in `engine/validation/closed_forms.py`: the sizes, areas and volumes from the sums above, each stack's stiffness as $`A_{11} - \nu A_{12}`$ with $`\nu`$ the contraction of the bonded section, and the lap by the general solution of every step with no shear stress at the middle; the engine agrees within $`10^{-9}`$. Over nine repairs (with and without cover plies, through and not, one or two plies a step) no two rectangles overlap, a grid of points over the slice gives the same part by both routes, and the areas and volumes equal the sums; the two stiffnesses of a bonded section add up to the section's and are the forces the stacks carry when the section is strained; a patch in the laminate's own angles restores the laminate's stiffness on every ledge; a lap of one step ending at a plane of symmetry equals its closed form. The mesh and the solids of the same rectangles are measured back in `fea/tests/test_repair_shape.py`.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -1135,6 +1196,7 @@ Checks: `engine/tests/test_step_lap.py`. The cases of `engine/validation/repair_
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - For a bonded lap: peel and bending, a yielding adhesive in a stepped lap and the bond's progressive failure, thermal mismatch (Section 16)
+- For a patch repair: the finite element solution of its slice, the load that flows around a round repair, a scarf, patch plies of another thickness (Section 17)
 - Hashin failure criteria
 - Ply drops in the stiffness: a change of layup is a step in the section, with no taper over the run-out; a drop's own stresses
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates

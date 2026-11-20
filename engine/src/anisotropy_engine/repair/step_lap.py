@@ -102,28 +102,39 @@ def step_constants(step: Step, adhesive: Adhesive, load_n_per_m: float) -> tuple
     return lam, load_n_per_m * so / (so + si)
 
 
-def boundary_forces(steps: list[Step], adhesive: Adhesive, load_n_per_m: float) -> np.ndarray:
-    """The outer adherend's force per unit width (N/m) at every step boundary, from its tip (zero) to the end of the inner
-    adherend (the applied load): the shear stress at the end of each step equals the one at the start of the next."""
+def boundary_forces(steps: list[Step], adhesive: Adhesive, load_n_per_m: float, inner_continues: bool = False) -> np.ndarray:
+    """The outer adherend's force per unit width (N/m) at every step boundary, from its tip (zero) to the lap's end: the shear
+    stress at the end of each step equals the one at the start of the next.
+
+    The lap ends where the inner adherend does, and the outer adherend carries the whole load there. With `inner_continues`
+    it ends instead at a plane of symmetry that both adherends cross, the middle of a patch over a laminate that is not cut
+    through: the shear stress is zero there, and the force the outer adherend has reached is part of the answer."""
     m = len(steps)
     forces = np.zeros(m + 1)
     forces[m] = load_n_per_m
-    if m == 1:
+    if m == 1 and not inner_continues:
         return forces
     lam, shared = np.array([step_constants(step, adhesive, load_n_per_m) for step in steps]).T
     t = np.tanh(lam * np.array([step.length_m for step in steps]) / 2)
     a, b = lam * t / 2, lam / (2 * t)  # tau at a step's end = (a - b) N_start + (a + b) N_end - 2 a P; at its start, mirrored
-    matrix, right = np.zeros((m - 1, m - 1)), np.zeros(m - 1)
+    size = m if inner_continues else m - 1  # the unknowns are forces[1:size + 1]
+    matrix, right = np.zeros((size, size)), np.zeros(size)
     for row in range(m - 1):  # the boundary between step `row` and step `row + 1`; its unknown is forces[row + 1]
         k, n = row, row + 1
         matrix[row, row] = a[k] + b[k] + a[n] + b[n]
         if row > 0:
             matrix[row, row - 1] = a[k] - b[k]
-        if row < m - 2:
+        if row < size - 1:
             matrix[row, row + 1] = a[n] - b[n]
         right[row] = 2 * a[k] * shared[k] + 2 * a[n] * shared[n]
-    right[-1] -= (a[-1] - b[-1]) * load_n_per_m
-    forces[1:m] = np.linalg.solve(matrix, right)
+    if inner_continues:  # no shear stress at the end of the last step
+        if m > 1:
+            matrix[-1, -2] = a[-1] - b[-1]
+        matrix[-1, -1] = a[-1] + b[-1]
+        right[-1] = 2 * a[-1] * shared[-1]
+    else:
+        right[-1] -= (a[-1] - b[-1]) * load_n_per_m
+    forces[1:size + 1] = np.linalg.solve(matrix, right)
     return forces
 
 
@@ -146,6 +157,7 @@ class StepLap:
     adhesive: Adhesive
     load_n_per_m: float
     forces: np.ndarray  # the outer adherend's force at the step boundaries, N/m
+    inner_continues: bool = False  # the lap ends at a plane of symmetry both adherends cross, not at the inner adherend's end
 
     @property
     def starts(self) -> np.ndarray:
@@ -211,14 +223,16 @@ class StepLap:
         return np.array(xs), np.array(taus), np.array(forces)
 
 
-def step_lap(steps: list[Step], adhesive: Adhesive, load_n_per_m: float) -> StepLap:
+def step_lap(steps: list[Step], adhesive: Adhesive, load_n_per_m: float, inner_continues: bool = False) -> StepLap:
     """Solve a stepped lap under a load per unit width (N/m, tension positive). The steps are listed from the outer
-    adherend's tip to the end of the inner adherend."""
+    adherend's tip to the end of the inner adherend, or, with `inner_continues`, to the plane of symmetry in the middle of
+    a patch whose laminate is not cut through (`boundary_forces`)."""
     if not steps:
         raise ValueError("A lap needs at least one step")
     if isinstance(load_n_per_m, bool) or not math.isfinite(load_n_per_m):
         raise ValueError(f"The load must be a finite number, got {load_n_per_m!r}")
-    return StepLap(tuple(steps), adhesive, float(load_n_per_m), boundary_forces(list(steps), adhesive, float(load_n_per_m)))
+    forces = boundary_forces(list(steps), adhesive, float(load_n_per_m), bool(inner_continues))
+    return StepLap(tuple(steps), adhesive, float(load_n_per_m), forces, bool(inner_continues))
 
 
 def elastic_limit_load(lap: StepLap) -> float:

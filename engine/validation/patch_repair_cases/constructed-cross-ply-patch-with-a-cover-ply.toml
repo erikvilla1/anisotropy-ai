@@ -1,0 +1,47 @@
+title = "Analytical check: a stepped patch in a cross-ply laminate, three steps of one ply, with one cover ply"
+source = "Constructed analytical check, not a printed problem, not a repair of anyone's and not a design: a laminate of six plies at 0 and 90 degrees, 0.2 mm each, of a material with round constants of our own; the top three plies cut in three steps of 10 mm around a 20 mm cut, the patch in the angles of the plies removed, one 0 degree cover ply reaching 15 mm past the widest cut, a 0.1 mm bondline, in a panel 200 mm by 150 mm. The closed form is validation/closed_forms.py `stepped_patch_repair`: sizes, areas and volumes written out from the description, each stack's stiffness as its share of the bonded section's, and the lap by the general solution of each step with no shear stress at the repair's middle."
+units = "mm-MPa"
+
+[parent]
+name = "Constructed ply"
+E1 = 140000.0
+E2 = 10000.0
+G12 = 5000.0
+nu12 = 0.3
+ply_thickness = 0.2
+layup = [0, 90, 0, 0, 90, 0]
+
+[damage]
+diameter = 20.0
+
+[steps]
+count = 3
+length = 10.0
+
+[cover]
+layup = [0]
+overlap = 15.0
+
+[adhesive]
+shear_modulus = 1000.0
+thickness = 0.1
+shear_strength = 30.0
+
+[panel]
+length = 200.0
+width = 150.0
+
+[applied]
+load = 100.0
+
+[expected]
+tolerance = 1e-9
+cut_radii = [30.0, 20.0, 10.0]
+areas = [108.0, 4.56, 11.94, 9.0]
+volumes = [35120.354057, 643.693485165, 872.124970192, 1272.3450247]
+bond_on_laminate = [45.0, 0.6]
+step_stiffnesses = [[28142.7357689, 116519.966015], [56285.4715378, 88377.2302464], [58259.9830076, 86402.7187766], [86402.7187766, 58259.9830076]]
+boundary_forces = [0.0, 28.173343667, 39.5850555069, 49.9963394115, 59.6356075149]
+shear_at_ends = [[12.9218007367, 5.79252875829], [5.79252875829, 0.417768339798], [0.417768339798, 5.21618991047], [5.21618991047, 0.0]]
+peak_shear = 12.9218007367
+elastic_limit_load = 232.165784098

@@ -382,8 +382,12 @@ def stepped_lap(case: dict) -> dict:
 
     and the 2m constants come from one linear system: N = 0 at the tip, N = the load at the end, and N and dN/dx (the
     adhesive's shear stress) continuous at every boundary between steps. The largest stress of an adherend in a step is
-    looked for at the step's ends and, by bisection, where the shear stress changes sign inside it."""
+    looked for at the step's ends and, by bisection, where the shear stress changes sign inside it.
+
+    With `symmetric_end` in the case the lap ends at a plane of symmetry that both adherends cross (ADR-0130 amendment 1):
+    the last condition is dN/dx = 0 there, and the outer adherend's force at the end is part of the answer."""
     steps, _, _, load = _lap_steps(case)
+    symmetric = bool(case.get("symmetric_end", False))
     m = len(steps)
     decay = [np.exp(-s["lam"] * s["length"]) for s in steps]
     matrix, right = np.zeros((2 * m, 2 * m)), np.zeros(2 * m)
@@ -393,7 +397,10 @@ def stepped_lap(case: dict) -> dict:
         matrix[row, 2 * k: 2 * k + 4] = [1.0, decay[k], -decay[n], -1.0]  # N continuous
         right[row] = steps[n]["shared"] - steps[k]["shared"]
         matrix[row + 1, 2 * k: 2 * k + 4] = [steps[k]["lam"], -steps[k]["lam"] * decay[k], -steps[n]["lam"] * decay[n], steps[n]["lam"]]  # dN/dx continuous
-    matrix[-1, -2], matrix[-1, -1], right[-1] = 1.0, decay[-1], load - steps[-1]["shared"]  # N = the load at the end
+    if symmetric:
+        matrix[-1, -2], matrix[-1, -1] = 1.0, -decay[-1]  # no shear stress at the end
+    else:
+        matrix[-1, -2], matrix[-1, -1], right[-1] = 1.0, decay[-1], load - steps[-1]["shared"]  # N = the load at the end
     constants = np.linalg.solve(matrix, right).reshape(m, 2)
 
     def force(k: int, x: float) -> float:
@@ -420,7 +427,7 @@ def stepped_lap(case: dict) -> dict:
     answer = {
         "lambda_length": [float(s["lam"] * s["length"]) for s in steps],
         "shared_forces": [float(s["shared"]) for s in steps],
-        "boundary_forces": [0.0] + [float(force(k, 0.0)) for k in range(1, m)] + [float(load)],
+        "boundary_forces": [0.0] + [float(force(k, 0.0)) for k in range(1, m)] + [float(force(m - 1, steps[-1]["length"])) if symmetric else float(load)],
         "shear_at_ends": [[float(a), float(b)] for a, b in ends],
         "peak_shear": float(peak),
         "adherend_stresses": [[float(a), float(b)] for a, b in stresses],
@@ -452,7 +459,83 @@ def ductile_double_lap(case: dict) -> float:
     return float(2 * min(eta * half_inner * slope, eta * outer * slope))
 
 
+def stepped_patch_repair(case: dict) -> dict:
+    """A stepped patch repair of a laminate of 0 and 90 degree plies, from its description (ADR-0131), without the engine.
+
+    Sizes: step j of n (1 at the top) is cut at R_j = d / 2 + (n - j) L. With t a ply's thickness, g the thickness of one
+    step's plies, eta the bondline and h the laminate's thickness, the half slice (out to half the panel's length) holds
+    - laminate: its rectangle less the cavity, sum of R_j g;
+    - patch: each group, out to R_j - eta, sum of (R_j - eta) g;
+    - adhesive: the patch is raised by eta, so the layer from h to h + eta holds the top of the patch out to R_1 - eta, and
+      under cover plies adhesive from there to the cover's edge. The adhesive is the cavity and that layer, less the patch,
+      less the space of one bondline left empty under the deepest group of a cut through every ply;
+    - cover: its plies out to R_1 plus the overlap.
+    In the panel a part of the repair is its rectangle swept about the middle, and a laminate ply the panel less a disc.
+
+    Stiffness: a stack of n0 plies at 0 and n90 at 90 has A11 = (n0 Q11 + n90 Q22) t, A22 = (n0 Q22 + n90 Q11) t and
+    A12 = (n0 + n90) Q12 t, and no coupling of stretching with shear. Bonded into one section with another stack and pulled
+    along x, both contract as the section does, by nu = A12 / A22 of the section, so a stack's E t is A11 - nu A12 of its
+    own. The lap is then `stepped_lap` on these steps: the cover's overlap, each ledge, and the floor to the repair's
+    middle, where the lap ends at a plane of symmetry."""
+    if case["units"] != "mm-MPa":
+        raise ValueError("a patch repair case is stated in mm, MPa and N/mm, so nothing is converted")
+    parent, steps, adhesive = case["parent"], case["steps"], case["adhesive"]
+    t, layup = parent["ply_thickness"], parent["layup"]
+    n, per, length, eta = steps["count"], steps.get("plies", 1), steps["length"], adhesive["thickness"]
+    cover = case.get("cover", {"layup": [], "overlap": 0.0})
+    removed = n * per
+    through = removed == len(layup)
+    patch = case.get("patch", {}).get("layup", layup[len(layup) - removed:])  # deepest first
+    if any(angle not in (0, 90) for angle in layup + patch + cover["layup"]) or "library" in parent or set(case.get("patch", {})) - {"layup"}:
+        raise ValueError("this closed form takes one typed material in plies at 0 and 90 degrees")
+    g, h, edge = per * t, len(layup) * t, case["panel"]["length"] / 2
+    radius = [case["damage"]["diameter"] / 2 + (n - j) * length for j in range(1, n + 1)]  # step 1 first
+    reach = radius[0] + cover["overlap"]
+    cavity = sum(r * g for r in radius)
+    patch_area = sum((r - eta) * g for r in radius)
+    proud = eta * (radius[0] - eta)  # the top of the patch, above the laminate's top face
+    above = eta * (reach - (radius[0] - eta)) if cover["layup"] else 0.0  # the adhesive between the cover plies and the laminate
+    empty = eta * (radius[-1] - eta) if through else 0.0
+    panel = case["panel"]["length"] * case["panel"]["width"]
+    ring = lambda inner, outer, height: np.pi * (outer**2 - inner**2) * height  # noqa: E731
+    patch_volume = sum(ring(0.0, r - eta, g) for r in radius)
+    answer = {
+        "cut_radii": radius,
+        "areas": [edge * h - cavity, cavity + proud + above - patch_area - empty, patch_area, reach * len(cover["layup"]) * t],
+        "volumes": [panel * h - sum(ring(0.0, r, g) for r in radius),
+                    sum(ring(0.0, r, g) for r in radius) + ring(0.0, radius[0] - eta, eta) - patch_volume
+                    + (ring(radius[0] - eta, reach, eta) if cover["layup"] else 0.0) - (ring(0.0, radius[-1] - eta, eta) if through else 0.0),
+                    patch_volume, ring(0.0, reach, len(cover["layup"]) * t)],
+        "bond_on_laminate": [(n - 1) * length + (0.0 if through else radius[-1]) + cover["overlap"], n * g],
+    }
+
+    q = q_on_axis(parent["E1"], parent["E2"], parent["G12"], parent["nu12"])
+
+    def stretching(angles: list) -> tuple[float, float, float]:
+        zeros, nineties = angles.count(0), angles.count(90)
+        return (zeros * q[0, 0] + nineties * q[1, 1]) * t, (zeros + nineties) * q[0, 1] * t, (zeros * q[1, 1] + nineties * q[0, 0]) * t
+
+    rows = []
+    stretches = ([(cover["overlap"], 0)] if cover["layup"] else []) + [(length, j) for j in range(1, n)] + ([] if through else [(radius[-1], n)])
+    for stretch, groups in stretches:
+        over = patch[(n - groups) * per:] + cover["layup"]
+        under = layup[:len(layup) - groups * per]
+        (a11o, a12o, a22o), (a11i, a12i, a22i) = stretching(over), stretching(under)
+        nu = (a12o + a12i) / (a22o + a22i)
+        rows.append({"length": stretch, "outer_thickness": len(over) * t, "outer_modulus": (a11o - nu * a12o) / (len(over) * t),
+                     "inner_thickness": len(under) * t, "inner_modulus": (a11i - nu * a12i) / (len(under) * t)})
+    lap = stepped_lap({"units": case["units"], "adhesive": adhesive, "steps": rows, "applied": case["applied"], "symmetric_end": not through})
+    answer["step_stiffnesses"] = [[row["outer_modulus"] * row["outer_thickness"], row["inner_modulus"] * row["inner_thickness"]] for row in rows]
+    answer.update({key: lap[key] for key in ("boundary_forces", "shear_at_ends", "peak_shear", "elastic_limit_load") if key in lap})
+    return answer
+
+
 LAP_CASES = {
     "constructed-flush-three-step-repair": stepped_lap,
     "constructed-single-step-lap-and-double-lap": stepped_lap,
+}
+
+PATCH_REPAIR_CASES = {
+    "constructed-cross-ply-patch-with-a-cover-ply": stepped_patch_repair,
+    "constructed-cross-ply-patch-through-every-ply": stepped_patch_repair,
 }

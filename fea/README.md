@@ -126,6 +126,16 @@ uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape engine/exa
 
 prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid. The wing file may also be the same description as JSON, and `--parts parts.json` writes the part table in the file's units: that is how the wing workspace's Download STEP calls it through the API (ADR-0118). A description the engine or the shape refuses ends with status 2 and its reason on stderr.
 
+## A patch repair's slice and STEP file
+
+`anisotropy_fea.repair_shape` takes a stepped patch repair's file (the engine's description, ADR-0131) and makes two things from the rectangles the engine lists for it. `slice_mesh` meshes one half of the slice through the repair's middle with four-node quadrilaterals on a grid, every element in one part (a laminate ply, the adhesive, a patch ply or a cover ply); it needs NumPy only. `build_repair_shape` writes every ply and every piece of adhesive as a named solid of the whole repair in its panel to a STEP file in millimetres; it needs the optional extra `mesh`:
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape engine/examples/example-patch-repair.toml --step repair.step
+```
+
+prints the mesh's size and, part by part, the area in the mesh beside the area by the description, the bondline that touches the laminate, and each kind of solid's volume beside the description's. `--size 2.5` sets the element size along the slice in millimetres. A STEP file holds shape and names only: a ply's angle is in its name, and its material is not in the file. Nothing is solved here: the finite element model of the slice is a later step.
+
 ## A wing in CalculiX
 
 `anisotropy_fea.wing_model` checks the same wing file with finite elements (ADR-0117): the shape's mesh as S8R composite shells carrying every ply and the core, the root clamped, every flight case of the envelope as a sum of four solved load patterns, each ply's strength ratio by the engine's criterion outboard of a root zone one web height long, each skin and web panel between ribs buckling as the engine's Ritz plate under its loads in the model, the first six vibration modes, the box's shear center and torsion stiffness, and a flutter estimate on that section (`anisotropy_engine.wing.flutter`). `--skins box` keeps only the skins between the spars, the hand calculation's box:
