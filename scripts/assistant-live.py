@@ -234,7 +234,9 @@ def main() -> int:
         for m in mcp_out["results"]:
             q = by_id[m["id"]]
             final = m["final"] or ""
-            item = {"question": q["ask"], "where": "an engineer's own assistant, on our MCP server's tools", "tools it called": m["tools"],
+            # what the tools returned goes with them: a number the answer quotes from there is the engine's, not typed (criterion 4)
+            item = {"question": q["ask"], "where": "an engineer's own assistant, on our MCP server's tools",
+                    **({"what its tools returned before the question": m["held"]} if m.get("held") else {}), "tools it called": m["tools"],
                     "its answer": final, "a good answer": (q["live"] or {}).get("judge") or f"Answers from what {q['mcp']['tool']} returned, its numbers as given"}
             items.append((q, m, "mcp", "MCP client", final[:300].replace("\n", " "), m["faults"], item))
         for _, _, _, _, _, faults, item in items:

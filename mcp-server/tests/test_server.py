@@ -3,6 +3,7 @@ package wrote. Each tool passes on what the API or the result holds; none comput
 
 import asyncio
 import json
+import re
 
 import httpx
 from mcp import Client
@@ -33,9 +34,11 @@ def test_the_server_offers_its_tools_each_described_and_tells_the_clients_model_
     assert by_name["result_values"].annotations.read_only_hint is True and by_name["solve_coupon"].annotations.read_only_hint is False
     assert by_name["solve_coupon"].annotations.destructive_hint is False and by_name["solve_coupon"].input_schema["required"] == ["values"]
     assert fake.calls == []  # listing the tools asks the API nothing
-    for rule in ("comes from a tool result of this server", "four significant figures", "When a required row is missing, ask", "a preview by our kernel",
-                 "answer only from its facts and theory sections", "start no full run"):
+    for rule in ("Lead with the answer in one short line", "Answer only what was asked", "Never name these tools, a solver program",
+                 "comes from a tool result of this server", "four significant figures at most", "When a required row is missing, ask for every missing row",
+                 "solve_coupon solves a preview", "is no failure of the coupon", "only from its facts and theory sections", "start no full run"):
         assert rule in INSTRUCTIONS
+    assert not re.search(r"calculix|prepomax|abaqus|\bkernel\b", INSTRUCTIONS + "".join(tool.description for tool in tools), re.I)  # ADR-0091
     assert server.instructions == INSTRUCTIONS
 
 
@@ -46,7 +49,7 @@ def test_the_materials_are_the_apis_marked_with_whether_a_setup_can_name_them(ca
     im7, other = listed["materials"]
     assert im7["material_id"] == "im7-8552" and im7["coupon_library"] is True and im7["ply_thickness_given"] is True and im7["rights"] == "open-publisher"
     assert other["coupon_library"] is False and "ply_thickness_given" not in other  # a second dataset of a material is not on the form
-    assert values["E1_pa"] == 162095743962.38818 and values["dataset_asked"] is None
+    assert values["E1_pa"] == 162095743962.38818 and "dataset_asked" not in values and {v["role"] for v in values["values"]} >= {"F1t", "F2t", "F6"}
     assert with_dataset["dataset_asked"] == "ncamp-im7-8552-2019-rtd-measured-v1"
     assert isinstance(unknown, Refused) and "unknown library material 'nothing-1'" in unknown
     assert isinstance(odd, Refused) and "letters, digits and hyphens" in odd and len(fake.calls) == 4  # an id that is not one never reaches the API
@@ -87,12 +90,15 @@ def test_a_solve_returns_the_packages_answer_and_sentences_and_an_id_never_the_f
     solved, = call(("solve_coupon", {"values": VALUES}))
     summary = FIELDS["summary"]
     assert fake.calls[0][:2] == ("POST", "/v1/coupon-jobs/live") and fake.calls[0][2]["values"]["angles"] == [45, 0, -45, 90]
-    assert solved["solved"] is True and solved["result_id"] == "r1" and solved["solver"] == "kernel" and "no CalculiX cross-check" in solved["kind"]
+    assert solved["solved"] is True and solved["result_id"] == "r1" and "solver" not in solved and "no check by a second solver" in solved["kind"]
+    assert not re.search(r"calculix|prepomax|tectonic|\bkernel\b|[A-Z]:\\\\", json.dumps(solved), re.I)  # no program of the machine, nor its path (ADR-0091)
+    assert "solver" not in solved["setup"]["passed"] and "document" not in solved["setup"]["passed"]
     assert solved["answer"]["verdict"] == summary["verdict"] and solved["answer"]["first_ply_failure"] == summary["fpf_gauge"]
     assert solved["answer"]["first_ply_failure_basis"] == "the gauge section" and solved["answer"]["reaction"] == summary["reaction"]
     assert solved["answer"]["gauge_section_read"] == summary["gauge_reading"] and summary["gauge_reading"]["stand_off"] == 6.25  # ADR-0108
     assert solved["answer"]["first_ply_failure"]["tsai_hill"]["ply"] == 4 and solved["answer"]["applied"] == summary["applied"]
-    assert solved["sentences"] == EXPLANATION["sentences"] and solved["coupon"]["layup"] == "[45/0/-45/90]s"
+    assert len(solved["sentences"]) == len(EXPLANATION["sentences"]) and solved["coupon"]["layup"] == "[45/0/-45/90]s"
+    assert any("PrePoMax" in said for said in EXPLANATION["sentences"])  # the package's aside, cut as the page cuts it
     assert solved["can_be_asked"] == results.offer(FIELDS) and solved["setup"]["blocking"] == []
     assert "element" not in solved and "fields" not in solved and len(json.dumps(solved)) < 12_000  # megabytes stay in the server
 
@@ -125,7 +131,8 @@ def test_why_is_answered_from_the_fact_sheet_and_the_theory_sections_the_questio
     _, why = call(("solve_coupon", {"values": VALUES}), ("explain_result", {"result_id": "r1", "question": "why does ply 4 fail first?"}))
     method, path, body, _ = fake.calls[-1]
     assert (method, path, body) == ("POST", "/v1/workspace/theory-sections", {"question": "why does ply 4 fail first?"})  # the question alone: no result leaves
-    assert why["facts"] == EXPLANATION["facts"] and why["sentences"] == EXPLANATION["sentences"] and why["question"] == "why does ply 4 fail first?"
+    assert why["facts"] == EXPLANATION["facts"] and why["question"] == "why does ply 4 fail first?"
+    assert len(why["sentences"]) == len(EXPLANATION["sentences"]) and not any("PrePoMax" in said for said in why["sentences"])
     assert why["theory"] == [{"id": "engine:5-failure", "from": "Laminate theory, 5. Failure", "text": SECTIONS[0]["text"]}]
     assert "name the section" in why["how_to_answer"] and "do not hold" not in why["how_to_answer"]
     fake.sections = []

@@ -53,14 +53,27 @@ def block(content: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def called_as_asked(calls: list[dict[str, Any]], asked: dict[str, Any]) -> bool:
+FREE_WORDS = {"question"}  # an argument the model words itself: the engineer's question put in its own words is the same question
+SHOWN = 9000  # what the judge is shown of each tool result, in characters: the numbers an answer may quote come from there
+
+
+def called_as_asked(calls: list[dict[str, Any]], asked: dict[str, Any], defaults: dict[str, dict[str, Any]], final: str = "") -> bool:
+    """Whether the model called the bank's tool with its arguments: an argument left out counts as the tool's default, `example` and a
+    free-worded argument count when given at all. A question the bank expects refused, answered without a call because the solve the
+    model already holds says why (an element the mesh has not), is as asked when the answer says what the bank says."""
+    if asked.get("refused") and not calls and all(said in final for said in asked.get("says", []) if not said.startswith('"')):
+        return True
     for call in calls:
         if call["name"] != asked["tool"]:
             continue
-        given = call["input"]
-        if all((key in given) if value == "example" else given.get(key) == value for key, value in asked["args"].items()):
+        given = {**defaults.get(call["name"], {}), **call["input"]}
+        if all((key in given) if value == "example" or key in FREE_WORDS else given.get(key) == value for key, value in asked["args"].items()):
             return True
     return False
+
+
+def shown(text: str) -> str:
+    return text if len(text) <= SHOWN else f"{text[:SHOWN]} [... {len(text) - SHOWN} more characters]"
 
 
 async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend, client: Any) -> dict[str, Any]:
@@ -69,9 +82,12 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
     server = build(Api("http://127.0.0.1:8000", transport=httpx.MockTransport(FakeApi())))
     async with Client(server) as session:
         tools = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in (await session.list_tools()).tools]
+        defaults = {t["name"]: {key: p["default"] for key, p in t["input_schema"].get("properties", {}).items() if "default" in p} for t in tools}
         messages: list[dict[str, Any]] = []
+        held: list[dict[str, Any]] = []
         if context == "solved":
             solved = await session.call_tool("solve_coupon", {"values": VALUES})
+            held.append({"name": "solve_coupon", "input": {"values": VALUES}, "returned": shown(solved.content[0].text)})
             messages += [{"role": "user", "content": SETUP + " Solve it."},
                          {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_context_1", "name": "solve_coupon", "input": {"values": VALUES}}]},
                          {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_context_1", "content": solved.content[0].text}]},
@@ -96,11 +112,11 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
             for use in uses:
                 result = await session.call_tool(use["name"], use["input"])
                 text = result.content[0].text if result.content else ""
-                calls.append({"name": use["name"], "input": use["input"], "refused": bool(result.is_error)})
+                calls.append({"name": use["name"], "input": use["input"], "refused": bool(result.is_error), "returned": shown(text)})
                 results.append({"type": "tool_result", "tool_use_id": use["id"], "content": text, **({"is_error": True} if result.is_error else {})})
             messages.append({"role": "user", "content": results})
-    faults = [] if called_as_asked(calls, asked) else [f"did not call {asked['tool']} with {json.dumps(asked['args'])}; called {[c['name'] for c in calls] or 'nothing'}"]
-    return {"id": question["id"], "tools": calls, "final": final, "faults": faults}
+    faults = [] if called_as_asked(calls, asked, defaults, final) else [f"did not call {asked['tool']} with {json.dumps(asked['args'])}; called {[c['name'] for c in calls] or 'nothing'}"]
+    return {"id": question["id"], "tools": calls, "held": held, "final": final, "faults": faults}
 
 
 async def talk_all(questions: list[dict[str, Any]], model: str, store: Store, spend: Spend, client: Any) -> tuple[list[dict[str, Any]], str | None]:
