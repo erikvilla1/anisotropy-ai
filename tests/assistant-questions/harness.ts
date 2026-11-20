@@ -62,6 +62,8 @@ export type Expected = {
   term?: string;
   /** The criterion of a failure answer or of the working. */
   criterion?: string;
+  /** The step of the working shown, by its id ("stress", "strain", "criterion", "loading"), or "all" for the whole working. */
+  step?: string;
   /** The plies and the quantities a value answer reads. */
   plies?: number[];
   columns?: string[];
@@ -225,7 +227,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const found = workingFor(s.fields, text);
       if (!s.fields || !found) return said("none", "No working to show yet");
       if (found.kind === "not-worked") return said("refused", "No working for that criterion yet", [`The working of ${found.name} is not written yet. Ask for ${found.others.join(" or ")}.`]);
-      return said("working", `Working: ${found.name}`, [`on ${found.basis}`], { criterion: found.criterion });
+      // as workingMessage in coupon-chat.tsx: one step asked by its quantity is headed by its title (ADR-0103 amendment 1)
+      return said("working", found.step ? found.step.title : `Working: ${found.name}`, [`on ${found.basis}`], { criterion: found.criterion, step: found.step?.id ?? "all" });
     }
     case "why": return said("why", "Answered in words from the results", [], {});
     case "why-none": return said("none", "No results to answer from yet");
@@ -344,6 +347,7 @@ function expected(e: Expected, answer: Said): string[] {
   for (const words of e.never ?? []) if (text.toLowerCase().includes(words.toLowerCase())) out.push(`says “${words}”`);
   if (e.term !== undefined && data.term !== e.term) out.push(`term ${String(data.term)}, expected ${e.term}`);
   if (e.criterion !== undefined && data.criterion !== e.criterion) out.push(`criterion ${String(data.criterion)}, expected ${e.criterion}`);
+  if (e.step !== undefined && data.step !== e.step) out.push(`step ${String(data.step)}, expected ${e.step}`);
   if (e.element !== undefined && data.element !== e.element) out.push(`element ${String(data.element)}, expected ${e.element}`);
   if (e.confirmed !== undefined && data.confirmed !== e.confirmed) out.push(`confirmed ${String(data.confirmed)}, expected ${e.confirmed}`);
   if (e.plies !== undefined && JSON.stringify(data.plies) !== JSON.stringify(e.plies)) out.push(`plies ${JSON.stringify(data.plies)}, expected ${JSON.stringify(e.plies)}`);

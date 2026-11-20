@@ -1328,6 +1328,23 @@ test("the working behind an answer is shown when asked: each formula with the so
   await say("show the working for Tsai-Wu");
   await expect(page.getByTestId("chat-working-none").last()).toHaveText("The working of Tsai-Wu is not written yet. Ask for Maximum stress or Tsai-Hill.");
 
+  // a quantity asked by name gets its one step, headed by it, with the whole working one click away (ADR-0103 amendment 1); the founder's
+  // "equation for stress" was shown all four steps of Tsai-Hill (2026-11-20)
+  await say("equation for stress");
+  const stress = page.getByTestId("chat-working").last();
+  await expect(stress).toHaveAttribute("data-step", "stress");
+  await expect(stress.locator("h4")).toHaveText("The ply's stress from its strain");
+  await expect(stress.getByTestId("chat-working-where")).toHaveText(`The first ply to fail in the gauge section: ply 4 (90°), element ${hill.element}, at ${printed(hill.factor)} times the applied loading, by Tsai-Hill.`);
+  await expect(stress.getByTestId("chat-working-step")).toHaveCount(1);
+  await expect(page.getByTestId("chat-working-stale")).toHaveCount(0); // the same result read again is not a changed setup (sameResults)
+  await expect(stress.getByTestId("chat-working-equation")).toHaveCount(hill.steps[1].equations.length);
+  await page.waitForTimeout(600); // the list has settled at its newest message
+  await stress.evaluate((answer) => answer.scrollIntoView({ block: "start" }));
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working-step.png" });
+  await stress.getByTestId("chat-working-all").click();
+  await expect(page.getByTestId("chat-working").last()).toHaveAttribute("data-step", "all");
+  await expect(page.getByTestId("chat-working").last().getByTestId("chat-working-step")).toHaveCount(4);
+
   await page.waitForTimeout(600); // the list has settled at its newest message
   await first.locator('[data-step="stress"]').evaluate((step) => step.scrollIntoView({ block: "start" }));
   await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working.png" });
