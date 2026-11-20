@@ -57,7 +57,7 @@ export function CadWorkspace() {
   return (
     <WorkspaceShell
       kind={workspace("cad").title}
-      title={<span className="ws-setup-line" data-testid="project-name">CAD</span>}
+      title={<span className="ws-setup-line" data-testid="project-name">No part yet</span>}
       rail={(
         <div className="studio-form ws-rail-panels ws-tree" data-testid="cad-rail">
           <p className="ws-setup-line" data-state="none">Being built. Nothing can be drawn yet.</p>
