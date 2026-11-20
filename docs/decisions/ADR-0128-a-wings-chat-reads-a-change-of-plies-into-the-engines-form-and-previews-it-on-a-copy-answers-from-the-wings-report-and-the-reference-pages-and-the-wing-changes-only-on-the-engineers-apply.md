@@ -38,6 +38,7 @@
 - `scripts/wing-choices.py` writes `tests/fixtures/wing/caps-preview.json` (the founder's change on the example with caps) and `skin-preview.json` (the MCP stand-in's).
 - `mcp-server/src/anisotropy_mcp/server.py`, `mcp-server/tests/conftest.py`, `test_server.py`, `test_questions.py`; `scripts/assistant-live-mcp.py` names the wing for the real-model run (context "wing").
 - `tests/assistant-questions/harness.ts` reads the wing pages and routes; `api/tests/test_assistant_questions.py` searches the wing bank's sections among the wing's pages.
+- After the first real-model check (run 44676857845, below): the MCP tests' stand-in API searches the wing's pages with the API's own search, not a fixed coupon section; the wing tools give margins to three decimals, as the page prints them; a preview's summaries carry the strengths' basis, which the page shows under the change's sentence ("Margins at ultimate load, on B-basis strengths."); the instructions ask for the answer first in one sentence and never a tool's field.
 - Different from the plan: no model reads a wing message on the hosted site yet (option 2); "both caps or only the upper one" is not asked, since one cap layup serves every cap (ADR-0125); a placement not said is beside the plies of the angle, named in the engine's sentence, not asked.
 
 ## Why (evidence)
@@ -47,7 +48,7 @@
 - `npx tsx --test tests/wing-chat.test.ts tests/assistant-questions.test.ts`: 29 passed; every wing question takes its route and answer.
 - `npx playwright test -c playwright.studio.config.ts tests/browser/wing.spec.ts`: the chat answers the 10 % rule with "No: the skin misses the 10 % rule" and the section that explains it; the founder's ask is refused on a wing with no caps in the engine's words, previewed once caps are added, and applied as a version by the assistant whose change line is the zone root to 40 % [0/0/0/45/-45/0]s.
 - `cd mcp-server && uv run pytest tests`: 69 passed.
-- The real-model check of the bank's MCP questions: not run yet.
+- The real-model check of the bank's ten MCP questions (ADR-0121, check 2): run 44676857845 on ca825ce, 3 hold, 6 weak, 1 fails, $0.11. After the fixes under As built, run 44678143920 on 6fa7bab, 3 hold, 6 weak, 1 fails, $0.10: "which part fails first" now holds, every margin is given as the page prints it, and "which ASTM test gives the compression allowable?" is answered from our test methods section (ASTM D6641); it still counts as failing because the client searched with the question reworded, which the bank's check of a tool's arguments does not allow. The weak answers are longer than the page's (criterion 8), or are asked for a preview-or-full-run line that a wing's hand calculation does not have.
 
 ## Consequences
 
