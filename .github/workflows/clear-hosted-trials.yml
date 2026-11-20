@@ -1,0 +1,71 @@
+# The one clearing of the hosted tier's trial records (ADR-0026 amendment 2), by hand from the Actions page. It reaches the hosted
+# database with the deploy's DATABASE_URL and the bucket with S3 keys derived from the deploy's CLOUDFLARE_API_TOKEN (R2's rule: the
+# token's id is the access key id, the SHA-256 of its value the secret), so no key leaves the repository's secrets. `count` changes
+# nothing; `delete` runs only from main, with the confirmation typed and the counts `count` printed. The repository is public, so the
+# log holds counts only (scripts/clear-hosted-trials.py prints no email and no coupon name).
+name: Clear hosted trials
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "count (changes nothing) or delete"
+        required: true
+        default: count
+        type: choice
+        options: [count, delete]
+      expect:
+        description: "For delete: the counts count printed, e.g. runs=373,jobs=27,projects=40"
+        required: false
+        default: ""
+      confirm:
+        description: 'For delete: type "delete the trial records"'
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency: clear-hosted-trials
+
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --project api --locked
+      - name: The bucket's S3 keys from the Cloudflare token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          id=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -r '.result.id // empty')
+          if [ -z "$id" ]; then
+            id=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | jq -r '.result.id // empty')
+          fi
+          if [ -z "$id" ]; then echo "::error::Cloudflare did not verify CLOUDFLARE_API_TOKEN"; exit 1; fi
+          secret=$(printf %s "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)
+          echo "::add-mask::$id"
+          echo "::add-mask::$secret"
+          {
+            echo "ANISOTROPY_R2_ACCESS_KEY_ID=$id"
+            echo "ANISOTROPY_R2_SECRET_ACCESS_KEY=$secret"
+            echo "ANISOTROPY_R2_ENDPOINT=https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+            echo "ANISOTROPY_R2_BUCKET=anisotropy-outputs"
+          } >> "$GITHUB_ENV"
+      - name: Count
+        if: inputs.mode == 'count'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: uv run --project api python scripts/clear-hosted-trials.py count
+      - name: Delete
+        if: inputs.mode == 'delete' && github.ref == 'refs/heads/main'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          EXPECT: ${{ inputs.expect }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: uv run --project api python scripts/clear-hosted-trials.py delete --expect "$EXPECT" --confirm "$CONFIRM"
