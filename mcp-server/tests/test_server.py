@@ -41,7 +41,7 @@ def test_the_server_offers_its_tools_each_described_and_tells_the_clients_model_
                  "comes from a tool result of this server", "four significant figures at most", "When a required row is missing, ask for every missing row",
                  "solve_coupon solves a preview", "is no failure of the coupon", "only from its facts and theory sections", "start no full run",
                  "ask back only for what has no such default", "never by the rows' keys", "show the working of the one that fails first",
-                 "pass it as step and show that step alone", "Open with the tool's basis_line",
+                 "pass it as step and show that step alone", "then give the tool's basis_line as it is written", "Say each symbol's meaning in words",
                  "a formula from show_working keeps the numbers as it wrote them"):
         assert rule in INSTRUCTIONS
     assert not re.search(r"calculix|prepomax|abaqus|\bkernel\b", INSTRUCTIONS + "".join(tool.description for tool in tools), re.I)  # ADR-0091
