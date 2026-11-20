@@ -11,7 +11,8 @@ queued or running; the rows go in one transaction, the objects after it.
 
 The database is DATABASE_URL_UNPOOLED, else DATABASE_URL; the store is ANISOTROPY_R2_BUCKET, ANISOTROPY_R2_ENDPOINT,
 ANISOTROPY_R2_ACCESS_KEY_ID and ANISOTROPY_R2_SECRET_ACCESS_KEY: the API's own names (docs/walkthroughs/hosted-deploy.md). The output
-holds counts only, never an email or a coupon's name.
+holds counts only, never an email or a coupon's name. The founder's PC holds no R2 keys, so the run is made by the workflow
+`.github/workflows/clear-hosted-trials.yml`, from the repository's secrets.
 """
 
 from __future__ import annotations
