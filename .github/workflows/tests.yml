@@ -123,11 +123,14 @@ jobs:
       - run: npm run test:calculator
 
   studio-browser:
-    # In two halves (ADR-0114 amendment 2): studio.spec.ts's scenarios may run in parallel, so Playwright splits them evenly by test.
+    # In three parts (ADR-0114 amendment 2): studio.spec.ts's scenarios may run in parallel, so Playwright splits them by test, in order.
+    # Each part draws one scene at a time: Chromium draws in software on the runner's CPU, and two scenes side by side starved each other
+    # (the plate scenario 52 s alone, past its 120 s limit beside the bending one, run 44816748264). The heavy scenes come first in the
+    # file, so three parts keep the first one near 6.5 minutes where two left it near 8.5.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     # Playwright's own image (ADR-0114 amendment 2): the browsers and their system packages are in it, so the job never waits on
     # Ubuntu's mirror. Its version is package-lock.json's; when they differ, Playwright stops and says the image needs updating too.
@@ -146,7 +149,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run test:studio -- --shard=${{ matrix.shard }}/2
+      - run: npm run test:studio -- --shard=${{ matrix.shard }}/3 --workers=1
 
   site-browser:
     # Every browser spec the jobs above do not run (ADR-0114): the public pages, the home page's demo, the shell, the libraries and every
