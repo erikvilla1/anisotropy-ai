@@ -98,3 +98,7 @@ The failure message lists each value that disagrees. Check, in this order:
 ## Sources and copyright
 
 Store only the numbers and a short source reference. Course problem statements, solution files, Excel input files and textbook pages stay out of the repository; keep them in `.local/` or another ignored folder.
+
+## Wing cases
+
+`wing_cases/` holds wing files (the format `examples/example-wing.toml` shows) with `stations` and an `[expected]` table: `[expected.design]` for the section's numbers and `[expected.cases.<number>]` for a load case's, in the report's units, with one relative `tolerance`. `tests/test_wing_validation.py` runs each on every `uv run pytest`. They sit beside `cases/` because the laminate runner and the problem documents read `cases/` as laminates (ADR-0115). A wing case is constructed: its closed form goes in `closed_forms.py` under `WING_CASES`, written without the engine, and the test checks every expected number against it. A wing built to a course's or a team's requirements stays in `.local/` (ADR-0042).

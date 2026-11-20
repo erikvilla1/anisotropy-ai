@@ -1,0 +1,22 @@
+{
+  "feature": "result-extremes",
+  "title": "Where a stress or a strain is largest",
+  "records": ["ADR-0100", "ADR-0108"],
+  "watches": ["lib/result-question.ts", "mcp-server/src/anisotropy_mcp/results.py"],
+  "questions": [
+    {"ask": "where is the shear stress highest?", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest |τ₁₂|: −45.86 MPa", "says": ["gauge section"]}, "mcp": {"tool": "result_extreme", "args": {"quantities": ["S12"], "sense": "magnitude"}, "says": ["\"value\":-45.8611282", "\"tied_plies\":[3,6,8]"]}},
+    {"ask": "max sigma 2", "kind": "which", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₂: 60.6 MPa"}},
+    {"ask": "highest transverse stress", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₂: 60.6 MPa"}},
+    {"ask": "most compressive stress", "kind": "which", "style": "loose", "page": "results", "route": "value", "answer": {"kind": "extremes", "says": ["Smallest σ₁: −364.8 MPa"]}},
+    {"ask": "where is sigma 1 lowest in ply 4", "kind": "which", "style": "jargon", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Smallest σ₁: −364.8 MPa", "plies": [4]}},
+    {"ask": "largest σ₁ over the whole model", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest |σ₁|: 1203 MPa", "says": ["whole model"]}},
+    {"ask": "peak fibre stress anywhere including the grips", "kind": "which", "style": "loose", "page": "results", "route": "value", "answer": {"kind": "extremes", "says": ["whole model"], "columns": ["S11"]}},
+    {"ask": "where is the shear strain highest", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "columns": ["E12"]}},
+    {"ask": "biggest strain", "kind": "which", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "extremes", "columns": ["E11", "E22", "E12"]}},
+    {"ask": "which ply carries the most load?", "kind": "which", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S11"], "sense": "magnitude"}}, "source": "the founder, 2026-11-17"},
+    {"ask": "where does the 90 ply see the most tension", "kind": "which", "style": "loose", "page": "results", "route": "model", "live": {"request": {"kind": "extreme", "quantities": ["S22"], "plies": [4, 5], "sense": "largest"}}},
+    {"ask": "max stress", "kind": "which", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "extremes"}, "live": {"judge": "Either the largest stresses or the maximum stress criterion; says which it read"}},
+    {"ask": "is the largest σ₁ in the gauge section?", "kind": "yes-no", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "opens": "Yes"}, "gap": "1: a yes-or-no question about a place is answered with the value, not yes or no"},
+    {"ask": "wher is the max shear", "kind": "which", "style": "typo", "page": "results", "route": "value", "answer": {"kind": "extremes", "columns": ["S12"]}, "live": {"request": {"kind": "extreme", "quantities": ["S12"]}}}
+  ]
+}

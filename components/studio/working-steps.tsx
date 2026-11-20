@@ -21,12 +21,12 @@ function Formula({ expression, block = true }: { expression: string; block?: boo
 
 /** The working behind an answer (ADR-0103): each step with what it rests on, the values put in, its formula and the formula with the
  * values in place. Every number and formula is the package's; this component typesets them and prints the values by the page's rule. */
-export function WorkingSteps({ chain, figures }: { chain: WorkingChain; figures: number }) {
+export function WorkingSteps({ chain, figures, titled = true }: { chain: WorkingChain; figures: number; titled?: boolean }) {
   return (
     <ol className="chat-working-steps">
       {chain.steps.map((step) => (
         <li key={step.id} data-testid="chat-working-step" data-step={step.id}>
-          <h5>{step.title}</h5>
+          {titled ? <h5>{step.title}</h5> : null}
           <p data-testid="chat-working-text">{shownSentence(step.text)}</p>
           {step.given.length ? (
             <table className="studio-table studio-table-compact chat-working-given">

@@ -13,6 +13,7 @@ from anisotropy_engine.library import LibraryMaterial, library_material
 from anisotropy_engine.response import Loads
 from anisotropy_engine.summary import FailureSummary, LaminateSummary
 from anisotropy_engine.units import UNIT_SYSTEMS
+from anisotropy_engine.wing.changes import PlyChange
 
 
 class Contract(BaseModel):
@@ -833,13 +834,14 @@ class OfferedChoice(Contract):
 
 
 class OfferedRow(Contract):
-    """A row the page offers a message to fill (ADR-0088): a number, a choice or a notation. A coupon's number names the unit it is stated
-    in, and a value written in another unit of the same system is converted to it; a laminate's number names the dimension of its units,
-    and the value keeps the unit written (the engine converts, ADR-0060). A pure number names neither."""
+    """A row the page offers a message to fill (ADR-0088): a number, a choice, a notation or a ply's angle. A coupon's number names the unit
+    it is stated in, and a value written in another unit of the same system is converted to it; a laminate's number names the dimension of
+    its units, and the value keeps the unit written (the engine converts, ADR-0060). A pure number names neither. An angle is in degrees,
+    from -90 to 90 (ADR-0121 amendment 5)."""
 
     key: Key
     label: ShortText
-    kind: Literal["number", "choice", "notation"]
+    kind: Literal["number", "choice", "notation", "angle"]
     unit: CouponUnit | None = None
     dimension: Dimension | None = None
     choices: Annotated[list[OfferedChoice], Field(min_length=1, max_length=120)] | None = None
@@ -1085,6 +1087,30 @@ class TheorySource(Contract):
     title: str
 
 
+class GeneralQuestionRequest(Contract):
+    """A question asked in the FEA section before anything is set up (ADR-0124): the question, and the kinds of work the page offers to
+    set up, which the model may name. No result, no rows and no name go with it."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    kinds: Annotated[list[Literal["coupon", "wing"]], Field(max_length=4)] = []
+
+
+class GeneralAnswerResponse(Contract):
+    """An answer in words to a question asked before a setup (ADR-0124). `prose` is the model's, kept only when every number in it is the
+    question's; `sources` are the theory sections it rests on, or with no prose the sections found. `start` is a kind of work the
+    question asks to set up, from those offered, which the page offers as a button; null when it names none."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    prose: list[str]
+    sources: list[TheorySource]
+    covered: bool
+    withheld: bool
+    reason: str | None
+    start: str | None
+
+
 class ResultAnswerResponse(Contract):
     """An answer in words to a question about a result (ADR-0102). `prose` is the model's, kept only when every number in it is the fact
     sheet's or the question's; `sources` are the theory sections it rests on. With no model, or an answer the guard set aside
@@ -1106,6 +1132,9 @@ class TheorySectionsRequest(Contract):
 
     question: Annotated[str, Field(min_length=1, max_length=2000)]
     limit: Annotated[int, Field(ge=1, le=5)] = 3
+    # what the question is about: a coupon's result searches the theory pages as before; a wing searches the wing's theory and the three
+    # reference pages of design rules, test methods and allowables (ADR-0127, ADR-0128)
+    about: Literal["coupon", "wing"] = "coupon"
 
 
 class TheorySection(Contract):
@@ -1164,10 +1193,11 @@ PROJECT_KINDS = ("fea", "laminate")
 
 class ProjectInput(Contract):
     """A workspace project as the page states it (ADR-0062 part 6): its kind, its name, its content as one JSON object (a coupon's rows
-    and a plate's lists, or a laminate problem's draft), and the form version and unit system the content was stated in. The API keeps
-    it; the fea package judges a coupon's rows at check time (ADR-0051). PUT /v1/projects/{id} creates or replaces it."""
+    and a plate's lists, a laminate problem's draft, or a wing's description under `wing`, ADR-0122), and the form version and unit
+    system the content was stated in. The API keeps it; the fea package judges a coupon's rows at check time (ADR-0051). PUT
+    /v1/projects/{id} creates or replaces it."""
 
-    kind: Literal["fea", "laminate"]
+    kind: Literal["fea", "laminate", "wing"]
     name: Annotated[str, Field(max_length=200)] = ""
     content: dict[str, Any]
     form_version: Annotated[str, Field(max_length=20)] | None = None
@@ -1177,6 +1207,8 @@ class ProjectInput(Contract):
     def not_empty(self) -> Self:
         if not self.content:
             raise ValueError("content must hold the project as the page states it; the object is empty")
+        if self.kind == "wing" and not isinstance(self.content.get("wing"), dict):
+            raise ValueError("a wing project's content holds the wing's description as an object under `wing` (ADR-0122)")
         size = len(json.dumps(self.content, ensure_ascii=False).encode("utf-8"))
         if size > VALUES_LIMIT_BYTES:
             raise ValueError(f"the content is {size} bytes; a project's rows are far below {VALUES_LIMIT_BYTES}")
@@ -1188,10 +1220,11 @@ class ProjectRename(Contract):
 
 
 class ProjectJobOutput(Contract):
-    """A job of a project, as its row stands: enough to list it and open it by its id."""
+    """A job of a project, as its row stands: enough to list it and open it by its id. `queued` until a solver takes it, on the hosted
+    tier (ADR-0056 amendment 3); a project read while one of its jobs waited failed before ADR-0122 found it."""
 
     job_id: str
-    state: Literal["running", "done", "stopped", "refused"]
+    state: Literal["queued", "running", "done", "stopped", "refused"]
     coupon: str | None
     attempt: str | None
     message: str | None
@@ -1209,7 +1242,7 @@ class ProjectOutput(Contract):
     """A project as the API keeps it (ADR-0062 part 6), with its jobs when read by its id."""
 
     id: str
-    kind: Literal["fea", "laminate"]
+    kind: Literal["fea", "laminate", "wing"]
     name: str
     actor: str
     user_email: str | None
@@ -1352,3 +1385,85 @@ class UploadOutput(Contract):
                    coupon=row.coupon, in_scope=row.in_scope, may_train=row.may_train, job_id=None if row.job_id is None else str(row.job_id),
                    verdict=row.verdict, compared_at=None if row.compared_at is None else row.compared_at.isoformat(), not_compared=row.not_compared,
                    facts=dict(row.facts) if full else None, comparison=dict(row.comparison) if full and row.comparison is not None else None)
+
+
+class WingRequest(Contract):
+    """A wing to work by hand (ADR-0115, ADR-0118): its description as the JSON object of a wing file, or the file's TOML text, in
+    the file's own units. The engine reads it with the same rules as a file on disk and refuses anything unknown or missing."""
+
+    wing: dict[str, Any] | None = None
+    toml: Annotated[str, Field(min_length=1, max_length=200_000)] | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_form(self) -> Self:
+        if (self.wing is None) == (self.toml is None):
+            raise ValueError("Give exactly one of wing (a JSON object) or toml (the wing file's text)")
+        return self
+
+
+class WingCheckRequest(WingRequest):
+    """A wing's finite element check (ADR-0119): the wing as for its hand calculation, and the wing project it is run for (ADR-0122),
+    whose row then lists the check; a project unknown or not the requester's is ignored, so a wing the browser alone knows still runs."""
+
+    project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
+
+
+class WingChangeRequest(WingRequest):
+    """A change of plies to preview on a wing (ADR-0128): the wing as for its hand calculation, and the change, plies of one angle added to
+    or taken from one part over a stretch of the half span. The wing sent is never kept or changed."""
+
+    change: PlyChange
+
+
+class WingChangePreview(Contract):
+    """A change worked before it is applied (ADR-0128): the change in one sentence, the wing file it gives, the summary of the wing as it is
+    and as changed (the passes, the lowest margin and where, each check's lowest margin, mass, tip deflection and first bending frequency,
+    in the file's units), and the design rules of the part changed. Applying it is the engineer's tap on the page."""
+
+    run_id: str | None = None
+    engine_version: str
+    change: dict[str, Any]
+    words: str
+    wing: dict[str, Any]
+    before: dict[str, Any]
+    after: dict[str, Any]
+    units: dict[str, Any]
+    rules: list[dict[str, Any]]
+
+
+class WingAnswer(Contract):
+    """The hand calculation of a wing (ADR-0118): the description as the engine read it, the results in the file's units as
+    `wing_report` gives them, and what a page draws (`wing_views`)."""
+
+    run_id: str | None = None
+    engine_version: str
+    wing: dict[str, Any]
+    report: dict[str, Any]
+    views: dict[str, Any]
+
+
+class WingCheckOutput(Contract):
+    """A wing's finite element check as it stands (ADR-0119): `queued` until a solver takes it, `running` with its stage (build, solve,
+    modes), then `done` with the check's report in the wing file's units, `refused` with the reason the description cannot be checked,
+    or `stopped` with what to do. `message` is shown as it is; the causes of a stop stay in the log."""
+
+    job_id: str
+    state: Literal["queued", "running", "done", "stopped", "refused"]
+    wing: str | None = None
+    started_at: str
+    finished_at: str | None = None
+    stage: str | None = None
+    stages_done: list[str] = []
+    stages: list[str] = []
+    message: str | None = None
+    run_id: str | None = None
+    report: dict[str, Any] | None = None
+
+
+class WingShapeAnswer(Contract):
+    """A wing's shape for a CAD program (ADR-0116, ADR-0118): its STEP file's text, in millimetres with every part named, and the
+    part table in the wing file's units: each part's layup, the thickness to thicken it to, its area and mass."""
+
+    run_id: str | None = None
+    step: str
+    parts: dict[str, Any]

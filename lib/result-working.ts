@@ -11,6 +11,7 @@ const ASKS = [
   new RegExp(`^\\s*(?:the |your |its )?${THING}(?: (?:please|for .+|of .+|behind .+))?[.?!]*\\s*$`, "i"),
   /\b(?:prove|derive)\b/i,
   /\bstep[- ]by[- ]step\b/i,
+  /\b(?:stress(?:es)?|strains?|failure index|failure load|load at failure)\s+(?:formulas?|formulae|equations?)\b/i, // "stress equation"
   /\bhow (?:is|was|were|are|did|do|does) (?:you|that|this|it|the|those|these)\b.*\b(?:calculated?|computed?|get|got|worked out|come from|came from|solved?|arrived? at|derived?)\b/i,
 ];
 
@@ -24,6 +25,20 @@ export function criterionNamed(text: string): string | null {
   if (/\bmax(?:imum)?[- ]?strain\b/i.test(text)) return "max_strain";
   if (/\bmax(?:imum)?[- ]?stress\b/i.test(text)) return "max_stress";
   return null;
+}
+
+/** The one step of the working a message asks for by its quantity (ADR-0103 amendment 1): "equation for stress" is the ply's stress from
+ * its strain, not the whole check. A criterion named ("the working for max stress"), or a message that names none or more than one of
+ * them ("show me the formula", "derive the failure factor"), asks for the whole working: null. */
+export function stepAsked(text: string): "strain" | "stress" | "criterion" | "loading" | null {
+  if (criterionNamed(text)) return null;
+  const named = ([
+    ["criterion", /\bfailure index\b|\bindex of failure\b/i],
+    ["loading", /\b(?:failure|first[- ]ply[- ]failure) (?:load|force|displacement)\b|\b(?:load|force|displacement) at (?:first[- ]ply )?failure\b/i],
+    ["stress", /\bstress(?:es)?\b|σ|\bsigma\b|τ|\btau\b/i],
+    ["strain", /\bstrains?\b|ε|\bepsilon\b|γ|\bgamma\b/i],
+  ] as const).filter(([, pattern]) => pattern.test(text)).map(([step]) => step);
+  return named.length === 1 ? named[0] : null;
 }
 
 const isText = (v: unknown): v is string => typeof v === "string";
@@ -47,7 +62,8 @@ export function workingOf(fields: Pick<Fields, "summary"> | null | undefined): W
 }
 
 export type FoundWorking =
-  | { kind: "chain"; criterion: string; name: string; chain: WorkingChain; basis: string; others: string[] }
+  /** `step`: the one step the message asks for by its quantity, when it asks for one and the chain has it (`stepAsked`). */
+  | { kind: "chain"; criterion: string; name: string; chain: WorkingChain; basis: string; others: string[]; step: WorkingChain["steps"][number] | null }
   /** The criterion named has no working written, though the result has others'. */
   | { kind: "not-worked"; name: string; others: string[] };
 
@@ -61,8 +77,10 @@ export function workingFor(fields: Pick<Fields, "summary"> | null | undefined, t
   if (named && !written.includes(named)) return { kind: "not-worked", name: nameOf(named), others: written.map(nameOf) };
   const earliest = fields.summary.verdict?.earliest ?? (working.basis === "gauge" ? fields.summary.earliest_gauge : fields.summary.earliest);
   const criterion = named ?? (earliest && written.includes(earliest) ? earliest : written[0]);
-  return { kind: "chain", criterion, name: nameOf(criterion), chain: working.criteria[criterion], basis: working.basis === "gauge" ? "the gauge section" : "the whole model",
-    others: written.filter((c) => c !== criterion).map(nameOf) };
+  const chain = working.criteria[criterion];
+  const asked = stepAsked(text);
+  return { kind: "chain", criterion, name: nameOf(criterion), chain, basis: working.basis === "gauge" ? "the gauge section" : "the whole model",
+    others: written.filter((c) => c !== criterion).map(nameOf), step: asked ? chain.steps.find((s) => s.id === asked) ?? null : null };
 }
 
 /** A value put into a formula, as the page prints it: the figures the package wrote, the page's own minus and power of ten. */

@@ -8,7 +8,7 @@ import { blankForm, exampleForm } from "../lib/studio-form";
 const p = (key: string, value: string, unit: string | null = null, label = key): Proposal =>
   ({ key, label, value, unit, written_value: value, written_unit: unit, quote: `${key} ${value}` });
 
-test("a coupon offers its choices, its numbers in its own system's units, the layup and the loading, and shows the model no name or source", () => {
+test("a coupon offers its choices, its numbers in its own system's units, the layup and each ply's angle, the loading, and shows the model no name or source", () => {
   const form = { ...exampleForm("2026-11-10"), filled_by: "A. Engineer", notes: "for the review", own_name: "X-Lamina", own_source: "a datasheet" };
   const { rows, form: view } = couponOffer(form);
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
@@ -18,7 +18,11 @@ test("a coupon offers its choices, its numbers in its own system's units, the la
   assert.ok(byKey.test.choices!.some((c) => c.value === "open-hole tension" && c.label === "Open-hole tension"));
   assert.ok(byKey.library.choices!.some((c) => c.value === "im7-8552"));
   assert.equal(byKey.layup.kind, "notation");
-  for (const key of ["value", "units", "filled_by", "own_name", "own_source", "notes", "ply_1", "mesh_nx", "tab_bevel", "name_part"]) assert.equal(byKey[key], undefined, key);
+  for (const key of ["value", "units", "filled_by", "own_name", "own_source", "notes", "ply_5", "mesh_nx", "tab_bevel", "name_part"]) assert.equal(byKey[key], undefined, key);
+  // each stated ply's angle is a row of its own, so one ply can be changed by its number (ADR-0121 amendment 5)
+  assert.deepEqual([byKey.ply_1.kind, byKey.ply_4.kind], ["angle", "angle"]);
+  assert.equal(byKey.ply_3.label, "Ply 3 angle, counted from the bottom, its mirror with it");
+  assert.deepEqual(couponRowsFrom([p("ply_3", "30")]).rows, { ply_3: "30" });
   assert.equal(view.layup, "[45/0/-45/90]s");
   for (const key of ["filled_by", "notes", "own_name", "own_source", "date", "ply_1"]) assert.equal(view[key], undefined, key);
   const inches = couponOffer({ ...blankForm("in-ksi"), units: "in-ksi" }).rows;

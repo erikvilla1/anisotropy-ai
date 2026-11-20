@@ -11,13 +11,20 @@ const SERVER_PROJECT = {
 
 /** The API answers the workspace needs to open: the coupon list, and the project store with one project kept on the server (part 6); the
  * setup check and the jobs are the studio scenarios' business. `store` holds what the page PUT. */
-async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}) {
+async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}, questions: unknown[] = []) {
   store[SERVER_PROJECT.id] = SERVER_PROJECT;
   await page.route(API, (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/v1/coupons") return json([]);
+    if (path === "/v1/workspace/questions") { // a question asked in FEA before a setup (ADR-0124): our pages' sections, the kind it names
+      const asked = request.postDataJSON() as { question: string; kinds: string[] };
+      questions.push(asked);
+      return json({ run_id: null, writer: "anthropic", model: "claude-stub", prose: ["A convergence study refines the mesh until the answer stops moving."],
+        sources: [{ id: "reasons:why-the-element-size-changes-the-numbers", document: "Reasons behind a result", title: "Why the element size changes the numbers" }],
+        covered: true, withheld: false, reason: null, start: /coupon/i.test(asked.question) ? "coupon" : null });
+    }
     if (path === "/v1/projects" && request.method() === "GET") return json(Object.values(store).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
     const one = /^\/v1\/projects\/([^/]+)$/.exec(path);
     if (one && request.method() === "PUT") {
@@ -31,22 +38,33 @@ async function quietApi(page: import("@playwright/test").Page, store: Record<str
   });
 }
 
-test("the workspace opens on two tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
+test("the workspace opens on the start box, three tiles and the projects, the server's among them, and FEA opens blank in three columns (ADR-0062, ADR-0124)", async ({ page }) => {
   const store: Record<string, Record<string, unknown>> = {};
   await quietApi(page, store);
   await page.goto("/workspace");
   const tiles = page.getByTestId("workspace-tiles");
-  await expect(tiles.locator("[data-workspace]")).toHaveCount(2); // the CAD tile is gone (decision D5)
-  await expect(tiles.locator("[data-workspace=cad]")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Start a project");
-  await expect(tiles.locator("[data-workspace=fea] h3")).toHaveText("New Coupon FEA project"); // the workspace's one name, as written
+  await expect(tiles.locator("[data-workspace]")).toHaveCount(3);
+  await expect(tiles.locator("[data-workspace] h3")).toHaveText(["FEA", "CAD", "Laminate"]); // the founder's order; each section's one name
+  await expect(tiles.locator("[data-workspace=cad]")).toHaveAttribute("data-planned", "true");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("What do you want to work on?");
+  await expect(page.getByRole("textbox", { name: "What do you want to work on?" })).toBeVisible();
   await expect(page.getByTestId("projects-source")).toHaveText("Saved to your account and in this browser.");
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "server"); // the list is the browser's merged with the server's (part 6)
   await expect(page.getByTestId("workspace-projects")).toContainText("From the server"); // a project this browser never held
-  await page.getByRole("button", { name: /New coupon fea project/i }).click();
+  await tiles.locator("[data-workspace=fea]").click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   const shell = page.getByTestId("workspace-shell");
   await expect(shell).toHaveAttribute("data-assistant", "open");
+  // blank: an empty model tree, an empty centre and the FEA assistant, until a kind of work is picked (ADR-0124)
+  await expect(page.getByTestId("ws-rail").getByTestId("fea-start-rail")).toBeVisible();
+  await expect(page.getByTestId("fea-start-tree").locator("li")).toHaveCount(10);
+  await expect(page.getByTestId("ws-stage").getByTestId("fea-start-stage")).toBeVisible();
+  await expect(page.getByTestId("ws-assistant").getByTestId("fea-start-chat")).toBeVisible();
+  await expect(shell.locator(".ws-title > span")).toHaveText("FEA");
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click();
+  await expect(shell.locator(".ws-title > span")).toHaveText("FEA · Coupon test");
+  await expect(page.getByTestId("ws-assistant").getByTestId("chat-kind")).toHaveText("Coupon test");
+  await expect(page.getByTestId("chat-set-up")).toBeVisible();
   await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible(); // the product's view: the material and the layup (ADR-0090)
   await expect(page.getByTestId("ws-stage").getByTestId("empty-scene")).toBeVisible();
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
@@ -69,7 +87,7 @@ test("the workspace opens on two tiles and the projects, the server's among them
   await expect(page.getByTestId("project-name")).toHaveValue("OHT study");
 
   await page.getByRole("link", { name: "All projects" }).click(); // a laminate project is kept beside it and opens its own workspace (part 5)
-  await page.getByRole("button", { name: /New laminate response project/i }).click();
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=laminate]").click();
   await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
   await expect(page.getByTestId("laminate-rail").getByTestId("panel-units")).toBeVisible();
   await expect(page.getByTestId("ws-stage").getByTestId("empty-stack")).toBeVisible();
@@ -84,8 +102,8 @@ test("the workspace opens on two tiles and the projects, the server's among them
   await expect(rows.first()).toContainText("ABD check");
   await expect(rows.nth(2)).toContainText("From the server");
   await expect(rows.nth(2)).toContainText("Open-hole tension: not offered yet"); // kept and listed, not offered (ADR-0089)
-  await expect(rows.first()).toContainText("Laminate response");
-  await expect(rows.nth(1)).toContainText("Coupon FEA");
+  await expect(rows.first().locator("td").nth(1)).toHaveText("Laminate");
+  await expect(rows.nth(1).locator("td").nth(1)).toHaveText("FEA · Coupon test");
   await expect.poll(() => Object.values(store).some((p) => p.name === "ABD check" && p.kind === "laminate"), { timeout: 10_000 }).toBe(true);
   await rows.nth(1).getByRole("button", { name: "Open" }).click(); // the coupon project, untouched
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
@@ -181,12 +199,125 @@ test("the old addresses go to the workspace with their query, and the service pa
   await expect(page).toHaveURL(/\/workspace\/fea\/view\/?\?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00$/);
   await page.goto("/studio");
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await page.goto("/services/test-plans"); // a link that promises a coupon opens FEA set up for one (ADR-0124)
+  await expect(page.getByRole("link", { name: "Describe a coupon", exact: true })).toHaveAttribute("href", "/workspace/fea?for=coupon");
   await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
   await expect(page).toHaveURL(/\/workspace\/fea\/view\/?\?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00$/);
   await page.goto("/services/finite-element-modeling");
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.goto("/workspace/laminate");
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "units");
-  await page.goto("/workspace/cad"); // no CAD page in the workspace (decision D5)
-  await expect(page.getByTestId("cad-placeholder")).toHaveCount(0);
+});
+
+test("the start box opens the section a message asks for, with the message, and offers the three when it names none (ADR-0124)", async ({ page }) => {
+  await quietApi(page);
+  await page.goto("/workspace");
+  const box = page.getByRole("textbox", { name: "What do you want to work on?" });
+  await box.fill("hello there");
+  await box.press("Enter");
+  const pick = page.getByTestId("workspace-pick");
+  await expect(pick.locator("[data-workspace]")).toHaveText(["FEA", "CAD", "Laminate"]);
+  await box.fill("I want to test an IM7/8552 unnotched tension coupon");
+  await expect(pick).toHaveCount(0); // a new message: the question goes
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  const chat = page.getByTestId("coupon-chat");
+  await expect(chat.locator(".chat-user")).toHaveText(["I want to test an IM7/8552 unnotched tension coupon"]); // the message heads the talk, once
+  await expect(chat.getByTestId("chat-set-up")).toBeVisible();
+  await expect(chat.locator(".chat-understood").last()).toContainText("IM7 / 8552"); // and is read, as it says more than the kind
+
+  await page.goto("/workspace");
+  await page.getByRole("textbox", { name: "What do you want to work on?" }).fill("ABD matrix of a [0/90]s laminate");
+  await page.getByRole("textbox", { name: "What do you want to work on?" }).press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
+  await expect(page.getByTestId("laminate-chat").locator(".chat-user").first()).toHaveText("ABD matrix of a [0/90]s laminate");
+
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=cad]").click();
+  await expect(page).toHaveURL(/\/workspace\/cad\/?$/);
+  await expect(page.getByTestId("cad-rail")).toContainText("Feature tree");
+  const cad = page.getByLabel("Message the CAD assistant", { exact: true });
+  await cad.fill("draw a bracket");
+  await cad.press("Enter");
+  await expect(page.getByTestId("cad-reply")).toContainText("Shapes and dimensions will be set here.");
+  await cad.fill("I want to test some coupons");
+  await cad.press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible();
+});
+
+test("FEA answers a question before anything is set up, and is set up as a coupon in place when asked (ADR-0124)", async ({ page }) => {
+  const store: Record<string, Record<string, unknown>> = {};
+  const questions: { question: string; kinds: string[] }[] = [];
+  await quietApi(page, store, questions);
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  const message = page.getByLabel("Message the FEA assistant", { exact: true });
+  await expect(page.getByTestId("fea-start-intro")).toBeVisible();
+  await message.fill("What is a mesh convergence study?");
+  await message.press("Enter");
+  const answer = page.getByTestId("fea-start-answer-body").last();
+  await expect(answer).toContainText("A convergence study refines the mesh until the answer stops moving.");
+  await expect(answer.getByTestId("fea-start-sources")).toHaveText("Reasons behind a result, Why the element size changes the numbers");
+  await expect(answer.getByTestId("fea-start-offer")).toHaveCount(0); // it named no work to set up
+  expect(questions).toEqual([{ question: "What is a mesh convergence study?", kinds: ["coupon", "wing"] }]);
+  await expect(page.getByTestId("fea-start-rail")).toBeVisible(); // a question sets nothing up
+
+  await message.fill("How do I test a coupon?"); // a question about a coupon: answered, and a coupon offered, not set up
+  await message.press("Enter");
+  await expect(page.getByTestId("fea-start-answer-body").last().getByTestId("fea-start-offer")).toHaveAttribute("data-target", "coupon");
+  await expect(page.getByTestId("fea-start-rail")).toBeVisible();
+
+  await message.fill("I want to do FEA"); // the section it is in: said so, with what can be set up (a wing opens its page: wing.spec.ts)
+  await message.press("Enter");
+  await expect(page.getByTestId("fea-start-kind-missing")).toContainText("You are in FEA");
+  await expect(page.getByTestId("fea-start-kind-missing").getByTestId("fea-start-offer")).toHaveCount(2);
+
+  await page.getByTestId("project-name").fill("Coupons for the class");
+  await message.fill("I want to test some coupons");
+  await message.press("Enter");
+  await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible(); // set up in place: same project, same name
+  await expect(page.getByTestId("project-name")).toHaveValue("Coupons for the class");
+  const chat = page.getByTestId("coupon-chat");
+  await expect(chat.locator(".chat-user").first()).toHaveText("I want to test some coupons");
+  await expect(chat.getByTestId("chat-set-up")).toBeVisible();
+  await expect(chat.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // the message said no more, so it is not read again
+  await expect.poll(() => Object.values(store).find((p) => p.name === "Coupons for the class")?.content, { timeout: 10_000 })
+    .not.toHaveProperty("analysis"); // kept on the server as a coupon
+});
+
+test("a switch to another section goes at once from an empty project and asks first when work is open (ADR-0124)", async ({ page }) => {
+  await quietApi(page);
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click();
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "material");
+  await question.getByRole("button", { name: "IM7 / 8552", exact: true }).click(); // now the coupon holds work
+  await expect(question).toHaveAttribute("data-step", "layup");
+  await message.fill("let's do a hand calc of [0/90]s instead");
+  await message.press("Enter");
+  const ask = page.getByTestId("chat-switch");
+  await expect(ask).toContainText("Open Laminate?");
+  await expect(ask).toContainText("Your coupon is saved under Projects");
+  await ask.getByTestId("switch-stay").click();
+  await expect(page).toHaveURL(/\/workspace\/fea/);
+  await expect(ask.getByTestId("switch-go")).toBeDisabled(); // answered once
+  await message.fill("let's do a hand calc of [0/90]s instead");
+  await message.press("Enter");
+  await page.getByTestId("chat-switch").last().getByTestId("switch-go").click();
+  await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
+  const laminate = page.getByLabel("Message the laminate assistant", { exact: true });
+  await expect(page.getByTestId("laminate-chat").locator(".chat-user").first()).toHaveText("let's do a hand calc of [0/90]s instead"); // carried
+  await expect(page.getByTestId("chat-switch")).toHaveCount(0);
+  await page.getByRole("link", { name: "All projects" }).click();
+  await expect(page.getByTestId("workspace-projects").locator("tbody tr[data-kind=fea]").first()).toContainText("im7-8552"); // kept as it was, its material by the library's id
+
+  await page.getByTestId("workspace-projects").locator("tbody tr[data-kind=laminate]").first().getByRole("button", { name: "Open" }).click();
+  await laminate.fill("I want to test some coupons"); // the laminate holds nothing of the engineer's yet: FEA opens at once
+  await laminate.press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await expect(page.getByTestId("coupon-chat").getByTestId("chat-set-up")).toBeVisible();
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // a new coupon: the one with work is kept apart
 });

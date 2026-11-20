@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { asksWorking, criterionNamed, givenText, workingFor, workingOf } from "../lib/result-working";
+import { asksWorking, criterionNamed, givenText, stepAsked, workingFor, workingOf } from "../lib/result-working";
 import { asksWhy } from "../lib/result-why";
 import type { Fields } from "../lib/studio-api";
 
@@ -42,6 +42,24 @@ test("the working asked for is the criterion named, else the earliest of the ans
   const named = workingFor(fields, "the proof for maximum stress");
   assert.ok(named && named.kind === "chain" && named.criterion === "max_stress" && named.others[0] === "Tsai-Hill");
   assert.deepEqual(workingFor(fields, "formula for tsai-wu"), { kind: "not-worked", name: "Tsai-Wu", others: ["Maximum stress", "Tsai-Hill"] });
+});
+
+test("a quantity asked by name is answered with its one step; a criterion, none or two ask for the whole working (ADR-0103 amendment 1)", () => {
+  // the founder's question on the live site, 2026-11-20: shown the whole Tsai-Hill working, "didnt really answer my question"
+  for (const [text, step] of [["equation for stress", "stress"], ["whats the stress equation", "stress"], ["show me the equation for σ2", "stress"],
+    ["how was the strain calculated?", "strain"], ["formula for the failure index", "criterion"], ["how did you get the load at failure", "loading"],
+    ["show me the formula", null], ["derive the failure factor", null], ["how did you get 16740 N", null], ["the working for max stress", null],
+    ["equation for stress and strain", null]] as const) {
+    assert.equal(stepAsked(text), step, text);
+  }
+  for (const text of ["equation for stress", "whats the stress equation", "stress formula?"]) assert.equal(asksWorking(text), true, text);
+  const stress = workingFor(fields, "equation for stress");
+  assert.ok(stress && stress.kind === "chain");
+  assert.equal(stress.criterion, "tsai_hill"); // the earliest criterion's chain, its one step
+  assert.equal(stress.step?.id, "stress");
+  assert.equal(stress.step?.title, "The ply's stress from its strain");
+  const whole = workingFor(fields, "show me the formula");
+  assert.ok(whole && whole.kind === "chain" && whole.step === null);
 });
 
 test("a result with no working, or one in another shape, has none to show", () => {

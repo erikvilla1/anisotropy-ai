@@ -1,0 +1,20 @@
+{
+  "feature": "imported-and-past",
+  "title": "Asking about an imported model or a past run, which talking does not change",
+  "records": ["ADR-0105", "ADR-0109"],
+  "watches": ["lib/run-history.ts", "lib/project-store.ts"],
+  "questions": [
+    {"ask": "change the width to 30", "kind": "change", "style": "plain", "page": "imported", "route": "read-only", "answer": {"heading": "An imported model is read as it stands"}},
+    {"ask": "which ply fails first", "kind": "which", "style": "plain", "page": "imported", "route": "failure", "answer": {"kind": "failure", "heading": "Ply 1 (0°) fails first", "says": ["The coupon fails", "whole model"]}},
+    {"ask": "where is sigma 1 highest", "kind": "which", "style": "jargon", "page": "imported", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₁: 325.4 MPa", "says": ["whole model"]}},
+    {"ask": "stress in ply 3 at element 5", "kind": "value", "style": "plain", "page": "imported", "route": "value", "answer": {"kind": "values", "plies": [3], "element": "5"}},
+    {"ask": "stress in ply 2", "kind": "value", "style": "terse", "page": "imported", "route": "value", "answer": {"kind": "ask", "heading": "Which element?"}},
+    {"ask": "what are the boundary conditions", "kind": "what-is", "style": "plain", "page": "imported", "route": "term", "answer": {"kind": "term", "term": "boundary-condition"}},
+    {"ask": "why does ply 1 fail first", "kind": "why", "style": "plain", "page": "imported", "route": "why", "answer": {"kind": "why"}},
+    {"ask": "which ply fails first", "kind": "which", "style": "plain", "page": "past", "route": "failure", "answer": {"kind": "failure", "heading": "Ply 4 (90°) fails first"}},
+    {"ask": "make it [0/90]2s", "kind": "change", "style": "plain", "page": "past", "route": "read-only", "answer": {"heading": "A past run is shown as it was solved"}},
+    {"ask": "run it again with 2 mm", "kind": "change", "style": "loose", "page": "past", "route": "read-only", "answer": {"heading": "A past run is shown as it was solved"}},
+    {"ask": "show me the formula", "kind": "what-is", "style": "plain", "page": "past", "route": "working", "answer": {"kind": "working", "criterion": "tsai_hill"}},
+    {"ask": "chnage the mesh", "kind": "change", "style": "typo", "page": "imported", "route": "read-only", "answer": {"heading": "An imported model is read as it stands"}}
+  ]
+}

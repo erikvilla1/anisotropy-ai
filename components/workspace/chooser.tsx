@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, History, Plus } from "lucide-react";
-import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
+import { ArrowUp, FolderOpen, History, Plus } from "lucide-react";
+import { mergeProjects, newFeaProject, newLaminateProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
 import { answerWords, askToOpen, pastRuns, runWhen, type PastRun } from "@/lib/run-history";
 import { printed } from "@/lib/studio-colors";
 import { listJobs, listProjects, noProjectStore } from "@/lib/studio-api";
@@ -11,7 +11,12 @@ import { browserStorage, tabStorage, useAllTests } from "@/components/studio/pro
 import { isTestEnabled } from "@/lib/enabled-tests";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
-import { workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
+import { applyMessage } from "@/lib/studio-chat";
+import { blankForm } from "@/lib/studio-form";
+import { wingAbout, wingMaterial } from "@/lib/wing";
+import { readIntent, saysMore, sectionOf, type WorkTarget } from "@/lib/work-intent";
+import { feaKind, WING_HREF, workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
+import { goTo } from "./go-to";
 
 function testTitle(test: string): string {
   return TEST_CHOICES.find((c) => c.test === test)?.title ?? test;
@@ -22,9 +27,11 @@ const when = (stamp: string): string => runWhen(stamp);
 /** How many past analyses the list shows before "Show all". */
 const RUNS_SHOWN = 8;
 
-/** What a project is about, in a few words: a coupon's test, a laminate's layup; a coupon of a test the studio does not offer yet (ADR-0089)
- * says so, and stays listed. */
+/** What a project is about, in a few words: a coupon's test, a laminate's layup, a wing's size; a coupon of a test the studio does not offer
+ * yet (ADR-0089) says so, and stays listed. */
 function about(project: Project, allTests: boolean): string {
+  if (project.kind === "wing") return wingAbout(project.wing);
+  if (project.kind === "fea" && project.analysis === "none") return "Not set up yet";
   if (project.kind === "fea") {
     const test = project.form.test;
     if (!test) return "–";
@@ -35,13 +42,23 @@ function about(project: Project, allTests: boolean): string {
 }
 
 function materialOf(project: Project): string {
+  if (project.kind === "wing") return wingMaterial(project.wing);
   if (project.kind === "fea") return project.form.library || project.form.own_name || "–";
   return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
 }
 
-const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
-/** A project's kind is its workspace's one name (audit fea-screens-10). */
-const kindWord = (kind: Project["kind"]): string => workspace(ROUTE[kind]).title;
+const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate", wing: "fea" };
+/** A project's kind is its section's one name (audit fea-screens-10), and an FEA project's kind of work once it is set up (ADR-0124); a
+ * wing is FEA work kept as a project of its own kind (ADR-0118 amendment 1). */
+const kindWord = (project: Project): string => project.kind === "wing" ? `${workspace("fea").title} · ${feaKind("wing").title}`
+  : project.kind === "fea" && project.analysis !== "none" ? `${workspace("fea").title} · ${feaKind(project.analysis).title}` : workspace(ROUTE[project.kind]).title;
+/** Where a project opens: its section, or the wing's own page under FEA. */
+const hrefOf = (project: Project): string => project.kind === "wing" ? WING_HREF : workspace(ROUTE[project.kind]).href;
+
+/** Suggestions under the start box: one of each kind of request it reads (ADR-0124). */
+const STARTS = ["I want to test some coupons", "ABD matrix of a [0/90]s laminate", "What is a mesh convergence study?"];
+/** Whether the coupon chat's own patterns read rows in a message, so it is carried to it. */
+const couponReads = (text: string): boolean => applyMessage({ ...blankForm(), date: "" }, text).understood.length > 0;
 
 /** Where the list comes from: loading, the account and this browser, this browser alone (the service keeps no projects), or this browser
  * because the saved projects could not be loaded (an outage, audit fea-screens-3). */
@@ -93,29 +110,65 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function open(project: Project) {
     const store = browserStorage();
     writeProjects(upsert(readProjects(store), project), store);
-    router.push(workspace(ROUTE[project.kind]).href);
+    router.push(hrefOf(project));
   }
   /** A past analysis in the coupon workspace, as it was solved; where this tab keeps nothing, its results in the viewer's own page. */
   function openRun(run: PastRun) {
     router.push(askToOpen(tabStorage(), run.job_id) ? workspace("fea").href : `/workspace/fea/view?job=${encodeURIComponent(run.job_id)}`);
   }
   function create(id: WorkspaceId) {
-    if (id === "fea") open(newProject());
+    if (id === "fea") open(newFeaProject()); // FEA starts blank; the chat or a pick sets it up (ADR-0124)
     else if (id === "laminate") open(newLaminateProject());
+    else router.push(workspace(id).href); // CAD keeps no projects yet
+  }
+
+  // the start box (ADR-0124): a request opens its section with the message; a question about FEA goes to FEA, which answers it; a
+  // message that names no section is offered the three
+  const [said, setSaid] = useState("");
+  const [unplaced, setUnplaced] = useState<string | null>(null);
+  function carry(target: WorkTarget, text: string) {
+    const reads = target === "coupon" ? couponReads : undefined;
+    const fea = sectionOf(target) === "fea" && target !== "coupon"; // the FEA assistant reads the message itself: a question, a wing
+    goTo(target, fea || target === "cad" ? { prompt: text } : { setUp: text, prompt: saysMore(text, reads) ? text : "" }, router.push);
+  }
+  function start(value = said) {
+    const text = value.trim();
+    if (!text) return;
+    const intent = readIntent(text);
+    if (intent?.start) { carry(intent.target, text); return; }
+    if (intent && sectionOf(intent.target) === "fea") { carry("fea", text); return; }
+    setUnplaced(text);
   }
 
   return (
     <div className="ws-chooser">
       <div className="studio-heading">
         <span className="eyebrow">WORKSPACE</span>
-        <h1>Start a project</h1>
-        <p>Set up and solve a coupon test, or work out a laminate&apos;s response to loads.</p>
+        <h1>What do you want to work on?</h1>
+        <p>Say it in a line, or pick a section.</p>
       </div>
-      <div className="ws-tiles" data-testid="workspace-tiles">
+      <div className="ws-start-box" data-testid="workspace-start">
+        <form onSubmit={(e) => { e.preventDefault(); start(); }}>
+          <textarea aria-label="What do you want to work on?" rows={2} maxLength={2000} value={said} placeholder="e.g. “I want to test some coupons”"
+            onChange={(e) => { setSaid(e.target.value); setUnplaced(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); start(); } }} />
+          <button className="send-button" type="submit" disabled={!said.trim()} aria-label="Start"><ArrowUp size={18} /></button>
+        </form>
+        <div className="ws-start-chips">{STARTS.map((s) => <button type="button" key={s} onClick={() => { setSaid(s); start(s); }}>{s}</button>)}</div>
+        {unplaced ? (
+          <div className="ws-start-pick" data-testid="workspace-pick" role="status">
+            <p>Which section should take this?</p>
+            <div className="ws-start-chips">
+              {WORKSPACES.map((w) => <button type="button" key={w.id} data-workspace={w.id} onClick={() => carry(w.id, unplaced)}>{w.title}</button>)}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="ws-tiles ws-tiles-3" data-testid="workspace-tiles">
         {WORKSPACES.map((w) => (
-          <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} onClick={() => create(w.id)}>
+          <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} data-planned={w.planned ? "true" : undefined} onClick={() => create(w.id)}>
             <span className="eyebrow">{w.eyebrow}</span>
-            <h3><Plus size={15} /> New {w.title} project</h3>
+            <h3><Plus size={15} /> {w.title}</h3>
             <p>{w.detail}</p>
           </button>
         ))}
@@ -132,7 +185,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
               {projects.map((p) => (
                 <tr key={p.id} data-project={p.id} data-kind={p.kind}>
                   <td>{projectTitle(p)}</td>
-                  <td>{kindWord(p.kind)}</td>
+                  <td>{kindWord(p)}</td>
                   <td>{about(p, allTests)}</td>
                   <td>{materialOf(p)}</td>
                   <td>{when(p.updated)}</td>

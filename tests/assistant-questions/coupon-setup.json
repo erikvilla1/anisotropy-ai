@@ -1,0 +1,31 @@
+{
+  "feature": "coupon-setup",
+  "title": "Setting a coupon up by talking",
+  "records": ["ADR-0055", "ADR-0088", "ADR-0090"],
+  "watches": ["lib/studio-chat.ts", "lib/proposals.ts", "api/src/anisotropy_api/proposals.py", "lib/coupon-form-definition.json"],
+  "questions": [
+    {"ask": "IM7/8552", "kind": "change", "style": "terse", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"library": "im7-8552"}}, "live": {"proposals": {"library": "im7-8552"}}},
+    {"ask": "make it [0/90]2s", "kind": "change", "style": "plain", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"ply_1": "0", "ply_2": "90", "symmetric": "yes"}}},
+    {"ask": "use AS4/8552 with [45/-45]2s", "kind": "change", "style": "plain", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"library": "as4-8552", "ply_1": "45", "ply_2": "-45"}}},
+    {"ask": "250 x 25 mm, 56 mm tabs", "kind": "change", "style": "units", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"length": "250", "width": "25", "tab_length": "56"}}, "live": {"proposals": {"length": "250", "width": "25", "tab_length": "56"}}},
+    {"ask": "ply thickness 0.125", "kind": "change", "style": "terse", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"ply_thickness": "0.125"}}},
+    {"ask": "10 kN", "kind": "change", "style": "units", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"control": "force", "value": "10000"}}},
+    {"ask": "finer mesh", "kind": "change", "style": "terse", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"element_size": "1"}}},
+    {"ask": "make the mesh coarser", "kind": "change", "style": "plain", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"element_size": "4"}}},
+    {"ask": "unnotched tension, ASTM D3039, IM7/8552, [45/0/-45/90]s, 1 mm pull", "kind": "change", "style": "plain", "page": "blank", "route": "model", "answer": {"kind": "rows", "rows": {"test": "unnotched tension", "library": "im7-8552", "ply_4": "90", "value": "1"}}},
+    {"ask": "change the width to 35 mm", "kind": "change", "style": "plain", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"width": "35"}}, "live": {"proposals": {"width": "35"}}, "gap": "offline 1: with no model, a plain change of width is not read", "source": "the founder, 2026-11-17"},
+    {"ask": "change the width to 35 mm", "kind": "change", "style": "plain", "page": "results", "route": "model", "live": {"proposals": {"width": "35"}}, "source": "the founder, 2026-11-17"},
+    {"ask": "chnage the lenght to 300 mm and make it 30 wide", "kind": "change", "style": "typo", "page": "setup", "route": "model", "live": {"proposals": {"length": "300", "width": "30"}}, "source": "the founder, 2026-11-16"},
+    {"ask": "make the coupon 20 mm wide please", "kind": "change", "style": "loose", "page": "results", "route": "model", "live": {"proposals": {"width": "20"}}},
+    {"ask": "pull it 2 mm", "kind": "change", "style": "loose", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"value": "2"}}, "live": {"proposals": {"displacement": "2"}}, "gap": "offline 1: with no model, 'pull it 2 mm' is not read"},
+    {"ask": "change ply 3 to 30 degrees", "kind": "change", "style": "plain", "page": "setup", "route": "model", "answer": {"kind": "rows", "rows": {"ply_3": "30"}}, "offline": "patterns", "live": {"proposals": {"ply_3": "30"}}},
+    {"ask": "same thing but make it compresion and 16 plys", "kind": "change", "style": "typo", "page": "setup", "route": "model", "live": {"judge": "Proposes nothing it cannot read and says why: a count of plies is not a layup, compression is not offered here"}, "source": "the founder, 2026-11-16"},
+    {"ask": "use maximum strain and tsai-wu", "kind": "change", "style": "jargon", "page": "setup", "route": "model", "live": {"judge": "Proposes the failure criteria rows, or says they are not offered on this screen"}},
+    {"ask": "run a 250 x 25 IM7/8552 [45/0/-45/90]s coupon at 1 mm", "kind": "change", "style": "plain", "page": "blank", "route": "model", "answer": {"kind": "rows", "rows": {"library": "im7-8552", "ply_1": "45"}}, "mcp": {"tool": "describe_coupon_form", "args": {}, "says": ["\"filled_by\"", "\"tab_length\""]}, "live": {"judge": "Takes the size, the material and the layup from the message, and asks in one short message for what is still missing or unclear (what the 1 mm is, the tabs, who fills it in), or offers the form's example for it; solves nothing yet and names no tool"}},
+    {"ask": "can I use my own material?", "kind": "yes-no", "style": "plain", "page": "setup", "route": "about", "live": {"judge": "Opens with Yes and says where its constants go, or that only the library is offered on this screen"}, "answer": {"kind": "about", "opens": "Yes", "says": ["My own material"]}},
+    {"ask": "what layup should I use?", "kind": "what-is", "style": "plain", "page": "setup", "route": "about", "live": {"judge": "Does not pick a layup for the engineer; offers the common ones as choices"}, "answer": {"kind": "about", "says": ["[45/0/-45/90]s", "[0/90]2s", "your own"]}},
+    {"ask": "how wide is it?", "kind": "value", "style": "loose", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "Width: 25 mm", "says": ["From the setup"]}},
+    {"ask": "whats the layup", "kind": "value", "style": "terse", "page": "results", "route": "about", "answer": {"kind": "about", "heading": "Layup: [45/0/-45/90]s"}},
+    {"ask": "what material is it?", "kind": "value", "style": "plain", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "Material: IM7 / 8552"}}
+  ]
+}

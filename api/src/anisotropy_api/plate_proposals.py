@@ -41,7 +41,7 @@ MAX_ENTRIES = 12
 # the directions whatever the model wrote: a named condition holds its set, a code holds its direction, CF1 to CF3 point a force along x,
 # y or z. A roller alone names no direction, so it needs one written beside it.
 NAMED_SUPPORTS: dict[str, tuple[int, ...]] = {
-    "encastre": (1, 2, 3, 4, 5, 6), "encastré": (1, 2, 3, 4, 5, 6), "pinned": (1, 2, 3),
+    "encastre": (1, 2, 3, 4, 5, 6), "encastré": (1, 2, 3, 4, 5, 6), "pinned": (1, 2, 3), "pin": (1, 2, 3),
     "xsymm": (1, 5, 6), "ysymm": (2, 4, 6), "zsymm": (3, 4, 5),
 }
 DIRECTION_CODES: dict[str, int] = {"u1": 1, "u2": 2, "u3": 3, "ur1": 4, "ur2": 5, "ur3": 6}
@@ -78,7 +78,7 @@ PLATE_SYSTEM = (
     "has direction null and sense as_signed, and is positive when it presses down on the plate; give a minus sign for suction or a "
     "pressure from below. Value, unit and quote follow the same rules as for rows. plate.held and plate.loaded name the regions already "
     "held and loaded. The engineer may use Abaqus's words: a boundary condition (BC) is a support; U1, U2, U3 are x, y, z and UR1, UR2, "
-    "UR3 are tilt_x, tilt_y, turn_z; encastre is all six; pinned is x, y and z; XSYMM is x, tilt_y and turn_z; YSYMM is y, tilt_x and "
+    "UR3 are tilt_x, tilt_y, turn_z; encastre is all six; pinned (or pin) is x, y and z; XSYMM is x, tilt_y and turn_z; YSYMM is y, tilt_x and "
     "turn_z; ZSYMM is z, tilt_x and tilt_y; CF1, CF2 and CF3 are a force along x, y and z. A roller with no direction written: propose "
     "nothing for it and ask which direction it holds. Quote the words that hold these names."
 )
@@ -126,18 +126,39 @@ class KeptPlate:
         return [part for part in unread if _plain(part["quote"]) not in quoted]
 
 
+def _one_slip(word: str, side: str) -> bool:
+    """Whether a typed word is the side's name with one slip of the keys: a letter doubled, dropped, struck for another or two swapped
+    ("lefft", "rigt", "botom", "tpo"). The side is the model's choice and the guard only checks that the words point at it, so a word one
+    slip from it does; a slip of a word of three letters is a swap alone ("top", not "tip")."""
+    if word == side or abs(len(word) - len(side)) > 1:
+        return word == side
+    if len(word) == len(side):
+        diff = [i for i, (a, b) in enumerate(zip(word, side)) if a != b]
+        swapped = len(diff) == 2 and diff[1] == diff[0] + 1 and word[diff[0]] == side[diff[1]] and word[diff[1]] == side[diff[0]]
+        return swapped or (len(diff) == 1 and len(side) > 3)
+    if len(side) <= 3:
+        return False
+    short, long = (word, side) if len(word) < len(side) else (side, word)
+    return any(long[:i] + long[i + 1:] == short for i in range(len(long)))
+
+
 def _names(region: str, quote: str) -> bool:
-    """Whether the quoted words name the region: an edge by its side, a tab by its side and the word tab, the face, the hole."""
+    """Whether the quoted words name the region: an edge by its side, a tab by its side and the word tab, the face, the hole. A side's
+    name typed with one slip names it too (ADR-0101 amendment 3)."""
     q = _plain(quote)
+    words = re.findall(r"[a-z]+", q)
 
     def has(pattern: str) -> bool:
         return re.search(pattern, q) is not None
 
+    def side(name: str) -> bool:
+        return any(_one_slip(word, name) for word in words)
+
     tab = has(r"\btabs?\b")
     if region.startswith("Edge-"):
-        return has(rf"\b{region[5:].lower()}\b") and not tab
+        return side(region[5:].lower()) and not tab
     if region.startswith("Tab-"):
-        return tab and has(rf"\b{region[4:].lower()}\b")
+        return tab and side(region[4:].lower())
     if region == "Hole":
         return has(r"\bholes?\b")
     if region == "Face":

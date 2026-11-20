@@ -104,6 +104,17 @@ def test_a_proposal_the_message_does_not_hold_is_dropped_with_its_reason(item, r
     assert out.proposals == [] and out.dropped == [{"key": item["key"], "reason": reason}]
 
 
+def test_a_plys_angle_is_kept_in_degrees_and_anything_else_is_dropped():
+    rows = [*COUPON_ROWS, {"key": "ply_3", "label": "Ply 3 angle, counted from the bottom", "kind": "angle"}]
+    message = "change ply 3 to 30 degrees, then ply 3 to 95, or ply 3 to 30 mm"
+    out = kept(message, [proposal("ply_3", "30", "degrees", "ply 3 to 30 degrees")], rows=rows)
+    assert [(p["key"], p["value"], p["unit"]) for p in out.proposals] == [("ply_3", "30", None)]
+    for item, reason in [(proposal("ply_3", "95", None, "ply 3 to 95"), "95 is not an angle from -90 to 90 degrees"),
+                         (proposal("ply_3", "30", "mm", "ply 3 to 30 mm"), "'mm' is not degrees"),
+                         (proposal("ply_3", "45", None, "ply 3 to 30 degrees"), "45 is not a number the quoted words write")]:
+        assert kept(message, [item], rows=rows).dropped == [{"key": "ply_3", "reason": reason}]
+
+
 def test_a_unit_of_another_dimension_is_dropped_on_a_laminate_row():
     out = kept("E2 10.3 mm", [proposal("E2", "10.3", "mm", "E2 10.3 mm")], rows=LAMINATE_ROWS)
     assert out.dropped == [{"key": "E2", "reason": "mm is not a unit of pressure"}]

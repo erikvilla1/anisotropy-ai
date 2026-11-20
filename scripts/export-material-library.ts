@@ -24,7 +24,7 @@ function dataset(material: CitedMaterial, primary: boolean) {
   const page = printedOnly ? material.source.printedPage ?? material.source.page : material.source.page;
   return {
     materialId: material.id, name: material.name, family: material.family, architecture: material.architecture,
-    datasetId: material.datasetId, dataset: material.dataset, primary,
+    datasetId: material.datasetId, dataset: material.dataset, primary, strengthBasis: material.strengthBasis ?? null,
     recordRevision: material.recordRevision ?? null, reviewedOn: material.reviewedOn ?? null,
     conditions: material.conditions, application: material.application,
     elasticInputs: material.elasticInputs ?? null,

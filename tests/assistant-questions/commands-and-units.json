@@ -1,0 +1,28 @@
+{
+  "feature": "commands-and-units",
+  "title": "Run, check, start over, the full form and units",
+  "records": ["ADR-0055", "ADR-0060", "ADR-0061", "ADR-0121"],
+  "watches": ["lib/chat-tools.ts", "lib/studio-chat.ts", "lib/studio-form.ts", "lib/chat-about.ts"],
+  "questions": [
+    {"ask": "run", "kind": "command", "style": "terse", "page": "ready", "route": "run"},
+    {"ask": "solve", "kind": "command", "style": "terse", "page": "ready", "route": "run"},
+    {"ask": "check", "kind": "command", "style": "terse", "page": "setup", "route": "check"},
+    {"ask": "start over", "kind": "command", "style": "plain", "page": "results", "route": "start-over"},
+    {"ask": "reset", "kind": "command", "style": "terse", "page": "results", "route": "start-over"},
+    {"ask": "show all the rows", "kind": "command", "style": "plain", "page": "setup", "route": "full-form"},
+    {"ask": "classical lamination theory", "kind": "command", "style": "jargon", "page": "setup", "route": "section"},
+    {"ask": "laminate calculator", "kind": "command", "style": "terse", "page": "setup", "route": "section"},
+    {"ask": "switch to inches", "kind": "change", "style": "units", "page": "setup", "route": "patterns", "answer": {"kind": "rows", "rows": {"units": "in-psi"}}},
+    {"ask": "use psi", "kind": "change", "style": "units", "page": "setup", "route": "patterns", "answer": {"kind": "rows", "rows": {"units": "in-psi"}}},
+    {"ask": "work in metres", "kind": "change", "style": "units", "page": "setup", "route": "patterns", "answer": {"kind": "rows", "rows": {"units": "m-Pa"}}},
+    {"ask": "A. Engineer", "kind": "change", "style": "terse", "page": "setup", "route": "name", "asking": "name", "answer": {"rows": {"filled_by": "A. Engineer"}}},
+    {"ask": "run it", "kind": "command", "style": "terse", "page": "setup", "route": "check", "live": {"judge": "Says what is still missing before it can run, or checks the setup"}, "answer": {"heading": "Checking the setup"}},
+    {"ask": "chekc", "kind": "command", "style": "typo", "page": "setup", "route": "check", "live": {"judge": "Checks the setup, or says to type “check”"}},
+    {"ask": "what units are you using?", "kind": "what-is", "style": "plain", "page": "setup", "route": "about", "answer": {"kind": "about", "heading": "mm, MPa and N", "says": ["switch to inches"]}, "live": {"judge": "Names the unit system the setup is in: mm, MPa and N"}},
+    {"ask": "can I use inches?", "kind": "yes-no", "style": "units", "page": "setup", "route": "about", "answer": {"kind": "about", "opens": "Yes", "says": ["switch to inches"]}},
+    {"ask": "is it ready to run?", "kind": "yes-no", "style": "plain", "page": "ready", "route": "ready", "answer": {"kind": "check", "opens": "Yes"}, "live": {"judge": "Opens with Yes or No from the setup check"}},
+    {"ask": "can I run it now?", "kind": "yes-no", "style": "plain", "page": "ready", "route": "ready", "answer": {"kind": "check", "opens": "Yes"}},
+    {"ask": "whats missing", "kind": "what-is", "style": "typo", "page": "setup", "route": "ready"},
+    {"ask": "units?", "kind": "what-is", "style": "terse", "page": "results", "route": "about", "answer": {"kind": "about", "heading": "mm, MPa and N"}}
+  ]
+}

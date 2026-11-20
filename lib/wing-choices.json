@@ -1,0 +1,148 @@
+{
+ "example": {
+  "title": "Example straight wing",
+  "source": "An example made for the engine's tests and documents, not a design of ours or of anyone's. Every number is a round value chosen for the example; the material comes from the library.",
+  "units": "SI",
+  "geometry": {
+   "half_span": 2.0,
+   "chord": 0.45,
+   "airfoil": "naca-2412",
+   "front_spar": 0.25,
+   "rear_spar": 0.65,
+   "rib_spacing": 0.5
+  },
+  "material": {
+   "library": "im7-8552",
+   "strengths": "B-basis"
+  },
+  "skin": {
+   "half_stack": [
+    0,
+    45,
+    -45,
+    0
+   ],
+   "core_thickness": 6.0,
+   "core": "divinycell-h45"
+  },
+  "spar": {
+   "half_stack": [
+    45,
+    -45,
+    0,
+    0
+   ]
+  },
+  "rib": {
+   "half_stack": [
+    45,
+    -45
+   ]
+  },
+  "aerodynamics": {
+   "aerodynamic_center": 0.25,
+   "pitching_moment_coefficient": -0.05,
+   "lift_curve_slope": 6.0
+  },
+  "envelope": {
+   "gross_weight": 2700.0,
+   "positive_load_factor": 3.8,
+   "negative_load_factor": -1.52,
+   "airspeed": "equivalent",
+   "speed_unit": "m/s",
+   "altitudes": [
+    0.0,
+    3000.0
+   ],
+   "ultimate_factor": 1.5,
+   "proof_factor": 1.25,
+   "criterion": "max_stress",
+   "speeds": {
+    "stall_flaps": 20.0,
+    "stall_clean": 23.0,
+    "cruise": 50.0,
+    "dive": 70.0,
+    "flutter": 84.0,
+    "positive_maneuver": 44.8,
+    "negative_maneuver": 28.4
+   },
+   "gust": {
+    "cruise_gust_speed": 15.24,
+    "dive_gust_speed": 7.62,
+    "lift_curve_slope_per_rad": 5.0,
+    "wing_area": 1.8
+   },
+   "aileron": {
+    "span_start": 1.2,
+    "span_end": 1.9,
+    "down_delta_cl": 0.3,
+    "down_delta_cm": -0.06,
+    "up_delta_cl": -0.3,
+    "up_delta_cm": 0.06,
+    "roll_pull_up_fraction": 0.6667
+   }
+  }
+ },
+ "materials": [
+  {
+   "id": "im7-8552",
+   "name": "IM7 / 8552",
+   "bases": [
+    "mean",
+    "B-basis"
+   ]
+  },
+  {
+   "id": "t650-5320-1",
+   "name": "T650 / 5320-1",
+   "bases": [
+    "mean"
+   ]
+  },
+  {
+   "id": "im7-bt250e-6",
+   "name": "IM7 / BT250E-6",
+   "bases": [
+    "mean"
+   ]
+  },
+  {
+   "id": "t1100gc-tc380",
+   "name": "T1100GC / TC380",
+   "bases": [
+    "mean"
+   ]
+  },
+  {
+   "id": "ims65-ep2190",
+   "name": "IMS65 / EP2190",
+   "bases": [
+    "mean"
+   ]
+  },
+  {
+   "id": "t650-5320-1-pw",
+   "name": "T650 PW / 5320-1",
+   "bases": [
+    "mean"
+   ]
+  },
+  {
+   "id": "7781-ea9396",
+   "name": "7781 / EA 9396",
+   "bases": [
+    "mean"
+   ]
+  }
+ ],
+ "cores": [
+  {
+   "id": "divinycell-h45",
+   "name": "Divinycell H45"
+  },
+  {
+   "id": "divinycell-h250",
+   "name": "Divinycell H250"
+  }
+ ]
+}

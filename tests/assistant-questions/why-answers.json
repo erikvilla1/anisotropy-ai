@@ -1,0 +1,22 @@
+{
+  "feature": "why-answers",
+  "title": "A question of why, answered from the results and our theory pages",
+  "records": ["ADR-0102"],
+  "watches": ["lib/result-why.ts", "api/src/anisotropy_api/result_answers.py", "api/src/anisotropy_api/theory.py", "engine/docs/reasons.md", "engine/docs/theory.md", "fea/docs/theory.md"],
+  "questions": [
+    {"ask": "why is ply 4 in compression?", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-a-90-degree-ply-is-in-compression-along-its-fibres-when-the-coupon-is-pulled"], "live": {"covered": true}, "mcp": {"tool": "explain_result", "args": {"question": "why is ply 4 in compression?"}, "says": ["\"facts\":", "\"theory\":"]}},
+    {"ask": "why does ply 4 fail first", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-a-90-degree-ply-usually-fails-first-in-a-tension-coupon"], "live": {"covered": true}},
+    {"ask": "why do the 90 plies crack first in tension", "kind": "why", "style": "loose", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-a-90-degree-ply-usually-fails-first-in-a-tension-coupon"], "live": {"covered": true}},
+    {"ask": "why are plies 4 and 5 tied", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-two-plies-tie"], "live": {"covered": true}},
+    {"ask": "how come the 0 ply carries most of the load", "kind": "why", "style": "loose", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-plies-at-different-angles-carry-different-stresses"], "live": {"covered": true}},
+    {"ask": "why does the 45 ply have shear", "kind": "why", "style": "terse", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-plies-at-plus-and-minus-45-degrees-carry-shear"], "live": {"covered": true}},
+    {"ask": "explain why the coupon holds", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:what-the-factor-at-first-ply-failure-and-the-failure-index-mean"], "live": {"covered": true}},
+    {"ask": "why is the stress higher at the grips", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-the-stress-is-highest-at-the-grips-and-is-reported-apart-from-the-answer"], "live": {"covered": true}},
+    {"ask": "why does a finer mesh change the answer at the tab", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-the-element-size-changes-the-numbers"], "live": {"covered": true}},
+    {"ask": "why is von mises not used", "kind": "why", "style": "jargon", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["fea:6-ply-stresses-in-material-axes"], "live": {"judge": "Says Mises is no failure measure for a composite ply and names the criteria used (criterion 7)"}},
+    {"ask": "what does tsai-hill mean", "kind": "what-is", "style": "jargon", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["engine:5-failure"], "live": {"covered": true}},
+    {"ask": "why is the shear stress zero in the 0 and 90 plies", "kind": "why", "style": "plain", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-plies-at-different-angles-carry-different-stresses"], "gap": "search: the theory pages' reason is not among the three sections found"},
+    {"ask": "whats the reason the 90s fail first", "kind": "why", "style": "typo", "page": "results", "route": "why", "answer": {"kind": "why"}, "sections": ["reasons:why-a-90-degree-ply-usually-fails-first-in-a-tension-coupon"], "gap": "10: 'what's the reason' is not read as a question of why"},
+    {"ask": "why is ply 4 in compression?", "kind": "why", "style": "plain", "page": "setup", "route": "why-none", "answer": {"kind": "none", "heading": "No results to answer from yet"}}
+  ]
+}

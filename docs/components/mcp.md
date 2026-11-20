@@ -26,7 +26,7 @@ Out, per tool, as compact JSON text:
 | `explain_result` | The result's fact sheet, the package's sentences and the theory sections the question's words find, with their text |
 | `show_working` | The working of ADR-0103: each formula, the formula with the numbers put in, and its result |
 
-The server also sends the client's model its rules (`INSTRUCTIONS` in `server.py`): numbers only from tool results, with units, to four significant figures; ask for a missing row; say when a value was the example's; say the solve is a preview; answer a why from the facts and sections only.
+The server also sends the client's model its rules (`INSTRUCTIONS` in `server.py`): the answer first in one line and at most three lines of basis; only what was asked; no tool, program, vendor, path or model named to the engineer; numbers only from tool results, as written, with units, to four significant figures at most; every missing row asked for in one message; say when a value was the example's; say once that the solve is a preview; the gauge section's answer, with a criterion reached first at a gripped edge said apart; answer a why in one to three sentences from the facts and sections only (ADR-0107 amendment 1). What a tool returns names none of this machine's programs or paths: the full run's own setup items are left out and the package's aside about another program's viewer is cut.
 
 ## Dependencies and connections
 

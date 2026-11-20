@@ -2,6 +2,8 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
+import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
+import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
@@ -449,7 +451,7 @@ export type ProjectJobRecord = { job_id: string; state: JobState; coupon: string
   finished_at: string | null; run_id: string | null };
 /** A workspace project as the API keeps it: the page's own object under `content`, the designation its last check derived, its jobs when read by id. */
 export type ProjectRecord = {
-  id: string; kind: "fea" | "laminate"; name: string; content: Record<string, unknown>; form_version: string | null; units: string | null;
+  id: string; kind: "fea" | "laminate" | "wing"; name: string; content: Record<string, unknown>; form_version: string | null; units: string | null;
   designation: string | null; last_check_run_id: string | null; created_at: string; updated_at: string; jobs: ProjectJobRecord[];
 };
 export type ProjectUpload = Pick<ProjectRecord, "kind" | "name" | "content" | "form_version" | "units">;
@@ -458,7 +460,7 @@ const PROJECTS = "/v1/projects";
 const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
 export function readProjectRecord(payload: unknown): ProjectRecord {
-  if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate") || typeof payload.name !== "string"
+  if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate" && payload.kind !== "wing") || typeof payload.name !== "string"
     || !isObject(payload.content) || typeof payload.created_at !== "string" || typeof payload.updated_at !== "string") {
     throw unreadable("a project");
   }
@@ -618,11 +620,77 @@ export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal
   return readLaminateAnswer(payload);
 }
 
+/** The wing workspace's hand calculation (ADR-0118): the description as it stands, or a wing file's text; the engine reads it, works
+ * every case its values allow and answers with the report and what the page draws. A refusal names the value that is wrong. */
+export async function analyzeWing(apiBaseUrl: string, request: { wing: WingDescription } | { toml: string }, signal?: AbortSignal): Promise<WingAnswer> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/analyze`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing calculation");
+  if (!isObject(payload) || !isObject(payload.wing) || !isObject(payload.report) || !isObject(payload.views)
+    || !Array.isArray(payload.report.cases) || !Array.isArray(payload.views.cases) || !Array.isArray(payload.views.walls)) {
+    throw unreadable("the wing calculation: not a wing answer");
+  }
+  return payload as unknown as WingAnswer;
+}
+
+/** The wing's shape for a CAD program (ADR-0116, ADR-0118): its STEP file's text and the part table, built from the description as it
+ * stands. The engine reads the description first, so a wing the calculation refuses is refused here in the same words. */
+export async function shapeWing(apiBaseUrl: string, request: { wing: WingDescription } | { toml: string }, signal?: AbortSignal): Promise<WingShape> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/shape`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing's shape");
+  if (!isObject(payload) || typeof payload.step !== "string" || !isObject(payload.parts) || !Array.isArray(payload.parts.parts)) {
+    throw unreadable("the wing's shape: not a shape");
+  }
+  return payload as unknown as WingShape;
+}
+
+/** A change of plies previewed on the wing as it stands (ADR-0128): the engine makes it on a copy and works both, and nothing is kept.
+ * A change the wing cannot take is refused in the engine's words. */
+export async function previewWingChange(apiBaseUrl: string, wing: WingDescription, change: PlyChange, signal?: AbortSignal): Promise<WingChangePreview> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/wings/changes`, { method: "POST", headers, body: JSON.stringify({ wing, change }), signal }, "the preview of the change");
+  if (!isObject(payload) || typeof payload.words !== "string" || !isObject(payload.wing) || !isObject(payload.before) || !isObject(payload.after)
+    || !isObject(payload.units) || !Array.isArray(payload.rules)) throw unreadable("the preview of the change: not a preview");
+  return payload as unknown as WingChangePreview;
+}
+
+/** A section of our pages as the search hands it: its id, the page, its title and its text. */
+export type ReferenceSection = { id: string; document: string; title: string; text: string };
+
+/** The sections of the wing's theory and the reference pages a question's words find, best first (ADR-0127): words cut from our own
+ * pages and ranked, no model and no number. */
+export async function wingReferences(apiBaseUrl: string, question: string, signal?: AbortSignal): Promise<ReferenceSection[]> {
+  const body = JSON.stringify({ question: question.slice(0, 2000), about: "wing", limit: 2 });
+  const payload = await call(`${base(apiBaseUrl)}/v1/workspace/theory-sections`, { method: "POST", headers, body, signal }, "the reference pages");
+  if (!isObject(payload) || !Array.isArray(payload.sections)) throw unreadable("the reference pages: not a list of sections");
+  return payload.sections.filter((s): s is ReferenceSection => isObject(s) && typeof s.id === "string" && typeof s.title === "string" && typeof s.text === "string"
+    && typeof s.document === "string");
+}
+
+/** The check's answer as the page reads it: a state it knows, its stage, and once done a report with its lowest margins and cases. */
+export function readWingFeCheck(payload: unknown): WingFeCheck {
+  const states = ["queued", "running", "done", "stopped", "refused"];
+  if (!isObject(payload) || typeof payload.job_id !== "string" || !states.includes(String(payload.state)) || typeof payload.started_at !== "string"
+    || !Array.isArray(payload.stages) || !Array.isArray(payload.stages_done)) throw unreadable("the wing's check");
+  const report = payload.report;
+  if (report !== null && report !== undefined && (!isObject(report) || !Array.isArray(report.cases) || !isObject(report.lowest)
+    || !isObject(report.lowest_hand) || !isObject(report.units))) throw unreadable("the wing's check: not a report");
+  return { ...(payload as unknown as WingFeCheck), report: (report ?? null) as WingFeCheck["report"] };
+}
+
+/** Start the wing's finite element check (ADR-0119), a job like a coupon run: the description as it stands, read by the engine first, so a
+ * wing the calculation refuses is refused here in the same words. Poll it with `getWingFeCheck` until it is neither queued nor running. */
+/** A wing's finite element check (ADR-0119), for the wing project it is run for when the page knows one the server keeps (ADR-0122). */
+export async function startWingFeCheck(apiBaseUrl: string, wing: WingDescription, projectId?: string | null, signal?: AbortSignal): Promise<WingFeCheck> {
+  const body = JSON.stringify(projectId ? { wing, project_id: projectId } : { wing });
+  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks`, { method: "POST", headers, body, signal }, "starting the wing's check"));
+}
+
+export async function getWingFeCheck(apiBaseUrl: string, jobId: string, signal?: AbortSignal): Promise<WingFeCheck> {
+  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the wing's check", JOB_GONE));
+}
+
 // ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)
 
 /** A row a message may fill: a coupon's number names the unit it is stated in, a laminate's the dimension of its units; a pure number neither. */
 export type OfferedRow = {
-  key: string; label: string; kind: "number" | "choice" | "notation";
+  key: string; label: string; kind: "number" | "choice" | "notation" | "angle";
   unit?: string; dimension?: string; choices?: { value: string; label: string }[];
 };
 /** A plate's own regions offered to a message, and the place clicked (ADR-0101): `here` names the regions the clicked element belongs to. */
@@ -738,6 +806,22 @@ export function readResultAnswer(payload: unknown): ResultAnswer {
 export async function answerResult(apiBase: string, question: string, facts: Record<string, unknown>, signal?: AbortSignal): Promise<ResultAnswer> {
   const payload = await call(`${base(apiBase)}/v1/workspace/result-answers`, { method: "POST", headers, body: JSON.stringify({ question, facts }), signal }, "the answer");
   return readResultAnswer(payload);
+}
+
+/** An answer in words to a question asked in FEA before anything is set up (ADR-0124): as a result's answer, from our theory pages
+ * alone, and `start`, a kind of work the question asks to set up from those offered, which the page offers as a button. */
+export type GeneralAnswer = ResultAnswer & { start: string | null };
+
+export function readGeneralAnswer(payload: unknown): GeneralAnswer {
+  const answer = readResultAnswer(payload) as GeneralAnswer;
+  if (!isTextOrNull((payload as Record<string, unknown>).start)) throw unreadable("the answer");
+  return answer;
+}
+
+/** A question asked in FEA before anything is set up, answered from our theory pages (ADR-0124); `kinds` are those the page offers. */
+export async function answerGeneral(apiBase: string, question: string, kinds: string[], signal?: AbortSignal): Promise<GeneralAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/questions`, { method: "POST", headers, body: JSON.stringify({ question, kinds }), signal }, "the answer");
+  return readGeneralAnswer(payload);
 }
 
 /** What the API offers this visitor (ADR-0089): `all`, every coupon test; `imports`, bringing a model in as a file (ADR-0105), which a

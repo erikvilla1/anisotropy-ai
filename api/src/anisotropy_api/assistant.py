@@ -14,15 +14,18 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .model_costs import ModelCall, measure
 from .proposals import UNREAD_REASONS
 
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
+EFFORT = "low"  # every call; its tokens and cost are kept per call (ADR-0120)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"  # the "default" fallbacks form routes a declined request by its category
 # How every explanation reads (ADR-0091, docs/copy-style-guide.md): the product's own words, no model, vendor or tool named.
 VOICE = (
@@ -61,7 +64,7 @@ PROPOSE_SYSTEM = (
     "converted, computed, rounded, completed or guessed (a cooling or a drop is a negative change, so you may add a minus sign); the unit "
     "copied exactly as the message writes it beside the value, or null when it writes none; and the quote, the shortest span of the message, "
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
-    "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
+    "a notation row the value is the notation as written. For an angle row the value is the ply's angle in degrees. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
     "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
     "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
@@ -142,7 +145,11 @@ ANSWER_MAX_TOKENS = 1500
 ANSWER_SYSTEM = (
     "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
     "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
-    "with an id. Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the fact sheet and the sections alone: the sheet says "
+    "with an id. Answer in at most three short, plain sentences of at most 25 words each, from the fact sheet and the sections alone. The "
+    "first sentence is the answer on its own in at most nine words, as an engineer would say it to a colleague, and the page shows it as "
+    "the heading; the others give only the one or two facts that "
+    "make it so. Nothing restates the question, and a quantity is named in words, its symbol only beside them (the stress across the "
+    "fibres, σ₂). The sheet says "
     "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
     "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
     "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "
@@ -150,6 +157,24 @@ ANSWER_SYSTEM = (
     "sections hold the reason or the meaning asked for. When they do not, set it to false, say what the fact sheet shows about the "
     "matter and that the theory pages do not explain it yet, and give no reason of your own. When the question is not about this "
     "result or its theory, set 'covered' to false and say in one sentence what can be asked here. Do not use markdown." + VOICE
+)
+
+
+# A question asked in the FEA section before anything is set up (ADR-0124), or of a coupon with no result yet (ADR-0121 amendment 5): no
+# result, so the model is shown the sections of our theory pages the question found and the kinds of work the page offers; the number
+# guard then reads the answer against the question alone.
+GENERAL_SYSTEM = (
+    "You answer an engineer's question in the finite element section of a composite analysis workspace, before any model is set up. You "
+    "are given the question, sections of the product's own theory pages, each with an id, and the kinds of work the workspace can set up. "
+    "Answer in one to three short, plain sentences, the first the answer on its own in at most eight words and 60 characters, as an "
+    "engineer would say it to a colleague, and nothing that restates the question, from the sections alone, "
+    "and only what was asked: leave out the grips, tabs, meshes or checks of a section unless the question is about them. Never write the "
+    "word engine: say the analysis or the laminate calculation. "
+    "Write no number that is not in the question, digit for digit, and never copy a number or an equation out of a section: say in words "
+    "what it means; a ply may be named by its angle, as the 90-degree ply. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
+    "names them. Set 'covered' to true only when those sections answer the question. When they do not, set it to false, say in one "
+    "sentence that the theory pages do not cover it yet, and give no answer of your own. Set 'start' to the kind of work the engineer "
+    "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE
 )
 
 
@@ -162,6 +187,7 @@ class Reading:
     writer: str
     model: str | None
     reason: str | None = None
+    call: ModelCall | None = None  # what the call to the model was billed for (ADR-0120); None when no model was called
 
 
 @dataclass(frozen=True)
@@ -174,6 +200,7 @@ class Draft:
     withheld: bool = False  # the model's draft held a number not in the facts; the template's prose stands
     reason: str | None = None  # why the template's prose stands when the model was asked: withheld, no answer, a refusal
     offending: tuple[str, ...] = ()
+    call: ModelCall | None = None  # what the call to the model was billed for, kept or not (ADR-0120); None when no model was called
 
 
 @dataclass(frozen=True)
@@ -200,6 +227,8 @@ class Assistant(Protocol):
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
     def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -293,6 +322,10 @@ class TemplateAssistant:
         """The template writes no answer to a question: the page names the theory sections found (ADR-0102)."""
         return Reading(None, "template", None)
 
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template writes no answer to a question asked before a setup either: the page names the sections found (ADR-0124)."""
+        return Reading(None, "template", None)
+
 
 def _sentences(text: str) -> tuple[str, ...]:
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text.strip()) if p.strip()]
@@ -320,96 +353,107 @@ class ClaudeAssistant:
                 self._client = anthropic.Anthropic()
         return self._client
 
-    def _ask(self, system: str, user: str, schema: dict[str, Any] | None = None, max_tokens: int = MAX_TOKENS) -> tuple[str | None, str | None]:
-        """The model's text, or None with the reason it gave none; with a schema, the text is JSON in that schema (structured outputs)."""
+    def _ask(self, feature: str, system: str, user: str, schema: dict[str, Any] | None = None,
+             max_tokens: int = MAX_TOKENS) -> tuple[str | None, str | None, ModelCall | None]:
+        """The model's text, or None with the reason it gave none; with a schema, the text is JSON in that schema (structured outputs).
+        Third, what the call was billed for (ADR-0120), whatever became of its answer; None when no answer came back to bill."""
         import anthropic
 
-        output_config: dict[str, Any] = {"effort": "low"}
+        output_config: dict[str, Any] = {"effort": EFFORT}
         if schema is not None:
             output_config["format"] = {"type": "json_schema", "schema": schema}
+        started = time.monotonic()
         try:
             response = self.client.beta.messages.create(
                 model=self.model, max_tokens=max_tokens, system=system, output_config=output_config,
                 betas=[FALLBACK_BETA], fallbacks="default", messages=[{"role": "user", "content": user}],
             )
         except anthropic.AuthenticationError as exc:
-            return None, f"the model's credential was refused: {exc.message}"
+            return None, f"the model's credential was refused: {exc.message}", None
         except anthropic.RateLimitError:
-            return None, "the model is rate limited; the template's prose stands"
+            return None, "the model is rate limited; the template's prose stands", None
         except anthropic.APIStatusError as exc:
-            return None, f"the model answered with an error ({exc.status_code}): {exc.message}"
+            return None, f"the model answered with an error ({exc.status_code}): {exc.message}", None
         except anthropic.APIConnectionError:
-            return None, "the model could not be reached; the template's prose stands"
+            return None, "the model could not be reached; the template's prose stands", None
+        answer = "".join(block.text for block in response.content or [] if getattr(block, "type", "") == "text")
+        call = measure(feature, self.model, EFFORT, response, answer, time.monotonic() - started)
         if response.stop_reason == "refusal":
-            return None, "the model declined the request; the template's prose stands"
+            return None, "the model declined the request; the template's prose stands", call
         if response.stop_reason == "max_tokens":
-            return None, "the model's answer was cut short; the template's prose stands"
-        text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text").strip()
+            return None, "the model's answer was cut short; the template's prose stands", call
+        text = answer.strip()
         if not text:
-            return None, "the model answered with no text; the template's prose stands"
-        return text, None
+            return None, "the model answered with no text; the template's prose stands", call
+        return text, None, call
 
-    def _draft(self, system: str, user: str, facts: dict[str, Any], template: list[str]) -> Draft:
-        text, reason = self._ask(system, user)
+    def _draft(self, feature: str, system: str, user: str, facts: dict[str, Any], template: list[str]) -> Draft:
+        text, reason, call = self._ask(feature, system, user)
         if text is None:
-            return Draft(tuple(template), "template", None, reason=reason)
+            return Draft(tuple(template), "template", None, reason=reason, call=call)
         guard = number_guard(text, facts)
         if not guard.ok:
             return Draft(tuple(template), "template", None, withheld=True, offending=guard.offending,
-                         reason="the model's draft held numbers that are not in the fact sheet: " + ", ".join(guard.offending))
-        return Draft(_sentences(text), self.name, self.model)
+                         reason="the model's draft held numbers that are not in the fact sheet: " + ", ".join(guard.offending), call=call)
+        return Draft(_sentences(text), self.name, self.model, call=call)
 
     def explain_setup(self, checklist: dict[str, Any], template: list[str]) -> Draft:
         view = model_view_of_checklist(checklist)
         user = "The setup check:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
         facts = {"items": [item["message"] for item in view["items"]] + [row for item in view["items"] for row in item["rows"]]}
-        return self._draft(SETUP_SYSTEM, user, facts, template)
+        return self._draft("explain_setup", SETUP_SYSTEM, user, facts, template)
 
     def explain_result(self, facts: dict[str, Any], template: list[str]) -> Draft:
         view = model_view_of_facts(facts)
         user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
-        return self._draft(RESULT_SYSTEM, user, view, template)
+        return self._draft("explain_result", RESULT_SYSTEM, user, view, template)
 
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
         """A laminate problem's answer (ADR-0060): the fact sheet is the API's, in the reporting units, and the guard reads it as any other."""
         view = model_view_of_facts(facts)
         user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
-        return self._draft(LAMINATE_SYSTEM, user, view, template)
+        return self._draft("explain_laminate", LAMINATE_SYSTEM, user, view, template)
 
-    def _read(self, system: str, view: dict[str, Any], schema: dict[str, Any], max_tokens: int) -> Reading:
+    def _read(self, feature: str, system: str, view: dict[str, Any], schema: dict[str, Any], max_tokens: int) -> Reading:
         """The model's answer to a view, as JSON in the schema asked for and not yet judged; none, with the reason, when it gave none."""
-        text, reason = self._ask(system, json.dumps(view, ensure_ascii=False, indent=1), schema=schema, max_tokens=max_tokens)
+        text, reason, call = self._ask(feature, system, json.dumps(view, ensure_ascii=False, indent=1), schema=schema, max_tokens=max_tokens)
         if text is None:
-            return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
+            return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""), call=call)
         try:
             raw = json.loads(text)
         except json.JSONDecodeError:
-            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for", call=call)
         if not isinstance(raw, dict):
-            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
-        return Reading(raw, self.name, self.model)
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for", call=call)
+        return Reading(raw, self.name, self.model, call=call)
 
     def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
         model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11). A plate
         passes its own schema and instructions, the rows' with its supports and loads added (ADR-0101)."""
-        return self._read(PROPOSE_SYSTEM + system, view, schema or PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
+        return self._read("propose_changes", PROPOSE_SYSTEM + system, view, schema or PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
 
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The model's reading of a question about a result (ADR-0100), in a schema of names on offer and whole numbers, which the guard
         then reads. `view` is what the model may see: the message, the quantities, plies and regions on offer; never a result."""
-        return self._read(QUESTION_SYSTEM, view, schema, QUESTION_MAX_TOKENS)
+        return self._read("read_question", QUESTION_SYSTEM, view, schema, QUESTION_MAX_TOKENS)
 
     def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The model's answer to a question about a result (ADR-0102), as JSON in the schema asked for and not yet judged: the number guard
         reads its text. `view` is what the model may see: the question, the result's fact sheet and the theory sections found."""
-        return self._read(ANSWER_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
+        return self._read("answer_question", ANSWER_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's answer to a question asked in the FEA section before a setup (ADR-0124), as JSON in the schema asked for and not
+        yet judged. `view` is the question, the theory sections found and the kinds of work offered. Billed as `answer_question`, the
+        one feature for questions answered from the theory pages (ADR-0120)."""
+        return self._read("answer_question", GENERAL_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is
         what the model may see: the message, each tool's name and description, and the names of those already done."""
         names = [str(tool["name"]) for tool in view.get("tools", [])]
-        return self._read(TOOL_CHOICE_SYSTEM, view, tool_choice_schema(names), TOOL_CHOICE_MAX_TOKENS)
+        return self._read("choose_tools", TOOL_CHOICE_SYSTEM, view, tool_choice_schema(names), TOOL_CHOICE_MAX_TOKENS)
 
 
 def assistant_for(provider: str | None, model: str | None) -> Assistant:

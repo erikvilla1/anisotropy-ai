@@ -2,21 +2,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
-export const handoffKey = "composite-scope-handoff";
+import { HANDOFF_KEY, putHandoff } from "@/lib/handoff";
+import { COUPON_HREF } from "@/lib/workspaces";
+/** The message's key in this tab's storage, which the workspace's assistants read once (ADR-0124, `lib/handoff.ts`). */
+export const handoffKey = HANDOFF_KEY;
+/** A coupon described on the home page opens FEA set up for a coupon, with the description carried to its assistant (ADR-0124). */
 export function HomeComposer() {
   const [prompt, setPrompt] = useState("");
   const router = useRouter();
   function submit() {
     if (!prompt.trim()) return;
-    const payload = { prompt: prompt.trim() };
-    try {
-      sessionStorage.setItem(handoffKey, JSON.stringify(payload));
-      router.push("/workspace/fea");
-    } catch {
-      router.push(
-        `/workspace/fea?prompt=${encodeURIComponent(payload.prompt)}`,
-      );
-    }
+    let kept = false;
+    try { kept = putHandoff(window.sessionStorage, { setUp: prompt, prompt }); } catch { /* storage blocked: the address carries it */ }
+    router.push(kept ? COUPON_HREF : `${COUPON_HREF}&prompt=${encodeURIComponent(prompt.trim().slice(0, 2000))}`);
   }
   return (
     <div className="hero-chat-entry">

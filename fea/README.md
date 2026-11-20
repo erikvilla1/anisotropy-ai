@@ -108,6 +108,32 @@ checks/              proofs that are not team models: cases/, decks/ (tiny fixtu
 examples/             deck_summary.py, solve_deck.py
 ```
 
+## A wing's shape and STEP file
+
+`anisotropy_fea.wing_shape` builds a wing file's parts (the engine's wing description, ADR-0115) as surfaces at their mid-thickness in Gmsh's OpenCASCADE, writes them as a STEP file in millimetres with every part named, and meshes them with four-node shells (ADR-0116). It needs the optional extra `mesh`:
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_shape engine/examples/example-wing.toml wing.step --mesh 20
+```
+
+prints each part's layup, thickness, area and mass. A STEP file holds no thickness or plies: a CAD program's thicken feature turns each surface into its solid. The wing file may also be the same description as JSON, and `--parts parts.json` writes the part table in the file's units: that is how the wing workspace's Download STEP calls it through the API (ADR-0118). A description the engine or the shape refuses ends with status 2 and its reason on stderr.
+
+## A wing in CalculiX
+
+`anisotropy_fea.wing_model` checks the same wing file with finite elements (ADR-0117): the shape's mesh as S8R composite shells carrying every ply and the core, the root clamped, every flight case of the envelope as a sum of four solved load patterns, each ply's strength ratio by the engine's criterion outboard of a root zone one web height long, each skin and web panel between ribs buckling as the engine's Ritz plate under its loads in the model, the first six vibration modes, the box's shear center and torsion stiffness, and a flutter estimate on that section (`anisotropy_engine.wing.flutter`). `--skins box` keeps only the skins between the spars, the hand calculation's box:
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_model engine/examples/example-wing.toml --mesh 40 --skins box --modes
+```
+
+prints every case beside the hand calculation, in about 20 s at 40 mm. The equations are in `docs/theory.md` Section 10.
+
+`anisotropy_fea.wing_check` is the same check as a job runs it from the wing page (ADR-0119): the skins between the spars, one report in the wing file's units (`wing-check.json`: the lowest margins by the model and by hand, every case side by side, the wing as a beam, the modes, flutter and panel buckling), the progress after each stage and the outcome at the end, as `tools/run_coupon.py` writes them. A description the engine or the model refuses ends `refused` (exit 2):
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.wing_check wing.json --out check --result outcome.json --progress progress.json
+```
+
 ## Abaqus field reports
 
 The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/<coupon>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.
