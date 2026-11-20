@@ -520,9 +520,9 @@ class CouponJobs:
                    snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [],
                              "message": "queued"})
 
-    def start_wing(self, actor: str, inputs: dict, user_email: str | None = None) -> Job:
+    def start_wing(self, actor: str, inputs: dict, user_email: str | None = None, project_id: uuid.UUID | None = None) -> Job:
         """Start a wing's finite element check (ADR-0119): `inputs` hold the kind, the wing's title and its description, which the
-        engine has read already. Like a coupon job it is refused while another runs here, within the per-user limits, and with the
+        engine has read already; `project_id` the wing project it is run for, already known to be the requester's (ADR-0120). Like a coupon job it is refused while another runs here, within the per-user limits, and with the
         queue it is filed for a solver: the description travels in the row, so nothing is filed in the store first."""
         if self.role == "solver":
             raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
@@ -534,10 +534,11 @@ class CouponJobs:
                 self._within_limits(actor, user_email)
             job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
             try:
-                insert_job(self.table, job_id=job_id, actor=actor, user_email=user_email, inputs=inputs, started_at=now, process=self.process, state="queued")
+                insert_job(self.table, job_id=job_id, actor=actor, user_email=user_email, inputs=inputs, started_at=now, process=self.process, state="queued",
+                           project_id=project_id)
             except SQLAlchemyError as exc:
                 raise JobRefused(f"the job could not be registered in the jobs table, so it was not queued: {str(exc).splitlines()[0]}") from exc
-            return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email,
+            return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email, project_id=project_id,
                        snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [], "message": "queued"})
         if self.wing is None:
             raise JobRefused("uv is not on PATH; a wing's check runs anisotropy_fea.wing_check through `uv run --project fea --extra mesh`")
@@ -549,12 +550,13 @@ class CouponJobs:
                 print(f"wing check refused: {busy.id} is running; one runs at a time", flush=True)
                 raise JobBusy(busy.id)
             job_id = uuid.uuid4()
-            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email)
+            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email, project_id=project_id)
             job.folder.mkdir(parents=True)
             self.jobs[job.id] = job
         if self.table is not None:
             try:
-                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process)
+                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process,
+                           project_id=project_id)
             except SQLAlchemyError as exc:
                 with self.lock:
                     del self.jobs[job.id]

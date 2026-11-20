@@ -1164,10 +1164,11 @@ PROJECT_KINDS = ("fea", "laminate")
 
 class ProjectInput(Contract):
     """A workspace project as the page states it (ADR-0062 part 6): its kind, its name, its content as one JSON object (a coupon's rows
-    and a plate's lists, or a laminate problem's draft), and the form version and unit system the content was stated in. The API keeps
-    it; the fea package judges a coupon's rows at check time (ADR-0051). PUT /v1/projects/{id} creates or replaces it."""
+    and a plate's lists, a laminate problem's draft, or a wing's description under `wing`, ADR-0120), and the form version and unit
+    system the content was stated in. The API keeps it; the fea package judges a coupon's rows at check time (ADR-0051). PUT
+    /v1/projects/{id} creates or replaces it."""
 
-    kind: Literal["fea", "laminate"]
+    kind: Literal["fea", "laminate", "wing"]
     name: Annotated[str, Field(max_length=200)] = ""
     content: dict[str, Any]
     form_version: Annotated[str, Field(max_length=20)] | None = None
@@ -1177,6 +1178,8 @@ class ProjectInput(Contract):
     def not_empty(self) -> Self:
         if not self.content:
             raise ValueError("content must hold the project as the page states it; the object is empty")
+        if self.kind == "wing" and not isinstance(self.content.get("wing"), dict):
+            raise ValueError("a wing project's content holds the wing's description as an object under `wing` (ADR-0120)")
         size = len(json.dumps(self.content, ensure_ascii=False).encode("utf-8"))
         if size > VALUES_LIMIT_BYTES:
             raise ValueError(f"the content is {size} bytes; a project's rows are far below {VALUES_LIMIT_BYTES}")
@@ -1188,10 +1191,11 @@ class ProjectRename(Contract):
 
 
 class ProjectJobOutput(Contract):
-    """A job of a project, as its row stands: enough to list it and open it by its id."""
+    """A job of a project, as its row stands: enough to list it and open it by its id. `queued` until a solver takes it, on the hosted
+    tier (ADR-0056 amendment 3); a project read while one of its jobs waited failed before ADR-0120 found it."""
 
     job_id: str
-    state: Literal["running", "done", "stopped", "refused"]
+    state: Literal["queued", "running", "done", "stopped", "refused"]
     coupon: str | None
     attempt: str | None
     message: str | None
@@ -1209,7 +1213,7 @@ class ProjectOutput(Contract):
     """A project as the API keeps it (ADR-0062 part 6), with its jobs when read by its id."""
 
     id: str
-    kind: Literal["fea", "laminate"]
+    kind: Literal["fea", "laminate", "wing"]
     name: str
     actor: str
     user_email: str | None
@@ -1366,6 +1370,13 @@ class WingRequest(Contract):
         if (self.wing is None) == (self.toml is None):
             raise ValueError("Give exactly one of wing (a JSON object) or toml (the wing file's text)")
         return self
+
+
+class WingCheckRequest(WingRequest):
+    """A wing's finite element check (ADR-0119): the wing as for its hand calculation, and the wing project it is run for (ADR-0120),
+    whose row then lists the check; a project unknown or not the requester's is ignored, so a wing the browser alone knows still runs."""
+
+    project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
 
 
 class WingAnswer(Contract):

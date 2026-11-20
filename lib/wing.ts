@@ -208,6 +208,23 @@ export function unitLabel(wing: WingDescription, unit: WingField["unit"]): strin
   return UNIT_LABELS[units][unit];
 }
 
+/** A wing in the list of projects (ADR-0120): its size in a few words, as the description states it ("2 m half span, 0.45 m chord"). */
+export function wingAbout(wing: WingDescription): string {
+  const length = UNIT_LABELS[unitsOf(wing)].length;
+  const part = (path: string, words: string) => {
+    const value = valueAt(wing, path);
+    return typeof value === "number" && Number.isFinite(value) ? `${shown(value)} ${length} ${words}` : null;
+  };
+  return [part("geometry.half_span", "half span"), part("geometry.chord", "chord")].filter(Boolean).join(", ") || "–";
+}
+
+/** A wing's material by its name: the library's, or the one typed in. */
+export function wingMaterial(wing: WingDescription): string {
+  const library = valueAt(wing, "material.library"), own = valueAt(wing, "material.name");
+  if (typeof library === "string") return WING_MATERIALS.find((m) => m.id === library)?.name ?? library;
+  return typeof own === "string" && own.trim() ? own : "–";
+}
+
 // ----------------------------------------------------------------------------------------------- the engine's answer
 
 export type WingCheckName = "skin plies" | "spar plies" | "skin buckling" | "web buckling";

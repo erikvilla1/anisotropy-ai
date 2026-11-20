@@ -8,7 +8,7 @@ import { WingRail } from "./wing-rail";
 import { WingStage } from "./wing-stage";
 
 /** The wing workspace (ADR-0118): the description's steps on the left, the answer and its drawings in the centre, the answer in words
- * on the right, all on one wing that this browser keeps and a wing file carries. */
+ * on the right, all on one wing project (ADR-0120), kept with the person's other projects, and carried by a wing file. */
 export function WingWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
   return (
     <WingProvider apiBaseUrl={apiBaseUrl}>

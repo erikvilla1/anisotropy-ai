@@ -191,6 +191,23 @@ def test_through_the_queue_a_solver_runs_the_check_and_the_api_reads_its_report_
 
 
 @needs_test_database
+def test_a_check_started_for_a_wing_project_is_listed_with_it_and_anothers_project_is_ignored(queue):
+    """A wing is a project (ADR-0120): the check names it, the project lists the check, even while it waits for a solver; a project id
+    that is not the requester's is ignored and the check still runs."""
+    front, solver, store, table = queue
+    pid = str(uuid.uuid4())
+    made = client.put(f"/v1/projects/{pid}", json={"kind": "wing", "name": "Example straight wing", "content": {"wing": example()}})
+    assert made.status_code == 201 and made.json()["kind"] == "wing" and made.json()["content"]["wing"] == example()
+    mine = client.post(CHECKS, json={"wing": example(), "project_id": pid})
+    assert mine.status_code == 202 and fetch_job(table, uuid.UUID(mine.json()["job_id"])).project_id == uuid.UUID(pid)
+    listed = client.get(f"/v1/projects/{pid}").json()["jobs"]
+    assert [(job["job_id"], job["state"]) for job in listed] == [(mine.json()["job_id"], "queued")]
+    theirs = client.post(CHECKS, json={"wing": example(), "project_id": pid}, headers={"X-Anisotropy-Actor": "test"})
+    assert theirs.status_code == 202 and fetch_job(table, uuid.UUID(theirs.json()["job_id"])).project_id is None
+    assert client.post(CHECKS, json={"wing": example(), "project_id": "not-an-id"}).status_code == 422
+
+
+@needs_test_database
 def test_through_the_queue_the_per_job_timeout_stops_the_check(queue, monkeypatch):
     front, solver, store, table = queue
     job_id = uuid.UUID(client.post(CHECKS, json={"wing": example("WAIT")}).json()["job_id"])

@@ -17,6 +17,7 @@ from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
 from conftest import TEST_URL, needs_test_database
 
 COUPON = {"form": {"test": "unnotched tension", "length": "250", "width": "25"}, "plate": {"supports": [], "loads": [], "regions": []}}
+WING = {"wing": {"title": "Example straight wing", "units": "SI", "geometry": {"half_span": 2.0, "chord": 0.45}}}  # the page's object, kept as sent
 LAMINATE = {"system": "SI", "material": {"library": "im7-8552"}, "layup": None, "thickness": None, "loads": None, "f12_star": "", "strain_limits": False}
 
 
@@ -77,12 +78,25 @@ def test_a_project_is_created_replaced_listed_and_renamed(recording):
 
 
 @needs_test_database
+def test_a_wing_is_a_project_of_its_own_kind(recording):
+    """ADR-0120: a wing's description is kept under `wing`, listed with the other kinds, and never becomes another kind."""
+    pid = str(uuid.uuid4())
+    made = recording.put(f"/v1/projects/{pid}", json=body(kind="wing", name="Example straight wing", content=WING))
+    assert made.status_code == 201 and made.json()["kind"] == "wing" and made.json()["content"] == WING and made.json()["form_version"] is None
+    assert [(p["kind"], p["name"]) for p in recording.get("/v1/projects").json()] == [("wing", "Example straight wing")]
+    refused = recording.put(f"/v1/projects/{pid}", json=body(kind="laminate", content=LAMINATE))
+    assert refused.status_code == 409 and "does not become a laminate one" in refused.json()["detail"]
+
+
+@needs_test_database
 @pytest.mark.parametrize("bad, reason", [
     (body(kind="stl"), "kind"),
     ({"kind": "fea", "name": "x", "content": {}}, "empty"),
     ({"kind": "fea", "name": "x", "content": {"big": "x" * 300_000}}, "far below"),
     ({"kind": "fea", "name": "x", "content": COUPON, "owner": "me"}, "extra"),
     ({"kind": "fea", "name": "x" * 201, "content": COUPON}, "200"),
+    ({"kind": "wing", "name": "x", "content": {"title": "Example straight wing"}}, "under `wing`"),  # ADR-0120
+    ({"kind": "wing", "name": "x", "content": {"wing": "Example straight wing"}}, "under `wing`"),
 ])
 def test_a_project_outside_the_contract_is_refused(recording, bad, reason):
     refused = recording.put(f"/v1/projects/{uuid.uuid4()}", json=bad)

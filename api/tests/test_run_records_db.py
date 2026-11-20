@@ -267,6 +267,22 @@ def test_migration_0007_creates_the_projects_table_and_refuses_to_drop_it_over_r
         upsert_project(engine, project_id=uuid.uuid4(), kind="stl", name="", actor="studio", user_email=None, content={}, form_version=None, units=None, now=now)
 
 
+def test_migration_0013_admits_a_wing_project_and_refuses_to_be_undone_over_one(engine):
+    """ADR-0120: the projects table knows the kind `wing`; undone, the old constraint would refuse the row, so the downgrade refuses."""
+    config = alembic_config(TEST_URL)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    command.downgrade(config, "0012")
+    with pytest.raises(DBAPIError):
+        upsert_project(engine, project_id=uuid.uuid4(), kind="wing", name="", actor="studio", user_email=None, content={"wing": {}},
+                       form_version=None, units=None, now=now)
+    command.upgrade(config, "head")
+    row, created = upsert_project(engine, project_id=uuid.uuid4(), kind="wing", name="Example straight wing", actor="studio", user_email=None,
+                                  content={"wing": {"title": "Example straight wing"}}, form_version=None, units="SI", now=now)
+    assert created and row.kind == "wing"
+    with pytest.raises(RuntimeError, match="holds 1 wing project"):
+        command.downgrade(config, "0012")
+
+
 def test_migration_0008_adds_the_queue_and_one_running_job_per_coupon(engine):
     """The job queue (ADR-0056 amendment 3): a `queued` state with what a solver needs, and the unique index that lets one running job
     hold a coupon; the downgrade refuses over a queued row."""

@@ -195,6 +195,72 @@ test("a check the model cannot make says why, in the words it was refused with (
   await expect(page.getByTestId("wing-fe-headline")).toHaveCount(0);
 });
 
+test("a wing is a project: listed with the others, each opened as it was left, its changes kept as versions to go back to (ADR-0120)", async ({ page }) => {
+  looks = LOOKS;
+  await playWings(page);
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=wing]").click();
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  const history = page.getByTestId("panel-wing-history");
+  await expect(history.locator(".ws-panel-note")).toHaveText("version 1"); // the wing as it started
+  await page.getByTestId("project-name").fill("First wing");
+  await expect(history.locator(".ws-panel-note")).toHaveText("version 2");
+  await page.getByLabel("Chord", { exact: true }).fill("0.5");
+  await expect(history.locator(".ws-panel-note")).toHaveText("version 3");
+  await history.locator("summary").click();
+  await expect(page.getByTestId("wing-version-1")).toContainText("The wing as it started");
+  await expect(page.getByTestId("wing-version-2")).toContainText("Name: Example straight wing → First wing");
+  await expect(page.getByTestId("wing-version-3")).toContainText("Chord: 0.45 → 0.5");
+  await page.getByTestId("wing-restore-2").click(); // going back is a version of its own
+  await expect(page.getByLabel("Chord", { exact: true })).toHaveValue("0.45");
+  await expect(page.getByTestId("wing-version-4")).toContainText("Back to version 2");
+  await expect(page.getByTestId("wing-version-4")).toContainText("Chord: 0.5 → 0.45");
+  await expect(page.getByTestId("project-name")).toHaveValue("First wing");
+  // the check names the wing project it is made for
+  await page.getByTestId("panel-wing-fe").locator("summary").click();
+  await page.getByTestId("wing-fe-start").click();
+  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  expect((checks[0] as Record<string, unknown>).project_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  await expect(page.getByTestId("wing-version-4")).toContainText("Checked: Lowest margin +0.146");
+
+  await page.goto("/workspace");
+  const first = page.getByTestId("workspace-projects").locator("tr[data-kind=wing]");
+  await expect(first).toHaveCount(1);
+  await expect(first).toContainText("First wing");
+  await expect(first).toContainText("Wing design");
+  await expect(first).toContainText("2 m half span, 0.45 m chord");
+  await expect(first).toContainText("IM7 / 8552");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=wing]").click(); // a second wing starts from the example
+  await expect(page.getByTestId("project-name")).toHaveValue("Example straight wing");
+  await page.getByLabel("Half span").fill("3");
+  await expect(page.getByTestId("panel-wing-history").locator(".ws-panel-note")).toHaveText("version 2");
+  await page.goto("/workspace");
+  await expect(page.getByTestId("workspace-projects").locator("tr[data-kind=wing]")).toHaveCount(2);
+  await page.getByTestId("workspace-projects").locator("tr[data-kind=wing]", { hasText: "First wing" }).getByRole("button", { name: "Open" }).click();
+  await expect(page.getByTestId("project-name")).toHaveValue("First wing");
+  await expect(page.getByLabel("Half span")).toHaveValue("2");
+  await expect(page.getByTestId("wing-fe-headline")).toBeVisible(); // its check comes back with it
+  await expect(page.getByTestId("panel-wing-history").locator(".ws-panel-note")).toHaveText("version 4");
+});
+
+test("a wing this browser kept before wings were projects becomes the first wing project, its check with it (ADR-0120)", async ({ page }) => {
+  looks = [LOOKS[1]];
+  await playWings(page);
+  const old = { ...ANSWER.wing, title: "Kept wing" };
+  await page.addInitScript(([wing, check]) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("anisotropy.wing.v1", JSON.stringify(wing));
+    localStorage.setItem("anisotropy.wing-check.v1", JSON.stringify(check));
+  }, [old, { jobId: CHECK_ID, wing: old }] as const);
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("project-name")).toHaveValue("Kept wing");
+  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("anisotropy.wing.v1"))).toBeNull();
+  await page.goto("/workspace");
+  await expect(page.getByTestId("workspace-projects").locator("tr[data-kind=wing]")).toContainText("Kept wing");
+});
+
 test("the wing workspace names no tool, no machinery and no record, with every panel open, the shape built and the check made (ADR-0091, ADR-0118, ADR-0119)", async ({ page }) => {
   looks = LOOKS;
   await playWings(page);

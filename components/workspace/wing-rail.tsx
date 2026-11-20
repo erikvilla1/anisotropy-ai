@@ -8,6 +8,7 @@ import {
 } from "@/lib/wing";
 import { shapeWing, StudioError } from "@/lib/studio-api";
 import { useWing } from "./wing-context";
+import { WingHistoryPanel } from "./wing-history";
 import { StepPanel } from "./panels/step-panel";
 
 const CRITERIA = [
@@ -380,6 +381,7 @@ export function WingRail() {
       </StepPanel>
       <FeCheckPanel />
       <ShapePanel />
+      <WingHistoryPanel />
     </div>
   );
 }

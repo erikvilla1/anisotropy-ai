@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderOpen, History, Plus } from "lucide-react";
-import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
+import { mergeProjects, newLaminateProject, newProject, newWingProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
 import { answerWords, askToOpen, pastRuns, runWhen, type PastRun } from "@/lib/run-history";
 import { printed } from "@/lib/studio-colors";
 import { listJobs, listProjects, noProjectStore } from "@/lib/studio-api";
@@ -11,6 +11,7 @@ import { browserStorage, tabStorage, useAllTests } from "@/components/studio/pro
 import { isTestEnabled } from "@/lib/enabled-tests";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
+import { wingAbout, wingMaterial } from "@/lib/wing";
 import { workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 
 function testTitle(test: string): string {
@@ -22,9 +23,10 @@ const when = (stamp: string): string => runWhen(stamp);
 /** How many past analyses the list shows before "Show all". */
 const RUNS_SHOWN = 8;
 
-/** What a project is about, in a few words: a coupon's test, a laminate's layup; a coupon of a test the studio does not offer yet (ADR-0089)
- * says so, and stays listed. */
+/** What a project is about, in a few words: a coupon's test, a laminate's layup, a wing's size; a coupon of a test the studio does not offer
+ * yet (ADR-0089) says so, and stays listed. */
 function about(project: Project, allTests: boolean): string {
+  if (project.kind === "wing") return wingAbout(project.wing);
   if (project.kind === "fea") {
     const test = project.form.test;
     if (!test) return "–";
@@ -35,11 +37,12 @@ function about(project: Project, allTests: boolean): string {
 }
 
 function materialOf(project: Project): string {
+  if (project.kind === "wing") return wingMaterial(project.wing);
   if (project.kind === "fea") return project.form.library || project.form.own_name || "–";
   return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
 }
 
-const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
+const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate", wing: "wing" };
 /** A project's kind is its workspace's one name (audit fea-screens-10). */
 const kindWord = (kind: Project["kind"]): string => workspace(ROUTE[kind]).title;
 
@@ -102,7 +105,8 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function create(id: WorkspaceId) {
     if (id === "fea") open(newProject());
     else if (id === "laminate") open(newLaminateProject());
-    else router.push(workspace(id).href); // the wing keeps its one wing in this browser and its file (ADR-0118)
+    else if (id === "wing") open(newWingProject()); // a new wing starts from the example, to change (ADR-0120)
+    else router.push(workspace(id).href);
   }
 
   return (

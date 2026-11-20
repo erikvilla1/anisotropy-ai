@@ -450,7 +450,7 @@ export type ProjectJobRecord = { job_id: string; state: JobState; coupon: string
   finished_at: string | null; run_id: string | null };
 /** A workspace project as the API keeps it: the page's own object under `content`, the designation its last check derived, its jobs when read by id. */
 export type ProjectRecord = {
-  id: string; kind: "fea" | "laminate"; name: string; content: Record<string, unknown>; form_version: string | null; units: string | null;
+  id: string; kind: "fea" | "laminate" | "wing"; name: string; content: Record<string, unknown>; form_version: string | null; units: string | null;
   designation: string | null; last_check_run_id: string | null; created_at: string; updated_at: string; jobs: ProjectJobRecord[];
 };
 export type ProjectUpload = Pick<ProjectRecord, "kind" | "name" | "content" | "form_version" | "units">;
@@ -459,7 +459,7 @@ const PROJECTS = "/v1/projects";
 const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
 export function readProjectRecord(payload: unknown): ProjectRecord {
-  if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate") || typeof payload.name !== "string"
+  if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate" && payload.kind !== "wing") || typeof payload.name !== "string"
     || !isObject(payload.content) || typeof payload.created_at !== "string" || typeof payload.updated_at !== "string") {
     throw unreadable("a project");
   }
@@ -653,8 +653,10 @@ export function readWingFeCheck(payload: unknown): WingFeCheck {
 
 /** Start the wing's finite element check (ADR-0119), a job like a coupon run: the description as it stands, read by the engine first, so a
  * wing the calculation refuses is refused here in the same words. Poll it with `getWingFeCheck` until it is neither queued nor running. */
-export async function startWingFeCheck(apiBaseUrl: string, wing: WingDescription, signal?: AbortSignal): Promise<WingFeCheck> {
-  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks`, { method: "POST", headers, body: JSON.stringify({ wing }), signal }, "starting the wing's check"));
+/** A wing's finite element check (ADR-0119), for the wing project it is run for when the page knows one the server keeps (ADR-0120). */
+export async function startWingFeCheck(apiBaseUrl: string, wing: WingDescription, projectId?: string | null, signal?: AbortSignal): Promise<WingFeCheck> {
+  const body = JSON.stringify(projectId ? { wing, project_id: projectId } : { wing });
+  return readWingFeCheck(await call(`${base(apiBaseUrl)}/v1/wings/checks`, { method: "POST", headers, body, signal }, "starting the wing's check"));
 }
 
 export async function getWingFeCheck(apiBaseUrl: string, jobId: string, signal?: AbortSignal): Promise<WingFeCheck> {

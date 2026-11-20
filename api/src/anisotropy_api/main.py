@@ -58,7 +58,8 @@ from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKEN
 from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingCheckOutput, WingRequest, WingShapeAnswer,
+    ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingCheckOutput, WingCheckRequest, WingRequest,
+    WingShapeAnswer,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1685,13 +1686,13 @@ def _wing_check_output(jobs: CouponJobs, job: Job) -> WingCheckOutput:
 
 
 @app.post(WING_CHECKS, status_code=202, response_model=WingCheckOutput)
-def start_wing_check(problem: WingRequest, actor: Actor, request: Request, response: Response) -> WingCheckOutput:
+def start_wing_check(problem: WingCheckRequest, actor: Actor, request: Request, response: Response) -> WingCheckOutput:
     """A wing's finite element check (ADR-0117, ADR-0119), started from the wing workspace like a coupon run: the engine reads the
     description first, so a wing the page could not work is refused in the same words and at once; then the check runs in the
     background, through the job queue on the hosted tier, half a minute for the example. Poll the Location until the state is
     neither queued nor running; once done the answer holds the check's report in the wing file's units. The same limits as a
     coupon run apply: one at a time here, and the hosted tier's per-user limits (409, 429). Its receipt is a run record at this
-    address, written when it ends."""
+    address, written when it ends. `project_id` names the wing project it is run for, when it is the requester's (ADR-0120)."""
     try:
         data = tomllib.loads(problem.toml) if problem.toml is not None else problem.wing
         wing, _ = wing_from_dict(data)
@@ -1701,7 +1702,8 @@ def start_wing_check(problem: WingRequest, actor: Actor, request: Request, respo
         raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
     jobs = _coupon_jobs(request)
     try:
-        job = jobs.start_wing(actor, {"kind": WING, "wing": wing.name, "description": data}, user_email=getattr(request.state, "user_email", None))
+        job = jobs.start_wing(actor, {"kind": WING, "wing": wing.name, "description": data}, user_email=getattr(request.state, "user_email", None),
+                              project_id=_own_project_id(request, actor, problem.project_id))
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobLimited as exc:
