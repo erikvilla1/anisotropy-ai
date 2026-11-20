@@ -86,10 +86,19 @@ def kept(message: Any) -> dict[str, Any]:
             "usage": message.usage.model_dump(mode="json")}
 
 
+def _attributes(value: Any) -> Any:
+    if isinstance(value, dict):
+        return SimpleNamespace(**{key: _attributes(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_attributes(item) for item in value]
+    return value
+
+
 def reply(answer: dict[str, Any]) -> SimpleNamespace:
-    """A kept answer in the shape the SDK returns it, for code that reads `stop_reason` and `content[i].type` and `.text`."""
-    return SimpleNamespace(model=answer["model"], stop_reason=answer["stop_reason"], content=[SimpleNamespace(**block) for block in answer["content"]],
-                           usage=SimpleNamespace(**answer["usage"]))
+    """A kept answer in the shape the SDK returns it, read by attribute all the way down (`content[i].text`, `usage.cache_creation`),
+    as the API's readers and its record of each call's cost (ADR-0120) read a response. A tool call's `input` stays a dict."""
+    content = [SimpleNamespace(**{key: (item if key == "input" else _attributes(item)) for key, item in block.items()}) for block in answer["content"]]
+    return SimpleNamespace(model=answer["model"], stop_reason=answer["stop_reason"], content=content, usage=_attributes(answer["usage"]))
 
 
 def resolve(client: Any, wanted: dict[str, dict[str, Any]], store: Store, spend: Spend, *, batch: bool, log: Callable[[str], None] = print,

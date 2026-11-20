@@ -40,11 +40,12 @@ from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_
 from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
+from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
-                      live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
+                      live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
 from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, restore_owners, sync, upload_document_key, upload_key,
@@ -268,26 +269,56 @@ def _run_header(run_id: uuid.UUID | None) -> dict[str, str] | None:
     return None if run_id is None else {RUN_ID_HEADER: str(run_id)}
 
 
+Billed = TypeVar("Billed")
+
+
+def _billed(calls: list[ModelCall], outcome: Billed) -> Billed:
+    """A writer's draft or reading, its call to the model, when it made one, added to the request's calls (ADR-0120)."""
+    call = getattr(outcome, "call", None)
+    if call is not None:
+        calls.append(call)
+    return outcome
+
+
+def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: uuid.UUID | None) -> None:
+    """Each call to the model the request made, with who asked and the request's run (ADR-0120). A row that cannot be written is
+    named in the log and the answer still goes back: the run is the request's receipt, and the provider's usage page holds the call."""
+    engine = getattr(request.app.state, "records", None)
+    if engine is None or not calls:
+        return
+    try:
+        record_model_calls(engine, calls, actor=actor, user_email=_email(request), run_id=run_id)
+    except SQLAlchemyError as exc:
+        print(f"{len(calls)} model call(s) of {request.url.path} could not be recorded: {str(exc).splitlines()[0]}", flush=True)
+
+
 Body = TypeVar("Body", bound=BaseModel)
 
 
 def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body],
-             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None) -> Body:
+             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None, calls: list[ModelCall] | None = None) -> Body:
     """Compute, record the outcome, and attach the run id (ADR-0026).
 
     A 422 raised while computing is recorded as a rejection and re-raised with the run id in its
     header; a successful body is recorded as returned, without run_id, and returned with it. `llm_of`
-    names the language model whose draft the body holds, for the record (ADR-0052).
+    names the language model whose draft the body holds, for the record (ADR-0052). `calls` is filled by
+    `compute` with each call to the model it made; they are written after the run, naming it, however
+    the request ends (ADR-0120): a call that was made was billed.
     """
+    run_id: uuid.UUID | None = None
     try:
-        body = compute()
-    except HTTPException as exc:
-        if exc.status_code != 422:
-            raise
-        run_id = _record(request, actor, problem, error=str(exc.detail))
-        raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
-    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}),
-                     llm=llm_of(body) if llm_of is not None else (None, None))
+        try:
+            body = compute()
+        except HTTPException as exc:
+            if exc.status_code != 422:
+                raise
+            run_id = _record(request, actor, problem, error=str(exc.detail))
+            raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
+        run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}),
+                         llm=llm_of(body) if llm_of is not None else (None, None))
+    finally:
+        if calls:
+            _record_calls(request, actor, calls, run_id)
     if run_id is None:
         return body
     response.headers[RUN_ID_HEADER] = str(run_id)
@@ -1425,13 +1456,15 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
     receipt = ExplainReceipt(job_id=str(job_id), kind=problem.kind,
                              facts_sha256=hashlib.sha256(json.dumps(seen, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    calls: list[ModelCall] = []
 
     def compute() -> ExplainResponse:
-        draft = assistant.explain_setup(checklist, template) if problem.kind == "setup" else assistant.explain_result(facts, template)
+        draft = _billed(calls, assistant.explain_setup(checklist, template) if problem.kind == "setup" else assistant.explain_result(facts, template))
         return ExplainResponse(run_id=None, job_id=str(job_id), kind=problem.kind, writer=draft.writer, model=draft.model, prose=list(draft.prose),
                                withheld=draft.withheld, reason=draft.reason, facts=facts if problem.kind == "result" else {"checklist": checklist})
 
-    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
 
 
 @app.get("/v1/coupons", response_model=list[CouponSummary])
@@ -1532,6 +1565,7 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
     answer worded from the engine's numbers by the template or, behind the setting, by the model with the number guard (ADR-0052).
     Recorded with its actor and, when a model wrote the words, the model's name (ADR-0026)."""
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    calls: list[ModelCall] = []
 
     def compute() -> LaminateAnswer:
         try:
@@ -1547,7 +1581,7 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
             raise HTTPException(status_code=422, detail=str(exc) or exc.__class__.__name__) from exc
         facts = facts_of(case, results, solution, failures, summary)
         template = sentences_of(facts)
-        draft = assistant.explain_laminate(facts, template)
+        draft = _billed(calls, assistant.explain_laminate(facts, template))
         return LaminateAnswer(
             run_id=None, engine_version=version("anisotropy-engine"), report_units=problem.report_units, units=unit_labels(problem.report_units),
             case=case, results={key: _json_value(value) for key, (value, _scale) in results.items()}, criteria=list(failures),
@@ -1555,7 +1589,8 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
             writer=draft.writer, model=draft.model, prose=list(draft.prose), withheld=draft.withheld, reason=draft.reason, facts=facts,
         )
 
-    return _deliver(request, response, actor, problem, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+    return _deliver(request, response, actor, problem, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)
@@ -1623,6 +1658,7 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
     what enters the problem; nothing here computes a result. With no model, or one that does not answer, nothing is proposed and the page
     reads the message with its own patterns. Recorded with the model's name when one read it (ADR-0026)."""
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    calls: list[ModelCall] = []
 
     def compute() -> ProposalResponse:
         rows = [row.model_dump(mode="json", exclude_none=True) for row in proposal.rows]
@@ -1631,10 +1667,10 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
                 "form": model_view_of_form(proposal.form)}
         plate = proposal.plate.model_dump(mode="json") if proposal.plate is not None else None
         if plate is None:
-            reading = assistant.propose(view)
+            reading = _billed(calls, assistant.propose(view))
         else:  # a plate's regions and the place clicked: the same reading, with supports and loads in its schema (ADR-0101)
             view["plate"] = plate_view(plate)
-            reading = assistant.propose(view, plate_schema(PROPOSAL_SCHEMA, [r["name"] for r in plate["regions"]]), PLATE_SYSTEM)
+            reading = _billed(calls, assistant.propose(view, plate_schema(PROPOSAL_SCHEMA, [r["name"] for r in plate["regions"]]), PLATE_SYSTEM))
         if reading.raw is None:
             return ProposalResponse(run_id=None, writer=reading.writer, model=None, proposals=[], conditions=[], question=None, dropped=[],
                                     reason=reading.reason)
@@ -1644,7 +1680,8 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
                                 question=kept.question, dropped=[*kept.dropped, *on_plate.dropped], reason=None,
                                 unread=on_plate.not_taken(kept.unread), supports=on_plate.supports, loads=on_plate.loads)
 
-    return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+    return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
 
 
 @app.post("/v1/workspace/result-questions", response_model=ResultQuestionResponse)
@@ -1654,17 +1691,19 @@ def read_result_question(asked: ResultQuestionRequest, actor: Actor, request: Re
     the model or returned: the page runs the request on the results it shows. With no model, or one that does not answer, nothing is read
     and the page's own patterns stand (ADR-0099). Recorded with the model's name when one read it (ADR-0026)."""
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    calls: list[ModelCall] = []
 
     def compute() -> ResultQuestionResponse:
         view = model_view(asked.message, list(asked.quantities), [p.model_dump(mode="json") for p in asked.plies], asked.gauge, asked.picked)
-        reading = assistant.read_question(view, question_schema([q["key"] for q in view["quantities"]], [r["key"] for r in view["regions"]]))
+        reading = _billed(calls, assistant.read_question(view, question_schema([q["key"] for q in view["quantities"]], [r["key"] for r in view["regions"]])))
         if reading.raw is None:
             return ResultQuestionResponse(run_id=None, writer=reading.writer, model=None, request=None, question=None, dropped=[], reason=reading.reason)
         kept = question_guard(reading.raw, asked.message, view)
         return ResultQuestionResponse(run_id=None, writer=reading.writer, model=reading.model, request=kept.request, question=kept.question,
                                       dropped=kept.dropped, reason=None)
 
-    return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+    return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
 
 
 @app.post("/v1/workspace/result-answers", response_model=ResultAnswerResponse)
@@ -1680,11 +1719,13 @@ def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Re
     receipt = ResultAnswerReceipt(question=asked.question, sections=[s.id for s in found],
                                   facts_sha256=hashlib.sha256(json.dumps(facts, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
 
+    calls: list[ModelCall] = []
+
     def named(sections) -> list[TheorySource]:
         return [TheorySource(id=s.id, document=s.document, title=s.title) for s in sections]
 
     def compute() -> ResultAnswerResponse:
-        reading = assistant.answer_question(answer_view(asked.question, facts, found), answer_schema([s.id for s in found]))
+        reading = _billed(calls, assistant.answer_question(answer_view(asked.question, facts, found), answer_schema([s.id for s in found])))
         if reading.raw is None:
             return ResultAnswerResponse(run_id=None, writer=reading.writer, model=None, prose=[], sources=named(found), covered=False, withheld=False,
                                         reason=reading.reason)
@@ -1695,7 +1736,8 @@ def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Re
         return ResultAnswerResponse(run_id=None, writer=reading.writer, model=reading.model, prose=list(kept.prose), sources=named(kept.sources),
                                     covered=kept.covered, withheld=False, reason=None)
 
-    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None),
+                    calls=calls)
 
 
 @app.post("/v1/workspace/theory-sections", response_model=TheorySectionsResponse)
