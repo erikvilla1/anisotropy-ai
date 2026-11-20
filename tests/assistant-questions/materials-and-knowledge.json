@@ -1,0 +1,19 @@
+{
+  "feature": "materials-and-knowledge",
+  "title": "Materials, their values and composite design knowledge",
+  "records": ["ADR-0018", "ADR-0072", "ADR-0107"],
+  "watches": ["lib/materials.ts", "lib/material-library-options.ts", "mcp-server/src/anisotropy_mcp/server.py"],
+  "questions": [
+    {"ask": "what materials can I use?", "kind": "which", "style": "plain", "page": "blank", "route": "model", "answer": {"says": ["IM7"]}, "mcp": {"tool": "list_materials", "args": {}, "says": ["\"material_id\":\"im7-8552\"", "\"coupon_library\":true"]}, "gap": "11: the library's materials are not listed in the chat"},
+    {"ask": "what are the properties of IM7/8552", "kind": "value", "style": "plain", "page": "results", "route": "model", "answer": {"says": ["E1"]}, "mcp": {"tool": "material_values", "args": {"material_id": "im7-8552"}, "says": ["\"E1_pa\""]}, "gap": "11: a library material's values are not given in the chat"},
+    {"ask": "what are the allowables for IM7/8552", "kind": "value", "style": "jargon", "page": "results", "route": "model", "answer": {"says": ["strength"]}, "mcp": {"tool": "material_values", "args": {"material_id": "im7-8552"}, "says": ["\"material_id\":\"im7-8552\""]}, "gap": "11: allowables are not answered in the chat"},
+    {"ask": "what is the ply thickness of IM7/8552", "kind": "value", "style": "plain", "page": "results", "route": "model", "answer": {"says": ["mm"]}, "gap": "11: a library value is not answered in the chat"},
+    {"ask": "what is F2t", "kind": "what-is", "style": "jargon", "page": "results", "route": "model", "answer": {"says": ["transverse tensile strength"]}, "gap": "8: a strength symbol is not explained in words"},
+    {"ask": "is von mises valid for composites", "kind": "yes-no", "style": "jargon", "page": "results", "route": "model", "answer": {"opens": "No"}, "live": {"judge": "Opens with No and names the composite criteria used (criterion 7)"}, "gap": "7: whether Mises suits a composite ply is not answered"},
+    {"ask": "what is the 10% rule", "kind": "what-is", "style": "jargon", "page": "results", "route": "model", "answer": {"says": ["10%"]}, "live": {"judge": "At least 10% of the plies in each of 0°, ±45° and 90°; says where Anisotropy checks it"}, "gap": "11: layup design rules are not in the theory pages"},
+    {"ask": "what do I need to set up a coupon", "kind": "what-is", "style": "plain", "page": "blank", "route": "model", "mcp": {"tool": "describe_coupon_form", "args": {}, "says": ["\"tests_offered\"", "\"unnotched tension\""]}, "live": {"judge": "Names the material, layup, size and load, or starts asking for them"}},
+    {"ask": "is my setup ok?", "kind": "yes-no", "style": "plain", "page": "setup", "route": "model", "mcp": {"tool": "check_setup", "context": "setup", "args": {"values": "example"}, "says": ["\"state\":\"ready\""]}, "live": {"judge": "Checks the setup, or says to type “check”"}},
+    {"ask": "which ASTM test is this coupon for", "kind": "what-is", "style": "jargon", "page": "results", "route": "model", "answer": {"says": ["D3039"]}, "gap": "11: the coupon's standard is on the page but not answered in the chat"},
+    {"ask": "waht is the strength of IM7", "kind": "value", "style": "typo", "page": "results", "route": "model", "answer": {"says": ["MPa"]}, "gap": "11: a library material's strength is not answered in the chat"}
+  ]
+}

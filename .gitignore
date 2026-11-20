@@ -90,3 +90,6 @@ worker-configuration.d.ts
 /public/media/*
 !/public/media/hero.mp4
 !/public/media/hero.jpg
+
+# The real-model check of the assistant keeps its answers here when run with --store assistant-live (ADR-0121); the workflow keeps them as an artifact.
+/assistant-live/

@@ -1,0 +1,22 @@
+{
+  "feature": "follow-ups-and-elements",
+  "title": "A follow-up of a few words, and what an element is",
+  "records": ["ADR-0099 amendment 3"],
+  "watches": ["lib/result-question.ts"],
+  "questions": [
+    {"ask": "now in ply 5", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["stress in ply 3"], "answer": {"kind": "values", "plies": [5], "element": "123"}, "source": "the founder, 2026-11-17"},
+    {"ask": "sigma 1", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["stress in ply 3"], "answer": {"kind": "values", "heading": "σ₁ = 413.9 MPa", "plies": [3]}, "source": "the founder, 2026-11-17"},
+    {"ask": "and at element 130", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["S22 in ply 4"], "answer": {"kind": "values", "heading": "σ₂ = 59.15 MPa", "element": "130"}},
+    {"ask": "what about ply 8", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["S22 in ply 4"], "answer": {"kind": "values", "plies": [8], "columns": ["S22"]}},
+    {"ask": "and the strain", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["S22 in ply 4"], "answer": {"kind": "values", "plies": [4], "columns": ["E11", "E22", "E12"]}},
+    {"ask": "at element 200", "kind": "value", "style": "fragment", "page": "results", "route": "follow-up", "after": ["stress in ply 3"], "answer": {"kind": "values", "plies": [3], "element": "200"}},
+    {"ask": "and in ply 2", "kind": "which", "style": "fragment", "page": "results", "route": "follow-up", "after": ["where is the shear stress highest?"], "answer": {"kind": "extremes", "plies": [2], "columns": ["S12"]}},
+    {"ask": "what does element 183 represent", "kind": "what-is", "style": "plain", "page": "results", "route": "element", "answer": {"kind": "element", "heading": "Element 183", "element": "183"}},
+    {"ask": "what does element 376 represent", "kind": "what-is", "style": "plain", "page": "results", "route": "element", "answer": {"kind": "refused", "says": ["1 to 250"], "never": ["Which result"]}, "source": "the founder, 2026-11-17"},
+    {"ask": "where is element 56", "kind": "what-is", "style": "plain", "page": "results", "route": "element", "answer": {"kind": "element", "element": "56"}},
+    {"ask": "what is it", "kind": "what-is", "style": "fragment", "page": "results", "route": "element", "after": ["what does element 183 represent"], "answer": {"kind": "element", "element": "183"}},
+    {"ask": "what is an element", "kind": "what-is", "style": "plain", "page": "results", "route": "element", "answer": {"kind": "element", "heading": "An element"}},
+    {"ask": "what is this element", "kind": "what-is", "style": "loose", "page": "results", "route": "element", "picked": 183, "answer": {"kind": "element", "element": "183"}},
+    {"ask": "whats elemnt 120", "kind": "what-is", "style": "typo", "page": "results", "route": "element", "answer": {"kind": "element", "element": "120"}, "gap": "10: a typo of element is not read"}
+  ]
+}
