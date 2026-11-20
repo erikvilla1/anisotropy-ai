@@ -6,6 +6,10 @@ documents' own text, cut and ranked.
 
 The ranking is BM25 over words (k1 = 1.5, b = 0.75), with a section's title counted three times. It is the same for the same question
 and documents, so a test can pin which section a question finds.
+
+The wing's sections (a `##` heading that names a file of the wing, as `wing/` or `wing_model.py`, and the sections under it) are read but
+not searched by default (ADR-0102 amendment 1): no chat answers a question about a wing yet, and their words would change how every other
+section ranks. The wing's chat will search them by its own subject (ADR-0125).
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ also only one two both here ply plies value values""".split())
 # two spellings or forms of one word, so a question in one finds a page in the other
 SAME = {"max": "maximum", "min": "minimum", "tied": "tie", "fiber": "fibre", "sigma": "σ", "tau": "τ", "epsilon": "ε", "meshe": "mesh"}
 K1, B, TITLE_WEIGHT = 1.5, 0.75, 3
+WING_FILE = re.compile(r"\(`wing[/_][^`]*`\)\s*$")  # a heading that names a file of the wing: `wing/`, `wing_model.py`
 MAX_SECTION_CHARS = 6000  # what one section may hand a model; a longer one is cut at a paragraph
 
 
@@ -42,6 +47,7 @@ class Section:
     document: str  # "Laminate theory"
     title: str  # "5. Failure", without the file named in the heading
     text: str  # the section's own text, with its sub-headings' text apart (each is its own section)
+    subject: str = ""  # "wing" for the wing's sections, found only when asked for by subject; "" for every other
 
     @property
     def words(self) -> list[str]:
@@ -76,13 +82,14 @@ def split(source: str, document: str, text: str) -> list[Section]:
     """A document's sections: one per `##` or `###` heading, holding the text up to the next heading of either level. A sub-section's
     title carries its parent's ("5. Failure: Fixed and variable loading")."""
     sections: list[Section] = []
-    parent, title, lines = "", "", []
+    parent, title, subject, lines = "", "", "", []
 
     def close() -> None:
         body = "\n".join(lines).strip()
         if title and body:
             slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-            sections.append(Section(f"{source}:{slug}", source, document, title, body[:MAX_SECTION_CHARS].rsplit("\n\n", 1)[0] if len(body) > MAX_SECTION_CHARS else body))
+            cut = body[:MAX_SECTION_CHARS].rsplit("\n\n", 1)[0] if len(body) > MAX_SECTION_CHARS else body
+            sections.append(Section(f"{source}:{slug}", source, document, title, cut, subject))
 
     for line in text.splitlines():
         heading = HEADING.match(line)
@@ -93,6 +100,7 @@ def split(source: str, document: str, text: str) -> list[Section]:
         name = re.sub(r"\s*\(`[^`]*`\)\s*$", "", heading.group(2))  # the file a heading names is the code's, not the reader's
         if heading.group(1) == "##":
             parent, title = name, name
+            subject = "wing" if WING_FILE.search(heading.group(2)) else ""
         else:
             title = f"{parent}: {name}" if parent else name
         lines = []
@@ -109,9 +117,15 @@ def sections() -> tuple[Section, ...]:
     return tuple(found)
 
 
+def of_subject(subject: str = "") -> tuple[Section, ...]:
+    """The sections of one subject: by default every section but the wing's, which only the wing's chat will search (ADR-0102 amendment 1)."""
+    return tuple(section for section in sections() if section.subject == subject)
+
+
 def find(question: str, among: tuple[Section, ...] | None = None, limit: int = 2) -> list[tuple[Section, float]]:
-    """The sections a question's words find, best first, each with its score; none when no word of the question is in any section."""
-    among = sections() if among is None else among
+    """The sections a question's words find, best first, each with its score; none when no word of the question is in any section. The
+    sections searched are `among`, by default every section but the wing's."""
+    among = of_subject() if among is None else among
     asked = set(words_of(question))
     if not asked or not among:
         return []

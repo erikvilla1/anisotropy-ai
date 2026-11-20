@@ -1,7 +1,7 @@
 ---
 name: chat-answer-quality
-description: How to judge whether an answer of the Anisotropy workspace chat to an engineer's question is a good one, and how to review a set of questions asked on the live site. Load before reviewing chat answers, before a live test of the assistant, and before changing how the chat reads a question or what a card says (lib/result-question.ts, lib/result-failure.ts, components/studio/coupon-chat.tsx, the API's workspace routes). Holds the eleven criteria, the review procedure, how to check the numbers independently, and worked examples from the founder's own questions.
-version: 0.1.1
+description: How to judge whether an answer of the Anisotropy workspace chat to an engineer's question is a good one, how to review a set of questions asked on the live site, and how to write a feature's questions into the question banks and run the assistant's checks (ADR-0121). Load before reviewing chat answers, before a live test of the assistant, before changing how the chat reads a question or what a card says (lib/chat-route.ts, lib/result-question.ts, lib/result-failure.ts, components/studio/coupon-chat.tsx, the API's workspace routes, the MCP server's tools), and before calling a feature's pull request ready. Holds the eleven criteria, the review procedure, how to check the numbers independently, worked examples from the founder's own questions, and the question banks.
+version: 0.2.0
 ---
 
 # Chat answer quality
@@ -70,6 +70,17 @@ IM7/8552 [45/0/-45/90]s unnotched tension, 1 mm applied.
 | "von misses" | The ply's von Mises, with no caution | Weak, 7 |
 | "does it mean that once it reaches 1 mm it got 22740 N, but for the first ply failure its 23450 N" | The "which ply fails first" card again | Fails 1 and 6: the answer is "yes" |
 
+## Procedure: a feature's questions (ADR-0121)
+
+Every feature that changes what the assistant reads or answers brings the questions a user would ask of it. The banks are `tests/assistant-questions/<feature>.json`; `harness.ts` beside them describes every field.
+
+1. **Find the bank** whose `watches` names the files you changed, or start one: `feature`, `title`, `records` (the ADRs), `watches` (the files whose change means the bank must change) and `questions`. A bank written before its feature is built gets `waiting` with the reason, and each question a `live` saying what a good answer holds.
+2. **Ask the way users ask.** Ten questions at least, of two kinds or more and three styles or more, one with a typo. Mix: a value, which or where, yes or no, what is it, why, a change, a command, and an honest decline; then fragments that lean on the message before (`after`), loose words, units, and another program's words (Abaqus, Ansys). Put the founder's own words in when he asked it (`source`).
+3. **Say what a good answer holds**, by the criteria above: `route` (who answers with a model, as on the hosted site) and `offline` when no model reads it; `answer` (kind, heading, how it opens, words it says and never says, rows, plies, quantities, element) for the page's answer; `sections` for a why question; `mcp` (tool, arguments, words its answer holds, `context`) for an MCP client; `live` (`request`, `proposals`, `plate`, `covered`, `judge`) for what a model should make of it. Write what is right, not what the page says today.
+4. **Mark a known gap** where the answer falls short: `gap` with the criterion's number and what goes wrong (`search:` for the theory search's, `mcp:` for the MCP server's). The check expects the fault and fails once it is fixed; take the mark off with the fix.
+5. **Run check 1**: `npx tsx --test tests/assistant-questions.test.ts`, `cd api && uv run pytest tests/test_assistant_questions.py`, `cd mcp-server && uv run pytest tests/test_questions.py`. A new route of the chat, of `/v1/workspace/` or a new MCP tool fails until a question takes it.
+6. **Before calling the pull request ready**, start the "Assistant check" workflow (check 2) for the feature's banks and read its report: `uv run --project api python scripts/assistant-live.py --features <feature> --dry-run` first says what it would send. It spends the founder's key: run it within its budget, once per feature, not per push; a run of answers already stored costs nothing. A pull request that changes the assistant and needs no questions says so in its description: "Assistant questions: none needed — <reason>" (check 3).
+
 ## Pitfalls
 
 - A message sent through the model on the hosted site uses the founder's key. Read the records freely; ask before sending questions of your own.
@@ -77,9 +88,12 @@ IM7/8552 [45/0/-45/90]s unnotched tension, 1 mm applied.
 - Before saying a change to an answer is live, read the `git_commit` of a fresh run record. On 2026-11-17 the hosted API answered with the code of before a deploy for half an hour (ADR-0056 amendment 10 restarts it at the first request after a deploy).
 - A screenshot shows one scroll position. On 2026-11-17 "Ready to run" beside finished results was reported as a failure of criterion 9; the chat was scrolled up to messages from the page's load. Read the whole chat, or the records' times, before reporting what the chat says now.
 - Do not judge an answer by its length or polish. Judge whether the engineer could act on it without asking again.
+- A bank's expectation copied from what the page answers today encodes the fault. Write the good answer and mark the gap.
+- The harness draws the page's answer with the page's functions but repeats how the component puts them together (`pageAnswer`, `modelAnswer` in `harness.ts`). When the component's order or wording changes, change the harness with it.
 
 ## Verification
 
 - Every question in the review has a kind, a reader and a verdict with a criterion number.
 - At least one number of each kind was recomputed outside the engine, and the working is shown in the report.
 - The report leads with the verdict and says what was not seen.
+- A feature's pull request changed a bank, or says why none was needed, and its real-model run's report is linked in the pull request.

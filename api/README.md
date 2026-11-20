@@ -142,6 +142,17 @@ uv run --project api python -m anisotropy_api.cost_report --month 2026-11 --week
 
 A week whose `flag` starts with "look" cost more than 30% more per call, or thought more than 30% more, than the four before it: see whether the model, the effort or a prompt changed that week (`git log`), else ask the provider. Once a month, set the month's total by model beside the provider's usage page for the key; they should agree within a few percent. When a price changes or another model is named, update `PRICES` and `PRICES_AS_OF`; until then the report counts the calls it could not price.
 
+### The monthly report (ADR-0120 amendment 1)
+
+On the 1st of each month a scheduled session of Claude reads last month's views and posts a short report in the project: the total and the month before, who used most and for what, flagged weeks with what changed in them, unpriced models, and suggestions. It reads through a login that can see the three views and nothing else. Make it once, or again to replace its password, from the repository root with the Neon CLI signed in:
+
+```powershell
+$env:DATABASE_URL_UNPOOLED = neon connection-string production
+uv run --project api python scripts/create-cost-reader.py
+```
+
+Paste the address it prints into the project's cloud environment as `COST_READER_DATABASE_URL` (Project settings, Cloud environment, the gear), never into a chat, a file here or a GitHub log. The environment's network access must allow `*.neon.tech`.
+
 ## Run it
 
 From the repository root, in PowerShell:

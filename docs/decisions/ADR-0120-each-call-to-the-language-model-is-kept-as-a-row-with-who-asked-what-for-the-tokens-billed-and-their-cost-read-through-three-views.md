@@ -1,6 +1,6 @@
 # ADR-0120: Each call to the language model is kept as a row with who asked, what for, the tokens billed and their cost, read through three views
 
-- Status: Proposed
+- Status: Proposed; a read-only login and a report each month since amendment 1
 - Date: 2026-11-19
 - Decided by: Founder, 2026-11-19 ("so essentially the table will have what we are getting billed for then, so we will have a history of the billing and can physically see the acutal cost on what is running in our software using the api key"; then "ok let's do it, this sounds goo dfo rus to monitor costs over tiem as well and what users are using up the costs, create the table make it opimale and easy to udnerstand for someone to read and see who it is what is is etc", choosing to record who asked as well as what for. The columns, the views, the 30% flag, pricing at the time of the call and the report command are the drafter's) | Drafted by: Claude Code
 - Related: `api/src/anisotropy_api/model_costs.py`, `api/src/anisotropy_api/assistant.py` (`ClaudeAssistant._ask`), `api/src/anisotropy_api/main.py` (`_deliver`, `_record_calls`), `api/src/anisotropy_api/records.py` (`ModelCallRow`, `record_model_calls`), `api/alembic/versions/0013_model_calls.py`, `api/src/anisotropy_api/cost_report.py`, `api/tests/test_model_costs.py`, [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md) (the assistant and its one provider interface), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md) (the run records), [ADR-0104](ADR-0104-behind-the-sign-in-a-run-a-job-its-files-and-a-coupon-are-their-owners-alone-a-stranger-is-answered-as-if-there-were-none-and-the-local-api-narrows-nothing.md) (records by signed-in email)
@@ -60,3 +60,18 @@ Within it:
 - A month's total by model differs from the provider's usage page for the key by more than 5%: either the key is used somewhere we do not record, or the pricing here is wrong.
 - A week is flagged and no change of model, effort or prompt explains it: that is what this was built to show, and it is taken up with the provider.
 - Nobody reads the views or the report in three months: the table is then a cost without a use.
+
+## Amendment 1, 2026-11-20 (a read-only login and a report each month; confirmed by the founder)
+
+**Context.** On 2026-11-19 the founder asked for "a live agent that tells me or send me report on a weekly basis or monthly basis, then creates a summary tel me any flags, suggestions". The rows are in the hosted database (Neon), whose owner's address is a deploy secret. The repository is public, so its Actions logs and artifacts can be read by anyone. The project's cloud environment reaches the web only through an HTTPS proxy (a plain PostgreSQL connection is refused there), and on 2026-11-20 its network policy refused `*.neon.tech`.
+
+**Options.**
+- A scheduled GitHub workflow running `cost_report`: rejected. The report names people by email, and a public repository's logs and artifacts are public.
+- A scheduled task on the founder's PC, like the weekly coupon check: rejected. The PC must be on, and the report would not reach the project.
+- A scheduled session of Claude in the project's cloud environment with the owner's address: rejected. The report only reads, and a leaked owner address could delete the runs.
+- A scheduled session with a login that can read the three views and nothing else: chosen.
+- Weekly and monthly, or monthly only: the founder chose monthly ("for right now let's leave it at monthly", 2026-11-19).
+
+**Decision.** `scripts/create-cost-reader.py`, run once by the founder with the owner's address, creates the role `cost_reader` in SQL. A role made in Neon's console would join `neon_superuser` and could read and write every table. The role gets a random password, SELECT on `model_costs_by_person`, `model_costs_by_feature` and `model_costs_by_day` alone, and read-only sessions. The script prints the reader's address once. The founder puts it in the cloud environment as `COST_READER_DATABASE_URL`, never in a chat or the repository. A second run gives a new password and the old one stops working. On the 1st of each month a scheduled session reads the last month through Neon's HTTP query endpoint, with the address in the `Neon-Connection-String` header. It posts a short report in the project: the total and the month before, who used most and for what, every flagged week with what changed that week in `git log`, calls of an unpriced model, and suggestions. The network policy must allow `*.neon.tech`.
+
+**Evidence.** `cd api && TEST_DATABASE_URL=... uv run pytest -q tests/test_cost_reader.py` gave 3 passed on 2026-11-20 against PostgreSQL 16 in a cloud container. The tests check that the reader reads the three views and is refused `model_calls`, `runs`, `jobs` and `projects`, that it cannot create, delete or refresh, and that a second run replaces the password. Neon's HTTP endpoint from the cloud environment: no evidence yet (UNVERIFIED until the first report runs).
