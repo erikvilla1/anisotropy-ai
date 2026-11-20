@@ -189,14 +189,15 @@ def test_the_views_add_up_by_person_feature_and_day_and_flag_a_jump(empty_runs):
     record_model_calls(engine, usual + this_week[:1], actor="browser", user_email=EMAIL, run_id=None)
     record_model_calls(engine, this_week[1:], actor="assistant", user_email=None, run_id=None)
     with engine.connect() as connection:
-        people = connection.execute(text("SELECT person, calls, cost_usd, unpriced_calls, features FROM model_costs_by_person WHERE month = '2026-11' "
-                                         "ORDER BY person")).all()
+        people = connection.execute(text("SELECT person, calls, cost_usd, unpriced_calls, features FROM model_costs_by_person "
+                                         "WHERE month = '2026-11'")).all()
         weekly = connection.execute(text("SELECT feature, calls, cost_per_call_usd, usual_cost_per_call_usd, thinking_share_pct, flag "
                                          "FROM model_costs_by_feature WHERE week_of = '2026-11-16' ORDER BY feature")).all()
         first = connection.execute(text("SELECT flag FROM model_costs_by_feature WHERE week_of = '2026-10-19'")).scalar_one()
         days = connection.execute(text("SELECT day, model, calls, cost_usd FROM model_costs_by_day WHERE day = '2026-11-16'")).all()
     # November holds the weeks of the 2nd, 9th and 16th for Erik's email (three calls), and the MCP server's unpriced one
-    assert [tuple(row) for row in people] == [("(no sign-in: assistant)", 1, None, 1, "answer_question"),
+    # sorted here, not by the database: how "(" sorts against a letter depends on the database's collation (C here, en_US on CI)
+    assert sorted(tuple(row) for row in people) == [("(no sign-in: assistant)", 1, None, 1, "answer_question"),
                                               (EMAIL, 3, Decimal("0.110000"), 0, "explain_result")]
     assert [tuple(row) for row in weekly] == [
         ("answer_question", 1, None, None, Decimal("77.8"), "no earlier week to compare with"),
