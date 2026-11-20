@@ -16,12 +16,14 @@ test("a wing's change is said in the page's labels: a half stack as its laminate
   changed = withValue(changed, "skin.half_stack", [0, 45, -45, 0, 0]);
   changed = withValue(changed, "skin.core", "divinycell-h250");
   changed = withValue(changed, "geometry.rib_spacing", undefined);
+  changed = withValue(changed, "design_rules.max_in_a_row", 3);
   changed = withValue(changed, "source", "Another note"); // where it came from is not a change
   assert.deepEqual(wingChanges(EXAMPLE_WING, changed), [
     "Chord: 0.45 → 0.5",
     "Rib spacing: 0.5 → blank",
     "Skin layup: [0/45/-45/0]s → [0/45/-45/0/0]s",
     "Core: Divinycell H45 → Divinycell H250",
+    "Most plies of one angle in a row: blank → 3",
   ]);
   assert.equal(wingKey(withValue(EXAMPLE_WING, "source", "x")), wingKey(EXAMPLE_WING));
 });

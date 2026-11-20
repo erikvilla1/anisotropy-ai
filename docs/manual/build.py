@@ -37,7 +37,7 @@ ROOT = HERE.parents[1]
 GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
-ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics", "summary", "tow",
+ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics", "summary", "layup_rules", "tow",
                   "sandwich", "wing.airfoil", "wing.atmosphere", "wing.loads", "wing.section", "wing.analysis", "wing.aeroelastic", "wing.flutter",
                   "cases")  # the case runner last: its listing is printed once, in the verification section
 FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",

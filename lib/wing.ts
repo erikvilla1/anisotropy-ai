@@ -123,7 +123,7 @@ export function wingFileName(wing: WingDescription, extension = "toml"): string 
 /** A field of the setup: where its value sits in the description, what it is, and its unit kind (null for a pure number). A
  * `list` field holds numbers typed as a list; an `optional` one may be left empty, which removes it from the description. */
 export type WingField = {
-  path: string; label: string; hint?: string; unit?: UnitKind | "speed" | "area" | "per_rad" | "chord" | "deg"; optional?: boolean; list?: boolean;
+  path: string; label: string; hint?: string; unit?: UnitKind | "speed" | "area" | "per_rad" | "chord" | "deg" | "percent"; optional?: boolean; list?: boolean;
 };
 
 export const GEOMETRY_FIELDS: readonly WingField[] = [
@@ -138,6 +138,12 @@ export const AERO_FIELDS: readonly WingField[] = [
   { path: "aerodynamics.aerodynamic_center", label: "Aerodynamic center", hint: "As a share of the chord", unit: "chord" },
   { path: "aerodynamics.pitching_moment_coefficient", label: "Pitching moment coefficient", hint: "About the aerodynamic center, nose up positive" },
   { path: "aerodynamics.lift_curve_slope", label: "Lift curve slope", hint: "The section's, per radian. Divergence and aileron reversal need it", unit: "per_rad", optional: true },
+];
+
+/** The limits the layups are judged by (ADR-0123); left empty, the usual ones. */
+export const DESIGN_RULE_FIELDS: readonly WingField[] = [
+  { path: "design_rules.min_percent", label: "Least share of each direction", hint: "Of 0°, +45°, −45° and 90°. Empty: 10 %", unit: "percent", optional: true },
+  { path: "design_rules.max_in_a_row", label: "Most plies of one angle in a row", hint: "Empty: 4. Thicker plies call for fewer", optional: true },
 ];
 
 export const ENVELOPE_FIELDS: readonly WingField[] = [
@@ -205,6 +211,7 @@ export function unitLabel(wing: WingDescription, unit: WingField["unit"]): strin
   if (unit === "per_rad") return "per rad";
   if (unit === "chord") return "of the chord";
   if (unit === "deg") return "°";
+  if (unit === "percent") return "%";
   return UNIT_LABELS[units][unit];
 }
 
@@ -257,7 +264,22 @@ export type WingReport = {
     reversal_over_dive: number | null; divergence_never: boolean; reversal_never: boolean; needs: string[];
   } | null;
   not_run: { number: number; label: string; altitude: number; needs: string }[];
+  rule_limits: { min_percent: number; max_in_a_row: number };
+  rules: WingRule[];
 };
+/** A design rule judged on one layup (ADR-0123): a warning when not met, never a margin. `words` is the sentence the page shows. */
+export type WingRuleName = "ten_percent" | "in_a_row" | "balance" | "symmetry";
+export type WingRule = {
+  part: "skin" | "spar" | "rib"; rule: WingRuleName; met: boolean; words: string; source: string; detail: Record<string, unknown>;
+};
+export const RULE_NAMES: readonly WingRuleName[] = ["ten_percent", "in_a_row", "balance", "symmetry"];
+
+/** A rule's name as the page prints it; the share rule is named by its limit ("10 % rule"). */
+export function ruleTitle(rule: WingRuleName, limits: { min_percent: number }): string {
+  if (rule === "ten_percent") return `${shown(limits.min_percent)} % rule`;
+  return { in_a_row: "Plies of one angle in a row", balance: "Balance", symmetry: "Symmetry" }[rule];
+}
+
 export type WingWall = { name: string; x: number[]; z: number[] };
 export type WingViews = {
   half_span: number; chord: number;

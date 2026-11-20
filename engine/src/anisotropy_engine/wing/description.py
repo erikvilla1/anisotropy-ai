@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, NonNegativeFloat, PositiveFloat, mod
 from ..failure import Criterion
 from ..lamina import Lamina
 from ..laminate import Ply
+from ..layup_rules import RuleCheck, RuleLimits, layup_rules
 from .airfoil import Airfoil
 from .atmosphere import TROPOPAUSE_M
 
@@ -84,6 +85,10 @@ class Layup(BaseModel):
         """Both halves stacked without the core: the laminate that carries the in-plane load."""
         face = self.face()
         return face + face[::-1]
+
+    def rules(self, limits: RuleLimits | None = None) -> tuple[RuleCheck, ...]:
+        """The design rules on both halves, listed from one outer face to the other, the core between them (ADR-0123)."""
+        return layup_rules(self.plies(), limits, core_after=len(self.half_stack_deg) if self.core_thickness_m > 0 else None)
 
     @property
     def fiber_thickness_m(self) -> float:
@@ -157,6 +162,7 @@ class Wing(BaseModel):
     spar: Layup
     aerodynamics: Aerodynamics
     rib: Layup | None = None  # the ribs' layup, when the geometry has ribs; the hand calculation does not use it
+    design_rules: RuleLimits = RuleLimits()  # the limits its layups are judged by (ADR-0123); they change no number of the analysis
 
     @model_validator(mode="after")
     def _checked(self) -> "Wing":

@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  AERO_FIELDS, AILERON_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
-  feProgress, readNumber, readNumbers, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName, wingToml,
-  type WingDescription, type WingField, type WingShape, type WingValue,
+  AERO_FIELDS, AILERON_FIELDS, DESIGN_RULE_FIELDS, ENVELOPE_FIELDS, EXAMPLE_WING, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, OWN_MATERIAL_KEYS,
+  feProgress, readNumber, readNumbers, ruleTitle, shown, SPEED_FIELDS, unitLabel, unitsOf, unitText, valueAt, WING_CORES, WING_MATERIALS, wingFileName,
+  wingToml, type WingDescription, type WingField, type WingShape, type WingValue,
 } from "@/lib/wing";
 import { shapeWing, StudioError } from "@/lib/studio-api";
 import { useWing } from "./wing-context";
@@ -223,8 +223,41 @@ function LayupFields({ member, title }: { member: "skin" | "spar" | "rib"; title
       {choice ? <WingNumber field={{ path: `${member}.core_thickness`, label: "Core thickness", unit: "thickness" }} /> : null}
       {choice === "own" ? <WingNumber field={{ path: `${member}.core_density`, label: "Core density", unit: "density", hint: "Its weight only; the hand calculation leaves the core's own stiffness out" }} /> : null}
       {thickness !== undefined && !choice ? <button type="button" className="studio-text-button" onClick={() => setValue(`${member}.core_thickness`, undefined)}>Remove the core thickness</button> : null}
+      <LayupRules member={member} />
     </fieldset>
   );
+}
+
+/** The design rules of one layup as the engine judged them (ADR-0123): each rule met or a warning, the sentence that says why, and
+ * where the rule comes from. A warning changes no margin. */
+function LayupRules({ member }: { member: "skin" | "spar" | "rib" }) {
+  const { answer } = useWing();
+  if (!answer?.report.rules) return null;
+  const rules = answer.report.rules.filter((r) => r.part === member);
+  if (!rules.length) return null;
+  return (
+    <ul className="wing-rules" data-testid={`wing-rules-${member}`}>
+      {rules.map((r) => (
+        <li key={r.rule} data-testid={`wing-rule-${member}-${r.rule}`} data-met={r.met}>
+          <span className="wing-rule-head">
+            <span className={`studio-badge studio-badge-${r.met ? "pass" : "warn"}`}>{r.met ? "met" : "warning"}</span>
+            <span className="wing-rule-title">{ruleTitle(r.rule, answer.report.rule_limits)}</span>
+          </span>
+          <span className="wing-rule-words">{r.words}</span>
+          <span className="wing-rule-source">{r.source}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The Layup step's badge: a warning while any rule is not met, "rules met" once every one is. */
+function useRulesState(): { state: "pass" | "warn" | "none"; note: string } {
+  const { answer, stale } = useWing();
+  const rules = answer?.report.rules;
+  if (!rules?.length || stale) return { state: "none", note: "" };
+  const unmet = rules.filter((r) => !r.met).length;
+  return unmet ? { state: "warn", note: `${unmet} design rule${unmet === 1 ? "" : "s"} not met` } : { state: "pass", note: "" };
 }
 
 function LoadsPanel() {
@@ -353,6 +386,7 @@ function ShapePanel() {
 
 export function WingRail() {
   const { wing, answer, stale, working, problem } = useWing();
+  const rules = useRulesState();
   const status = problem ? "" : working || stale ? "Working the wing…"
     : answer ? `Worked ${answer.report.cases.length} case${answer.report.cases.length === 1 ? "" : "s"} in ${Math.max(answer.report.seconds, 0.001).toFixed(3)} s.` : "";
   const ribs = valueAt(wing, "geometry.rib_spacing") !== undefined;
@@ -364,10 +398,15 @@ export function WingRail() {
         <Fields fields={GEOMETRY_FIELDS} />
       </StepPanel>
       <MaterialPanel />
-      <StepPanel id="wing-layup" step={4} title="Layup">
+      <StepPanel id="wing-layup" step={4} title="Layup" state={rules.state} word="rules met" note={rules.note}>
         <LayupFields member="skin" title="Skins" />
         <LayupFields member="spar" title="Spar webs" />
         {ribs ? <LayupFields member="rib" title="Ribs" /> : null}
+        <fieldset className="wing-fieldset" data-testid="wing-design-rules">
+          <legend>Design rules</legend>
+          <p className="studio-hint">Each layup is checked against these. A rule not met is a warning: it changes no margin.</p>
+          {DESIGN_RULE_FIELDS.map((f) => <WingNumber key={f.path} field={f} />)}
+        </fieldset>
       </StepPanel>
       <StepPanel id="wing-aero" step={5} title="Aerodynamics" open={false} note={`moment coefficient ${textOf(valueAt(wing, "aerodynamics.pitching_moment_coefficient"))}`}><Fields fields={AERO_FIELDS} /></StepPanel>
       <LoadsPanel />

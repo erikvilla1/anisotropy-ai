@@ -1004,6 +1004,34 @@ Each root gives $`\omega = \omega_\theta/\sqrt{\operatorname{Re} Z}`$, the speed
 
 Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against the exact function at three reduced frequencies; the strip $`a = -1/5`$, $`x_\theta = 1/10`$, $`r^2 = 6/25`$, $`\sigma = 2/5`$, $`\mu = 20`$ flutters at $`U/(b\omega_\theta) = 2.170`$; mass moved forward, a heavier strip and thinner air each raise the speed. `fea/tests/test_wing_model.py` solves the same strip by the p-k method with the exact $`C(k)`$ from the Hankel functions, written without this module: 2.184, within 1 %.
 
+## 14. Design rules of a stack (`layup_rules.py`)
+
+Four rules a designer checks on a stack before any load (ADR-0123). They are rules of practice, not physics: a rule not met is a warning, nothing else in the engine reads the result, and no number of an analysis changes with it. Plies are counted, not weighed by thickness, as the rules are stated, and a fiber at $`\theta`$ is the fiber at $`\theta + 180°`$, so $`135°`$ counts as $`-45°`$ and $`-90°`$ as $`90°`$. The limits are the designer's: the least share $`s_{\min}`$ (default 10 %, at most 25 %, since four directions cannot each hold more) and the most plies of one angle in a row $`r_{\max}`$ (default 4).
+
+The 10 % rule asks that the laminate be carried by its fibers in every direction (MIL-HDBK-17-3F, Volume 3). With $`n`$ plies and $`n_d`$ of them in direction $`d`$, it is met when
+
+```math
+\frac{n_d}{n} \ge s_{\min} \qquad \text{for each } d \in \{0°, +45°, -45°, 90°\},
+```
+
+a ply at any other angle counting only in $`n`$. It is checked by `ten_percent_rule`.
+
+<!-- code: ten_percent_rule -->
+
+Plies of one angle next to each other act as one thick ply, which cracks between plies more readily; the run counts across the middle of a solid laminate, where the two middle plies touch, but not across a core. The longest run, its angle and its first and last ply are computed by `in_a_row_rule`, and the rule is met when that run is at most $`r_{\max}`$. Thicker plies usually call for a smaller $`r_{\max}`$.
+
+<!-- code: in_a_row_rule -->
+
+Balance and symmetry are the stack's own facts of section 10 (`is_balanced`, `is_symmetric`): a balanced stack has $`A_{16} = A_{26} = 0`$, so stretching does not shear it, and a symmetric one has $`\mathbf{B} = 0`$, so stretching does not bend it. Their words, the plies at each off-axis angle without a partner and the first ply that does not mirror its own, are checked by `balance_rule` and `symmetry_rule`; a core must also sit in the middle, with as many plies on each side.
+
+<!-- code: balance_rule, symmetry_rule -->
+
+All four on one stack, listed from one face to the other with the core after a given ply, are checked by `layup_rules`. A wing judges its skins, spar webs and ribs this way, both halves of each with the core between them, by the limits of its file's `[design_rules]`; the wing's report lists every rule of every layup with one plain sentence and the numbers behind it.
+
+<!-- code: layup_rules -->
+
+Checks: `engine/tests/test_layup_rules.py`: stacks counted by hand, among them $`[0/\pm 45/90]_s`$ meeting every rule, one $`90°`$ ply in twelve (8.3 %) short of 10 % and one in ten meeting it, $`[\pm 45/0_2]_s`$ with four $`0°`$ plies across the middle, the same run broken by a core, unpaired $`+45°`$ plies, partners of another thickness, and a core off the middle; the example wing's limits changed with every analysis number the same.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -1011,5 +1039,6 @@ Checks: `engine/tests/test_wing_flutter.py`: $`C(k)`$ at its limits and against 
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
+- Design rules for ply drops (taper ratio, plies dropped per step, plies covering a drop), which need a stack that changes along the span
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
 - For a wing, in the beam: taper, sweep and twist; shear lag; ribs as load paths; the skin outside the two spars; the walls' own bending stiffness and the core's in-plane stiffness; a skin's curve in its buckling; web buckling with the web's bending stress, and skin buckling under shear with compression; the core's transverse shear; relief from the wing's own weight; flaps; flutter beyond two modes on one strip, and divergence and reversal of a swept or tapered wing

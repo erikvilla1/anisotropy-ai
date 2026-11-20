@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, readNumber, readNumbers, valueAt, wingFileName, wingToml, withValue,
-  type WingFeCheck, type WingReport,
+  answerWords, EXAMPLE_WING, FE_STOPPED, feProgress, feWords, handAndModel, marginText, readNumber, readNumbers, RULE_NAMES, ruleTitle, valueAt, wingFileName,
+  wingToml, withValue, type WingFeCheck, type WingReport,
 } from "../lib/wing";
 
 // The wing page's own words and its wing file (ADR-0118). Every number comes from the engine; these only read, write and word it.
@@ -50,6 +50,21 @@ test("the answer is worded from the engine's report: passes or how many fail, th
   assert.equal(answerWords({ ...report, cases: [], governing: null }).verdict, "No case could run yet");
   assert.equal(marginText(-0.25), "−0.250");
   assert.equal(marginText(null), "–");
+});
+
+test("the example's design rules come with its answer: four per layup, its laminates short of 90° plies, named by their limits (ADR-0123)", () => {
+  const report = ANSWER.report as WingReport;
+  assert.deepEqual(report.rule_limits, { min_percent: 10, max_in_a_row: 4 });
+  assert.deepEqual(report.rules.map((r) => `${r.part} ${r.rule}`), ["skin", "spar", "rib"].flatMap((part) => RULE_NAMES.map((rule) => `${part} ${rule}`)));
+  assert.deepEqual(report.rules.filter((r) => !r.met).map((r) => r.part), ["skin", "spar", "rib"]); // the 10 % rule only
+  assert.ok(report.rules.filter((r) => !r.met).every((r) => r.rule === "ten_percent" && r.words.includes("90°")));
+  assert.equal(ruleTitle("ten_percent", report.rule_limits), "10 % rule");
+  assert.equal(ruleTitle("ten_percent", { min_percent: 12.5 }), "12.5 % rule");
+  assert.equal(ruleTitle("in_a_row", report.rule_limits), "Plies of one angle in a row");
+  const limits = withValue(withValue(EXAMPLE_WING, "design_rules.min_percent", 15), "design_rules.max_in_a_row", 3);
+  assert.match(wingToml(limits), /\[design_rules\]\nmin_percent = 15\nmax_in_a_row = 3\n/);
+  assert.equal(valueAt(withValue(limits, "design_rules.min_percent", undefined), "design_rules.max_in_a_row"), 3);
+  assert.equal(valueAt(withValue(withValue(limits, "design_rules.min_percent", undefined), "design_rules.max_in_a_row", undefined), "design_rules"), undefined);
 });
 
 test("the finite element check is worded from its report: both lowest margins, where the model's is, and its root (ADR-0119)", () => {

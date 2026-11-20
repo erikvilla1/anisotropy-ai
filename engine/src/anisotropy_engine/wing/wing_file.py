@@ -18,8 +18,10 @@ or a key the format does not know is refused by name.
 | running load, shear flow | N/m | lb/in |
 | bending and torsion stiffness | N*m^2 | lb*in^2 |
 | mass | kg | lb |
+| design rules: least share of each direction, most plies of one angle in a row | % and a count | the same |
 """
 
+import dataclasses
 import math
 import re
 import tomllib
@@ -28,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
+from ..layup_rules import RuleLimits
 from ..library import library_core, library_material
 from ..units import FOOT, INCH, LBF, POUND_MASS, PSI
 from .airfoil import Airfoil, naca4
@@ -135,9 +138,28 @@ def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
                  core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core)
 
 
+def _design_rules(table: dict) -> RuleLimits:
+    """[design_rules]: the limits the layups are judged by (ADR-0123), each optional, the share in percent."""
+    limits = {}
+    if "min_percent" in table:
+        value = table["min_percent"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= 25:
+            raise ValueError("[design_rules] min_percent is the least share of each of 0, +45, -45 and 90 degrees, above 0 and at most 25 %")
+        limits["min_share"] = value / 100
+    if "max_in_a_row" in table:
+        value = table["max_in_a_row"]
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError("[design_rules] max_in_a_row is the most plies of one angle next to each other, a whole number of at least 1")
+        limits["max_in_a_row"] = value
+    return RuleLimits(**limits)
+
+
 def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     """The wing and its envelope in SI from a wing file's contents."""
-    _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"}, {"source", "rib"})
+    _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"},
+          {"source", "rib", "design_rules"})
     if data["units"] not in WING_UNITS:
         raise ValueError(f"units must be one of {tuple(WING_UNITS)}")
     system = WING_UNITS[data["units"]]
@@ -163,6 +185,8 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
                                   pitching_moment_coefficient=aero["pitching_moment_coefficient"],
                                   lift_curve_slope_per_rad=aero.get("lift_curve_slope")),
         rib=_layup(_table(data, "rib", {"half_stack"}, LAYUP_KEYS), material, si, "rib") if "rib" in data else None,
+        design_rules=_design_rules(_table(data, "design_rules", set(), {"min_percent", "max_in_a_row"})) if "design_rules" in data
+        else RuleLimits(),
     )
 
     env = _table(data, "envelope", {"gross_weight", "positive_load_factor", "negative_load_factor", "airspeed", "speed_unit", "altitudes",
@@ -281,7 +305,16 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "reversal_never": result.aeroelastic.reversal_speed_m_s == math.inf,
             "needs": list(result.aeroelastic.needs)},
         "not_run": [{"number": n.number, "label": n.label, "altitude": n.altitude_m / u["altitude"][0], "needs": n.needs} for n in result.not_run],
+        "rule_limits": {"min_percent": 100 * result.wing.design_rules.min_share, "max_in_a_row": result.wing.design_rules.max_in_a_row},
+        "rules": wing_rules(result.wing),
     }
+
+
+def wing_rules(wing: Wing) -> list[dict]:
+    """The design rules of every layup of the wing (ADR-0123), skins, spar webs and ribs, as plain values: a warning each, never a margin."""
+    members = (("skin", wing.skin), ("spar", wing.spar), ("rib", wing.rib))
+    return [{"part": part, **dataclasses.asdict(check)} for part, layup in members if layup is not None
+            for check in layup.rules(wing.design_rules)]
 
 
 VIEW_DIGITS = 4  # significant digits of what a page draws; the numbers it states come from wing_report in full

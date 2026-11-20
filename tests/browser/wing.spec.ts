@@ -261,6 +261,30 @@ test("a wing this browser kept before wings were projects becomes the first wing
   await expect(page.getByTestId("workspace-projects").locator("tr[data-kind=wing]")).toContainText("Kept wing");
 });
 
+test("each layup shows its design rules, met or a warning, and the limits typed go with the wing (ADR-0123)", async ({ page }) => {
+  const allMet = { ...ANSWER, report: { ...ANSWER.report, rule_limits: { min_percent: 10, max_in_a_row: 3 },
+    rules: ANSWER.report.rules.map((r: { met: boolean }) => ({ ...r, met: true })) } };
+  const sent = await playWings(page, (body) => ({ status: 200, body: (body.wing?.design_rules as Record<string, unknown> | undefined)?.max_in_a_row === 3 ? allMet : ANSWER }));
+  await page.goto("/workspace/wing");
+  await expect(page.getByTestId("wing-answer")).toBeVisible();
+  const layup = page.getByTestId("panel-wing-layup");
+  await expect(layup).toHaveAttribute("data-state", "warn");
+  await expect(layup.locator("summary")).toContainText("3 design rules not met");
+  const skin = page.getByTestId("wing-rule-skin-ten_percent");
+  await expect(skin).toHaveAttribute("data-met", "false");
+  await expect(skin).toContainText("10 % rule");
+  await expect(skin).toContainText("No plies at 90°");
+  await expect(skin).toContainText("MIL-HDBK-17-3F");
+  await expect(page.getByTestId("wing-rule-spar-in_a_row")).toContainText("At most 4 plies of one angle in a row; the limit is 4.");
+  await expect(page.getByTestId("wing-rules-rib").locator("li")).toHaveCount(4);
+  await page.getByLabel("Most plies of one angle in a row").fill("3");
+  await expect.poll(() => (sent.at(-1)?.wing?.design_rules as Record<string, unknown> | undefined)?.max_in_a_row).toBe(3);
+  await expect(layup).toHaveAttribute("data-state", "pass");
+  await expect(layup.locator("summary")).toContainText("rules met");
+  await page.getByLabel("Most plies of one angle in a row").fill("");
+  await expect.poll(() => sent.at(-1)?.wing?.design_rules).toBeUndefined(); // emptied, the usual limits again
+});
+
 test("the wing workspace names no tool, no machinery and no record, with every panel open, the shape built and the check made (ADR-0091, ADR-0118, ADR-0119)", async ({ page }) => {
   looks = LOOKS;
   await playWings(page);

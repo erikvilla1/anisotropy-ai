@@ -4,8 +4,8 @@
  * back is itself a new version: no earlier state is ever overwritten. Pure: no React, no browser, so `tests/wing-versions.test.ts` runs it.
  */
 import {
-  AERO_FIELDS, AILERON_FIELDS, ENVELOPE_FIELDS, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS, SPEED_FIELDS,
-  WING_CORES, WING_MATERIALS, type WingDescription, type WingValue,
+  AERO_FIELDS, AILERON_FIELDS, DESIGN_RULE_FIELDS, ENVELOPE_FIELDS, GEOMETRY_FIELDS, GUST_FACTOR_FIELDS, GUST_SPEED_FIELDS, OWN_MATERIAL_FIELDS,
+  SPEED_FIELDS, WING_CORES, WING_MATERIALS, type WingDescription, type WingValue,
 } from "./wing";
 
 export type WingVersion = {
@@ -31,7 +31,7 @@ const ORDER: [string, string][] = [
   ["title", "Name"], ["units", "Units"], ["geometry.airfoil", "Airfoil"], ...GEOMETRY_FIELDS.map((f): [string, string] => [f.path, f.label]),
   ["material.library", "Material"], ["material.name", "Material name"], ...OWN_MATERIAL_FIELDS.map((f): [string, string] => [f.path, f.label]),
   ["skin.half_stack", "Skin layup"], ["skin.core", "Core"], ["skin.core_thickness", "Core thickness"], ["spar.half_stack", "Spar web layup"],
-  ["rib.half_stack", "Rib layup"], ...AERO_FIELDS.map((f): [string, string] => [f.path, f.label]),
+  ["rib.half_stack", "Rib layup"], ...DESIGN_RULE_FIELDS.map((f): [string, string] => [f.path, f.label]), ...AERO_FIELDS.map((f): [string, string] => [f.path, f.label]),
   ...ENVELOPE_FIELDS.map((f): [string, string] => [f.path, f.label]), ["envelope.criterion", "Failure criterion"], ["envelope.airspeed", "Speeds are"],
   ["envelope.speed_unit", "Speed unit"],
   ...[...SPEED_FIELDS, ...GUST_SPEED_FIELDS, ...GUST_FACTOR_FIELDS, ...AILERON_FIELDS].map((f): [string, string] => [f.path, f.label]),
