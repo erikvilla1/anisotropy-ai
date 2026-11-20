@@ -1813,7 +1813,7 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/workspace/fea");
+  await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
   const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
