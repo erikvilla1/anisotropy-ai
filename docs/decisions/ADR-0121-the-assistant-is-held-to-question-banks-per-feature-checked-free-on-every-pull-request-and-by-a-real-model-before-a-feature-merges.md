@@ -35,7 +35,7 @@ For the real-model run's place the founder was offered every pull request, weekl
 - The routing: `lib/chat-route.ts`; `components/studio/coupon-chat.tsx` calls it and keeps its handlers.
 - Check 1: `tests/assistant-questions.test.ts`, `api/tests/test_assistant_questions.py`, `mcp-server/tests/test_questions.py`, run by the `website`, `api` and `mcp` jobs of `.github/workflows/tests.yml`.
 - Check 3: `scripts/assistant-questions-check.mjs`, `.github/workflows/assistant-questions.yml`, which runs again when a description is edited.
-- Check 2: `scripts/assistant-live.py`, `scripts/assistant-live-mcp.py`, `scripts/assistant_live_common.py`, `tests/assistant-questions/requests.ts` and `shown.ts`, `.github/workflows/assistant-live.yml`; it needs the repository secret `ANTHROPIC_API_KEY`, which the founder sets.
+- Check 2: `scripts/assistant-live.py`, `scripts/assistant-live-mcp.py`, `scripts/assistant_live_common.py`, `tests/assistant-questions/requests.ts` and `shown.ts`, `.github/workflows/assistant-live.yml`; it needs the repository secret `ANTHROPIC_API_KEY_QUESTION_CHECKER` (or `ANTHROPIC_API_KEY`), which the founder sets: a key of its own, in a Console workspace with its own spend limit (set 2026-11-19).
 
 ## Why (evidence)
 

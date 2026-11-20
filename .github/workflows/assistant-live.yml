@@ -4,7 +4,7 @@ name: Assistant check
 # question of the banks that a model reads is asked of the API's readers and of an MCP client with the site's models, and the report
 # lands on the run's page. Answers are kept from one run to the next (the run's "assistant-answers" artifact), so a run pays only for
 # the questions, instructions or models that changed; the rest goes in one batch at half price. It needs the repository secret
-# ANTHROPIC_API_KEY, which only the founder sets.
+# ANTHROPIC_API_KEY_QUESTION_CHECKER (or ANTHROPIC_API_KEY), which only the founder sets: a key of its own, with its own spend limit.
 on:
   workflow_dispatch:
     inputs:
@@ -47,7 +47,7 @@ jobs:
           true
       - name: Ask the model
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_QUESTION_CHECKER || secrets.ANTHROPIC_API_KEY }}
           FEATURES: ${{ inputs.features }}
           BUDGET: ${{ inputs.budget }}
         run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET"
