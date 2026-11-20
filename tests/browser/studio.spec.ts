@@ -6,6 +6,10 @@ import { ANALYSIS_UNAVAILABLE, bannedIn, bannedInAbaqusCard } from "../../lib/st
 import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 import { hydrated } from "./hydrated";
 
+// Each scenario opens its own page and plays the API on it, so the scenarios may run side by side, and CI splits them in two
+// halves by scenario rather than by file (ADR-0114 amendment 2).
+test.describe.configure({ mode: "parallel" });
+
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
 const API = /https?:\/\/[^/]+\/v1\//;

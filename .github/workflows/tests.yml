@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request stops the run of its older commit (ADR-0114 amendment 2). Every run on main finishes: its group is
+# its own commit, and Deploy waits on it.
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     # The Python lint (ADR-0114): the rules are named in ruff.toml, and ruff's version is pinned here so a release cannot change what passes.
@@ -37,9 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - id: image
+        run: echo "name=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-debs
+          key: apt-${{ steps.image.outputs.name }}-calculix-ccx-libglu1-mesa
       - name: Install CalculiX (the independent reference solver; tests skip with a reason if absent)
-        # ccx -v prints the version and exits with code 201, so the step needs the fallback
-        run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa && (ccx -v || true)
+        # From the cache when it has the packages (ADR-0114 amendment 2). ccx -v prints the version and exits with code 201, so the
+        # step needs the fallback.
+        run: ../scripts/ci-apt-install.sh ~/apt-debs calculix-ccx libglu1-mesa && (ccx -v || true)
       - run: uv sync --locked --extra mesh   # Gmsh (the wheel needs libGLU, installed above)
       - run: uv run pytest tests ../engine/tests
 
@@ -93,7 +106,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
-      BROWSER_CHANNEL: chromium
+      # The runner's own Google Chrome, so nothing is installed from Ubuntu's mirror (ADR-0114 amendment 2).
+      BROWSER_CHANNEL: chrome
       # The browser test's API has no database; recording is switched off on purpose (ADR-0026).
       ANISOTROPY_RUN_RECORDS: "off"
     steps:
@@ -105,12 +119,21 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: npm ci
       - run: uv sync --project api --locked
-      - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run test:calculator
 
   studio-browser:
+    # In two halves (ADR-0114 amendment 2): studio.spec.ts's scenarios may run in parallel, so Playwright splits them evenly by test.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
+    # Playwright's own image (ADR-0114 amendment 2): the browsers and their system packages are in it, so the job never waits on
+    # Ubuntu's mirror. Its version is package-lock.json's; when they differ, Playwright stops and says the image needs updating too.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --user 1001 --ipc=host
     env:
       # The studio test plays the API from tests/fixtures/studio by route interception, so any address will do (ADR-0051).
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
@@ -122,14 +145,18 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run build
-      - run: npm run test:studio
+      - run: npm run test:studio -- --shard=${{ matrix.shard }}/2
 
   site-browser:
     # Every browser spec the jobs above do not run (ADR-0114): the public pages, the home page's demo, the shell, the libraries and every
     # page on a phone. playwright.site.config.ts takes any spec no other configuration claims, so a new spec file is never left out.
     runs-on: ubuntu-latest
+    # Playwright's own image (ADR-0114 amendment 2): the browsers and their system packages are in it, so the job never waits on
+    # Ubuntu's mirror. Its version is package-lock.json's; when they differ, Playwright stops and says the image needs updating too.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --user 1001 --ipc=host
     env:
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
       BROWSER_CHANNEL: chromium
@@ -140,7 +167,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run test:site
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -152,13 +178,19 @@ jobs:
 
   other-browsers:
     # The site's and the workspace's browser specs in Firefox and in WebKit, the engine of Safari and of every browser on an iPhone
-    # (ADR-0114); the jobs above run them in Chromium. The phone check is an iPhone in WebKit.
+    # (ADR-0114); the jobs above run them in Chromium. The phone check is an iPhone in WebKit. One job per browser and per suite
+    # (ADR-0114 amendment 2), so the two suites run side by side instead of one after the other.
     strategy:
       fail-fast: false
       matrix:
         browser: [firefox, webkit]
+        suite: [site, studio]
     runs-on: ubuntu-latest
-    timeout-minutes: 40 # an install that hangs on the runner's package mirror stops here, not at GitHub's six hours
+    timeout-minutes: 40
+    # Playwright's own image, as in the jobs above (ADR-0114 amendment 2).
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --user 1001 --ipc=host
     env:
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
       BROWSER: ${{ matrix.browser }}
@@ -169,18 +201,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: npm run build
       # On a virtual display: Firefox runs with its window, as without one it gives no WebGL (playwright.config.ts). WebKit needs none.
-      - name: The site's specs
-        run: xvfb-run -a npm run test:site
-      - name: The workspace's specs, with the API played from tests/fixtures/studio
-        if: success() || failure()
-        run: xvfb-run -a npm run test:studio
+      # The workspace's specs play the API from tests/fixtures/studio.
+      - name: The ${{ matrix.suite }} specs
+        run: xvfb-run -a npm run test:${{ matrix.suite }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
-          name: ${{ matrix.browser }}-results
+          name: ${{ matrix.browser }}-${{ matrix.suite }}-results
           path: test-results/
           retention-days: 7
 
@@ -234,7 +263,8 @@ jobs:
         options: --health-cmd "pg_isready -U anisotropy -d anisotropy_worker" --health-interval 5s --health-retries 10
     env:
       WRANGLER_SEND_METRICS: "false"
-      BROWSER_CHANNEL: chromium
+      # The runner's own Google Chrome for the live run, so nothing is installed from Ubuntu's mirror (ADR-0114 amendment 2).
+      BROWSER_CHANNEL: chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -266,7 +296,6 @@ jobs:
           grep -q "Ready on" wrangler.log
       - name: The deploy's check against it (the site, the API on this commit, one public coupon job through the queue)
         run: python3 scripts/check-hosted.py --site http://127.0.0.1:8787 --commit "$GITHUB_SHA" --values tests/fixtures/studio/values.json --wait 900
-      - run: npx playwright install --with-deps chromium
       - name: The studio's live browser run, the public example end to end through the Worker
         run: npm run test:studio-live
         env:
@@ -288,17 +317,21 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - id: image
+        run: echo "name=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-debs
+          key: apt-${{ steps.image.outputs.name }}-calculix-ccx-libglu1-mesa
       - name: Install CalculiX and libGLU, as the fea job does (the manual's build runs the fea tests, which need the solver and Gmsh)
-        run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa && (ccx -v || true)
+        run: scripts/ci-apt-install.sh ~/apt-debs calculix-ccx libglu1-mesa && (ccx -v || true)
       - run: uv run --project fea --extra mesh python docs/manual/build.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: engine-manual
           path: docs/manual/build/anisotropy-engine-manual.pdf
       - name: Build one document per check record (ADR-0031; the open-hole model is meshed by Gmsh). The coupon documents are local (ADR-0042)
-        run: |
-          sudo apt-get update && sudo apt-get install -y libglu1-mesa
-          uv run --project fea --extra mesh python docs/models/build.py --all
+        run: uv run --project fea --extra mesh python docs/models/build.py --all   # libGLU is installed above
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: model-documents
