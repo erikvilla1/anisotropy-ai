@@ -25,23 +25,30 @@ test("a question is answered from a fact sheet that holds facts, and an older re
   assert.equal(factsOf(null), null);
 });
 
-test("an answer is shown in the page's symbols with the sections it rests on named under it", () => {
+test("an answer is shown in the page's symbols, its first sentence the heading, with the sections it rests on named under it (ADR-0102 amendment 1)", () => {
   const lines = whyLines(answer(), false);
   assert.deepEqual(lines.prose, ["Ply 4 (90 degrees) fails first: σ₂ reaches 60.6 MPa at 1.032 times the applied loading."]);
-  assert.equal(lines.note, "Based on the results and: Laminate theory, 5. Failure.");
-  const two = whyLines(answer({ sources: [FAILURE, PLIES] }), true);
-  assert.equal(two.note, "Based on the results and: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes. Preview: run the analysis to verify.");
+  assert.equal(lines.heading, lines.prose[0]);
+  assert.deepEqual(lines.more, []);
+  assert.equal(lines.note, "From the results and our theory pages.");
+  assert.deepEqual(lines.sources, ["Laminate theory, 5. Failure"]);
+  const two = whyLines(answer({ sources: [FAILURE, PLIES], prose: ["Ply 4 fails first.", "It is loaded across its fibres."] }), true);
+  assert.equal(two.heading, "Ply 4 fails first.");
+  assert.deepEqual(two.more, ["It is loaded across its fibres."]);
+  assert.equal(two.note, "From the results and our theory pages. Preview: run the analysis to verify.");
+  assert.deepEqual(two.sources, ["Laminate theory, 5. Failure", "Finite element theory, 6. Ply stresses in material axes"]);
 });
 
 test("an answer the theory pages do not cover says so and cites nothing", () => {
   const lines = whyLines(answer({ covered: false, sources: [], prose: ["The results show ply 4 in compression along its fibres."] }), false);
-  assert.equal(lines.note, "Based on the results only.");
+  assert.equal(lines.note, "From the results only.");
   assert.deepEqual(lines.sources, []);
 });
 
 test("with no answer written the page says so and names the sections the question found", () => {
   const none = whyLines(answer({ writer: "template", model: null, prose: [], covered: false, sources: [FAILURE, PLIES] }), false);
   assert.deepEqual(none.prose, []);
+  assert.equal(none.heading, "No answer in words");
   assert.equal(none.note, "Not answered in words yet. See: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
   const withheld = whyLines(answer({ writer: "template", model: null, prose: [], covered: false, withheld: true, reason: "73", sources: [FAILURE] }), false);
   assert.equal(withheld.note, "The answer held a number the results do not, so it is not shown. See: Laminate theory, 5. Failure.");

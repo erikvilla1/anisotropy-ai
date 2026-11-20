@@ -1086,14 +1086,17 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
-  /** An answer in words to a question of why (ADR-0102): its sentences, and under them what it rests on, the theory sections by name. */
+  /** An answer in words to a question of why (ADR-0102): its first sentence as the heading, the rest under it, and what it rests on in one
+   * line with the theory sections by name folded under Details (amendment 1). */
   function whyMessage(entry: Extract<Entry, { kind: "why" }>): ReactNode {
     const lines = whyLines(entry.answer, entry.preview);
     return (
       <div data-testid="chat-why" data-answered={lines.prose.length ? "yes" : "no"} data-covered={entry.answer.covered ? "yes" : "no"} data-source={entry.preview ? "live" : "run"}>
-        <h4>{lines.prose.length ? "Why" : "No answer in words"}</h4>
-        {lines.prose.map((sentence, i) => <p key={i} data-testid="chat-why-sentence">{sentence}</p>)}
+        <h4 data-testid="chat-why-answer">{lines.heading}</h4>
+        {lines.more.map((sentence, i) => <p key={i} data-testid="chat-why-sentence">{sentence}</p>)}
         <p className="chat-note" data-testid="chat-why-note">{lines.note}</p>
+        {lines.prose.length && lines.sources.length ? <details className="chat-details" data-testid="chat-why-sources"><summary>Details</summary>
+          <p className="chat-note">Our theory pages: {lines.sources.join("; ")}.</p></details> : null}
         {lines.prose.length && workingOf(shown.fields) ? <Chips><button type="button" data-testid="chat-why-working" onClick={() => showWorking("Show the working")}>Show the working</button></Chips> : null}
       </div>
     );

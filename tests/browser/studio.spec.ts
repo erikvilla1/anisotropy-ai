@@ -1209,14 +1209,19 @@ test("a question of why is answered in words from the results and our theory pag
   await page.getByTestId("chat-run").click();
   await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
 
-  // answered in words: the fact sheet of the result on the page goes with the question, and the section is named under the answer
+  // answered in words: the fact sheet of the result on the page goes with the question; the first sentence is the heading, and the section
+  // is named under Details (ADR-0102 amendment 1)
   await say("why does ply 4 fail first?");
   const why = page.getByTestId("chat-why").last();
   await expect(why).toHaveAttribute("data-answered", "yes");
   await expect(why).toHaveAttribute("data-covered", "yes");
   await expect(why).toHaveAttribute("data-source", "run");
-  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
-  await expect(why.getByTestId("chat-why-note")).toHaveText("Based on the results and: Laminate theory, 5. Failure.");
+  await expect(why.getByTestId("chat-why-answer")).toHaveText("Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.");
+  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["By Tsai-Hill that is at 1.032 times the applied loading."]);
+  await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and our theory pages.");
+  await expect(why.getByTestId("chat-why-sources")).not.toHaveAttribute("open");
+  await why.getByTestId("chat-why-sources").getByText("Details", { exact: true }).click();
+  await expect(why.getByTestId("chat-why-sources")).toContainText("Our theory pages: Laminate theory, 5. Failure.");
   await expect(why.getByTestId("chat-why-working")).toHaveText("Show the working"); // the formulas with the numbers put in are one click away (ADR-0103)
   expect(asked).toHaveLength(1);
   expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
@@ -1226,14 +1231,16 @@ test("a question of why is answered in words from the results and our theory pag
   await say("why is ply 4 in compression?");
   const uncovered = page.getByTestId("chat-why").last();
   await expect(uncovered).toHaveAttribute("data-covered", "no");
-  await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
-  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Based on the results only.");
+  await expect(uncovered.getByTestId("chat-why-answer")).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("From the results only.");
+  await expect(uncovered.getByTestId("chat-why-sources")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
 
   // an answer the guard set aside is not shown; the sections the question found are named
   await say("what does the failure index mean?");
   const withheld = page.getByTestId("chat-why").last();
   await expect(withheld).toHaveAttribute("data-answered", "no");
+  await expect(withheld.getByTestId("chat-why-answer")).toHaveText("No answer in words");
   await expect(withheld.getByTestId("chat-why-sentence")).toHaveCount(0);
   await expect(withheld.getByTestId("chat-why-note")).toHaveText("The answer held a number the results do not, so it is not shown. See: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
 

@@ -138,7 +138,7 @@ export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<str
 export function scene(question: Question, modelReads: boolean): Scene {
   const example = exampleForm("2026-11-19");
   const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED : null;
-  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST } : example;
+  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } : example; // a plate with a hole, so the hole can be held
   const fields = results?.fields ?? null;
   const picked = question.picked !== undefined && fields ? fields.mesh.element_labels.findIndex((l) => l.split(".").pop() === String(question.picked)) : -1;
   return {
@@ -352,7 +352,7 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
       if (!r.response) return said("failed", "No answer right now", ["That question could not be answered right now. Try again in a moment."]);
       const answer = r.response as unknown as ResultAnswer;
       const lines = whyLines(answer, false);
-      return said("why", lines.prose.length ? "Answered in words" : "Not answered in words", [...lines.prose, lines.note], { covered: answer.covered, sources: lines.sources });
+      return said("why", lines.heading, [...lines.more, lines.note], { covered: answer.covered, sources: lines.sources });
     }
     if (r.reader === "result-questions") {
       const reading = r.response as unknown as ResultReading | null;

@@ -120,3 +120,13 @@
 
 **Evidence.**
 - `cd api && uv run pytest -q tests/test_plate_proposals.py`: see ADR-0110, Why (evidence). Not yet read by a real model.
+
+## Amendment 3, 2026-11-20 (a side typed with a slip, and "pin")
+
+**Context.** The first real-model run of the question banks (ADR-0121, run 44654876004, 2026-11-20) asked a plate "fix the lefft edge" and "pin the hole", and neither held anything. The guard took a region only when the quoted words held its side's name exactly, so a slip of the keys dropped what the model had read; and the plate the banks asked about had no hole, so the model rightly said the hole could not be set.
+
+**Options.** (1) A list of misspellings: it never ends. Rejected. (2) A side's name typed with one slip names it: a letter doubled, dropped or struck for another, or two letters swapped; a three-letter name ("top") by a swap alone, so "tip" and "to" do not. The model still chooses the region; the guard only asks that the words point at it. Chosen. "pin" is "pinned", x, y and z, in the guard's named supports and in the model's instructions. The banks' plate gets a hole of 6 mm, so "pin the hole" asks about a hole that exists.
+
+**Decision.** Option 2: `_one_slip` and `_names` in `api/src/anisotropy_api/plate_proposals.py`, `NAMED_SUPPORTS["pin"]`, `PLATE_SYSTEM`; the plate scene in `tests/assistant-questions/harness.ts`.
+
+**Evidence.** `api/tests/test_plate_proposals.py`, 55 passed (2026-11-20): "lefft", "rigth", "botom" and "tpo" name their edges; "lift", "tip" and "bottom" for the top edge do not; "pin the hole" holds x, y and z. What a real model does with them: UNVERIFIED until the next real run.

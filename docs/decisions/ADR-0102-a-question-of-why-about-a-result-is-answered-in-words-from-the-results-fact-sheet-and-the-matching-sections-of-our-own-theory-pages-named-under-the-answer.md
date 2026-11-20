@@ -86,3 +86,13 @@ Options 2, 4, 7 and 8.
 - The founder's live questions get answers that are wrong, or that he would not put in front of a customer.
 - More than one answer in five is set aside by the number guard, or says the pages do not explain the matter, on the questions engineers ask.
 - A question finds none of the sections that hold its answer because it shares no word with them, more than rarely: then the sections are found by meaning (option 5).
+
+## Amendment 1, 2026-11-20 (the answer as the heading, the sections folded)
+
+**Context.** In the first real-model run of the question banks (ADR-0121, run 44654876004, 2026-11-20), nine of fourteen answers of why were graded weak and one failed, all for their shape, none for a number: four long sentences of terms and symbols where one to three short ones were asked for, the heading a word ("Why") rather than the answer, and a line under it citing "Reasons behind a result, ...; Finite element theory, 7. First-ply failure" that read as the product's internals. The founder asked for answers that are "simple and fast to the point" with the details folded (2026-11-17).
+
+**Options.** (1) Cut the model's text to three sentences on the page: a cut can drop the sentence that makes the answer true. Rejected. (2) A schema of a one-line answer and its reasons: every stored answer and the guard's tests change for the same effect as a sharper instruction. Rejected for now. (3) Ask the model for at most three sentences of at most 25 words, the first the answer on its own and a quantity named in words with its symbol beside them; show that first sentence as the heading and the rest under it; say in one short line what it rests on ("From the results and our theory pages.", or "From the results only."), and fold the sections' names under Details. Chosen. An answer not shown keeps its line naming the sections the question found, since that is then all there is to read.
+
+**Decision.** Option 3: `ANSWER_SYSTEM` in `api/src/anisotropy_api/assistant.py`; `whyLines` (`heading`, `more`) in `lib/result-why.ts`; `whyMessage` in `components/studio/coupon-chat.tsx`, with the test ids `chat-why-answer` and `chat-why-sources`.
+
+**Evidence.** `tests/result-why.test.ts` 7 of 7 and the browser spec of this record pass (2026-11-20); the screenshot `.local/website/screenshots/studio-why.png` shows "Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there." as the heading, one sentence under it and the section under Details. How a real model's answers grade after the change: UNVERIFIED until the next real run.

@@ -145,7 +145,10 @@ ANSWER_MAX_TOKENS = 1500
 ANSWER_SYSTEM = (
     "You answer an engineer's question about the result of a finite element solve of a composite laminate coupon. You are given the "
     "question, a fact sheet of numbers a tested engine computed for this result, and sections of the product's own theory pages, each "
-    "with an id. Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the fact sheet and the sections alone: the sheet says "
+    "with an id. Answer in at most three short, plain sentences of at most 25 words each, from the fact sheet and the sections alone. The "
+    "first sentence is the answer on its own, as an engineer would say it to a colleague; the others give only the one or two facts that "
+    "make it so. Nothing restates the question, and a quantity is named in words, its symbol only beside them (the stress across the "
+    "fibres, σ₂). The sheet says "
     "what happened in this result, and the sections say why. Every number you write must appear in the fact sheet or in the question "
     "exactly as printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio, "
     "and never copy a number or an equation out of a section: say in words what it means. Do not name or number a section in the "
