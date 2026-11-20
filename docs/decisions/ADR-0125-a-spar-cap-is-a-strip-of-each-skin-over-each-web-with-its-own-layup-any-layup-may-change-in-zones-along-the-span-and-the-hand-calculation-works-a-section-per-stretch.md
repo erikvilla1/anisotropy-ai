@@ -1,4 +1,4 @@
-# ADR-0124: A spar cap is a strip of each skin over each web with its own layup, any layup may change in zones along the span, and the hand calculation works a section per stretch
+# ADR-0125: A spar cap is a strip of each skin over each web with its own layup, any layup may change in zones along the span, and the hand calculation works a section per stretch
 
 - Status: Proposed
 - Date: 2026-11-20
@@ -47,6 +47,7 @@ Options 1(a), 2(a), 3(a), 4(a), 5(a) and 6(a). A wing file takes an optional `[s
 - `fea/src/anisotropy_fea/wing_model.py` and `fea/src/anisotropy_fea/wing_shape.py` refuse caps and zones by name.
 - `lib/wing.ts` (`SPAR_CAP_FIELDS`, `newSparCaps`, `zonesOf`, `withZones`, `newZone`, `spanWords`, inline tables in the wing file), `lib/wing-versions.ts` (labels of the caps and zones), `components/workspace/wing-rail.tsx` (`SparCapFields`, `ZonesFields`, `ZoneRow`, rules grouped by stretch and drop), `components/workspace/wing-stage.tsx` (caps in the section, their edges and the changes on the planform, EI and GJ per stretch, the caps' mass), `app/workspace/workspace.css`.
 - `scripts/wing-choices.py` writes a second answer, `tests/fixtures/wing/caps-answer.json`: the example with the caps the page adds and a cap zone from the root to 40 % with one more 0° ply each side of the middle, checked against the API like the first.
+- Numbered ADR-0125: the workspace's sections (pull request #249) took ADR-0124 first.
 - A wing without caps or zones gives every number it gave to the last digit or two of a double (the sums run in another order); `tests/fixtures/wing/example-answer.json` differs only there and by the new keys.
 
 ## Why (evidence)

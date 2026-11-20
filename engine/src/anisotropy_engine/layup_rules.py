@@ -9,7 +9,7 @@ Four rules, each judged on the plies alone:
 - balance: as many plies at -theta as at +theta, so stretching does not shear the laminate (A16 = A26 = 0);
 - symmetry: the stack mirrors about its middle, so stretching does not bend it (B = 0).
 
-Where a part's stack changes along the span (ADR-0124), the change is a ply drop, judged by three more rules on the two stacks:
+Where a part's stack changes along the span (ADR-0125), the change is a ply drop, judged by three more rules on the two stacks:
 
 - plies dropped at one place: no more than a number of plies end at one place, both halves counted;
 - the ply drop ratio: the plies that end need a run-out of the ratio times the change of thickness, and it must fit in the thicker side;

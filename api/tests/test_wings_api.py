@@ -141,7 +141,7 @@ def test_the_pages_wing_choices_and_the_browser_tests_answer_are_what_the_script
     sent["report"]["seconds"] = kept["report"]["seconds"]
     assert close({key: sent[key] for key in ("wing", "report", "views")}, {key: kept[key] for key in ("wing", "report", "views")}), \
         "the browser test's answer is the API's"
-    caps = json.loads(module.CAPS_ANSWER.read_text(encoding="utf-8"))  # the example with spar caps and a cap zone (ADR-0124)
+    caps = json.loads(module.CAPS_ANSWER.read_text(encoding="utf-8"))  # the example with spar caps and a cap zone (ADR-0125)
     assert close(caps, module.answer(caps=True)), hint
     sent = client.post(ENDPOINT, json={"wing": module.with_caps(example())}).json()
     sent["report"]["seconds"] = caps["report"]["seconds"]

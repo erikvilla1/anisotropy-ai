@@ -1,4 +1,4 @@
-"""Spar caps and layups that change along the span (ADR-0124): the description refuses what cannot be built, the section with caps
+"""Spar caps and layups that change along the span (ADR-0125): the description refuses what cannot be built, the section with caps
 is worked by hand on a flat-sided box and holds equilibrium on a curved one, the span is cut where a layup changes, and the beam,
 the stations and the ply drop rules follow."""
 

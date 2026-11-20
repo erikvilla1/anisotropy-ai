@@ -30,7 +30,7 @@ function marginsAlong(views: WingViews, index: number, check: CheckChoice): (num
 }
 
 /** The wing from above, root on the left: the box between the spars coloured by margin along the span, the ribs, the line of
- * shear centres, the spar caps' edges and where a layup changes along the span (ADR-0124). */
+ * shear centres, the spar caps' edges and where a layup changes along the span (ADR-0125). */
 function Planform({ views, margins, governingAt, units }: { views: WingViews; margins: (number | null)[]; governingAt: number | null; units: string }) {
   const width = 640, pad = 34;
   const scale = Math.min((width - 2 * pad) / views.half_span, 220 / views.chord);
@@ -136,7 +136,7 @@ function Section({ views, index, field, units }: { views: WingViews; index: numb
   );
 }
 
-/** EI and GJ: one value for a wing whose plies do not change along the span, else one a stretch, root to tip (ADR-0124). */
+/** EI and GJ: one value for a wing whose plies do not change along the span, else one a stretch, root to tip (ADR-0125). */
 function stiffness(d: WingReport["design"], u: WingReport["units"]): [string, string][] {
   const stretches = d.stretches ?? [];
   if (stretches.length < 2) {

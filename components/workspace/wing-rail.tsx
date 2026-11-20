@@ -230,7 +230,7 @@ function LayupFields({ member, title }: { member: "skin" | "spar" | "rib"; title
   );
 }
 
-/** The spar caps (ADR-0124): a strip of each skin centred on each web, its width per spar and its own half stack, which may change
+/** The spar caps (ADR-0125): a strip of each skin centred on each web, its width per spar and its own half stack, which may change
  * along the span in zones. A wing without caps offers to add them. */
 function SparCapFields() {
   const { wing, replace } = useWing();
@@ -263,7 +263,7 @@ function SparCapFields() {
   );
 }
 
-/** A part's zones along the span (ADR-0124): each a stretch from root to tip, in % of the half span, with its own half stack. Outside
+/** A part's zones along the span (ADR-0125): each a stretch from root to tip, in % of the half span, with its own half stack. Outside
  * its zones the part has its own half stack. Where a zone starts or ends, plies end: a ply drop, judged by the design rules. */
 function ZonesFields({ part }: { part: ZonedPart }) {
   const { wing, replace } = useWing();
@@ -332,7 +332,7 @@ function ZoneRow({ part, index, zone }: { part: ZonedPart; index: number; zone: 
 
 /** The design rules of one part as the engine judged them (ADR-0123): each rule met or a warning, the sentence that says why, and
  * where the rule comes from. A warning changes no margin. A part whose plies change along the span has its rules for each stretch
- * and at each change, a ply drop (ADR-0124), each group under where it holds. */
+ * and at each change, a ply drop (ADR-0125), each group under where it holds. */
 function LayupRules({ member }: { member: WingPart }) {
   const { answer } = useWing();
   if (!answer?.report.rules) return null;

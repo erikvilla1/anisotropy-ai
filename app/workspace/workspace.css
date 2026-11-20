@@ -226,7 +226,7 @@
 .wing-rules > li[data-met="false"] .wing-rule-words { color: #e7c77a; }
 .wing-rule-source { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .wing-rules-where { margin: 8px 0 0; font-size: 12px; color: var(--heading); }
-/* A part's zones along the span (ADR-0124) */
+/* A part's zones along the span (ADR-0125) */
 .wing-zones { display: grid; gap: 6px; margin: 2px 0 8px; }
 .wing-zone { border-left: 2px solid var(--line); padding-left: 10px; }
 .wing-zone-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--heading); margin-bottom: 4px; }

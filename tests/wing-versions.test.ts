@@ -28,7 +28,7 @@ test("a wing's change is said in the page's labels: a half stack as its laminate
   assert.equal(wingKey(withValue(EXAMPLE_WING, "source", "x")), wingKey(EXAMPLE_WING));
 });
 
-test("spar caps and zones along the span are said in the page's labels: each zone by its stretch of the span and its laminate (ADR-0124)", () => {
+test("spar caps and zones along the span are said in the page's labels: each zone by its stretch of the span and its laminate (ADR-0125)", () => {
   const capped = { ...EXAMPLE_WING, spar_caps: newSparCaps(EXAMPLE_WING) };
   assert.deepEqual(wingChanges(EXAMPLE_WING, capped), [
     "Front cap width: blank → 0.045", "Rear cap width: blank → 0.045", "Spar cap layup: blank → [0/0/45/-45/0]s",

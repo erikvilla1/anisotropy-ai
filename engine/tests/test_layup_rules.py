@@ -139,7 +139,7 @@ def test_an_empty_design_rules_table_keeps_the_defaults():
     assert wing.design_rules.max_in_a_row == 3
 
 
-# ----------------------------------------------------------------------------------------------- ply drops (ADR-0124)
+# ----------------------------------------------------------------------------------------------- ply drops (ADR-0125)
 
 def drops(inboard, outboard, room=(0.8, 1.2), **limits):
     from anisotropy_engine.layup_rules import ply_drop_rules

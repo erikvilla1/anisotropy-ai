@@ -136,7 +136,7 @@ def _core(table: dict, si, name: str) -> tuple[CoreMaterial | None, float | None
 
 
 def _zones(value, name: str) -> tuple[Zone, ...]:
-    """[[<part>.zones]]: each a stretch of the half span, start and end as fractions of it, with its own half stack (ADR-0124)."""
+    """[[<part>.zones]]: each a stretch of the half span, start and end as fractions of it, with its own half stack (ADR-0125)."""
     if not isinstance(value, list) or not all(isinstance(zone, dict) for zone in value):
         raise ValueError(f"[{name}] zones must be a list of tables, each with start, end and half_stack")
     zones = []
@@ -158,7 +158,7 @@ def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
 
 
 def _spar_caps(table: dict, material: WingMaterial, si) -> SparCaps:
-    """[spar_caps]: a strip of each skin centred on each web, its width per spar and its own half stack, solid (ADR-0124)."""
+    """[spar_caps]: a strip of each skin centred on each web, its width per spar and its own half stack, solid (ADR-0125)."""
     _keys(table, "[spar_caps]", {"front_width", "rear_width", "half_stack"}, {"zones"})
     layup = Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
                   zones=_zones(table["zones"], "spar_caps") if "zones" in table else ())
@@ -166,7 +166,7 @@ def _spar_caps(table: dict, material: WingMaterial, si) -> SparCaps:
 
 
 def _design_rules(table: dict) -> RuleLimits:
-    """[design_rules]: the limits the layups are judged by (ADR-0123, ADR-0124), each optional, the share in percent."""
+    """[design_rules]: the limits the layups are judged by (ADR-0123, ADR-0125), each optional, the share in percent."""
     limits = {}
     if "min_percent" in table:
         value = table["min_percent"]
@@ -321,7 +321,7 @@ def wing_report(result: WingResult, units: str, speed_unit: str) -> dict:
             "enclosed_area": section.enclosed_area_m2 / length**2,
             "cap_modulus": None if section.cap is None else section.cap.Ex / u["modulus"][0],
             "cap_thickness": None if section.cap is None else section.cap.thickness_m / u["thickness"][0],
-            # root to tip, a stretch wherever a layup changes (ADR-0124); the values above are the root's
+            # root to tip, a stretch wherever a layup changes (ADR-0125); the values above are the root's
             "stretches": [{"start": s.segment.start_m / length, "end": s.segment.end_m / length,
                            "bending_stiffness": s.section.EI / u["stiffness"][0], "torsion_stiffness": s.section.GJ / u["stiffness"][0],
                            "shear_center": s.section.shear_center_m / length,
@@ -370,7 +370,7 @@ def _percent_of_span(fraction: float) -> str:
 def wing_rules(wing: Wing, units: str = "SI") -> list[dict]:
     """The design rules of every layup of the wing (ADR-0123), skins, spar webs, spar caps and ribs, as plain values: a warning each,
     never a margin. A part whose layup changes along the span is judged on each stretch, `span` from its start to its end as
-    fractions of the half span, and at each change, `at` (ADR-0124), with its run-out in the file's thickness unit."""
+    fractions of the half span, and at each change, `at` (ADR-0125), with its run-out in the file's thickness unit."""
     limits, unit = wing.design_rules, WING_UNITS[units]["thickness"]
     members = (("skin", wing.skin), ("spar", wing.spar), ("cap", None if wing.spar_caps is None else wing.spar_caps.layup), ("rib", wing.rib))
     rules = []
@@ -452,7 +452,7 @@ def wing_views(result: WingResult, units: str) -> dict:
         "spars": [v / length for v in section.spar_x_m], "spar_heights": [v / length for v in section.spar_heights_m],
         "shear_center": section.shear_center_m / length, "centroid": [section.centroid_x_m / length, section.centroid_m / length],
         "ribs": [v / length for v in g.rib_stations_m],
-        # each spar cap at the root, upper and lower, both halves, as the root's section puts it (ADR-0124)
+        # each spar cap at the root, upper and lower, both halves, as the root's section puts it (ADR-0125)
         "caps": [{"name": name, "x": _drawn(x / length), "z": _drawn(z / length)} for name, x, z in _cap_points(section)],
         "changes": [s.segment.end_m / length for s in result.stretches[:-1]],  # where a layup changes along the span
         "stations": _drawn(result.cases[0].stations.y / length) if result.cases else [],

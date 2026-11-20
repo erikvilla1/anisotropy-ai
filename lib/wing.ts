@@ -150,7 +150,7 @@ export const DESIGN_RULE_FIELDS: readonly WingField[] = [
   { path: "design_rules.max_dropped", label: "Most plies ending at one place", hint: "Both halves counted. Empty: 2, one each side of the middle", optional: true },
 ];
 
-/** The spar caps (ADR-0124): a strip of each skin centred on each web, with its own half stack. */
+/** The spar caps (ADR-0125): a strip of each skin centred on each web, with its own half stack. */
 export const SPAR_CAP_FIELDS: readonly WingField[] = [
   { path: "spar_caps.front_width", label: "Front cap width", hint: "Along the chord, centred on the front web", unit: "length" },
   { path: "spar_caps.rear_width", label: "Rear cap width", hint: "Along the chord, centred on the rear web", unit: "length" },
@@ -164,7 +164,7 @@ export function newSparCaps(wing: WingDescription): WingDescription {
   return { front_width: width, rear_width: width, half_stack: stack };
 }
 
-/** A part's zones along the span (ADR-0124): each from `start` to `end`, fractions of the half span, with its own half stack. */
+/** A part's zones along the span (ADR-0125): each from `start` to `end`, fractions of the half span, with its own half stack. */
 export type WingZone = { start: number; end: number; half_stack: number[] };
 export type ZonedPart = "skin" | "spar" | "spar_caps";
 export function zonesOf(wing: WingDescription, part: ZonedPart): WingZone[] {
@@ -315,7 +315,7 @@ export type WingReport = {
   rule_limits: { min_percent: number; max_in_a_row: number; drop_ratio: number; max_dropped: number };
   rules: WingRule[];
 };
-/** A design rule judged on one layup (ADR-0123) or at a change of layup along the span (ADR-0124): a warning when not met, never a
+/** A design rule judged on one layup (ADR-0123) or at a change of layup along the span (ADR-0125): a warning when not met, never a
  * margin. `words` is the sentence the page shows. A stack's rule has the stretch it holds over, `span`, as fractions of the half
  * span; a ply drop's rule has where it is, `at`. */
 export type WingRuleName = "ten_percent" | "in_a_row" | "balance" | "symmetry" | "drop_count" | "drop_ratio" | "drop_cover";

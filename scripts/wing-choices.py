@@ -4,7 +4,7 @@ file as the engine reads it, and the library materials and cores a wing can name
 all five strengths; a sandwich core). Also writes the browser test's answer to the example wing,
 tests/fixtures/wing/example-answer.json: the engine's report and drawings, as the API sends them, with the run time fixed so the
 file does not change from run to run; and its answer to the example with the spar caps the page adds and a cap zone from the root to
-40 % of the span with one more 0° ply each side of the middle (ADR-0124), tests/fixtures/wing/caps-answer.json.
+40 % of the span with one more 0° ply each side of the middle (ADR-0125), tests/fixtures/wing/caps-answer.json.
 
     uv run --project engine python scripts/wing-choices.py
 

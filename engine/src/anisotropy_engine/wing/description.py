@@ -9,7 +9,7 @@ degree direction is the span. Layups are given as half of a symmetric laminate, 
 first; the other half mirrors it, with the core, when there is one, between the halves.
 
 A layup may change along the span in zones, each a stretch of the half span with a half stack of its own; outside its zones a
-part has its own half stack. The spar caps are a strip of each skin centred on each web, with a layup of their own (ADR-0124).
+part has its own half stack. The spar caps are a strip of each skin centred on each web, with a layup of their own (ADR-0125).
 """
 
 import math
@@ -59,7 +59,7 @@ class CoreMaterial(BaseModel):
 
 class Zone(BaseModel):
     """A stretch of the span where a part has a half stack of its own: from `start` to `end`, fractions of the half span from the
-    root (ADR-0124). The material and the core are the part's."""
+    root (ADR-0125). The material and the core are the part's."""
 
     model_config = _FROZEN
 
@@ -79,7 +79,7 @@ class Zone(BaseModel):
 
 class Layup(BaseModel):
     """A symmetric laminate by its outer half, with an optional core between the halves, and the zones of the span where its half
-    stack is another (ADR-0124). `half_stack_deg` is the stack outside every zone; the properties below are of that stack."""
+    stack is another (ADR-0125). `half_stack_deg` is the stack outside every zone; the properties below are of that stack."""
 
     model_config = _FROZEN
 
@@ -212,7 +212,7 @@ class Aerodynamics(BaseModel):
 
 class SparCaps(BaseModel):
     """The spar caps: a strip of the upper and of the lower skin centred on each web, as wide as given along the chord, with a layup
-    of its own in place of the skin's (ADR-0124). A cap is a solid laminate: the skin's core, when it has one, stops at its edge."""
+    of its own in place of the skin's (ADR-0125). A cap is a solid laminate: the skin's core, when it has one, stops at its edge."""
 
     model_config = _FROZEN
 
@@ -239,7 +239,7 @@ class Wing(BaseModel):
     aerodynamics: Aerodynamics
     rib: Layup | None = None  # the ribs' layup, when the geometry has ribs; the hand calculation does not use it
     design_rules: RuleLimits = RuleLimits()  # the limits its layups are judged by (ADR-0123); they change no number of the analysis
-    spar_caps: SparCaps | None = None  # no caps: the skin's layup runs from spar to spar (ADR-0124)
+    spar_caps: SparCaps | None = None  # no caps: the skin's layup runs from spar to spar (ADR-0125)
 
     @model_validator(mode="after")
     def _checked(self) -> "Wing":
@@ -288,7 +288,7 @@ class SpanSegment:
 
 def span_segments(wing: Wing) -> tuple[SpanSegment, ...]:
     """The wing from root to tip in stretches of constant layup: a new one starts wherever any part's zone starts or ends and its
-    stack changes there (ADR-0124). A wing without zones is one segment."""
+    stack changes there (ADR-0125). A wing without zones is one segment."""
     parts = {"skin": wing.skin.stretches(), "spar": wing.spar.stretches(),
              "cap": None if wing.spar_caps is None else wing.spar_caps.layup.stretches()}
     edges = sorted({0.0, 1.0} | {edge for stretches in parts.values() if stretches for start, end, _ in stretches for edge in (start, end)})

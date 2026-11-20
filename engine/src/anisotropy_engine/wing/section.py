@@ -8,7 +8,7 @@ into straight pieces and worked as one closed thin-walled cell (Megson, Aircraft
 shared by skins and webs and closed by the condition that a shear at the shear center twists nothing, and Bredt-Batho
 torsion. The skin ahead of the front spar and behind the rear spar is not counted, in the stiffness or in the mass.
 
-Spar caps (ADR-0124): a cap is a strip of each skin centred on its web, with a layup of its own. Its half inside the box is part of
+Spar caps (ADR-0125): a cap is a strip of each skin centred on its web, with a layup of its own. Its half inside the box is part of
 the cell's skin wall; its half outside is an open flange that leaves the cell at the corner, whose shear flow is nothing at its
 free edge and joins the cell's at the corner. Every stretch of skin, cap or plain skin, sits at its own mid-thickness under the
 airfoil's surface, so a solid cap beside a cored skin lies nearer the surface than the skin does, and the web runs between the
@@ -108,7 +108,7 @@ def skin_buckling_load(wing: Wing, D: np.ndarray, width_m: float) -> float:
 def mid_surface_heights(wing: Wing, x_m: np.ndarray, thickness_m: float | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Heights of the upper and lower skin's mid-surface at chord positions `x_m` (metres from the leading edge): the airfoil's
     surface moved inward along its normal by half the skin's whole thickness, plies and core, as the shape draws it (ADR-0116).
-    `thickness_m` is that whole thickness, the wing's skin's when it is not given; a spar cap's is its own (ADR-0124)."""
+    `thickness_m` is that whole thickness, the wing's skin's when it is not given; a spar cap's is its own (ADR-0125)."""
     g = wing.geometry
     c = g.chord_m
     half = (wing.skin.fiber_thickness_m + wing.skin.core_thickness_m if thickness_m is None else thickness_m) / 2
@@ -130,7 +130,7 @@ class WallPoints:
     checked, with what one unit of each load puts there; arrays (2, points). The wall's axis runs round the cell: forward
     along the upper skin, down the front web, aft along the lower skin, up the rear web, which is the second axis of a
     laminate whose first axis is the span and whose third is the wall's outward normal. Shear flow is along that axis. Where a
-    spar cap's edge meets the skin a point is listed twice, once for each, in the order of the axis (ADR-0124)."""
+    spar cap's edge meets the skin a point is listed twice, once for each, in the order of the axis (ADR-0125)."""
 
     x_m: np.ndarray
     z_m: np.ndarray  # up from the chord line

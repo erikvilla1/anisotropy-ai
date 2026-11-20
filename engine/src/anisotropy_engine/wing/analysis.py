@@ -10,7 +10,7 @@ one.
 Beam theory with the thin-walled section of section.py: plane sections stay plane, so the lift's moment puts an in-plane
 load at every point of the skins and webs in proportion to its distance from the inclined neutral axis; the vertical shear,
 acting at the shear center, and the torque about it each put a shear flow round the closed box, and the two are added with
-their signs. Every ply angle is checked at every point. A wing whose layups change along the span (ADR-0124) is worked stretch by
+their signs. Every ply angle is checked at every point. A wing whose layups change along the span (ADR-0125) is worked stretch by
 stretch, each with its own section: the bending and the twist integrate each stretch's stiffness, and the checks at a change are
 made on both sides of it. Not modeled: shear lag, taper, sweep, ribs as load paths, the leading
 and trailing edge skins, the interaction of shear with compression in skin buckling and of the web's bending stress with its
@@ -54,7 +54,7 @@ class Check:
 
 @dataclass(frozen=True)
 class SpanStations:
-    """One case along the span, at limit load, SI units; arrays of one value per station. Where a layup changes (ADR-0124) the
+    """One case along the span, at limit load, SI units; arrays of one value per station. Where a layup changes (ADR-0125) the
     station is listed twice, once with the section inboard of the change and once with the one outboard."""
 
     y: np.ndarray
@@ -253,7 +253,7 @@ def aeroelastic_checks(wing: Wing, envelope: FlightEnvelope, section: BoxSection
 
 def lowest_aeroelastic(wing: Wing, envelope: FlightEnvelope, sections: list[BoxSection]) -> Aeroelastic:
     """Divergence and reversal of a wing whose section changes along the span: each stretch's section is taken as the whole wing's,
-    and the lowest dynamic pressure of each is kept (ADR-0124). A uniform wing has one section, and this is its own."""
+    and the lowest dynamic pressure of each is kept (ADR-0125). A uniform wing has one section, and this is its own."""
     found = [aeroelastic_checks(wing, envelope, section) for section in sections]
     if len(found) == 1:
         return found[0]

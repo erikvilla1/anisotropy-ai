@@ -9,7 +9,7 @@ const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json"
 /** The finite element check's report of the example wing (ADR-0119), as the fea package's tool writes it; fea/tests/test_wing_check.py
  * checks that it has the tool's shape. */
 const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", "utf-8"));
-/** The engine's answer to the example with the spar caps the page adds and a cap zone from the root to 40 % (ADR-0124), written and
+/** The engine's answer to the example with the spar caps the page adds and a cap zone from the root to 40 % (ADR-0125), written and
  * checked like ANSWER. */
 const CAPS = JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf-8"));
 const WINGS = /\/v1\/wings\/(analyze|shape|checks(\/[0-9a-f-]+)?)$|\/v1\/wake$/;
@@ -288,7 +288,7 @@ test("each layup shows its design rules, met or a warning, and the limits typed 
   await expect.poll(() => sent.at(-1)?.wing?.design_rules).toBeUndefined(); // emptied, the usual limits again
 });
 
-test("spar caps are added over the webs, a zone along the span changes their plies, and the rules come for each stretch and the drop (ADR-0124)", async ({ page }) => {
+test("spar caps are added over the webs, a zone along the span changes their plies, and the rules come for each stretch and the drop (ADR-0125)", async ({ page }) => {
   const sent = await playWings(page, (body) => ({ status: 200, body: body.wing?.spar_caps ? CAPS : ANSWER }));
   await page.goto("/workspace/wing");
   await expect(page.getByTestId("wing-answer")).toBeVisible();

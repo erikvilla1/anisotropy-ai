@@ -9,7 +9,7 @@ import {
 // The wing page's own words and its wing file (ADR-0118). Every number comes from the engine; these only read, write and word it.
 const ANSWER = JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf-8"));
 const CHECK = JSON.parse(readFileSync("tests/fixtures/wing/example-check.json", "utf-8"));
-/** The example with spar caps and a cap zone from the root to 40 % (ADR-0124), written by scripts/wing-choices.py like ANSWER. */
+/** The example with spar caps and a cap zone from the root to 40 % (ADR-0125), written by scripts/wing-choices.py like ANSWER. */
 const CAPS = JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf-8"));
 const STACK_RULES = ["ten_percent", "in_a_row", "balance", "symmetry"];
 
@@ -71,7 +71,7 @@ test("the example's design rules come with its answer: four per layup, its lamin
   assert.equal(valueAt(withValue(withValue(limits, "design_rules.min_percent", undefined), "design_rules.max_in_a_row", undefined), "design_rules"), undefined);
 });
 
-test("spar caps and zones: the page adds caps from the skin, a zone outboard of the last, and saves the zones inline (ADR-0124)", () => {
+test("spar caps and zones: the page adds caps from the skin, a zone outboard of the last, and saves the zones inline (ADR-0125)", () => {
   const caps = newSparCaps(EXAMPLE_WING);
   assert.deepEqual(caps, { front_width: 0.045, rear_width: 0.045, half_stack: [0, 0, 45, -45, 0] }); // a tenth of the chord, one more 0° outside
   const capped = { ...EXAMPLE_WING, spar_caps: caps };
@@ -92,7 +92,7 @@ test("spar caps and zones: the page adds caps from the skin, a zone outboard of 
   assert.equal(spanWords(0.125, 0.5), "12.5 to 50 %");
 });
 
-test("the caps' rules come for each stretch and at each ply drop, every one met but the 10 % rule, with the run-out (ADR-0124)", () => {
+test("the caps' rules come for each stretch and at each ply drop, every one met but the 10 % rule, with the run-out (ADR-0125)", () => {
   const report = CAPS.report as WingReport;
   const cap = report.rules.filter((r) => r.part === "cap");
   assert.deepEqual(cap.map((r) => `${r.span?.join("-") ?? `at ${r.at}`} ${r.rule}`), [
