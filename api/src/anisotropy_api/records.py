@@ -231,7 +231,7 @@ class UploadRow(Base):
 
 
 class ModelCallRow(Base):
-    """One call to the language model and what it cost (ADR-0119, migration 0013): when, who asked, for what, which model answered,
+    """One call to the language model and what it cost (ADR-0120, migration 0013): when, who asked, for what, which model answered,
     the tokens it was billed for by kind, and the cost at the list's prices on the day. Read it through the views
     `model_costs_by_person`, `model_costs_by_feature` and `model_costs_by_day`, or `python -m anisotropy_api.cost_report`.
     Rows are only added; the run a row names may be cleared (ADR-0026 amendment 2), and the row stays with that link empty."""
@@ -265,7 +265,7 @@ class ModelCallRow(Base):
         CheckConstraint("input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 "
                         "AND answer_characters >= 0", name="model_calls_counts_not_negative"),
         CheckConstraint("thinking_tokens IS NULL OR thinking_tokens BETWEEN 0 AND output_tokens", name="model_calls_thinking_within_output"),
-        {"comment": "One row per call to the language model: who asked, for what, the tokens billed and the cost (ADR-0119)"},
+        {"comment": "One row per call to the language model: who asked, for what, the tokens billed and the cost (ADR-0120)"},
     )
 
 
@@ -349,7 +349,7 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
 
 
 def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None) -> int:
-    """One row per call (ADR-0119), in one transaction; returns how many. A database failure raises; the caller decides."""
+    """One row per call (ADR-0120), in one transaction; returns how many. A database failure raises; the caller decides."""
     if not calls:
         return 0
     with Session(engine) as session:

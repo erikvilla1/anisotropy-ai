@@ -1,4 +1,4 @@
-# ADR-0119: Each call to the language model is kept as a row with who asked, what for, the tokens billed and their cost, read through three views
+# ADR-0120: Each call to the language model is kept as a row with who asked, what for, the tokens billed and their cost, read through three views
 
 - Status: Proposed
 - Date: 2026-11-19

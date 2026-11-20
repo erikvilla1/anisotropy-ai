@@ -1,4 +1,4 @@
-"""What the language model cost this month, by person and by feature, from the `model_calls` table (ADR-0119).
+"""What the language model cost this month, by person and by feature, from the `model_calls` table (ADR-0120).
 
     uv run --project api python -m anisotropy_api.cost_report             # this month (UTC)
     uv run --project api python -m anisotropy_api.cost_report --month 2026-11 --weeks 8

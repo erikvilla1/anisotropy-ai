@@ -1,4 +1,4 @@
-"""What each call to the language model cost (ADR-0119): the tokens the API reported for it, by kind, and their price on the day.
+"""What each call to the language model cost (ADR-0120): the tokens the API reported for it, by kind, and their price on the day.
 
 Every call the assistant makes (ADR-0052) comes back with a `usage` block: the tokens read, the tokens written (the model's hidden
 thinking included, which is billed as output though only the answer is returned), and the tokens read from or written to the
@@ -6,7 +6,7 @@ prompt cache. `measure` turns that block into a `ModelCall`, priced from the lis
 `model_calls` table with who asked and the run it belongs to. Nothing here calls the model or computes a result.
 
 The counts are the provider's own. They show what we were billed and when that changes; they cannot prove the hidden thinking count
-is true (ADR-0119, Context).
+is true (ADR-0120, Context).
 """
 
 from __future__ import annotations

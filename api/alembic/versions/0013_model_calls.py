@@ -1,4 +1,4 @@
-"""What each call to the language model cost, and who asked (ADR-0119).
+"""What each call to the language model cost, and who asked (ADR-0120).
 
 The assistant's calls (ADR-0052) came back with what the provider billed for them, and that was thrown away. `model_calls` keeps one
 row per call: when, the signed-in email that asked and the client, what the call was for, the model that answered and the effort
@@ -103,10 +103,10 @@ ORDER BY day DESC, model
 """
 
 VIEW_COMMENTS = {
-    "model_costs_by_person": "Each month (UTC) and person: calls, what they used, tokens and cost (ADR-0119)",
+    "model_costs_by_person": "Each month (UTC) and person: calls, what they used, tokens and cost (ADR-0120)",
     "model_costs_by_feature": "Each week (UTC, from Monday) and feature: tokens, hidden thinking share and cost per call against the four weeks "
-                              "before, flagged above 30% (ADR-0119)",
-    "model_costs_by_day": "Each day (UTC) and model: the counts and cost to set beside the provider's usage page (ADR-0119)",
+                              "before, flagged above 30% (ADR-0120)",
+    "model_costs_by_day": "Each day (UTC) and model: the counts and cost to set beside the provider's usage page (ADR-0120)",
 }
 
 
@@ -138,7 +138,7 @@ def upgrade() -> None:
         sa.CheckConstraint("input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 "
                            "AND answer_characters >= 0", name="model_calls_counts_not_negative"),
         sa.CheckConstraint("thinking_tokens IS NULL OR thinking_tokens BETWEEN 0 AND output_tokens", name="model_calls_thinking_within_output"),
-        comment="One row per call to the language model: who asked, for what, the tokens billed and the cost (ADR-0119)",
+        comment="One row per call to the language model: who asked, for what, the tokens billed and the cost (ADR-0120)",
     )
     op.create_index("model_calls_called_at_idx", "model_calls", ["called_at"])
     op.create_index("model_calls_person_idx", "model_calls", ["user_email", "called_at"])

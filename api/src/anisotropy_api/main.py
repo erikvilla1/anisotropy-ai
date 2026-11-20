@@ -273,7 +273,7 @@ Billed = TypeVar("Billed")
 
 
 def _billed(calls: list[ModelCall], outcome: Billed) -> Billed:
-    """A writer's draft or reading, its call to the model, when it made one, added to the request's calls (ADR-0119)."""
+    """A writer's draft or reading, its call to the model, when it made one, added to the request's calls (ADR-0120)."""
     call = getattr(outcome, "call", None)
     if call is not None:
         calls.append(call)
@@ -281,7 +281,7 @@ def _billed(calls: list[ModelCall], outcome: Billed) -> Billed:
 
 
 def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: uuid.UUID | None) -> None:
-    """Each call to the model the request made, with who asked and the request's run (ADR-0119). A row that cannot be written is
+    """Each call to the model the request made, with who asked and the request's run (ADR-0120). A row that cannot be written is
     named in the log and the answer still goes back: the run is the request's receipt, and the provider's usage page holds the call."""
     engine = getattr(request.app.state, "records", None)
     if engine is None or not calls:
@@ -303,7 +303,7 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
     header; a successful body is recorded as returned, without run_id, and returned with it. `llm_of`
     names the language model whose draft the body holds, for the record (ADR-0052). `calls` is filled by
     `compute` with each call to the model it made; they are written after the run, naming it, however
-    the request ends (ADR-0119): a call that was made was billed.
+    the request ends (ADR-0120): a call that was made was billed.
     """
     run_id: uuid.UUID | None = None
     try:

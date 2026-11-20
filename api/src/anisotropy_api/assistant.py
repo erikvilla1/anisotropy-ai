@@ -25,7 +25,7 @@ from .proposals import UNREAD_REASONS
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
-EFFORT = "low"  # every call; its tokens and cost are kept per call (ADR-0119)
+EFFORT = "low"  # every call; its tokens and cost are kept per call (ADR-0120)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"  # the "default" fallbacks form routes a declined request by its category
 # How every explanation reads (ADR-0091, docs/copy-style-guide.md): the product's own words, no model, vendor or tool named.
 VOICE = (
@@ -165,7 +165,7 @@ class Reading:
     writer: str
     model: str | None
     reason: str | None = None
-    call: ModelCall | None = None  # what the call to the model was billed for (ADR-0119); None when no model was called
+    call: ModelCall | None = None  # what the call to the model was billed for (ADR-0120); None when no model was called
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,7 @@ class Draft:
     withheld: bool = False  # the model's draft held a number not in the facts; the template's prose stands
     reason: str | None = None  # why the template's prose stands when the model was asked: withheld, no answer, a refusal
     offending: tuple[str, ...] = ()
-    call: ModelCall | None = None  # what the call to the model was billed for, kept or not (ADR-0119); None when no model was called
+    call: ModelCall | None = None  # what the call to the model was billed for, kept or not (ADR-0120); None when no model was called
 
 
 @dataclass(frozen=True)
@@ -328,7 +328,7 @@ class ClaudeAssistant:
     def _ask(self, feature: str, system: str, user: str, schema: dict[str, Any] | None = None,
              max_tokens: int = MAX_TOKENS) -> tuple[str | None, str | None, ModelCall | None]:
         """The model's text, or None with the reason it gave none; with a schema, the text is JSON in that schema (structured outputs).
-        Third, what the call was billed for (ADR-0119), whatever became of its answer; None when no answer came back to bill."""
+        Third, what the call was billed for (ADR-0120), whatever became of its answer; None when no answer came back to bill."""
         import anthropic
 
         output_config: dict[str, Any] = {"effort": EFFORT}

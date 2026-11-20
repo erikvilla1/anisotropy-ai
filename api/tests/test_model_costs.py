@@ -1,4 +1,4 @@
-"""What each call to the language model cost, and who asked (ADR-0119): the price of a call from the usage block its response carries,
+"""What each call to the language model cost, and who asked (ADR-0120): the price of a call from the usage block its response carries,
 the writers carrying their call whatever became of the answer, the row each call leaves with its run and the signed-in email, the
 three views and the report. A stub plays the model, as api/tests/test_assistant.py does; nothing here calls one."""
 
@@ -139,7 +139,7 @@ def test_the_features_are_the_ones_the_migration_allows():
     spec = util.spec_from_file_location("m0013", Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0013_model_calls.py")
     migration = util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.FEATURES == FEATURES  # a new feature is a new migration (ADR-0119)
+    assert migration.FEATURES == FEATURES  # a new feature is a new migration (ADR-0120)
 
 
 def test_the_report_table_aligns_its_columns():

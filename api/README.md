@@ -121,7 +121,7 @@ cd api; uv run alembic upgrade head   # migrates over the unpooled address
 
 The API reads `DATABASE_URL` at startup, from the environment or the nearest `.env` found by walking up from the current directory. It refuses to start when the variable is missing, the server is unreachable or the table is absent, and each refusal names the fix. For an experiment without recording, set `ANISOTROPY_RUN_RECORDS=off` on purpose; the browser test does this. The tests use `TEST_DATABASE_URL` (the `anisotropy_test` database, created when the Docker volume is first initialised) and are skipped with a stated reason when it is absent. If the database stops answering while the API runs, a solve returns 503 and no result: a result without its record is not delivered (ADR-0026).
 
-## What the model costs (ADR-0119)
+## What the model costs (ADR-0120)
 
 Every call the assistant makes to the language model leaves one row in `model_calls`: when, who asked (the signed-in email; empty for nobody), from which client, what for, the model that answered, the tokens it was billed for and the cost in US dollars at the price list of the day (`model_costs.PRICES`, dated `PRICES_AS_OF`). The hidden thinking is billed as output: `thinking_tokens` is the part of `output_tokens` it took. `answer_characters` is the length of the answer we received, and `run_id` the run of the request.
 
