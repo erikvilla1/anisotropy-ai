@@ -180,3 +180,11 @@ test("the library's constants and the chips come per system from the engine's ta
   }
   assert.equal(LOAD_CHIPS["in-psi"][2].value, "2000");
 });
+
+test("one ply's angle is read by its number, its mirror with it, and a number that is not an angle is not (ADR-0121 amendment 5)", () => {
+  const form = exampleForm("2026-11-20"); // [45/0/-45/90]s
+  assert.deepEqual(applyMessage(form, "change ply 3 to 30 degrees"), { rows: { ply_3: "30" }, understood: ["ply 3: 30° and its mirror, ply 6"], note: null });
+  assert.deepEqual(applyMessage(form, "ply 6 = -30°").rows, { ply_3: "-30" }); // the mirror of ply 3 in eight
+  for (const text of ["stress in ply 3 at element 120", "ply 9 to 30", "ply 3 to 95", "change ply 3 to 30 mm", "show me ply 4"])
+    assert.deepEqual(applyMessage(form, text).rows, {}, text);
+});

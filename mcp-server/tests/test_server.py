@@ -36,7 +36,8 @@ def test_the_server_offers_its_tools_each_described_and_tells_the_clients_model_
     assert fake.calls == []  # listing the tools asks the API nothing
     for rule in ("Lead with the answer in one short line", "Answer only what was asked", "Never name these tools, a solver program",
                  "comes from a tool result of this server", "four significant figures at most", "When a required row is missing, ask for every missing row",
-                 "solve_coupon solves a preview", "is no failure of the coupon", "only from its facts and theory sections", "start no full run"):
+                 "solve_coupon solves a preview", "is no failure of the coupon", "only from its facts and theory sections", "start no full run",
+                 "ask back only for what has no such default", "show the working of the one that fails first"):
         assert rule in INSTRUCTIONS
     assert not re.search(r"calculix|prepomax|abaqus|\bkernel\b", INSTRUCTIONS + "".join(tool.description for tool in tools), re.I)  # ADR-0091
     assert server.instructions == INSTRUCTIONS

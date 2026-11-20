@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { asksWhy, factsOf, whyLines } from "../lib/result-why";
+import { asksWhy, factsOf, readAt, whyLines } from "../lib/result-why";
 import { readResultAnswer, StudioError, type ResultAnswer } from "../lib/studio-api";
 
 const FAILURE = { id: "engine:5-failure", document: "Laminate theory", title: "5. Failure" };
@@ -36,6 +36,9 @@ test("an answer is shown in the page's symbols, its first sentence the heading, 
   assert.equal(two.heading, "Ply 4 fails first.");
   assert.deepEqual(two.more, ["It is loaded across its fibres."]);
   assert.equal(two.note, "From the results and our theory pages. Preview: run the analysis to verify.");
+  // where the result is read, from the fact sheet, leads the line (ADR-0102 amendment 2)
+  assert.equal(whyLines(answer(), false, readAt({ basis: "the gauge section" })).note, "Read in the gauge section. From the results and our theory pages.");
+  assert.equal(readAt({ basis: "" }), null);
   assert.deepEqual(two.sources, ["Laminate theory, 5. Failure", "Finite element theory, 6. Ply stresses in material axes"]);
 });
 

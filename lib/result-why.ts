@@ -10,6 +10,9 @@ const ENDS = /\bwhy\b[^.?!]*\?\s*$/i; // "ply 4 is in compression, why?"
 export const asksWhy = (text: string): boolean => OPENS.test(text) || ENDS.test(text);
 
 /** The fact sheet a question is answered from: the shown result's, when it holds any fact. An older result carries none. */
+/** Where a result's fact sheet says its answer is read ("the gauge section", "the whole model"), or null. */
+export const readAt = (facts: Record<string, unknown> | null): string | null => (typeof facts?.basis === "string" && facts.basis.trim() ? facts.basis.trim() : null);
+
 export function factsOf(explanation: { facts: Record<string, unknown> } | null | undefined): Record<string, unknown> | null {
   const facts = explanation?.facts;
   return facts && Object.keys(facts).length ? facts : null;
@@ -24,13 +27,14 @@ export type WhyLines = {
   more: string[];
   /** The theory sections the answer rests on, folded under Details, or, with no prose, those the question found. */
   sources: string[];
-  /** What the small line under the answer says. */
+  /** What the small line under the answer says: where the result is read, what the answer rests on, and whether it is a preview. */
   note: string;
 };
 
 /** What the page shows of an answer: its sentences in the product's own words (a sentence that names a program is left out, ADR-0091), the
- * first as the heading; one short line saying what it rests on, the sections by document and title folded under it; or why there is none. */
-export function whyLines(answer: ResultAnswer, preview: boolean): WhyLines {
+ * first as the heading; one short line saying where the result is read (the fact sheet's `basis`, ADR-0102 amendment 2) and what the answer
+ * rests on, the sections by document and title folded under it; or why there is none. */
+export function whyLines(answer: ResultAnswer, preview: boolean, place: string | null = null): WhyLines {
   const prose = answer.prose.map(shownSentence).filter((sentence): sentence is string => sentence !== null);
   const sources = answer.sources.map((s) => `${s.document}, ${s.title}`);
   if (!prose.length) {
@@ -40,7 +44,8 @@ export function whyLines(answer: ResultAnswer, preview: boolean): WhyLines {
   }
   const covered = answer.covered && sources.length > 0;
   const basis = covered ? "From the results and our theory pages." : "From the results only.";
-  return { prose, heading: prose[0], more: prose.slice(1), sources: covered ? sources : [], note: `${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
+  const read = place ? `Read in ${place}. ` : "";
+  return { prose, heading: prose[0], more: prose.slice(1), sources: covered ? sources : [], note: `${read}${basis}${preview ? " Preview: run the analysis to verify." : ""}` };
 }
 
 /** What the FEA assistant of a blank project shows of an answer to a question (ADR-0124): its sentences in the product's own words, as

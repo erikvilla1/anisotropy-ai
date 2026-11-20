@@ -16,7 +16,7 @@ import { applyMessage, unitsNamed } from "../../lib/studio-chat";
 import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
-import { factsOf, generalLines, whyLines } from "../../lib/result-why";
+import { factsOf, generalLines, readAt, whyLines } from "../../lib/result-why";
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
@@ -260,6 +260,7 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       : hasWork(newProject(s.form)) ? said("ask", `Open ${TARGET_TITLES[routed.target]}?`, ["Your coupon is saved under Projects, as it is now. Your message goes with you."])
       : said("said", `Opens ${TARGET_TITLES[routed.target]}`);
     case "name": return said("rows", "Got it", [`Run by ${text}`], { rows: { filled_by: text } });
+    case "general": return said("general", "Answered in words from our theory pages", []); // the API's reader writes it (ADR-0121 amendment 5)
     case "model": return said("model", "Read by the model", [], { asksResults: modelAsksResults(text, s.form, !!s.fields) });
     case "unread": { const words = unreadWords(!!s.fields); return said("redirect", words.title, [words.text]); }
     case "patterns": {
@@ -357,8 +358,9 @@ export type ModelRequest = { reader: "result-questions" | "proposals" | "result-
 export function modelRequests(question: Question): ModelRequest[] {
   const s = scene(question, true);
   const { route } = talk(question, true);
-  // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124)
-  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: FEA_KINDS.map((k) => k.id) } }];
+  // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124);
+  // the coupon chat sends one of meaning with no kind, since its work is set up (ADR-0121 amendment 5)
+  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: question.page === "start" ? FEA_KINDS.map((k) => k.id) : [] } }];
   if (route === "why") return s.facts ? [{ reader: "result-answers", body: { question: question.ask, facts: s.facts } }] : [];
   if (route !== "model") return [];
   const out: ModelRequest[] = [];
@@ -383,6 +385,12 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
       if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
       const answer = r.response as unknown as GeneralAnswer;
       const { prose, sources } = generalLines(answer);
+      if (question.page !== "start") { // as answerMeaning in coupon-chat.tsx: the first sentence as the heading, the sections under Details
+        const covered = answer.covered && sources.length > 0;
+        return said("general", prose[0] ?? "Not in our theory pages yet",
+          [...prose.slice(1), ...(!prose.length ? ["Ask about the setup instead, for example “is it ready to run?”."] : covered ? ["From our theory pages."] : [])],
+          { covered, sources: covered ? sources : [] });
+      }
       const offered = answer.start && answer.start !== "none" ? answer.start : null;
       return said("general", prose.length ? "Answered in words" : sources.length ? "Our theory pages hold this" : "Our theory pages do not cover that yet",
         [...prose, ...(sources.length ? [`Read: ${sources.join("; ")}`] : []), ...(offered ? [`Offers: set up a ${offered} test`] : [])],
@@ -391,7 +399,7 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
     if (r.reader === "result-answers") {
       if (!r.response) return said("failed", "No answer right now", ["That question could not be answered right now. Try again in a moment."]);
       const answer = r.response as unknown as ResultAnswer;
-      const lines = whyLines(answer, false);
+      const lines = whyLines(answer, false, readAt(s.facts));
       return said("why", lines.heading, [...lines.more, lines.note], { covered: answer.covered, sources: lines.sources });
     }
     if (r.reader === "result-questions") {

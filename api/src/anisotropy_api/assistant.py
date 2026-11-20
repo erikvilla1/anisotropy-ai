@@ -64,7 +64,7 @@ PROPOSE_SYSTEM = (
     "converted, computed, rounded, completed or guessed (a cooling or a drop is a negative change, so you may add a minus sign); the unit "
     "copied exactly as the message writes it beside the value, or null when it writes none; and the quote, the shortest span of the message, "
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
-    "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
+    "a notation row the value is the notation as written. For an angle row the value is the ply's angle in degrees. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
     "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
     "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
@@ -160,12 +160,14 @@ ANSWER_SYSTEM = (
 )
 
 
-# A question asked in the FEA section before anything is set up (ADR-0124): no result, so the model is shown the sections of our theory
-# pages the question found and the kinds of work the page offers; the number guard then reads the answer against the question alone.
+# A question asked in the FEA section before anything is set up (ADR-0124), or of a coupon with no result yet (ADR-0121 amendment 5): no
+# result, so the model is shown the sections of our theory pages the question found and the kinds of work the page offers; the number
+# guard then reads the answer against the question alone.
 GENERAL_SYSTEM = (
     "You answer an engineer's question in the finite element section of a composite analysis workspace, before any model is set up. You "
     "are given the question, sections of the product's own theory pages, each with an id, and the kinds of work the workspace can set up. "
-    "Answer in one to three short, plain sentences, the answer first and nothing that restates the question, from the sections alone, "
+    "Answer in one to three short, plain sentences, the first the answer on its own in at most nine words, and nothing that restates the "
+    "question, from the sections alone, "
     "and only what was asked: leave out the grips, tabs, meshes or checks of a section unless the question is about them. Never write the "
     "word engine: say the analysis or the laminate calculation. "
     "Write no number that is not in the question, digit for digit, and never copy a number or an equation out of a section: say in words "

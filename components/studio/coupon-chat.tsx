@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
-  type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
+import { allCouponTests, answerGeneral, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
+  type GeneralAnswer, type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { summaryAnswer, type SummaryQuantity } from "@/lib/result-summary";
-import { factsOf, whyLines } from "@/lib/result-why";
+import { factsOf, generalLines, readAt, whyLines } from "@/lib/result-why";
 import { isConditionOrLoad, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
 import { appliedOf } from "@/lib/applied";
 import { workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
@@ -73,7 +73,7 @@ type Entry = { stage?: boolean } & (
   // what an element is and where it sits, said from the fields (ADR-0099 amendment 3)
   | { id: number; role: "assistant"; kind: "element"; answer: ElementFacts; from: Fields }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
-  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean }
+  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean; place: string | null }
   // another section asked for while the coupon holds work: one tap to go, the coupon kept (ADR-0124)
   | { id: number; role: "assistant"; kind: "switch"; target: Switchable; carried: string });
 /** The sections a coupon's chat opens on request (ADR-0124). */
@@ -581,8 +581,31 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     setReading(true);
     let answer: ResultAnswer | null = null;
     try { answer = await answerResult(apiBaseUrl, text, facts); } catch { /* said below */ } finally { setReading(false); }
-    if (answer) add({ role: "assistant", kind: "why", answer, preview });
+    if (answer) add({ role: "assistant", kind: "why", answer, preview, place: readAt(facts) });
     else add({ role: "assistant", kind: "text", title: "No answer right now", body: <p data-testid="chat-why-failed">That question could not be answered right now. Try again in a moment.</p> });
+  }
+
+  /** What something is or means, asked with no result on the page (ADR-0121 amendment 5): answered in words from our theory pages by
+   * the reader FEA's own assistant asks before a setup (ADR-0124), the first sentence as the heading and the sections folded under
+   * Details, as an answer of why is shown (ADR-0102 amendment 1). Nothing in the setup changes. */
+  async function answerMeaning(text: string) {
+    add({ role: "user", text });
+    setReading(true);
+    let answer: GeneralAnswer | null = null;
+    try { answer = await answerGeneral(apiBaseUrl, text, []); } catch { /* said below */ } finally { setReading(false); }
+    if (!answer) {
+      add({ role: "assistant", kind: "text", title: "No answer right now", body: <p data-testid="chat-general-failed">That question could not be answered right now. Try again in a moment.</p> });
+      return;
+    }
+    const { prose, sources } = generalLines(answer); // in the product's own words (ADR-0091)
+    const covered = answer.covered && sources.length > 0;
+    add({ role: "assistant", kind: "text", title: prose[0] ?? "Not in our theory pages yet", body: (
+      <div data-testid="chat-general" data-covered={covered}>
+        {prose.slice(1).map((line, i) => <p key={i} data-testid="chat-general-sentence">{line}</p>)}
+        {!prose.length ? <p>Ask about the setup instead, for example “is it ready to run?”.</p> : covered ? <p className="chat-note">From our theory pages.</p> : null}
+        {covered ? <details><summary>Details</summary><p data-testid="chat-general-sources">Our theory pages: {sources.join("; ")}.</p></details> : null}
+      </div>
+    ) });
   }
 
   /** The working behind the answer (ADR-0103), when the engineer asks for it: the package's own steps for the criterion named, else the
@@ -705,6 +728,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       case "full-form": add({ role: "user", text }); showPanel("advanced"); return;
       case "section": add({ role: "user", text }); openSection(routed.target, text); return; // at once when the coupon holds no work, else one tap (ADR-0124)
       case "name": answer(text, { filled_by: text }); return;
+      case "general": void answerMeaning(text); return;
       case "model": void readWithModel(text); return;
       case "unread": unread(text); return;
       case "patterns": readWithPatterns(text); return;
@@ -1113,7 +1137,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   /** An answer in words to a question of why (ADR-0102): its first sentence as the heading, the rest under it, and what it rests on in one
    * line with the theory sections by name folded under Details (amendment 1). */
   function whyMessage(entry: Extract<Entry, { kind: "why" }>): ReactNode {
-    const lines = whyLines(entry.answer, entry.preview);
+    const lines = whyLines(entry.answer, entry.preview, entry.place);
     return (
       <div data-testid="chat-why" data-answered={lines.prose.length ? "yes" : "no"} data-covered={entry.answer.covered ? "yes" : "no"} data-source={entry.preview ? "live" : "run"}>
         <h4 data-testid="chat-why-answer">{lines.heading}</h4>

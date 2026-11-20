@@ -46,7 +46,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
 export const ROUTES = ["start-over", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
-  "ready", "setup-fixed", "run", "check", "full-form", "section", "name", "model", "unread", "patterns"] as const;
+  "ready", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 /** What the coupon chat opens, or answers is not here yet, when asked for by name (ADR-0124). */
 export type SectionAsked = "laminate" | "cad" | "wing";
@@ -71,6 +71,7 @@ export type ChatRoute =
   | { route: "full-form" }
   | { route: "section"; target: SectionAsked } // another section (Laminate, CAD) or another kind of FEA work (a wing) asked for (ADR-0124)
   | { route: "name" } // the answer to "Who is running it?"
+  | { route: "general" } // what something is or means, with no result: answered in words from our theory pages (ADR-0121 amendment 5)
   | { route: "model" } // a model reads it: a question of the results first, else rows of the setup (ADR-0088, ADR-0100, ADR-0101)
   | { route: "unread" } // a question nothing could read: what can be asked, never a row of the setup
   | { route: "patterns" }; // the setup's own patterns read it into rows, or point at the panel that asks for the next thing (ADR-0055)
@@ -101,6 +102,13 @@ export type ChatState = {
   /** Another section (Laminate, CAD) can be opened from here (ADR-0124). */
   sections: boolean;
 };
+
+/** A question of what something is or means ("what is the ABD matrix?", "explain first ply failure", "what does tsai-hill mean"), with
+ * no number in it: a number makes it a value or a change. */
+const MEANING = /^\s*(?:what(?:'s|’s|s|\s+is|\s+are|\s+does|\s+do)\s+(?!i\b|we\b|you\b)|explain\b|define\b|tell\s+me\s+about\b|how\s+(?:does|do)\s+(?!i\b|we\b|you\b)|when\s+(?:should|do|would)\b|is\s+(?:fea|an?\s+\w+(?:\s+\w+)?\s+better)\b)/i;
+export const asksMeaning = (text: string): boolean => MEANING.test(text) && !/\d/.test(text);
+/** Whether the chat answers a question of meaning in words: with no result on the page, an API to ask, and the setup's own. */
+const general = (text: string, s: ChatState): boolean => s.api && !s.results && !s.readOnly && asksMeaning(text);
 
 /** Whether a message nothing read is a question, said so with what can be asked, rather than read by the setup's patterns: with results on
  * the page anything that opens as a question of them (ADR-0100), and anywhere a question (ADR-0121 amendment 2). */
@@ -137,7 +145,7 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   if (asksWorking(text) && (!edits() || isQuestion(text))) return { route: "working" };
   // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102); with
   // no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
-  if (asksWhy(text)) return s.api && s.results && s.facts ? { route: "why" } : { route: "why-none" };
+  if (asksWhy(text)) return s.api && s.results && s.facts ? { route: "why" } : general(text, s) ? { route: "general" } : { route: "why-none" };
   // the reaction, the largest displacement or the modulus of the result, as the result card prints it (ADR-0099 amendment 4)
   const quantity = s.results ? summaryAsked(text) : null;
   if (quantity) return { route: "summary", quantity };
@@ -181,6 +189,9 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   const edit = edits() || (s.onPlate && namesPlateEdit(text));
   const asks = /\?\s*$/.test(text) || ASKING.test(text);
   if (s.step === "name" && !/\d/.test(text) && !edit && !asks) return { route: "name" };
+  // what something is or means, with no result to read it in: answered in words from our theory pages, as FEA's own assistant answers a
+  // question before a setup (ADR-0124), and never read into rows; "what is the ABD matrix?" was answered "Not a question I can answer yet"
+  if (general(text, s) && !edits()) return { route: "general" };
   // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
   const named = unitsNamed(text);
   if (s.modelReads && s.api && !isSwitchRequest(text) && (named === null || named === unitsOf(s.form))) return { route: "model" };

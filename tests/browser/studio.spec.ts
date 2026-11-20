@@ -1219,7 +1219,7 @@ test("a question of why is answered in words from the results and our theory pag
   await expect(why).toHaveAttribute("data-source", "run");
   await expect(why.getByTestId("chat-why-answer")).toHaveText("Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.");
   await expect(why.getByTestId("chat-why-sentence")).toHaveText(["By Tsai-Hill that is at 1.032 times the applied loading."]);
-  await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and our theory pages.");
+  await expect(why.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results and our theory pages.");
   await expect(why.getByTestId("chat-why-sources")).not.toHaveAttribute("open");
   await why.getByTestId("chat-why-sources").getByText("Details", { exact: true }).click();
   await expect(why.getByTestId("chat-why-sources")).toContainText("Our theory pages: Laminate theory, 5. Failure.");
@@ -1233,7 +1233,7 @@ test("a question of why is answered in words from the results and our theory pag
   const uncovered = page.getByTestId("chat-why").last();
   await expect(uncovered).toHaveAttribute("data-covered", "no");
   await expect(uncovered.getByTestId("chat-why-answer")).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
-  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("From the results only.");
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results only.");
   await expect(uncovered.getByTestId("chat-why-sources")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
 
@@ -1813,6 +1813,15 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
+  const meanings: unknown[] = []; // a question of what something means, sent to the theory pages' reader (ADR-0121 amendment 5)
+  await page.route(API, (route) => {
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/workspace/questions") return route.fallback();
+    meanings.push(request.postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run_id: null, writer: "anthropic", model: "claude-stand-in",
+      prose: ["It ties a laminate's loads to its strains.", "Its parts hold the in-plane, coupling and bending stiffness."],
+      sources: [{ id: "engine:3-laminate-stiffness", document: "Laminate theory", title: "3. Laminate stiffness" }], covered: true, withheld: false, reason: null, start: null }) });
+  });
   await page.goto("/workspace/fea?for=coupon");
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await hydrated(message);
@@ -1835,6 +1844,10 @@ test("a question is answered and changes nothing: the units, inches, who it is, 
   await say("what is the width?"); // a value of the setup, read from its own row (ADR-0121 amendment 3)
   await expect(page.getByTestId("chat-about").last()).toHaveAttribute("data-topic", "setup-value");
   await expect(heading()).toHaveText("Width: 25 mm");
+  await say("what is the ABD matrix?"); // what something means, with no result yet: answered in words, the first sentence the heading
+  await expect(heading()).toHaveText("It ties a laminate's loads to its strains.");
+  await expect(page.getByTestId("chat-general").last()).toContainText("From our theory pages.");
+  expect(meanings).toEqual([{ question: "what is the ABD matrix?", kinds: [] }]);
   expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
   await say("is my setup ok?"); // checked, and the answer opens with Yes or No
   await expect(page.getByTestId("chat-check").last().locator("h4")).toHaveText("Yes, ready to run");
