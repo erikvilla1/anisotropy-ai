@@ -10,7 +10,7 @@ import {
   type LoadName, type Quantity,
 } from "./laminate-chat";
 import { expandLayup } from "./layup";
-import { layupNotation, layupRows, parseLayup, TEST_CHOICES } from "./studio-chat";
+import { layupNotation, layupRows, parseLayup, pliesOf, TEST_CHOICES } from "./studio-chat";
 import { fieldByKey, fields, libraryOptions, unitLabels, unitsOf, type StudioForm } from "./studio-form";
 import type { OfferedRow, PlateOffer, Proposal, ProposalAnswer, ProposalRequest, UnreadPart } from "./studio-api";
 import { DOF_WORDS, ownRegions, type PlateLists, type PlateLoad } from "./studio-plate";
@@ -55,6 +55,9 @@ export function couponOffer(form: StudioForm, all = true): Pick<ProposalRequest,
   }
   rows.push({ key: "library", label: "Library material", kind: "choice", choices: libraryOptions.map((m) => ({ value: m.id, label: m.name })) });
   rows.push({ key: "layup", label: "Layup, in laminate notation, bottom ply first", kind: "notation" });
+  // each stated ply's angle, so "change ply 3 to 30 degrees" has a row to fill (ADR-0121 amendment 5); a symmetric layup's mirror follows
+  const mirror = form.symmetric === "yes" ? ", its mirror with it" : "";
+  pliesOf(form).forEach((_, i) => rows.push({ key: `ply_${i + 1}`, label: `Ply ${i + 1} angle, counted from the bottom${mirror}`, kind: "angle" }));
   for (const field of fields) {
     if (field.kind !== "number" || COUPON_NUMBERS_LEFT.has(field.key) || hidden(field.key) || !isRowEnabled(field.key, all)) continue;
     if (field.unit === "length" || field.unit === "stress") rows.push({ key: field.key, label: field.labels?.[unitsOf(form)] ?? field.label, kind: "number", unit: labels[field.unit] });

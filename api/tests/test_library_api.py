@@ -39,6 +39,13 @@ def test_material_detail_returns_si_values_with_their_pages():
     nasa = client.get("/v1/materials/im7-8552", params={"dataset": "nasa-tm-20230001560-im7-8552-rt-measured-v1"}).json()
     assert nasa["citation"].startswith("Experimental Tests to Characterize")
     assert client.get("/v1/materials/nothing").status_code == 404
+
+
+def test_the_mcp_servers_stand_in_answers_with_this_apis_own_material():
+    """The MCP server's tests and its real-model check (ADR-0121) answer material_values from a copy of this answer; a client's model
+    asked for IM7/8552's strengths must find them there as it would here. Rewrite the copy when this answer changes."""
+    copy = Path(__file__).resolve().parents[2] / "mcp-server" / "tests" / "fixtures" / "material-im7-8552.json"
+    assert json.loads(copy.read_text(encoding="utf-8")) == client.get("/v1/materials/im7-8552").json()
     refused = client.get("/v1/materials/t650-35-976")
     assert refused.status_code == 422 and "no elastic input set" in refused.json()["detail"]
 

@@ -184,6 +184,25 @@ def test_abaqus_names_and_codes_fix_the_directions_whatever_the_model_wrote(mess
     assert kept.dropped == [] and kept.supports == [{"region": region, "dofs": dofs, "quote": quote}]
 
 
+@pytest.mark.parametrize("message, region", [("fix the lefft edge", "Edge-Left"), ("hold the rigth edge", "Edge-Right"), ("clamp the botom edge", "Edge-Bottom"),
+                                             ("fix the tpo edge", "Edge-Top")])
+def test_a_side_typed_with_one_slip_still_names_its_edge(message, region):
+    """ADR-0101 amendment 3: the first real-model run (2026-11-20) found "fix the lefft edge" read by the model and dropped by the guard."""
+    kept = plate_guard({"supports": [support(region, ["x", "y", "z"], message)]}, message, offer())
+    assert kept.dropped == [] and kept.supports[0]["region"] == region
+
+
+@pytest.mark.parametrize("message, region", [("fix the lift edge", "Edge-Right"), ("fix the tip edge", "Edge-Top"), ("hold the bottom edge", "Edge-Top")])
+def test_a_word_that_is_not_a_slip_of_the_side_names_no_edge(message, region):
+    kept = plate_guard({"supports": [support(region, ["x", "y", "z"], message)]}, message, offer())
+    assert kept.supports == [] and kept.dropped[0]["reason"].startswith("the quoted words do not name")
+
+
+def test_pin_is_pinned():
+    kept = plate_guard({"supports": [support("Hole", [], "pin the hole")]}, "pin the hole", offer())
+    assert kept.dropped == [] and kept.supports == [{"region": "Hole", "dofs": [1, 2, 3], "quote": "pin the hole"}]
+
+
 def test_a_named_condition_stands_even_when_the_model_names_no_direction():
     kept = plate_guard({"supports": [support("Edge-Left", [], "encastre the left edge")]}, "encastre the left edge", offer())
     assert kept.supports[0]["dofs"] == [1, 2, 3, 4, 5, 6] and kept.dropped == []
@@ -205,6 +224,6 @@ def test_cf1_to_cf3_point_a_force_along_x_y_z_whatever_the_model_wrote(code, dof
 
 
 def test_the_plate_prompt_says_abaqus_words_with_the_meanings_the_guard_holds():
-    for words in ("boundary condition (BC) is a support", "encastre is all six", "pinned is x, y and z", "XSYMM is x, tilt_y and turn_z",
+    for words in ("boundary condition (BC) is a support", "encastre is all six", "pinned (or pin) is x, y and z", "XSYMM is x, tilt_y and turn_z",
                   "YSYMM is y, tilt_x and turn_z", "ZSYMM is z, tilt_x and tilt_y", "CF1, CF2 and CF3 are a force along x, y and z"):
         assert words in PLATE_SYSTEM

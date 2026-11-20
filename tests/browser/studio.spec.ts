@@ -1021,11 +1021,12 @@ test("the assistant keeps the thread: a missing place is the gauge centre, a fra
   const yes = page.getByTestId("chat-failure").last();
   await expect(yes.getByTestId("chat-failure-yes")).toHaveText("Yes");
   await expect(yes.getByTestId("chat-failure-loading")).toHaveText(`At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${printed(row.factor)} × that: ${failing}.`);
-  // a statement with a number the page does not print gets the answer with both states, and no yes
+  // a statement with a number the page does not print is told no, with both states as the page prints them (ADR-0099 amendment 4)
   await say("does it mean that it fails at 20000 N");
-  const plain = page.getByTestId("chat-failure").last();
-  await expect(plain.getByTestId("chat-failure-yes")).toHaveCount(0);
-  await expect(plain.getByTestId("chat-failure-applied")).toHaveText(`Applied: ${now}.`);
+  const no = page.getByTestId("chat-failure").last();
+  await expect(no.getByTestId("chat-failure-yes")).toHaveCount(0);
+  await expect(no.getByTestId("chat-failure-no")).toHaveText("No");
+  await expect(no.getByTestId("chat-failure-loading")).toHaveText(`At the applied ${now} no ply has failed. Ply 4 (90°) fails first at ${printed(row.factor)} × that: ${failing}.`);
 
   expect(calls.checks).toHaveLength(1); // a question changes no row and asks the service nothing
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
@@ -1042,7 +1043,7 @@ test("with a model on, a loose question about the results is read into a fixed r
   let proposalsAsked = 0;
   // a model behind the API: its readings, as the guard would keep them
   const readings: Record<string, unknown> = {
-    "wher is teh shear highest?": { kind: "extreme", quantities: ["S12"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
+    "where's the shearing worst?": { kind: "extreme", quantities: ["S12"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
     "which ply carries the most load?": { kind: "extreme", quantities: ["S11"], plies: [], element: null, here: false, sense: "magnitude", region: "default" },
     "compare the 0° and 90° plies here": { kind: "values", quantities: ["S11", "S22", "S12"], plies: [2, 4, 5, 7], element: null, here: true, sense: null, region: "default" },
     "worst transverse loading anywhere, grips included?": { kind: "extreme", quantities: ["S22"], plies: [], element: null, here: false, sense: "magnitude", region: "whole" },
@@ -1076,13 +1077,19 @@ test("with a model on, a loose question about the results is read into a fixed r
 
   // the page's own patterns read a plain question: no model is asked
   await say("where is the shear stress highest?");
-  const plain = page.getByTestId("chat-extremes").last();
+  const plain = page.getByTestId("chat-extremes").first();
   await expect(plain).toHaveAttribute("data-reader", "patterns");
   await expect(plain).toHaveAttribute("data-region", "the gauge section");
   expect(offers).toHaveLength(0);
 
-  // a loose one goes to the model, which answers with a request; the page looks the values up
+  // and one with its words misspelt (ADR-0121 amendment 2)
   await say("wher is teh shear highest?");
+  await expect(page.getByTestId("chat-extremes")).toHaveCount(2);
+  await expect(page.getByTestId("chat-extremes").last()).toHaveAttribute("data-reader", "patterns");
+  expect(offers).toHaveLength(0);
+
+  // a loose one goes to the model, which answers with a request; the page looks the values up
+  await say("where's the shearing worst?");
   const loose = page.getByTestId("chat-extremes").last();
   await expect(loose).toHaveAttribute("data-reader", "model");
   await expect(loose.getByTestId("chat-extreme")).toHaveText(await plain.getByTestId("chat-extreme").innerText()); // the same answer, whoever read the question
@@ -1166,7 +1173,7 @@ test("a question of why is answered in words from the results and our theory pag
   // a model behind the API: its answers, as the number guard would keep them, or none
   const answers: Record<string, unknown> = {
     "why does ply 4 fail first?": { ...written, covered: true, sources: [FAILURE],
-      prose: ["Ply 4 (90 degrees) fails first by tension across its fibres: sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
+      prose: ["Ply 4 (90 degrees) fails first, across its fibres.", "Its sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
     "why is ply 4 in compression?": { ...written, covered: false, sources: [],
       prose: ["The results show ply 4 (90 degrees) at -364.8 MPa along its fibres.", "The theory pages do not explain this yet."] },
     "what does the failure index mean?": { ...written, writer: "template", model: null, covered: false, withheld: true, reason: "numbers", prose: [], sources: [FAILURE, PLIES] },
@@ -1203,14 +1210,19 @@ test("a question of why is answered in words from the results and our theory pag
   await page.getByTestId("chat-run").click();
   await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
 
-  // answered in words: the fact sheet of the result on the page goes with the question, and the section is named under the answer
+  // answered in words: the fact sheet of the result on the page goes with the question; the first sentence is the heading, and the section
+  // is named under Details (ADR-0102 amendment 1)
   await say("why does ply 4 fail first?");
   const why = page.getByTestId("chat-why").last();
   await expect(why).toHaveAttribute("data-answered", "yes");
   await expect(why).toHaveAttribute("data-covered", "yes");
   await expect(why).toHaveAttribute("data-source", "run");
-  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
-  await expect(why.getByTestId("chat-why-note")).toHaveText("Based on the results and: Laminate theory, 5. Failure.");
+  await expect(why.getByTestId("chat-why-answer")).toHaveText("Ply 4 (90 degrees) fails first, across its fibres.");
+  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Its σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
+  await expect(why.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results and our theory pages.");
+  await expect(why.getByTestId("chat-why-sources")).not.toHaveAttribute("open");
+  await why.getByTestId("chat-why-sources").getByText("Details", { exact: true }).click();
+  await expect(why.getByTestId("chat-why-sources")).toContainText("Our theory pages: Laminate theory, 5. Failure.");
   await expect(why.getByTestId("chat-why-working")).toHaveText("Show the working"); // the formulas with the numbers put in are one click away (ADR-0103)
   expect(asked).toHaveLength(1);
   expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
@@ -1220,14 +1232,18 @@ test("a question of why is answered in words from the results and our theory pag
   await say("why is ply 4 in compression?");
   const uncovered = page.getByTestId("chat-why").last();
   await expect(uncovered).toHaveAttribute("data-covered", "no");
+  // a first sentence too long for a heading (68 characters) stands whole under a fixed one (ADR-0121 amendment 7)
+  await expect(uncovered.getByTestId("chat-why-answer")).toHaveText("Answered in words from the results");
   await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
-  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Based on the results only.");
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("Read in the gauge section. From the results only.");
+  await expect(uncovered.getByTestId("chat-why-sources")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
 
   // an answer the guard set aside is not shown; the sections the question found are named
   await say("what does the failure index mean?");
   const withheld = page.getByTestId("chat-why").last();
   await expect(withheld).toHaveAttribute("data-answered", "no");
+  await expect(withheld.getByTestId("chat-why-answer")).toHaveText("No answer in words");
   await expect(withheld.getByTestId("chat-why-sentence")).toHaveCount(0);
   await expect(withheld.getByTestId("chat-why-note")).toHaveText("The answer held a number the results do not, so it is not shown. See: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
 
@@ -1575,7 +1591,7 @@ test("the mesh is changed by talking: a written element size, and finer as half 
   const livesBefore = calls.lives.length;
   await message.fill("would a finer mesh change the answer?");
   await message.press("Enter");
-  await expect(page.getByText("Not sure what to change").last()).toBeVisible();
+  await expect(page.getByTestId("chat-value-unread").last()).toContainText("is it ready to run?"); // a question is said so (ADR-0121 amendment 2)
   await page.waitForTimeout(1_200); // longer than the preview's wait after an edit
   expect(calls.lives.length).toBe(livesBefore);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -1791,6 +1807,70 @@ test("what is applied is drawn and listed under the model before and after a run
   await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
   await expect(page.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
+  expect(browserErrors).toEqual([]);
+});
+
+test("a question is answered and changes nothing: the units, inches, who it is, a test's name, ready to run, the working, the reaction, yes or no (ADR-0121 amendment 2, ADR-0099 amendment 4)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  const meanings: unknown[] = []; // a question of what something means, sent to the theory pages' reader (ADR-0121 amendment 5)
+  await page.route(API, (route) => {
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/workspace/questions") return route.fallback();
+    meanings.push(request.postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run_id: null, writer: "anthropic", model: "claude-stand-in",
+      prose: ["It ties a laminate's loads to its strains.", "Its parts hold the in-plane, coupling and bending stiffness."],
+      sources: [{ id: "engine:3-laminate-stiffness", document: "Laminate theory", title: "3. Laminate stiffness" }], covered: true, withheld: false, reason: null, start: null }) });
+  });
+  await page.goto("/workspace/fea?for=coupon");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await hydrated(message);
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  const heading = () => page.getByTestId("coupon-chat").locator("h4").last();
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  // the first real-model run of the question banks (2026-11-20) found each of these answered “Not sure what to change”, or read as a change
+  await say("can I use inches?"); // asked, not told: the units stay, and the switch is one click away
+  await expect(page.getByTestId("chat-about").last()).toHaveAttribute("data-topic", "units-other");
+  await expect(heading()).toHaveText("Yes: in, psi and lbf");
+  await expect(page.getByTestId("chat-about").last().getByRole("button", { name: "Switch to in, psi and lbf" })).toBeVisible();
+  await say("what units are you using?");
+  await expect(heading()).toHaveText("mm, MPa and N");
+  await say("who made you");
+  await expect(heading()).toHaveText("Anisotropy's assistant");
+  await say("what is a tension coupon"); // a test's name, asked: what it is, and no test set
+  await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "tension-coupon");
+  await say("what is the width?"); // a value of the setup, read from its own row (ADR-0121 amendment 3)
+  await expect(page.getByTestId("chat-about").last()).toHaveAttribute("data-topic", "setup-value");
+  await expect(heading()).toHaveText("Width: 25 mm");
+  await say("what is the ABD matrix?"); // what something means, with no result yet: answered in words, the first sentence the heading
+  await expect(heading()).toHaveText("It ties a laminate's loads to its strains.");
+  await expect(page.getByTestId("chat-general").last()).toContainText("From our theory pages.");
+  expect(meanings).toEqual([{ question: "what is the ABD matrix?", kinds: [] }]);
+  expect(calls.checks).toHaveLength(1); // nothing asked changed the setup
+  await say("is my setup ok?"); // checked, and the answer opens with Yes or No
+  await expect(page.getByTestId("chat-check").last().locator("h4")).toHaveText("Yes, ready to run");
+  await page.getByTestId("chat-run").last().click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  await say("how did you get 16740 N"); // a number of the answer, asked about: the working, never a new load of 16740 N
+  await expect(page.getByTestId("chat-working-none").or(page.getByTestId("chat-working")).last()).toBeVisible();
+  await expect(page.getByTestId("coupon-chat")).not.toContainText("16740 N force");
+  // questions of the result the page answers itself, each opening with the answer (ADR-0099 amendment 4)
+  await say("what is the reaction force");
+  await expect(heading()).toHaveText(`Reaction: ${printed(16222.038876522856)} N`);
+  await expect(page.getByTestId("chat-summary").last()).toContainText("the top grip, in tension");
+  await say("does it fail?");
+  await expect(page.getByTestId("chat-failure-verdict").last()).toHaveText("No, the coupon holds");
+  await say("what is the margin of safety");
+  await expect(page.getByTestId("chat-failure-margin").last()).toContainText("No margin of safety is worked out here");
+  await say("is ply 2 above 1000 MPa in σ₁ at element 125?");
+  await expect(page.getByTestId("chat-value-verdict").last()).toHaveText(/^Yes, \d+ MPa is above 1000 MPa$/);
+  expect(calls.solves).toHaveLength(1);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "chatgpt", "abaqus"]) expect(said).not.toContain(word);
   expect(browserErrors).toEqual([]);
 });
 

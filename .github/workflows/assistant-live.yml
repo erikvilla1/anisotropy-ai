@@ -3,8 +3,9 @@ name: Assistant check
 # The real-model check of the assistant (ADR-0121, check 2), started by hand from the Actions tab before a feature is merged: every
 # question of the banks that a model reads is asked of the API's readers and of an MCP client with the site's models, and the report
 # lands on the run's page. Answers are kept from one run to the next (the run's "assistant-answers" artifact), so a run pays only for
-# the questions, instructions or models that changed; the rest goes in one batch at half price. It needs the repository secret
-# ANTHROPIC_API_KEY, which only the founder sets.
+# the questions, instructions or models that changed; the rest goes in one batch at half price, or with "fast" all at once at full
+# price, for a report in minutes rather than when the batch ends. It needs the repository secret
+# ANTHROPIC_API_KEY_QUESTION_CHECKER (or ANTHROPIC_API_KEY), which only the founder sets: a key of its own, with its own spend limit.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +17,10 @@ on:
         description: "The most this run may spend, in dollars"
         default: "3"
         required: true
+      fast:
+        description: "Fast: send everything at once at full price (done in minutes, about twice the cost) instead of a half-price batch"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,7 +55,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_QUESTION_CHECKER || secrets.ANTHROPIC_API_KEY }}
           FEATURES: ${{ inputs.features }}
           BUDGET: ${{ inputs.budget }}
-        run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET"
+          FAST: ${{ inputs.fast }}
+        run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET" $([ "$FAST" = "true" ] && echo --now)
       - name: The report, on the run's page
         if: always()
         run: if [ -f assistant-live/report.md ]; then cat assistant-live/report.md >> "$GITHUB_STEP_SUMMARY"; fi

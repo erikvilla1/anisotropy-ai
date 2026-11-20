@@ -2,7 +2,8 @@
 of our own theory pages that the question's words find (`theory.find`) go to a model with the question, and it answers in a fixed
 schema: the answer, the ids of the sections it rests on, whether they cover the question, and the kind of work the question asks to set
 up, from those the page offers, or none. The guard is the why answers' (ADR-0102): the answer stands only when every number in it is the
-question's, since there is no fact sheet; a number of the theory pages is said in words. The sections are named by the page from their
+question's, since there is no fact sheet; a number of the theory pages is said in words. A ply named by its angle ("the 90-degree ply")
+is the name of a kind of ply, not a value, and stands. The sections are named by the page from their
 ids, and an id or a kind that was not offered is dropped. The page sets nothing up on the model's word: a kind named is offered as a
 button.
 
@@ -11,6 +12,7 @@ With no model nothing is written: the page names the sections found.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +26,10 @@ KIND_WORDS = {
     "wing": "a wing: its skins, spars and ribs under flight loads",
 }
 NONE = "none"
+# A ply named by its angle, "the 90-degree ply", "the 0° and ±45° plies": the angles a layup is written in, with a degree sign or the
+# word, are the names of kinds of ply and no value of a result, so the guard reads past them (ADR-0121 amendment 6). Any other number
+# still needs the question.
+PLY_ANGLE = re.compile(r"(?<![\w.])[±+\-−]?(?:0|15|30|45|60|75|90)(?:\s*°|\s*-?\s*degrees?\b)")
 
 
 def general_schema(ids: list[str], kinds: list[str]) -> dict[str, Any]:
@@ -62,7 +68,7 @@ def general_guard(raw: dict[str, Any], question: str, found: list[Section], kind
         return KeptGeneral(reason="the model's answer held no text", start=start)
     if len(text) > MAX_ANSWER:
         return KeptGeneral(withheld=True, reason="the model's answer was longer than an answer here may be", start=start)
-    guard = number_guard(text, {"the question": question})
+    guard = number_guard(PLY_ANGLE.sub(" ", text), {"the question": question})
     if not guard.ok:
         return KeptGeneral(withheld=True, reason="the model's answer held numbers that are not in the question: " + ", ".join(guard.offending), start=start)
     named = raw.get("sections") if isinstance(raw.get("sections"), list) else []

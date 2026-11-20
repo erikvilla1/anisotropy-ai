@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import OrderedDict
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -28,26 +29,32 @@ FORM = REPO / "lib" / "coupon-form-definition.json"  # the form the page is buil
 EXAMPLE_WING = REPO / "engine" / "examples" / "example-wing.toml"  # Anisotropy's example wing, the wing tools' `example`
 MAX_WING_FILE = 200_000  # characters, as the API takes a wing file's text
 RESULTS_KEPT = 8
-RUN_ONLY = ("solver", "document")  # setup items that concern the full run alone; our kernel's solve goes ahead without them (ADR-0086)
-PREVIEW = ("Our kernel's answer to the rows as they stand: a preview, with no mesh convergence study, no CalculiX cross-check and no "
-           "document. The full run with those is started from the workspace page.")
+RUN_ONLY = ("solver", "document")  # setup items that concern the full run alone; the preview's solve goes ahead without them (ADR-0086)
+PREVIEW = ("A preview of the rows as they stand: no mesh convergence study, no check by a second solver and no report. The full run with "
+           "those is started from the workspace page.")
+# An aside of the package's sentences about another program's viewer, which the workspace page cuts too (lib/studio-copy.ts, ADR-0091).
+VIEWER_ASIDE = re.compile(r";\s*these are element centroids[^.;]*?,?\s*not the [^.;]*?a viewer such as PrePoMax shows\.")
 
-INSTRUCTIONS = """Anisotropy analyses composite test coupons with its own engine. These tools ask that engine; you never compute.
+INSTRUCTIONS = """Anisotropy analyses composite test coupons. These tools ask its analysis; you never compute.
 
 Rules:
-1. Every number you state about a material, a setup or a result comes from a tool result of this server, with the unit it came with. Do not compute, estimate, convert or interpolate one yourself. Print a number to four significant figures and say nothing more precise than the tool said.
-2. A setup is the rows of the coupon form. Read describe_coupon_form once before the first setup. Pass only what the engineer stated. When a required row is missing, ask for it. If the engineer asks for an example or tells you to choose, use the form's example and say plainly which values were chosen by you and not by them.
-3. solve_coupon is a preview by our kernel: no mesh convergence study, no CalculiX cross-check, no document. Say so when you report a result, and report what was solved (material, layup, size, loading, mesh) from the setup the tool returns.
-4. Report the answer as the tool gives it: the criterion, the ply and its angle, the element and place, the mode, and the factor on the applied loading. A factor above 1 means the laminate holds at the applied loading. If the result says a criterion is reached earlier outside the gauge section at a grip, report it apart, as the tool does.
-5. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written.
-6. For why, use explain_result and answer only from its facts and theory sections. Name the section you rest on. If the sections do not hold the reason, say that they do not; never fill the gap from general knowledge without saying it is not from Anisotropy's pages.
-7. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
+1. Lead with the answer in one short line: the value with its unit, the ply that fails first, or yes or no. Then at most three short lines of basis: the place (element, gauge section), the ply and its angle, the criterion, and that it is a preview. Give more only when the engineer asks for it.
+2. Answer only what was asked. A question of one value gets that value, not the failure factors or the setup beside it.
+3. Never name these tools, a solver program, a vendor, a file path or a model to the engineer. Say "the preview" for what solve_coupon solves and "the full run" for the one started from the workspace page.
+4. Every number you state about a material, a setup or a result comes from a tool result of this server, with the unit it came with, printed as the tool wrote it to four significant figures at most. Do not compute, estimate, convert or interpolate one yourself.
+5. A setup is the rows of the coupon form. Read describe_coupon_form once before the first setup. Pass only what the engineer stated. When a required row is missing, ask for every missing row in one short message, in words and never by the rows' keys, with the form's default or example beside each row that has one, so the engineer can answer yes. If the engineer asks for an example or tells you to choose, use the form's example and say plainly which values were chosen by you and not by them.
+6. solve_coupon solves a preview: say so once, in a few words. The full run, with a mesh convergence study, a check by a second solver and a report, is started from the workspace page.
+7. Which ply fails first is the gauge section's answer, the test's: the criterion, the ply and its angle, the factor on the applied loading and the load at that factor, as the tool gives them. A factor above 1 means the laminate holds at the applied loading. A criterion the tool reports reached earlier at a gripped tab's edge is no failure of the coupon, since a value at a clamped edge grows as the mesh is refined; say it in one line, apart, after the answer.
+8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. Its Tsai-Hill sum is not the failure index the results show (that index is 1/R); keep the two apart.
+9. For why, use explain_result and answer in one to three sentences only from its facts and theory sections. Name the section you rest on. If the sections do not hold the reason, say that they do not; never fill the gap from general knowledge without saying it is not from Anisotropy's pages.
+10. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
+11. A question that leaves out the ply or the quantity means every ply and the stresses along the fibres, across them and in shear; ask back only for what has no such default, once, with the choices named. For an element that is not in the model, say the range in one line and give the values at the element where first ply failure is read, saying so. For the working of a criterion the result does not have, say in one line which it has and show the working of the one that fails first.
 
 A wing: the wing tools read a wing file on this machine by its full path, or `example` for Anisotropy's example wing, and the API works it by hand in under a second.
-8. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). A margin is given as the wing page prints it, with its sign and three decimals (+0.059); write it so. Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
-11. Answer a wing question the way the wing page does: the answer first, in one sentence (the part, yes or no, or the value, with its basis), then at most three short lines of what it rests on. No table and nothing the engineer did not ask about unless they ask for more. Say parts and checks in words; never name a tool's fields.
-9. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
-10. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
+12. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). A margin is given as the wing page prints it, with its sign and three decimals (+0.059); write it so. Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
+13. Answer a wing question the way the wing page does: the answer first, in one sentence (the part, yes or no, or the value, with its basis), then at most three short lines of what it rests on. No table and nothing the engineer did not ask about unless they ask for more. Say parts and checks in words; never name a tool's fields.
+14. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
+15. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
 
 Quantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
 READS = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -120,7 +127,8 @@ def setup_of(checklist: dict) -> dict:
     which of those stop a solve."""
     items = checklist.get("items", [])
     return {"state": checklist.get("state"), "designation": checklist.get("designation"),
-            "passed": {item["id"]: item.get("message") for item in items if item.get("state") == "pass"},
+            # a full run's own items name this machine's programs and their paths: the preview needs neither, and the engineer is not told them
+            "passed": {item["id"]: item.get("message") for item in items if item.get("state") == "pass" and item.get("id") not in RUN_ONLY},
             "not_passed": [{"id": item.get("id"), "label": item.get("label"), "state": item.get("state"), "message": item.get("message"),
                             **({"rows": item["rows"]} if item.get("rows") else {})}
                            for item in items if item.get("state") not in ("pass", "pending")],
@@ -134,6 +142,11 @@ def as_read(found: dict) -> dict:
     """The coupon's card as the check read the rows: material, layup, size."""
     card = ((found.get("preview") or {}).get("coupon") or {}).get("card") or []
     return {"as_read": {row[0]: row[1] for row in card if isinstance(row, list) and len(row) == 2}} if card else {}
+
+
+def sentences_of(explanation: dict) -> list[str]:
+    """The package's sentences as the workspace page shows them: an aside about another program's viewer is cut (ADR-0091)."""
+    return [VIEWER_ASIDE.sub(".", sentence) for sentence in explanation.get("sentences", [])]
 
 
 def said(result: dict) -> str:
@@ -291,9 +304,9 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
 
     @server.tool(annotations=ASKS, structured_output=False)
     def solve_coupon(values: Annotated[dict[str, Any], Field(description="The setup: the coupon form's rows by key (describe_coupon_form)")]) -> str:
-        """Check a coupon setup and, when nothing blocks, solve it with Anisotropy's own kernel. Returns the answer (which ply fails first,
-        by which criterion, where, and at what multiple of the applied loading), the setup as it was read, the package's own sentences, and
-        a result_id to ask further questions with. A preview: no mesh study, no CalculiX cross-check, no document."""
+        """Check a coupon setup and, when nothing blocks, solve it as a preview. Returns the answer (which ply fails first, by which
+        criterion, where, and at what multiple of the applied loading), the setup as it was read, the package's own sentences, and a
+        result_id to ask further questions with. A preview: no mesh study, no check by a second solver, no report."""
         found = ask(api.post, "/v1/coupon-jobs/live", {"values": values_sent(values)})
         setup = setup_of(found.get("checklist") or {})
         fields = found.get("fields")
@@ -302,9 +315,9 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
                          "note": "Nothing was solved: the setup items named in `blocking` do not pass. Their messages and rows say what to change."})
         explanation = found.get("explanation") or {}
         result_id = held.keep({"fields": fields, "explanation": explanation, "designation": found.get("designation")})
-        return said({"solved": True, "result_id": result_id, "kind": PREVIEW, "solver": found.get("solver"), "seconds": found.get("seconds"),
+        return said({"solved": True, "result_id": result_id, "kind": PREVIEW, "seconds": found.get("seconds"),
                      "coupon": fields.get("coupon"), "setup": setup, **as_read(found),
-                     "answer": answer_of(fields.get("summary") or {}), "sentences": list(explanation.get("sentences", [])),
+                     "answer": answer_of(fields.get("summary") or {}), "sentences": sentences_of(explanation),
                      "can_be_asked": results.offer(fields)})
 
     @server.tool(annotations=READS, structured_output=False)
@@ -346,7 +359,7 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
         result = held.of(result_id)
         facts = result["explanation"].get("facts") or {}
         sections = ask(api.post, "/v1/workspace/theory-sections", {"question": question}).get("sections", [])
-        return said({"question": question, "facts": facts, "sentences": list(result["explanation"].get("sentences", [])),
+        return said({"question": question, "facts": facts, "sentences": sentences_of(result["explanation"]),
                 "theory": [{"id": s["id"], "from": f"{s['document']}, {s['title']}", "text": s["text"]} for s in sections],
                 "how_to_answer": ("Answer from the facts and the theory sections alone, and name the section the reason rests on. Every number in the "
                                   "answer is one of the facts. " + ("" if sections else "No section of the theory pages shares a word with this question: "

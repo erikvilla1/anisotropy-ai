@@ -5,16 +5,18 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Fields, GeneralAnswer, ProposalAnswer, ResultAnswer, ResultReading } from "../../lib/studio-api";
-import { ASKING, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
-import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, valueLines, type ResultQuestion } from "../../lib/result-question";
-import { confirmsFailure, failureAnswer, failureLines } from "../../lib/result-failure";
+import { ASKING, asksUnread, modelAsksResults, routeMessage, ROUTES, type ChatRoute, type ChatState, type RouteName } from "../../lib/chat-route";
+import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
+import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
+import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
+import { summaryAnswer } from "../../lib/result-summary";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
 import { workingFor } from "../../lib/result-working";
 import { applyMessage, unitsNamed } from "../../lib/studio-chat";
 import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
-import { factsOf, generalLines, whyLines } from "../../lib/result-why";
+import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/result-why";
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
@@ -107,6 +109,9 @@ export type Question = {
   sections?: string[];
   /** The MCP server's tool a client should call for it, the arguments, and words its answer holds (ADR-0107). */
   mcp?: { tool: string; args: Record<string, unknown>; says?: string[]; refused?: boolean;
+    /** For a refused question, the words a client's own answer holds when it told the refusal from what it already held, in the
+     * real-model run; `says` (the tool's words) when absent. */
+    said?: string[];
     /** What the client's conversation holds before the question, in the real-model run: the coupon stated ("setup"), or stated and solved
      * ("solved", the default for a tool that reads a result), or the wing named ("wing": Anisotropy's example wing, ADR-0128). */
     context?: "setup" | "solved" | "wing" };
@@ -155,7 +160,7 @@ export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<str
 export function scene(question: Question, modelReads: boolean): Scene {
   const example = exampleForm("2026-11-19");
   const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED : null;
-  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST } : example;
+  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } : example; // a plate with a hole, so the hole can be held
   const fields = results?.fields ?? null;
   const picked = question.picked !== undefined && fields ? fields.mesh.element_labels.findIndex((l) => l.split(".").pop() === String(question.picked)) : -1;
   return {
@@ -173,7 +178,17 @@ export type Said = { kind: string; heading: string; lines: string[]; data: Recor
 
 const said = (kind: string, heading: string, lines: string[] = [], data: Record<string, unknown> = {}): Said => ({ kind, heading, lines, data });
 
-function valueAnswer(s: Scene, question: ResultQuestion): Said {
+function valueAnswer(s: Scene, question: ResultQuestion, text: string): Said {
+  const answer = valueOnly(s, question);
+  if (!s.fields || (answer.kind !== "values" && answer.kind !== "extremes")) return answer;
+  // "is ply 2 above 1000 MPa?" opens with Yes or No (ADR-0099 amendment 4), as coupon-chat.tsx's answerQuestion says it
+  const found = answerResultQuestion(s.fields, question, s.picked);
+  const column = found.kind === "extremes" ? found.blocks[0]?.column : found.kind === "values" ? found.columns[0] : undefined;
+  const verdict = column ? thresholdVerdict(text, found, resultUnit(s.fields, column), printed) : null;
+  return verdict ? { ...answer, heading: verdict, lines: [answer.heading, ...answer.lines] } : answer;
+}
+
+function valueOnly(s: Scene, question: ResultQuestion): Said {
   if (!s.fields) return said("none", "No results to read yet", ["Stresses and strains come from a solved model."]);
   const answer = answerResultQuestion(s.fields, question, s.picked);
   if (answer.kind === "ask") return said("ask", "Which element?", [answer.text]);
@@ -202,6 +217,10 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const lines = termLines(routed.term);
       return said("term", lines.title, [lines.means, lines.here], { term: routed.term.term.id });
     }
+    case "about": {
+      const answer = aboutAnswer(routed.topic, text, { form: s.form, results: !!s.fields, readOnly: s.state.readOnly });
+      return said("about", answer.title, answer.lines, { topic: routed.topic });
+    }
     case "working": {
       const found = workingFor(s.fields, text);
       if (!s.fields || !found) return said("none", "No working to show yet");
@@ -210,15 +229,25 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     }
     case "why": return said("why", "Answered in words from the results", [], {});
     case "why-none": return said("none", "No results to answer from yet");
-    case "value": case "follow-up": return valueAnswer(s, routed.question);
+    case "summary": {
+      const answer = summaryAnswer(s.fields!, routed.quantity, printed);
+      return said(answer.found ? "summary" : "refused", answer.title, answer.lines, { quantity: routed.quantity });
+    }
+    case "value": case "follow-up": return valueAnswer(s, routed.question, text);
     case "failure": {
       const found = s.fields ? failureAnswer(s.fields, text) : null;
       if (!found) return said("none", "No answer to read yet");
       const lines = failureLines(found, printed);
       const confirmed = confirmsFailure(text, found, printed) && lines.confirmed !== null;
       const data = { criterion: found.row.criterion, confirmed, element: found.row.label.split(".").pop(), plies: [found.row.ply] };
-      return confirmed ? said("failure", "Yes", [lines.confirmed!, lines.facts.join(" · ")], data)
-        : said("failure", lines.headline, [lines.loading, ...(lines.applied ? [lines.applied] : []), lines.facts.join(" · ")], data);
+      const margin = marginNote(text, found, printed);
+      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : [])];
+      if (confirmed) return said("failure", "Yes", [lines.confirmed!, ...facts], data);
+      // as failureMessage in coupon-chat.tsx: a loading stated back wrongly is answered No, "does it fail?" opens with Yes or No
+      if (lines.confirmed !== null && contradictsFailure(text, found, printed)) return said("failure", "No", [lines.confirmed, ...facts], data);
+      const verdict = failureVerdict(text, found);
+      if (verdict) return said("failure", verdict, [`${lines.headline}, ${lines.loading.charAt(0).toLowerCase()}${lines.loading.slice(1)}`, ...(lines.applied ? [lines.applied] : []), ...facts], data);
+      return said("failure", lines.headline, [lines.loading, ...(lines.applied ? [lines.applied] : []), ...facts], data);
     }
     case "element": {
       const answer = describeElement(s.fields!, routed.element === "last" ? s.state.about : routed.element, s.picked);
@@ -228,6 +257,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
         { element: number, where: answer.where });
     }
     case "read-only": return s.past ? said("said", "A past run is shown as it was solved") : said("said", "An imported model is read as it stands");
+    // the setup check answers; on the page set up and checked it is ready, and a setup not yet checked is checked first
+    case "ready": return s.state.ready ? said("check", checkTitle(true, 0, true), [], { ready: true }) : said("said", "Checking the setup");
     case "setup-fixed": {
       const term = routed.term;
       const heading = isConditionOrLoad(term) ? (s.form.test === PLATE_TEST ? "Add it on the model tree" : "Set by the test")
@@ -244,8 +275,9 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
         [`Your coupon is saved under Projects, as it is now.${routed.target === "wing" ? "" : " Your message goes with you."}`])
       : said("said", `Opens ${TARGET_TITLES[routed.target]}`);
     case "name": return said("rows", "Got it", [`Run by ${text}`], { rows: { filled_by: text } });
+    case "general": return said("general", "Answered in words from our theory pages", []); // the API's reader writes it (ADR-0121 amendment 5)
     case "model": return said("model", "Read by the model", [], { asksResults: modelAsksResults(text, s.form, !!s.fields) });
-    case "unread": return said("redirect", "Not a question I can read yet", ["Ask for a quantity and a place: “stress in ply 3 at element 120”, “strain here” after clicking an element, or “where is the shear stress highest?”."]);
+    case "unread": { const words = unreadWords(!!s.fields); return said("redirect", words.title, [words.text]); }
     case "patterns": {
       const read = applyMessage(s.form, text);
       if (read.understood.length) return said("rows", "Got it", read.understood, { rows: read.rows });
@@ -348,8 +380,9 @@ export type ModelRequest = { reader: "result-questions" | "proposals" | "result-
 export function modelRequests(question: Question): ModelRequest[] {
   const s = scene(question, true);
   const { route } = talk(question, true);
-  // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124)
-  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: FEA_KINDS.map((k) => k.id) } }];
+  // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124);
+  // the coupon chat sends one of meaning with no kind, since its work is set up (ADR-0121 amendment 5)
+  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: question.page === "start" ? FEA_KINDS.map((k) => k.id) : [] } }];
   if (route === "why") return s.facts ? [{ reader: "result-answers", body: { question: question.ask, facts: s.facts } }] : [];
   if (route !== "model") return [];
   const out: ModelRequest[] = [];
@@ -374,6 +407,13 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
       if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
       const answer = r.response as unknown as GeneralAnswer;
       const { prose, sources } = generalLines(answer);
+      if (question.page !== "start") { // as answerMeaning in coupon-chat.tsx: the first sentence as the heading, the sections under Details
+        const covered = answer.covered && sources.length > 0;
+        const { heading, more } = prose.length ? headed(prose, "Answered in words") : { heading: "Not in our theory pages yet", more: [] };
+        return said("general", heading,
+          [...more, ...(!prose.length ? ["Ask about the setup instead, for example “is it ready to run?”."] : covered ? ["From our theory pages."] : [])],
+          { covered, sources: covered ? sources : [] });
+      }
       const offered = answer.start && answer.start !== "none" ? answer.start : null;
       return said("general", prose.length ? "Answered in words" : sources.length ? "Our theory pages hold this" : "Our theory pages do not cover that yet",
         [...prose, ...(sources.length ? [`Read: ${sources.join("; ")}`] : []), ...(offered ? [`Offers: set up a ${offered} test`] : [])],
@@ -382,8 +422,8 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
     if (r.reader === "result-answers") {
       if (!r.response) return said("failed", "No answer right now", ["That question could not be answered right now. Try again in a moment."]);
       const answer = r.response as unknown as ResultAnswer;
-      const lines = whyLines(answer, false);
-      return said("why", lines.prose.length ? "Answered in words" : "Not answered in words", [...lines.prose, lines.note], { covered: answer.covered, sources: lines.sources });
+      const lines = whyLines(answer, false, readAt(s.facts));
+      return said("why", lines.heading, [...lines.more, lines.note], { covered: answer.covered, sources: lines.sources });
     }
     if (r.reader === "result-questions") {
       const reading = r.response as unknown as ResultReading | null;
@@ -405,7 +445,7 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
     }
     parts = answer?.unread ?? [];
   }
-  if (s.fields && ASKING.test(text)) return pageAnswer(text, s, { route: "unread" });
+  if (asksUnread(text, !!s.fields)) return pageAnswer(text, s, { route: "unread" });
   const patterns = pageAnswer(text, s, { route: "patterns" });
   if (patterns.kind !== "rows" && parts.length) return said("redirect", "Read, but nothing to enter", unreadLines(parts).map((u) => `“${u.quote}”: ${u.words}`));
   return patterns;

@@ -93,7 +93,7 @@ def test_the_page_of_reasons_names_no_program_and_writes_no_value_of_a_result():
 
 
 def test_the_wings_sections_are_read_but_searched_only_by_their_subject():
-    # ADR-0102 amendment 1: no chat answers a question about a wing yet, so its sections are kept out of what a question is matched against
+    # ADR-0102 amendment 4: no chat answers a question about a wing yet, so its sections are kept out of what a question is matched against
     wing = of_subject("wing")
     assert {s.id for s in wing} >= {"engine:13-wing", "engine:15-spar-caps-and-layups-that-change-along-the-span", "fea:10-the-wing-in-calculix"}
     assert all(s.subject == "wing" for s in wing) and set(wing) | set(of_subject("references")) | set(of_subject()) == set(sections())

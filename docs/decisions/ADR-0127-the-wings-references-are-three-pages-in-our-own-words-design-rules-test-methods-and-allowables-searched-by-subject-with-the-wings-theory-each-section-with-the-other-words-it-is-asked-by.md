@@ -10,14 +10,14 @@
 
 - The founder asked that the wing's chat bring in allowables, test methods and design rules: ply drop ratios, plies of one angle in a row, the 10 % rule. The theory search (ADR-0102) reads three pages: laminate theory, finite element theory and the reasons behind a coupon's result. None explains a design rule's purpose, a test method or a basis value.
 - The values themselves are already exact: the rule limits and results are the engine's (ADR-0123, ADR-0125), the strengths and their basis, table and page the material record's (ADR-0126). A text search can find the closest words, which may belong to another material or another rule, so a value never comes from a page.
-- The wing's own theory sections are searched only by their subject, since adding them to every search changed how a coupon's questions rank (ADR-0102 amendment 1). Pages of design guidance would do the same.
+- The wing's own theory sections are searched only by their subject, since adding them to every search changed how a coupon's questions rank (ADR-0102 amendment 4). Pages of design guidance would do the same.
 - ASTM standards and CMH-17 are licensed references: a standard's number, never its text or figures (ADR-0018 amendment 1). MIL-HDBK-17-3F and FAA AC 20-107B are public.
 - Sources read on 2026-11-20: FAA AC 20-107B with change 1 (paragraphs 6.d, 6.f, 6.g, 7.a, 7.e, 7.f, 8.a(4) and Appendix 2); NCAMP's statistical report for IM7/8552, NCP-RP-2009-028 Rev B (sections 1, 1.3, 1.4, 2.3, 2.5, 3.1, Tables 1-2, 1-3 and 3-1). Not read: MIL-HDBK-17-3F (everyspec.com refuses automated downloads; the founder was asked for a copy), a NASA contractor report of laminate design guidelines (contract NAS1-19347, 1997; not found on NASA's report server), the DLR report ADR-0123 cites, and 14 CFR 23.613 and 25.613. A search excerpt places the handbook's 10 % rule in Volume 3, Chapter 12 (Lessons learned).
 
 ## Options considered
 
 1. **Three pages in our own words, `engine/docs/references/`, read by the theory search as the subject "references" and searched with the wing's theory only; each section names the other words it is asked by in a line `<!-- also: ... -->`** (chosen). A coupon's question ranks as before; the wing's chat (step 5) will search `wing_sections()`.
-2. The pages searched with every question. Rejected: the same fault ADR-0102 amendment 1 fixed, every coupon question's ranking moved by sections no coupon chat needs today.
+2. The pages searched with every question. Rejected: the same fault ADR-0102 amendment 4 fixed, every coupon question's ranking moved by sections no coupon chat needs today.
 3. Meaning search with vectors. Rejected for now: the pages are a few dozen sections, the word ranking is exact and testable, and each answer can name its section. The plan keeps vectors for when the banks show questions missing their section.
 4. Other words in the search's table of spellings (`SAME`). Rejected: that table maps one word to another on every page; "taper" is not "ply drop" everywhere. A section's own line keeps its other words beside it, where its author sees them.
 5. Text taken from the handbooks or the standards. Rejected: ASTM and CMH-17 text is licensed, and the pages explain the rules in the terms the wing's page and checks use.

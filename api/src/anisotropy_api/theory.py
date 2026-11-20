@@ -8,7 +8,7 @@ The ranking is BM25 over words (k1 = 1.5, b = 0.75), with a section's title coun
 and documents, so a test can pin which section a question finds.
 
 The wing's sections (a `##` heading that names a file of the wing, as `wing/` or `wing_model.py`, and the sections under it) are read but
-not searched by default (ADR-0102 amendment 1): no chat answers a question about a wing yet, and their words would change how every other
+not searched by default (ADR-0102 amendment 4): no chat answers a question about a wing yet, and their words would change how every other
 section ranks. The wing's chat will search them by its own subject (ADR-0125), with the three reference pages, design rules, test
 methods and allowables, which are of the subject "references" (ADR-0127): `wing_sections()`. A section may name the other words it is
 asked by in a line `<!-- also: taper, run-out, drop-off -->` under its heading; they count as its title's words and are not shown.
@@ -132,7 +132,7 @@ def sections() -> tuple[Section, ...]:
 
 def of_subject(subject: str = "") -> tuple[Section, ...]:
     """The sections of one subject: by default every section but the wing's and the references', which only the wing's chat will search
-    (ADR-0102 amendment 1, ADR-0127)."""
+    (ADR-0102 amendment 4, ADR-0127)."""
     return tuple(section for section in sections() if section.subject == subject)
 
 

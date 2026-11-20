@@ -690,7 +690,7 @@ export async function getWingFeCheck(apiBaseUrl: string, jobId: string, signal?:
 
 /** A row a message may fill: a coupon's number names the unit it is stated in, a laminate's the dimension of its units; a pure number neither. */
 export type OfferedRow = {
-  key: string; label: string; kind: "number" | "choice" | "notation";
+  key: string; label: string; kind: "number" | "choice" | "notation" | "angle";
   unit?: string; dimension?: string; choices?: { value: string; label: string }[];
 };
 /** A plate's own regions offered to a message, and the place clicked (ADR-0101): `here` names the regions the clicked element belongs to. */
