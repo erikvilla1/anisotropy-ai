@@ -44,7 +44,8 @@ Rules:
 7. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
 
 A wing: the wing tools read a wing file on this machine by its full path, or `example` for Anisotropy's example wing, and the API works it by hand in under a second.
-8. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
+8. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). A margin is given as the wing page prints it, with its sign and three decimals (+0.059); write it so. Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
+11. Answer a wing question the way the wing page does: the answer first, in one sentence (the part, yes or no, or the value, with its basis), then at most three short lines of what it rests on. No table and nothing the engineer did not ask about unless they ask for more. Say parts and checks in words; never name a tool's fields.
 9. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
 10. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
 
@@ -171,6 +172,20 @@ def wing_text(wing: str) -> str:
     return text
 
 
+def margin(value: float | None) -> float | None:
+    """A margin as the wing page prints it: three decimals (ADR-0128)."""
+    return None if value is None else round(value, 3)
+
+
+def summary_shown(summary: dict | None) -> dict | None:
+    """A preview's summary with its margins as the wing page prints them; every other value as the engine gave it."""
+    if not summary:
+        return summary
+    governing = summary.get("governing")
+    return {**summary, "lowest": {name: margin(value) for name, value in (summary.get("lowest") or {}).items()},
+            "governing": governing and {**governing, "margin_ultimate": margin(governing.get("margin_ultimate"))}}
+
+
 def results_of(report: dict) -> dict:
     """The wing's hand calculation as a client's model reads it: the verdict, what governs and where, each check's lowest margin with its
     case, the largest tip deflection and twist, the design summary, the aeroelastic speeds and the cases waiting. Values are picked out of
@@ -179,10 +194,14 @@ def results_of(report: dict) -> dict:
     lowest = {}
     for case in cases:
         for name, check in (case.get("checks") or {}).items():
-            margin = (check or {}).get("margin_ultimate")
-            if margin is not None and (name not in lowest or margin < lowest[name]["margin_ultimate"]):
-                lowest[name] = {"margin_ultimate": margin, "case": case["number"], "label": case["label"],
-                                **{key: check.get(key) for key in ("member", "station", "ply_angle", "mode", "margin_proof")}}
+            ultimate = (check or {}).get("margin_ultimate")
+            if ultimate is not None and (name not in lowest or ultimate < lowest[name]["margin_ultimate"]):
+                lowest[name] = {"margin_ultimate": ultimate, "case": case["number"], "label": case["label"],
+                                **{key: check.get(key) for key in ("member", "station", "ply_angle", "mode")}, "margin_proof": check.get("margin_proof")}
+    for found in lowest.values():  # margins as the wing page prints them, once the lowest are found on the engine's own numbers
+        found["margin_ultimate"], found["margin_proof"] = margin(found["margin_ultimate"]), margin(found["margin_proof"])
+    governing = report.get("governing")
+    governing = governing and {**governing, "margin_ultimate": margin(governing.get("margin_ultimate"))}
 
     def largest(key: str) -> dict | None:
         top = max(cases, key=lambda c: abs(c.get(key) or 0.0), default=None)
@@ -191,7 +210,7 @@ def results_of(report: dict) -> dict:
     design = {key: value for key, value in (report.get("design") or {}).items() if key != "stretches"}
     material = report.get("material") or {}
     return {"wing": report.get("wing"), "units": report.get("units"), "passes": report.get("passes"), "cases_run": len(cases),
-            "strengths": material.get("strength_basis"), "governing": report.get("governing"), "lowest_by_check": lowest,
+            "strengths": material.get("strength_basis"), "governing": governing, "lowest_by_check": lowest,
             "largest_tip_deflection": largest("tip_deflection"), "largest_tip_twist": largest("tip_twist"), "design": design,
             "aeroelastic": report.get("aeroelastic"), "cases_waiting": report.get("not_run"),
             "note": "The hand calculation: the box between the spars as a thin-walled beam. Margins are at ultimate load; a margin is the strength "
@@ -406,13 +425,13 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
         """Preview a change of plies on the wing, never applied: the engine makes it on a copy of the wing file (splitting the part into
         zones where it covers a stretch) and works the wing as it is and as changed. Returns the change in one sentence with the stacks it
         gives, the summary before and after (the lowest margin and where, each check's lowest margin, mass, tip deflection, first bending
-        frequency), the design rules of the part changed, and the part as changed."""
+        frequency, the strengths' basis), the design rules of the part changed, and the part's table as changed."""
         change = {"action": action, "part": part, "angle": angle, "count": count, "start": start, "end": end, "placement": placement}
         found = ask(api.post, "/v1/wings/changes", {"toml": wing_text(wing), "change": change})
-        return said({"words": found.get("words"), "before": found.get("before"), "after": found.get("after"), "units": found.get("units"),
-                     "rules": found.get("rules"), "part_as_changed": (found.get("wing") or {}).get(part),
-                     "applied": False, "note": "Nothing is applied. The engineer applies it with Apply on the wing page, or by writing part_as_changed "
-                                               "into the wing file's table of that part."})
+        return said({"words": found.get("words"), "before": summary_shown(found.get("before")), "after": summary_shown(found.get("after")),
+                     "units": found.get("units"), "rules": found.get("rules"), "table_as_changed": (found.get("wing") or {}).get(part),
+                     "applied": False, "note": "Nothing is applied. The engineer applies it with Apply on the wing page, or by changing the wing file "
+                                               "themselves. Margins are at ultimate load, on the strengths' basis each summary names."})
 
     @server.tool(annotations=READS, structured_output=False)
     def show_working(result_id: Annotated[str, Field(description="The result_id solve_coupon returned")],

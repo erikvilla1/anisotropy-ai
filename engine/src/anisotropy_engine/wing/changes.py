@@ -167,7 +167,7 @@ def change_words(data: dict, change: PlyChange) -> str:
 
 def _summary(report: dict) -> dict:
     """What a change is judged by: the lowest margin and where, each check's lowest margin, the mass, the largest tip deflection and the
-    first bending frequency, in the report's units."""
+    first bending frequency, in the report's units, and the basis of the strengths the margins use (ADR-0126)."""
     lowest: dict[str, float] = {}
     for case in report["cases"]:
         for name, check in case["checks"].items():
@@ -176,7 +176,8 @@ def _summary(report: dict) -> dict:
     design = report["design"]
     return {"passes": report["passes"], "governing": report["governing"], "lowest": lowest, "mass": design["mass"],
             "tip_deflection": max(abs(case["tip_deflection"]) for case in report["cases"]),
-            "first_bending_frequency": design["first_bending_frequency"]}
+            "first_bending_frequency": design["first_bending_frequency"],
+            "strength_basis": (report.get("material") or {}).get("strength_basis")}
 
 
 def preview_change(data: dict, change: PlyChange) -> dict:

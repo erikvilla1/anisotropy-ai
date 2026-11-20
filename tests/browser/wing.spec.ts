@@ -422,6 +422,7 @@ test("the wing's chat answers from the wing's own numbers and pages, and preview
   await expect.poll(() => sent.at(-1)?.wing?.spar_caps).toBeTruthy();
   const previewed = await ask("Add 2 0 plies to the spar caps from the root to 40% span");
   await expect(previewed.getByTestId("wing-preview-words")).toHaveText(PREVIEW.words);
+  await expect(previewed.getByTestId("wing-preview-basis")).toHaveText("Margins at ultimate load, on B-basis strengths.");
   expect(changes.at(-1)?.change).toEqual({ action: "add_plies", part: "spar_caps", angle: 0, count: 2, start: 0, end: 0.4, placement: "beside" });
   const table = previewed.getByTestId("wing-preview-table");
   await expect(table.locator("tbody tr").first()).toContainText("Lowest margin");

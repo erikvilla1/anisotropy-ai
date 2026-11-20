@@ -8,6 +8,7 @@
 import {
   answerWords, CHECK_NAMES, CHECK_WORDS, marginText, ruleTitle, shown, STRENGTH_LABELS, strengthWords, unitText, whereWords,
   type WingCase, type WingCheckName, type WingDescription, type WingPart, type WingReport, type WingRule, type WingRuleName,
+  type WingStrengthBasis,
 } from "./wing";
 
 /** Every way the wing's chat answers a message. */
@@ -464,6 +465,8 @@ export type PreviewRow = { label: string; before: string; after: string; better:
 export type WingSummary = {
   passes: boolean; governing: { case: number; label: string; check: WingCheckName; margin_ultimate: number | null } | null;
   lowest: Partial<Record<WingCheckName, number>>; mass: number; tip_deflection: number; first_bending_frequency: number;
+  /** the basis of the strengths the margins use (ADR-0126) */
+  strength_basis?: WingStrengthBasis | null;
 };
 
 /** The API's preview of a change (ADR-0128), as the page reads it. */
@@ -492,6 +495,12 @@ export function previewRows(p: WingChangePreview): PreviewRow[] {
 function moved(before: number | null, after: number | null, good: 1 | -1): boolean | null {
   if (before === null || after === null || Math.abs(after - before) <= 1e-12 * Math.max(1, Math.abs(before))) return null;
   return (after - before) * good > 0;
+}
+
+/** What the preview's margins rest on, in one line, as the verdict says it: "Margins at ultimate load, on B-basis strengths." */
+export function previewBasis(p: WingChangePreview): string {
+  const basis = p.after.strength_basis ? strengthWords({ strength_basis: p.after.strength_basis } as Parameters<typeof strengthWords>[0]) : "";
+  return `Margins at ultimate load${basis ? `, on ${basis}` : ""}.`;
 }
 
 /** The rules of the part changed that the change leaves unmet, in the page's sentence each. */

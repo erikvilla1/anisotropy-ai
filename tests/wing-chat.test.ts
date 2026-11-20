@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { changeLine, lowestOf, previewRows, previewWarnings, readWingAsk, wingAnswer, type PlyChange, type WingChangePreview } from "../lib/wing-chat";
+import { changeLine, lowestOf, previewBasis, previewRows, previewWarnings, readWingAsk, wingAnswer, type PlyChange, type WingChangePreview } from "../lib/wing-chat";
 import type { WingReport } from "../lib/wing";
 
 // The wing's chat (ADR-0128): what the page reads in a message by its own patterns, and how it answers from the engine's report. The reports
@@ -137,5 +137,6 @@ test("the preview's table and warnings are the engine's numbers, which way each 
   const unmet = PREVIEW.rules.filter((r) => !r.met);
   assert.equal(previewWarnings(PREVIEW).length, unmet.length);
   previewWarnings(PREVIEW).forEach((w, i) => assert.ok(w.startsWith("Spar caps") && w.endsWith(unmet[i].words), w));
+  assert.equal(previewBasis(PREVIEW), "Margins at ultimate load, on B-basis strengths.", "the basis the verdict names, under the sentence");
   assert.equal(PREVIEW.words, "Two 0° plies added to the spar caps from the root to 40 % of the half span, beside the 0° plies: [0/0/0/45/-45/0]s there.");
 });

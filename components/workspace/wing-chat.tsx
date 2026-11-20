@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { ArrowUp, CircleAlert, MessagesSquare } from "lucide-react";
 import { previewWingChange, StudioError, wingReferences, type ReferenceSection } from "@/lib/studio-api";
-import { previewRows, previewWarnings, readWingAsk, wingAnswer, type WingAsk, type WingChangePreview, type WingSaid } from "@/lib/wing-chat";
+import { previewBasis, previewRows, previewWarnings, readWingAsk, wingAnswer, type WingAsk, type WingChangePreview, type WingSaid } from "@/lib/wing-chat";
 import { wingKey } from "@/lib/wing-versions";
 import { bannedIn } from "@/lib/studio-copy";
 import type { WingDescription } from "@/lib/wing";
@@ -134,6 +134,7 @@ function Preview({ preview, outcome, stale, onApply, onDismiss }: { preview: Win
     <div data-testid="wing-preview">
       <h4>Preview: {outcome === "applied" ? "applied" : outcome === "dismissed" ? "not applied" : "not applied yet"}</h4>
       <p data-testid="wing-preview-words">{preview.words}</p>
+      <p className="chat-note" data-testid="wing-preview-basis">{previewBasis(preview)}</p>
       <div className="studio-table-scroll">
         <table className="studio-table studio-table-num studio-table-compact" data-testid="wing-preview-table">
           <thead><tr><th scope="col">By the hand calculation</th><th scope="col" className="studio-num-head">As it is</th><th scope="col" className="studio-num-head">Changed</th></tr></thead>

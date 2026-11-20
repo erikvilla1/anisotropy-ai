@@ -186,9 +186,10 @@ def test_the_results_are_the_reports_values_picked_out_with_their_case_and_place
     found = call(("wing_results", {"wing": "example"}))[0]
     report = WING["report"]
     assert found["passes"] is True and found["cases_run"] == 34 and found["strengths"] == "B-basis"
-    assert found["governing"] == report["governing"]
+    printed = round(report["governing"]["margin_ultimate"], 3)  # a margin as the wing page prints it, +0.059
+    assert found["governing"] == {**report["governing"], "margin_ultimate": printed} and printed == 0.059
     skin = found["lowest_by_check"]["skin plies"]
-    assert skin["margin_ultimate"] == report["governing"]["margin_ultimate"] and skin["case"] == 6 and skin["member"] == "upper skin"
+    assert skin["margin_ultimate"] == printed and skin["case"] == 6 and skin["member"] == "upper skin"
     tip = max(report["cases"], key=lambda c: abs(c["tip_deflection"]))
     assert found["largest_tip_deflection"] == {"value": tip["tip_deflection"], "case": tip["number"], "label": tip["label"]}
     assert found["design"]["mass"] == report["design"]["mass"] and "stretches" not in found["design"]
@@ -209,7 +210,8 @@ def test_the_rules_and_the_strengths_are_the_wings_own(call):
 def test_a_question_finds_the_wings_reference_sections_and_never_a_value_from_them(call, fake):
     found = call(("search_wing_references", {"question": "what ply drop ratio should I use?"}))[0]
     assert fake.calls[-1][2] == {"question": "what ply drop ratio should I use?", "about": "wing", "limit": 3}
-    assert found["sections"][0]["from"] == "Laminate theory, 5. Failure" and "never from a section" in found["how_to_answer"]
+    assert found["sections"][0]["from"] == "Design rules for laminates, Ply drops: How long the run-out is"  # the API's own search of the wing's pages
+    assert "never from a section" in found["how_to_answer"]
 
 
 def test_a_change_is_previewed_never_applied_and_one_the_wing_cannot_take_is_refused_in_the_engines_words(call, fake):
@@ -219,7 +221,9 @@ def test_a_change_is_previewed_never_applied_and_one_the_wing_cannot_take_is_ref
                                 ("preview_wing_change", {"wing": "example", **change, "count": 1}))
     assert fake.calls[0][2] == {"toml": EXAMPLE_WING, "change": {**change, "placement": "beside"}}
     assert previewed["words"].startswith("Two 0° plies added to the skin from the root to 40 % of the half span")
-    assert previewed["applied"] is False and previewed["part_as_changed"]["zones"][0]["end"] == 0.4
+    assert previewed["applied"] is False and previewed["table_as_changed"]["zones"][0]["end"] == 0.4
     assert previewed["after"]["lowest"]["skin plies"] > previewed["before"]["lowest"]["skin plies"]
+    assert previewed["before"]["governing"]["margin_ultimate"] == 0.059 and previewed["after"]["strength_basis"] == "B-basis"
+    assert all(round(value, 3) == value for value in previewed["after"]["lowest"].values()), "margins as the wing page prints them"
     assert isinstance(caps, Refused) and caps.endswith(": The wing has no spar caps: add them on the Layup step first.")
     assert isinstance(odd, Refused) and len(fake.calls) == 2, "an odd count is refused before the API is asked"
