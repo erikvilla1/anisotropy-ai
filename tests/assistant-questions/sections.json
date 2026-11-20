@@ -21,6 +21,7 @@
     {"ask": "how is a wing spar sized?", "kind": "what-is", "style": "plain", "page": "start", "route": "general",
       "live": {"covered": false, "start": "none", "judge": "Says plainly that our theory pages do not cover sizing a wing spar yet; does not make up a method or a number, and does not offer to set up a wing"}},
     {"ask": "Is FEA better than a hand calc for this", "kind": "yes-no", "style": "loose", "page": "start", "route": "general",
+      "gap": "search: no theory page says when a hand calculation is enough and when FEA is needed, so the answer declines (real-model check, 2026-11-20)",
       "live": {"start": "none", "judge": "Opens with the answer: a hand calculation (laminate theory) is enough for a flat laminate under even loads, and FEA is needed where the stress varies, at a hole, a grip or a change of shape; does not claim a number"}},
     {"ask": "open the laminate calculator", "kind": "command", "style": "plain", "page": "setup", "route": "section", "answer": {"heading": "Open Laminate?", "says": ["Your coupon is saved"]}},
     {"ask": "CAD please", "kind": "command", "style": "terse", "page": "blank", "route": "section", "answer": {"heading": "Opens CAD"}},
