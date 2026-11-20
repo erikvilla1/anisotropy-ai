@@ -5,8 +5,9 @@ with its arguments, is checked here; its last words go to the judge in `assistan
 
     uv run --project mcp-server --with "anthropic>=1,<2" python scripts/assistant-live-mcp.py --questions q.json --store DIR --out a.json
 
-A conversation's turns depend on each other, so they are sent one by one, each stored under its exact request like every other answer.
-Exits 3 when the budget stopped it, with what was done written out."""
+A conversation's turns depend on each other, so they are sent one after another, each stored under its exact request like every other
+answer; the conversations themselves go on at the same time, `AT_ONCE` of them. Exits 3 when the budget stopped one, with what was done
+written out."""
 
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from mcp import Client
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "mcp-server" / "tests")]
 
-from assistant_live_common import OverBudget, Spend, Store, key_of, reply, resolve  # noqa: E402
+from assistant_live_common import AT_ONCE, OverBudget, Spend, Store, key_of, reply, resolve  # noqa: E402
 from conftest import FakeApi  # noqa: E402
 from test_server import VALUES  # noqa: E402
 
@@ -81,7 +82,7 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
         for _ in range(TURNS):
             params = {"model": model, "max_tokens": 4000, "system": INSTRUCTIONS, "tools": tools, "messages": messages, "output_config": {"effort": "low"}}
             key = key_of(params)
-            resolve(client, {key: params}, store, spend, batch=False)
+            await asyncio.to_thread(resolve, client, {key: params}, store, spend, batch=False, log=print)
             answer = store.get(key)
             if answer is None:
                 return {"id": question["id"], "tools": calls, "final": final, "faults": ["the model gave no answer in this run"]}
@@ -102,6 +103,22 @@ async def talk(question: dict[str, Any], model: str, store: Store, spend: Spend,
     return {"id": question["id"], "tools": calls, "final": final, "faults": faults}
 
 
+async def talk_all(questions: list[dict[str, Any]], model: str, store: Store, spend: Spend, client: Any) -> tuple[list[dict[str, Any]], str | None]:
+    """Every conversation, `AT_ONCE` at a time; the answers in the questions' order. One the budget stops is left out and named."""
+    gate = asyncio.Semaphore(AT_ONCE)
+
+    async def one(question: dict[str, Any]) -> dict[str, Any]:
+        async with gate:
+            return await talk(question, model, store, spend, client)
+
+    done = await asyncio.gather(*(one(q) for q in questions), return_exceptions=True)
+    stopped = next((str(r) for r in done if isinstance(r, OverBudget)), None)
+    failed = next((r for r in done if isinstance(r, BaseException) and not isinstance(r, OverBudget)), None)
+    if failed is not None:
+        raise failed
+    return [r for r in done if isinstance(r, dict)], stopped
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--questions", type=Path, required=True)
@@ -116,13 +133,7 @@ def main() -> int:
     logging.getLogger("httpx").setLevel(logging.WARNING)  # the stand-in API's every call is not news
     store, spend = Store(args.store), Spend(args.budget, args.spent)
     client = anthropic.Anthropic(max_retries=4)
-    results, stopped = [], None
-    for question in json.loads(args.questions.read_text(encoding="utf-8")):
-        try:
-            results.append(asyncio.run(talk(question, args.model, store, spend, client)))
-        except OverBudget as exc:
-            stopped = str(exc)
-            break
+    results, stopped = asyncio.run(talk_all(json.loads(args.questions.read_text(encoding="utf-8")), args.model, store, spend, client))
     args.out.write_text(json.dumps({"spent": spend.dollars, "sent": len(store.sent), "stored": len(store.used - store.sent), "stopped": stopped,
                                     "results": results}, ensure_ascii=False, indent=1), encoding="utf-8")
     return 3 if stopped else 0

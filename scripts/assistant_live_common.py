@@ -1,13 +1,15 @@
 """What both halves of the real-model check share (ADR-0121, check 2): the store of the model's answers, keyed by the exact request, so a
 request answered once is never paid for again; the prices, so a run stops before its budget is spent; and the sending, in one batch at
-half price or one by one. Imported by `scripts/assistant-live.py` (the API's readers, the judge, the report) and
+half price or all at once at full price. Imported by `scripts/assistant-live.py` (the API's readers, the judge, the report) and
 `scripts/assistant-live-mcp.py` (an MCP client on our tools)."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -20,6 +22,7 @@ CACHE_READ = {"claude-opus-5-5": 0.05, "claude-sonnet-5-5": 0.05}
 CACHE_WRITE = 1.25
 CHARS_PER_TOKEN = 3.0  # an estimate on the high side, for the budget only
 OUTPUT_GUESS = 800  # tokens an answer is budgeted at, or its max_tokens when lower
+AT_ONCE = 8  # requests sent at the same time when not in a batch, well under the API's rate limits
 
 
 class OverBudget(RuntimeError):
@@ -49,11 +52,25 @@ class Store:
 
 
 class Spend:
-    """What the run has spent, from the usage each answer reports, against its budget."""
+    """What the run has spent, from the usage each answer reports, against its budget. Requests sent at the same time reserve their
+    estimate first, so together they cannot pass the budget either."""
 
     def __init__(self, budget: float, spent: float = 0.0):
         self.budget = budget
         self.dollars = spent
+        self.reserved = 0.0
+        self.lock = threading.Lock()
+
+    def reserve(self, estimate: float, count: int) -> None:
+        with self.lock:
+            if self.dollars + self.reserved + estimate > self.budget:
+                raise OverBudget(f"{count} new requests would cost about ${estimate:.2f}, with ${self.dollars + self.reserved:.2f} spent or "
+                                 f"under way and a budget of ${self.budget:.2f}: raise the budget or run fewer features")
+            self.reserved += estimate
+
+    def release(self, estimate: float) -> None:
+        with self.lock:
+            self.reserved = max(0.0, self.reserved - estimate)
 
     @staticmethod
     def estimate(params: dict[str, Any], batch: bool) -> float:
@@ -67,7 +84,8 @@ class Spend:
         dollars = ((usage.get("input_tokens") or 0) * price_in + (usage.get("output_tokens") or 0) * price_out
                    + (usage.get("cache_read_input_tokens") or 0) * price_in * CACHE_READ.get(model, 0.1)
                    + (usage.get("cache_creation_input_tokens") or 0) * price_in * CACHE_WRITE) / 1e6
-        self.dollars += dollars * (0.5 if batch else 1.0)
+        with self.lock:
+            self.dollars += dollars * (0.5 if batch else 1.0)
 
 
 def for_sending(params: dict[str, Any]) -> dict[str, Any]:
@@ -103,17 +121,24 @@ def reply(answer: dict[str, Any]) -> SimpleNamespace:
 
 def resolve(client: Any, wanted: dict[str, dict[str, Any]], store: Store, spend: Spend, *, batch: bool, log: Callable[[str], None] = print,
             poll: float = 20.0, wait: float = 3 * 3600) -> None:
-    """Asks the model every request in `wanted` the store has no answer to, and keeps each answer. Nothing is sent when the estimate
-    would pass the budget. A request the model did not answer is not kept, so the next run asks it again."""
+    """Asks the model every request in `wanted` the store has no answer to, and keeps each answer: in one batch at half price, or else
+    all at once at full price, `AT_ONCE` at a time. Nothing is sent when the estimate would pass the budget. A request the model did not
+    answer is not kept, so the next run asks it again. Safe to call from several threads at once."""
     store.used.update(wanted)
     missing = {key: params for key, params in wanted.items() if store.get(key) is None}
     if not missing:
         return
     batch = batch and len(missing) > 1
     estimate = sum(Spend.estimate(params, batch) for params in missing.values())
-    if spend.dollars + estimate > spend.budget:
-        raise OverBudget(f"{len(missing)} new requests would cost about ${estimate:.2f}, with ${spend.dollars:.2f} spent and a budget of "
-                         f"${spend.budget:.2f}: raise the budget or run fewer features")
+    spend.reserve(estimate, len(missing))
+    try:
+        _send(client, missing, store, spend, batch=batch, log=log, poll=poll, wait=wait)
+    finally:
+        spend.release(estimate)
+
+
+def _send(client: Any, missing: dict[str, dict[str, Any]], store: Store, spend: Spend, *, batch: bool, log: Callable[[str], None],
+          poll: float, wait: float) -> None:
     store.sent.update(missing)
     import anthropic  # here, so the module loads where the SDK is not installed
 
@@ -121,7 +146,7 @@ def resolve(client: Any, wanted: dict[str, dict[str, Any]], store: Store, spend:
         try:
             created = client.messages.batches.create(requests=[{"custom_id": key, "params": for_sending(p)} for key, p in missing.items()])
         except anthropic.BadRequestError as exc:
-            log(f"The batch was refused ({exc.message}); sending the requests one by one.")
+            log(f"The batch was refused ({exc.message}); sending the requests at full price instead.")
         else:
             log(f"Batch {created.id}: {len(missing)} requests at half price; checking every {poll:.0f} s.")
             deadline = time.monotonic() + wait
@@ -138,11 +163,19 @@ def resolve(client: Any, wanted: dict[str, dict[str, Any]], store: Store, spend:
                 else:
                     log(f"A request of the batch came back {result.result.type}; it is asked again next run.")
             return
-    for key, params in missing.items():
+
+    def one(key: str, params: dict[str, Any]) -> None:
         try:
             message = client.messages.create(**for_sending(params))
         except anthropic.APIStatusError as exc:
             log(f"A request was refused ({exc.status_code}: {exc.message}); it is asked again next run.")
-            continue
+            return
         spend.add(params["model"], message.usage.model_dump(mode="json"), batch=False)
         store.put(key, kept(message))
+
+    if len(missing) == 1:
+        one(*next(iter(missing.items())))
+        return
+    with ThreadPoolExecutor(max_workers=AT_ONCE) as pool:
+        for done in [pool.submit(one, key, params) for key, params in missing.items()]:
+            done.result()

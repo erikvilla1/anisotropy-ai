@@ -5,9 +5,10 @@ feature by feature, what holds, what is weak and what fails, and what changed si
 
 What keeps it cheap: an answer is stored under the exact request, so a run pays only for requests whose question, instructions, schema
 or model changed since the last; the rest go in one batch at half price, with the instructions cached; the judge is the small model;
-and the run stops before it would pass its budget. `--dry-run` counts the requests still to pay for and sends nothing.
+and the run stops before it would pass its budget. `--now` sends everything at once at full price instead, for a report in minutes
+rather than when the batch ends. `--dry-run` counts the requests still to pay for and sends nothing.
 
-    uv run --project api python scripts/assistant-live.py [--features coupon-setup,result-values] [--budget 3] [--dry-run]
+    uv run --project api python scripts/assistant-live.py [--features coupon-setup,result-values] [--budget 3] [--now] [--dry-run]
 
 It needs ANTHROPIC_API_KEY. The GitHub workflow "Assistant check" runs it by hand, before a feature is merged.
 """
@@ -188,7 +189,7 @@ def main() -> int:
     parser.add_argument("--budget", type=float, default=3.0, help="the most this run may spend, in dollars")
     parser.add_argument("--store", type=Path, default=ROOT / ".local" / "assistant-live", help="where answers are kept between runs")
     parser.add_argument("--report", type=Path, default=None, help="where the report goes (default: in the store's folder)")
-    parser.add_argument("--now", action="store_true", help="send one by one at full price rather than in a batch")
+    parser.add_argument("--now", action="store_true", help="send everything at once at full price rather than in a half-price batch: done in minutes, about twice the cost")
     parser.add_argument("--no-mcp", action="store_true", help="leave out the questions an MCP client answers")
     parser.add_argument("--dry-run", action="store_true", help="count the requests still to pay for and send nothing")
     args = parser.parse_args()
