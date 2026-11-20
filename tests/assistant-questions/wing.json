@@ -1,0 +1,24 @@
+{
+  "feature": "wing",
+  "title": "Designing and checking a composite wing box",
+  "records": ["ADR-0115", "ADR-0118"],
+  "watches": [],
+  "waiting": "The wing's chat is not built yet: the wing page and its check are in draft PR #244, and a chat that edits a wing is a later step. These are the questions it must answer when it lands.",
+  "questions": [
+    {"ask": "Add 2 0° plies to the spar caps from the root to 40% span", "kind": "change", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Proposes two 0° plies on both spar caps from 0 to 40% span for the engineer to tick; names the ply drop at 40% span and its ramp ratio; says whether the caps still meet the 10% rule and the limit on consecutive plies of one angle; writes no number that is not the wing's or the rule's"}, "source": "the founder, 2026-11-19"},
+    {"ask": "what allowables are you using for the spar caps?", "kind": "what-is", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Names the material, the dataset and whether the strengths are mean or B-basis values, with the source"}},
+    {"ask": "which ASTM test gives the compression allowable?", "kind": "what-is", "style": "jargon", "page": "results", "route": "model", "live": {"judge": "Names the ASTM compression method the dataset's strength comes from, without inventing one"}},
+    {"ask": "what ply drop ratio should I use?", "kind": "what-is", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Gives the ramp ratio from our design rules and where it is checked"}},
+    {"ask": "how many 0° plies can I stack together?", "kind": "what-is", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Gives the limit on consecutive plies of one angle from our design rules"}},
+    {"ask": "does my skin meet the 10% rule?", "kind": "yes-no", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Opens with Yes or No, then each direction's share of the skin's plies"}},
+    {"ask": "is the spar cap laminate balanced and symmetric?", "kind": "yes-no", "style": "jargon", "page": "results", "route": "model", "live": {"judge": "Opens with Yes or No for each, from the wing's own layup"}},
+    {"ask": "which part fails first", "kind": "which", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Names the part (skin, spar cap, web) and the margin, from the wing's check"}},
+    {"ask": "what is the margin of safety of the web?", "kind": "value", "style": "jargon", "page": "results", "route": "model", "live": {"judge": "The web's margin from the wing's check, with what it is against (buckling or strength)"}},
+    {"ask": "why does the web buckle first?", "kind": "why", "style": "plain", "page": "results", "route": "model", "live": {"judge": "From the wing's facts and the theory pages; no number not in them"}},
+    {"ask": "what is the tip deflection", "kind": "value", "style": "plain", "page": "results", "route": "model", "live": {"judge": "The tip deflection from the wing's check, with its load case"}},
+    {"ask": "make the spar caps thicker near the root", "kind": "change", "style": "loose", "page": "results", "route": "model", "live": {"judge": "Asks how much, or proposes plies for the engineer to tick; never changes the wing on its own"}},
+    {"ask": "add a rib at 60% span", "kind": "change", "style": "plain", "page": "results", "route": "model", "live": {"judge": "Proposes a rib at 60% span for the engineer to tick"}},
+    {"ask": "export the STEP", "kind": "command", "style": "terse", "page": "results", "route": "model", "live": {"judge": "Offers the STEP download"}},
+    {"ask": "whats the weight of the wing box", "kind": "value", "style": "typo", "page": "results", "route": "model", "live": {"judge": "The wing box's mass from the wing's own numbers, or says it is not computed yet"}}
+  ]
+}

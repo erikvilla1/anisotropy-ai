@@ -8,7 +8,7 @@ import { MODEL_TREE } from "@/lib/model-tree";
 import { answerGeneral, StudioError, type GeneralAnswer } from "@/lib/studio-api";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
-import { readIntent, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
+import { routeStart, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
 import { FEA_KINDS, feaKind, type FeaKind } from "@/lib/workspaces";
 import { tabStorage, useProject } from "@/components/studio/project-context";
 import { goTo } from "./go-to";
@@ -142,14 +142,14 @@ export function FeaStartChat() {
     if (!text || busy.current) return;
     setInput("");
     add({ role: "user", text });
-    const intent = readIntent(text);
-    if (intent?.start) {
-      if (intent.target === "coupon") { setUp("coupon", text); return; }
-      if (intent.target === "wing" || intent.target === "fea") { notHereYet(intent.target); return; }
-      goTo(intent.target, { prompt: saysMore(text) ? text : "" }, router.push); // nothing here is work yet: another section opens at once
-      return;
+    // who answers is a fixed order, in one place the question banks try (lib/work-intent.ts, ADR-0121)
+    const routed = routeStart(text);
+    switch (routed.route) {
+      case "set-up": setUp(routed.kind, text); return;
+      case "not-here": notHereYet(routed.target); return;
+      case "open": goTo(routed.target, { prompt: saysMore(text) ? text : "" }, router.push); return; // nothing here is work yet: it opens at once
+      case "general": void ask(text, routed.named); return;
     }
-    void ask(text, intent?.target ?? null);
   }
 
   // the first words, and a message carried from the start screen, the home page or another section, read once (ADR-0124)

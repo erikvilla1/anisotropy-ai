@@ -46,6 +46,26 @@ export function readIntent(text: string): Intent | null {
   return { target: found[0], start: !QUESTION.test(said) || ASKS_FOR.test(said) };
 }
 
+/** Every way the FEA assistant of a blank project answers a message (ADR-0124), in the order `routeStart` tries them. The question banks
+ * ask at least one question that takes each (ADR-0121, `tests/assistant-questions/sections.json`, page "start"). */
+export const START_ROUTES = ["set-up", "not-here", "open", "general"] as const;
+export type StartRoute =
+  | { route: "set-up"; kind: "coupon" } // a kind of FEA work this project is set up for, in place
+  | { route: "not-here"; target: "wing" | "fea" } // a wing, not built yet, or FEA itself, where the engineer already is
+  | { route: "open"; target: "laminate" | "cad" } // another section, opened at once with the message: a blank project holds no work
+  | { route: "general"; named: WorkTarget | null }; // anything else, answered in words from the theory pages (`/v1/workspace/questions`)
+
+/** Who answers a message in the FEA assistant of a blank project: `components/workspace/fea-start.tsx` answers by the route this returns. */
+export function routeStart(text: string): StartRoute {
+  const intent = readIntent(text);
+  if (intent?.start) {
+    if (intent.target === "coupon") return { route: "set-up", kind: "coupon" };
+    if (intent.target === "wing" || intent.target === "fea") return { route: "not-here", target: intent.target };
+    return { route: "open", target: intent.target };
+  }
+  return { route: "general", named: intent?.target ?? null };
+}
+
 /** The section a target is worked in. */
 export function sectionOf(target: WorkTarget): "fea" | "cad" | "laminate" {
   return target === "coupon" || target === "wing" || target === "fea" ? "fea" : target;
