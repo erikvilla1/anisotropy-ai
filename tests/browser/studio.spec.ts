@@ -2010,7 +2010,8 @@ test("where the Ansys file is closed, a customer is offered the Abaqus file alon
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await message.fill("can i get this as an ansys file?");
   await message.press("Enter");
-  await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Not as an Ansys file yet");
+  // by its words, not as the last heading: Build has started a run, and its Results card can land after this answer on a slow runner
+  await expect(page.getByTestId("coupon-chat").locator("h4", { hasText: "Not as an Ansys file yet" })).toBeVisible();
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus");
   await expect(page.getByTestId("chat-model-file").last().getByRole("button")).toHaveText(["Abaqus input file (.inp)"]);
   await expectNoBannedTerms(page, "the assistant's answer about the file");
@@ -2040,7 +2041,7 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await message.fill("can i get this as an ansys file?");
   await message.press("Enter");
-  await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Download the model");
+  await expect(page.getByTestId("coupon-chat").locator("h4", { hasText: "Download the model" }).last()).toBeVisible(); // by its words: the run's Results card can land after it
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
   await expect(page.getByTestId("chat-model-file").last()).toContainText("Compare the Ansys file's reaction with the one shown here");
   await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
