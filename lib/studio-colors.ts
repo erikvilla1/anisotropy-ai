@@ -5,6 +5,7 @@
  * number: the legend's ticks and the readout do.
  */
 import { formatNumber, MINUS } from "./number-format";
+import { RAINBOW } from "./rainbow";
 
 export type RGB = [number, number, number]; // 0..1
 
@@ -14,6 +15,23 @@ export const SEQUENTIAL = ["#10170f", "#1f3a1c", "#376330", "#5d8f52", "#8fbb80"
 export const DIVERGING = ["#2a78d6", "#5d95dd", "#8eb0e0", "#9ba29b", "#e0a07c", "#df7a4c", "#d95926"];
 /** Fixed categorical slots for the ply angles, in order of first appearance (the reference palette's first slots, dark steps). */
 export const CATEGORICAL = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
+/** The home page's rainbow, blue to red, the workspace's default (ADR-0063 amendment 1): Classic. */
+export const CLASSIC = RAINBOW.map(([r, g, b]) => `#${[r, g, b].map((c) => Math.round(c * 255).toString(16).padStart(2, "0")).join("")}`);
+/** Turbo's seven stops from t = 0.08 to 0.96, without its near-black ends, as the hero lens records them (ADR-0071 amendment 2): Spectrum.
+ * Google's published polynomial fit of Turbo (Mikhailov 2019), rounded to the byte. */
+export const SPECTRUM = ["#4b4ac8", "#29afec", "#3ff393", "#a6f748", "#ffb827", "#ee5315", "#970d00"];
+/** The colour scales offered under View, Colours (ADR-0063 amendment 1): Classic by default, Spectrum, and the green ramps of before. */
+export type Palette = "classic" | "spectrum" | "green";
+export const PALETTES: [Palette, string][] = [["classic", "Classic"], ["spectrum", "Spectrum"], ["green", "Green"]];
+export const DEFAULT_PALETTE: Palette = "classic";
+export const isPalette = (value: string): value is Palette => PALETTES.some(([p]) => p === value);
+/** The outlines and edges drawn over a scale: on a rainbow, red is the top of the scale, so the critical element is outlined in white and
+ * the picked one in black; on the green ramps they stay red and light grey. */
+export function overlayColors(palette: Palette): { critical: string; picked: string; edges: string; criticalWord: string } {
+  return palette === "green"
+    ? { critical: CRITICAL, picked: "#efefef", edges: "#555555", criticalWord: "red" }
+    : { critical: "#ffffff", picked: "#0a0a0a", edges: "#1c1c1c", criticalWord: "white" };
+}
 export const CRITICAL = "#e66767"; // the status colour for the critical element's outline, with its label beside it
 export const HELD = "#9085e9"; // a held set's frame
 export const LOADED = "#c98500"; // the loaded set's frame and the arrow
@@ -35,13 +53,17 @@ export function ramp(stops: string[], t: number): RGB {
 
 export type Scale = {
   kind: "sequential" | "diverging"; min: number; max: number; stops: string[];
+  /** the scale's colours: a rainbow runs every field from its lowest to its highest value; green keeps the grey at zero */
+  palette?: Palette;
   /** The field's ends: the range the package wrote, or the smallest and largest value shown when it wrote none. */
   ends: [number, number]; source: "package" | "values";
 };
 
 /** The scale for a field: its ends are the range the package wrote (ADR-0063) or, for a job solved before the package wrote ranges, the
- * smallest and largest of the values shown (picked, not computed); diverging when it changes sign, around zero and symmetric; sequential otherwise. */
-export function scaleFor(values: (number | null)[], forceSequential = false, range: [number, number] | null = null): Scale {
+ * smallest and largest of the values shown (picked, not computed). On the green ramps, diverging when it changes sign, around zero and
+ * symmetric, and sequential otherwise; on a rainbow (Classic, Spectrum) every field runs from its lowest to its highest value, as finite
+ * element programs draw it (ADR-0063 amendment 1). */
+export function scaleFor(values: (number | null)[], forceSequential = false, range: [number, number] | null = null, palette: Palette = "green"): Scale {
   let ends: [number, number];
   let source: Scale["source"];
   if (range) { ends = range; source = "package"; }
@@ -53,11 +75,12 @@ export function scaleFor(values: (number | null)[], forceSequential = false, ran
   }
   let [min, max] = ends;
   if (min === max) { min -= 1; max += 1; }
+  if (palette !== "green") return { kind: "sequential", min, max, stops: palette === "classic" ? CLASSIC : SPECTRUM, ends, source, palette };
   if (!forceSequential && min < 0 && max > 0) {
     const bound = Math.max(-min, max);
-    return { kind: "diverging", min: -bound, max: bound, stops: DIVERGING, ends, source };
+    return { kind: "diverging", min: -bound, max: bound, stops: DIVERGING, ends, source, palette };
   }
-  return { kind: "sequential", min, max, stops: SEQUENTIAL, ends, source };
+  return { kind: "sequential", min, max, stops: SEQUENTIAL, ends, source, palette };
 }
 
 export function colorAt(scale: Scale, value: number | null): RGB {

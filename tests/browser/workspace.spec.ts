@@ -60,9 +60,9 @@ test("the workspace opens on the start box, three tiles and the projects, the se
   await expect(page.getByTestId("fea-start-tree").locator("li")).toHaveCount(10);
   await expect(page.getByTestId("ws-stage").getByTestId("fea-start-stage")).toBeVisible();
   await expect(page.getByTestId("ws-assistant").getByTestId("fea-start-chat")).toBeVisible();
-  await expect(shell.locator(".ws-title > span")).toHaveText("FEA");
+  await expect(shell.locator(".cv-kind > span")).toHaveText("FEA");
   await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click();
-  await expect(shell.locator(".ws-title > span")).toHaveText("FEA · Coupon test");
+  await expect(shell.locator(".cv-kind > span")).toHaveText("FEA · Coupon test");
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-kind")).toHaveText("Coupon test");
   await expect(page.getByTestId("chat-set-up")).toBeVisible();
   await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible(); // the product's view: the material and the layup (ADR-0090)

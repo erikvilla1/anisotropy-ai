@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { X } from "lucide-react";
 import { explainJob, sameResults, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
-import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
+import { answerOf, answerStat, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
 import { customerText, downloadable, setWords, shownSentence } from "@/lib/studio-copy";
 import { useAllTests, type FieldView, type Place } from "./project-context";
-import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
+import { DEFAULT_PALETTE, isPalette, legendGradient, legendTicks, overlayColors, PALETTES, percentChange, printed, scaleFor, settled, type Palette, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { AbaqusCard } from "./abaqus-card";
 import { JobFiles, namingOf } from "./job-files";
@@ -15,19 +16,25 @@ import { Scene } from "./scene";
 import type { SceneField } from "./scene-canvas";
 import { proposedInputs, sceneInputs } from "./scene-inputs";
 import type { ProposedInputs } from "./project-context";
+import { remember, remembered } from "./local";
+import { DetailsToggle, Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
 
 /** The contour choices: the smooth ramp, or bands with an isoline at every band boundary, each boundary a labelled tick (ADR-0063). */
 export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"]];
 export const DEFAULT_CONTOURS = 8;
 
-export function Legend({ scale, label, unit, by, bands = 0 }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number }) {
+export function Legend({ scale, label, unit, by, bands = 0, lit = false }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number;
+  /** the lighting is on: the shading changes the colours, which the legend says (ADR-0063 amendment 1) */ lit?: boolean }) {
   const ticks = legendTicks(scale, bands ? bands + 1 : 5);
   return (
     <div className="studio-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
       <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />
-      <div className="studio-legend-ticks" aria-hidden="true">{ticks.map((t, i) => <span key={i}>{printed(t)}</span>)}</div>
+      <div className="studio-legend-ticks" aria-hidden="true">{ticks.map((t, i) => (
+        // where the tick stands along the bar, for the card's legend, which sets every boundary's label at its place in two rows (ADR-0134)
+        <span key={i} style={{ "--at": `${(100 * i) / Math.max(ticks.length - 1, 1)}%` } as CSSProperties}>{printed(t)}</span>
+      ))}</div>
       <p><strong>{label}</strong>{unit && unit !== "-" ? ` (${unit})` : ""} · {by === "element" ? "element values" : "nodal averages"} · {printed(scale.ends[0])} to {printed(scale.ends[1])}{unit && unit !== "-" ? ` ${unit}` : ""}
-        {bands ? ` · ${bands} bands` : ""}{scale.kind === "diverging" ? " · grey is zero" : ""}</p>
+        {bands ? ` · ${bands} bands` : ""}{scale.kind === "diverging" ? " · grey is zero" : ""}{lit ? " · lit: the shading changes the colours" : ""}</p>
     </div>
   );
 }
@@ -556,6 +563,44 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
+/** The answer in its short form, in the results card's third column (ADR-0134, ADR-0099): the verdict as its heading, one line of labels,
+ * where it is reached earlier apart, and Details for the full answer and its tables. Every number is the package's (ADR-0051). */
+function AnswerShort({ fields, onShow, details, onDetails }: {
+  fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void; details: boolean; onDetails: (open: boolean) => void;
+}) {
+  const a = answerOf(fields);
+  const stat = answerStat(fields, printed);
+  const s = fields.summary, lab = fields.labels;
+  const more = <DetailsToggle open={details} onToggle={onDetails} />;
+  if (!a || !stat) {
+    return (
+      <div className="cv-answer-short" data-testid="answer-short">
+        <p className="cv-eyebrow">Result</p>
+        <h3 className="cv-verdict">Reaction {printed(Math.abs(s.reaction.value))} {lab.force}</h3>
+        <p className="cv-answer-line">Largest displacement {printed(s.max_displacement.value)} {lab.length} · no failure criterion chosen</p>
+        <div className="cv-answer-actions">{more}</div>
+      </div>
+    );
+  }
+  const e = a.earliest;
+  return (
+    <div className="cv-answer-short" data-testid="answer-short" data-fails={e.fails}>
+      <p className="cv-eyebrow">First-ply failure · {a.basisWords}</p>
+      <h3 className="cv-verdict" data-testid="answer-short-verdict">{stat.verdict} at the applied loading</h3>
+      <p className="cv-answer-line"><strong>R {stat.factor}</strong> · ply {e.ply} ({e.angle}°){e.face ? `, ${e.face} face` : ""} · {modeWords(e.mode)} · {e.name}</p>
+      {stat.outside ? <p className="cv-answer-note">{stat.outside}</p> : null}
+      <div className="cv-answer-actions">
+        <button type="button" className="studio-text-button" onClick={() => onShow(e.element, e.ply, e.criterion, e.face)}>Show where</button>
+        {more}
+      </div>
+    </div>
+  );
+}
+
+/** Where the readout card stands over the model: beside the click that picked the element, on the side with more room; null for a pick
+ * from elsewhere (the chat, a table's Show), which stands at the model's top right. */
+type ReadoutAt = { left?: number; right?: number; top: number } | null;
+
 export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null,
   emphasis = null, view = null, onShown }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
@@ -578,14 +623,36 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   /** the job's files at the foot; off in the workspace, whose left column lists them */
   showFiles?: boolean;
 }) {
+  const canvas = useCanvasSlots(); // in the FEA workspace's layout the parts go to the card, the details and over the model (ADR-0134)
   const [choice, setChoice] = useState<FieldChoice>(() => DEFAULT_CHOICE(fields));
   const [scale, setScale] = useState<number>(() => suggestedScale(fields.mesh.nodes, fields.nodal.magnitude));
   const [deformed, setDeformed] = useState(true);
   const [wireframe, setWireframe] = useState(true);
   const [contours, setContours] = useState(DEFAULT_CONTOURS);
+  const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
+  const [lit, setLit] = useState(false); // results unlit unless asked (ADR-0063 and its amendment 1)
   const [picked, setPicked] = useState<number | null>(null);
+  const [readoutAt, setReadoutAt] = useState<ReadoutAt>(null);
+  // the View menu is a popover over the model: a press anywhere else or Esc puts it away, before Esc closes anything else
+  const viewMenu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const away = (event: PointerEvent) => { const menu = viewMenu.current; if (menu?.open && !menu.contains(event.target as Node)) menu.open = false; };
+    const key = (event: KeyboardEvent) => {
+      const menu = viewMenu.current;
+      if (event.key === "Escape" && menu?.open) { menu.open = false; event.preventDefault(); menu.querySelector("summary")?.focus(); }
+    };
+    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
+  }, []);
+  const pointer = useRef<{ x: number; y: number; t: number } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(() => criticalElement(fields));
   const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
+  useEffect(() => {
+    // the colours the engineer chose last, in this browser (ADR-0063 amendment 1)
+    const kept = remembered(PALETTE_KEY);
+    if (isPalette(kept)) setPalette(kept);
+  }, []);
+  const pickPalette = (next: Palette) => { setPalette(next); remember(PALETTE_KEY, next); };
   useEffect(() => {
     // once our engine has written the explanation, the API's writer (the template, or a model behind a setting) rephrases it (ADR-0052)
     if (!job || !apiBase || !("explanation" in job.outputs)) return;
@@ -605,20 +672,40 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);
-  const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range), [values]);
-  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours } }),
-    [values, colorScale, contours]);
+  const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range, palette), [values, palette]);
+  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values,
+    scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours, lit } }), [values, colorScale, contours, lit]);
   // every boundary condition and load drawn and listed in words, as before the run (ADR-0110; audit fea-run-16)
   const inputs = useMemo(() => (preview ? sceneInputs(preview, fields.mesh) : { held: [], loads: [], about: [] }), [preview, fields.mesh]);
   const pending = useMemo(() => (preview ? proposedInputs(preview, proposed, fields.mesh) : null), [preview, proposed, fields.mesh]);
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
+  const overlay = overlayColors(palette);
+  /** An element picked: on the model by a click, beside which its readout stands, or from elsewhere. */
+  const pick = (element: number | null, at: ReadoutAt = null) => { setPicked(element); setReadoutAt(element === null ? null : at); };
+  const pickOnModel = (element: number | null) => {
+    const over = canvas?.places.over;
+    const p = pointer.current;
+    if (element === null || !over || !p || Date.now() - p.t > 2000) { pick(element); return; }
+    const box = over.getBoundingClientRect();
+    const x = p.x - box.left, y = p.y - box.top;
+    const top = Math.max(8, Math.min(y - 40, box.height - 280));
+    pick(element, x > box.width * 0.55 ? { right: Math.max(8, box.width - x + 16), top } : { left: Math.min(x + 16, Math.max(8, box.width - 360)), top });
+  };
   const show = (element: number, ply: number, criterion: string, face?: string | null) => {
-    setHighlight(element); setPicked(element);
+    setHighlight(element); pick(element);
     const faceIndex = face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(face)) : undefined;
     setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion, face: faceIndex ?? c.face }));
+    canvas?.setDetails(false); // the model is under the details: shown, it is seen
   };
   useEffect(() => { onPicked?.(picked); }, [picked, onPicked]);
   useEffect(() => () => onPicked?.(null), [onPicked]); // the results gone, nothing is picked
+  useEffect(() => {
+    // Esc puts the readout over the model away, before the shell closes anything else (ADR-0134)
+    if (!canvas || picked === null) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !canvas.details) { event.preventDefault(); pick(null); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [canvas, picked]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewed = useRef(view?.at ?? 0); // a field asked for before these results were on the page is not asked again
   useEffect(() => {
     if (!view || view.at === viewed.current) return;
@@ -634,12 +721,96 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     if (!place || place.at === placed.current) return;
     placed.current = place.at;
     if (place.element < 0 || place.element >= fields.mesh.element_labels.length) return;
-    setHighlight(place.element); setPicked(place.element);
+    setHighlight(place.element); pick(place.element);
     const faceIndex = place.face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(place.face)) : undefined;
     const id = place.field && fieldOptions(fields).some((o) => o.id === place.field) ? place.field : undefined;
     const criterion = place.criterion && fields.element.failure[place.criterion] ? place.criterion : undefined;
     setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face, criterion: criterion ?? c.criterion }));
   }, [place?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const legend = <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} lit={lit} />;
+  // the field, and the ply, face and criterion it is read at: always in sight
+  const primary = (
+    <>
+      <label>Field
+        <select value={choice.id} onChange={(e) => setChoice({ ...choice, id: e.target.value })} aria-label="Field">
+          {[...new Set(options.map((o) => o.group))].map((group) => (
+            <optgroup key={group} label={group}>{options.filter((o) => o.group === group).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</optgroup>
+          ))}
+        </select>
+      </label>
+      {option.perPly ? (
+        <label>Ply
+          <select value={choice.ply} onChange={(e) => setChoice({ ...choice, ply: Number(e.target.value) })} aria-label="Ply">
+            {fields.mesh.angles.map((angle, i) => <option key={i} value={i + 1}>{i + 1}: {angle}°</option>)}
+          </select>
+        </label>
+      ) : null}
+      {option.perFace && fields.mesh.faces ? (
+        <label>Face
+          <select value={choice.face} onChange={(e) => setChoice({ ...choice, face: Number(e.target.value) })} aria-label="Face">
+            {fields.mesh.faces.map((face, i) => <option key={face} value={i}>{face}</option>)}
+          </select>
+        </label>
+      ) : null}
+      {option.perCriterion ? (
+        <label>Criterion
+          <select value={choice.criterion} onChange={(e) => setChoice({ ...choice, criterion: e.target.value })} aria-label="Criterion">
+            {Object.keys(fields.element.failure).map((c) => <option key={c} value={c}>{criterionName(c)}</option>)}
+          </select>
+        </label>
+      ) : null}
+    </>
+  );
+  // how it is drawn: under View in the workspace's card, in the row elsewhere
+  const drawing = (
+    <>
+      {!option.nodalOnly && !option.elementOnly && option.id !== "failure_index_ply" ? (
+        <label>Values
+          <select value={choice.averaged ? "average" : "element"} onChange={(e) => setChoice({ ...choice, averaged: e.target.value === "average" })} aria-label="Shown as">
+            <option value="element">Element</option>
+            <option value="average">Nodal average</option>
+          </select>
+        </label>
+      ) : null}
+      <label>Contours
+        <select value={contours} onChange={(e) => setContours(Number(e.target.value))} aria-label="Contours">
+          {CONTOURS.map(([bands, word]) => <option key={bands} value={bands}>{word}</option>)}
+        </select>
+      </label>
+      <label>Colours
+        <select value={palette} onChange={(e) => { if (isPalette(e.target.value)) pickPalette(e.target.value); }} aria-label="Colours">
+          {PALETTES.map(([id, word]) => <option key={id} value={id}>{word}</option>)}
+        </select>
+      </label>
+      <label><input type="checkbox" checked={deformed} onChange={(e) => setDeformed(e.target.checked)} /> Deformed, ×
+        <input type="number" value={scale} min={0} step="any" onChange={(e) => setScale(Number(e.target.value) || 0)} aria-label="Deformation scale" className="studio-scale" /></label>
+      <label><input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} /> Mesh edges</label>
+      <label><input type="checkbox" checked={lit} onChange={(e) => setLit(e.target.checked)} data-testid="lighting" /> Lighting</label>
+    </>
+  );
+  const hint = <p className="studio-muted studio-pick-hint">Click an element to read its values. The critical element is outlined in {overlay.criticalWord}.</p>;
+  const readoutCard = readout ? (
+    <div className={`studio-panel studio-readout${canvas ? " cv-readout" : ""}`} data-testid="readout"
+      style={canvas ? (readoutAt ? { left: readoutAt.left, right: readoutAt.right, top: readoutAt.top } : { right: 12, top: 48 }) : undefined}>
+      <h3>{readout.title}{highlight === picked ? <span className="studio-badge">critical</span> : null}
+        {canvas ? <button type="button" className="icon-button cv-readout-close" onClick={() => pick(null)} title="Close (Esc)" data-testid="readout-close">
+          <X size={14} aria-hidden={true} /><span className="sr-only">Close the readout</span></button> : null}</h3>
+      <dl>{readout.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      <p className="studio-muted">Click another element to read it, or the background to clear.</p>
+      {picked !== null ? <ProbePanel fields={fields} table={probeTable(fields, picked)} /> : null}
+    </div>
+  ) : null;
+  const rest = (
+    <>
+      <SummaryPanel fields={fields} onShow={show} />
+      {/* the user's own Abaqus beside a finished run of the tension coupon, the one the comparison covers (ADR-0094 part 7) */}
+      {job && !live && job.state === "done" && apiBase && fields.coupon.kind === "unnotched_tension"
+        ? <AbaqusCard apiBase={apiBase} job={job} fields={fields} onShow={show} /> : null}
+      <ExplanationPanel explanation={explanation} answer={answer} />
+      {job && showFiles ? <Downloads apiBase={apiBase} job={job} fields={fields} /> : null}
+    </>
+  );
   return (
     <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>
       {live ? (
@@ -647,74 +818,45 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
           <strong>Preview</strong> ({live.seconds < 10 ? live.seconds.toFixed(1) : Math.round(live.seconds)} s). Run the analysis to verify it and write the report.{updating ? " Updating…" : ""}
         </p>
       ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating…</p> : null}
-      <div className="studio-scene-block">
+      <div className="studio-scene-block" onPointerDown={(e) => { pointer.current = { x: e.clientX, y: e.clientY, t: Date.now() }; }}>
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={inputs.held} loads={inputs.loads} about={inputs.about} proposed={pending}
-          highlight={highlight} picked={picked} emphasis={emphasis}
-          wireframe={wireframe} onPick={setPicked} />
-        <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} />
+          highlight={highlight} picked={picked} emphasis={emphasis} palette={palette}
+          wireframe={wireframe} onPick={canvas ? pickOnModel : (element) => pick(element)} />
+        {canvas ? null : legend}
       </div>
-      <div className="studio-controls" data-testid="field-controls">
-        <label>Field
-          <select value={choice.id} onChange={(e) => setChoice({ ...choice, id: e.target.value })} aria-label="Field">
-            {[...new Set(options.map((o) => o.group))].map((group) => (
-              <optgroup key={group} label={group}>{options.filter((o) => o.group === group).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</optgroup>
-            ))}
-          </select>
-        </label>
-        {option.perPly ? (
-          <label>Ply
-            <select value={choice.ply} onChange={(e) => setChoice({ ...choice, ply: Number(e.target.value) })} aria-label="Ply">
-              {fields.mesh.angles.map((angle, i) => <option key={i} value={i + 1}>{i + 1}: {angle}°</option>)}
-            </select>
-          </label>
-        ) : null}
-        {option.perFace && fields.mesh.faces ? (
-          <label>Face
-            <select value={choice.face} onChange={(e) => setChoice({ ...choice, face: Number(e.target.value) })} aria-label="Face">
-              {fields.mesh.faces.map((face, i) => <option key={face} value={i}>{face}</option>)}
-            </select>
-          </label>
-        ) : null}
-        {option.perCriterion ? (
-          <label>Criterion
-            <select value={choice.criterion} onChange={(e) => setChoice({ ...choice, criterion: e.target.value })} aria-label="Criterion">
-              {Object.keys(fields.element.failure).map((c) => <option key={c} value={c}>{criterionName(c)}</option>)}
-            </select>
-          </label>
-        ) : null}
-        {!option.nodalOnly && !option.elementOnly && option.id !== "failure_index_ply" ? (
-          <label>Values
-            <select value={choice.averaged ? "average" : "element"} onChange={(e) => setChoice({ ...choice, averaged: e.target.value === "average" })} aria-label="Shown as">
-              <option value="element">Element</option>
-              <option value="average">Nodal average</option>
-            </select>
-          </label>
-        ) : null}
-        <label><input type="checkbox" checked={deformed} onChange={(e) => setDeformed(e.target.checked)} /> Deformed, ×
-          <input type="number" value={scale} min={0} step="any" onChange={(e) => setScale(Number(e.target.value) || 0)} aria-label="Deformation scale" className="studio-scale" /></label>
-        <label><input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} /> Mesh edges</label>
-        <label>Contours
-          <select value={contours} onChange={(e) => setContours(Number(e.target.value))} aria-label="Contours">
-            {CONTOURS.map(([bands, word]) => <option key={bands} value={bands}>{word}</option>)}
-          </select>
-        </label>
-      </div>
-      <AnswerCard fields={fields} onShow={show} />
-      {readout ? (
-        <div className="studio-panel studio-readout" data-testid="readout">
-          <h3>{readout.title}{highlight === picked ? <span className="studio-badge">critical</span> : null}</h3>
-          <dl>{readout.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
-          <p className="studio-muted">Click another element to read it, or the background to clear.</p>
-          {picked !== null ? <ProbePanel fields={fields} table={probeTable(fields, picked)} /> : null}
-        </div>
-      ) : <p className="studio-muted studio-pick-hint">Click an element to read its values. The critical element is outlined in red.</p>}
-      <SummaryPanel fields={fields} onShow={show} />
-      {/* the user's own Abaqus beside a finished run of the tension coupon, the one the comparison covers (ADR-0094 part 7) */}
-      {job && !live && job.state === "done" && apiBase && fields.coupon.kind === "unnotched_tension"
-        ? <AbaqusCard apiBase={apiBase} job={job} fields={fields} onShow={show} /> : null}
-      <ExplanationPanel explanation={explanation} answer={answer} />
-      {job && showFiles ? <Downloads apiBase={apiBase} job={job} fields={fields} /> : null}
+      {canvas ? (
+        <>
+          <Slot name="view">
+            {legend}
+            <div className="studio-controls cv-controls" data-testid="field-controls">
+              {primary}
+              <details className="cv-view-menu" data-testid="view-menu" ref={viewMenu}>
+                <summary>View</summary>
+                <div className="cv-view-menu-body">{drawing}</div>
+              </details>
+            </div>
+            {hint}
+          </Slot>
+          <Slot name="answer">
+            <AnswerShort fields={fields} onShow={show} details={canvas.details} onDetails={canvas.setDetails} />
+          </Slot>
+          <Slot name="over">{readoutCard}</Slot>
+          <Slot name="details">
+            <AnswerCard fields={fields} onShow={show} />
+            {rest}
+          </Slot>
+        </>
+      ) : (
+        <>
+          <div className="studio-controls" data-testid="field-controls">{primary}{drawing}</div>
+          <AnswerCard fields={fields} onShow={show} />
+          {readoutCard ?? hint}
+          {rest}
+        </>
+      )}
     </div>
   );
 }
+
+const PALETTE_KEY = "anisotropy.studio.colours";

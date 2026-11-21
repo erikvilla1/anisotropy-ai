@@ -4,6 +4,7 @@
  * two spars with caps and a row of ribs, is laminate and is what was analysed; over it lies a clear film that is drawn only
  * (amendment 11). */
 import record from "./demo-wing.json";
+import { RAINBOW } from "./rainbow";
 
 /** A part of the wing. A `cover` is the film: it has no plies, `layup` says what it is, and it is not analysed. */
 export type WingPart = { id: string; name: string; layup: string; angles: number[]; first: number; count: number; cover?: boolean };
@@ -88,9 +89,9 @@ export function wingProblems(wing: DemoWing): string[] {
 }
 
 /** The colours the parts take, at the lead's word of 2026-11-14 ("make the FEA analysis colors like that"): the rainbow most
- * analysis programs draw, blue at the field's smallest value through cyan, green and yellow to red at its largest. The
- * workspace itself keeps its own scale (lib/studio-colors.ts); this one is the demo's only. */
-export const RAINBOW: [number, number, number][] = [[0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]];
+ * analysis programs draw, blue at the field's smallest value through cyan, green and yellow to red at its largest. The workspace's
+ * default scale is the same rainbow since ADR-0098 amendment 12 (`lib/rainbow.ts`). */
+export { RAINBOW };
 /** A value's colour on the rainbow, as red, green and blue from 0 to 1. */
 export function wingColour(field: WingField, value: number): [number, number, number] {
   const share = field.max > field.min ? Math.min(1, Math.max(0, (value - field.min) / (field.max - field.min))) : 0;

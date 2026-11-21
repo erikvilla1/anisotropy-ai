@@ -1383,13 +1383,13 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   );
 }
 
-/** The run in the conversation: one line, the state in a word and a stopped run's plain reason; the steps are on the centre's card. */
+/** The run in the conversation: one line, the state in a word and a stopped run's plain reason; the steps are on the results card under the model (ADR-0134). */
 function ChatRun({ job }: { job: JobStatus }) {
   const problem = runProblem(job);
   return (
     <div data-testid="chat-job" data-state={job.state}>
       <h4>Analysis: {runHeadline(job)}</h4>
-      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown in the centre of the page.</p> : null}
+      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown in the card at the foot of the page.</p> : null}
     </div>
   );
 }

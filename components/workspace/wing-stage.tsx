@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CATEGORICAL, CRITICAL, DIVERGING, ramp, SEQUENTIAL } from "@/lib/studio-colors";
 import {
   answerWords, CHECK_NAMES, CHECK_WORDS, feProgress, feWords, handAndModel, marginText, shown, spanWords, unitText, whereWords,
   type HandAndModel, type WingAnswer, type WingCheckName, type WingFeCheck, type WingFeReport, type WingReport, type WingViews,
 } from "@/lib/wing";
+import { DetailsToggle, Slot, useCanvasSlots } from "./canvas-slots";
 import { useWing } from "./wing-context";
 
 type CheckChoice = WingCheckName | "lowest";
@@ -292,7 +293,7 @@ export function WingStage() {
   const { answer, stale, working, problem } = useWing();
   if (!answer) {
     return (
-      <div className="studio-panel wing-stage" data-testid="wing-stage" data-state="waiting">
+      <div className="studio-panel wing-stage wing-waiting" data-testid="wing-stage" data-state="waiting">
         <p className={problem ? "studio-alert" : "studio-muted"} role={problem ? "alert" : "status"}>{problem || (working ? "Working the wing…" : "The wing appears here.")}</p>
       </div>
     );
@@ -314,48 +315,52 @@ function Answer({ answer, stale, problem }: { answer: WingAnswer; stale: boolean
   const margins = chosenCase ? marginsAlong(views, index, check) : [];
   const gCheck = report.governing && chosenCase ? chosenCase.checks[check === "lowest" ? report.governing.check : check] : null;
   const governingAt = gCheck && gCheck.station !== null && index === governingIndex ? gCheck.station : null;
-  return (
-    <div className="wing-stage" data-testid="wing-stage" data-state={stale ? "stale" : "current"}>
-      <section className="studio-panel wing-answer" data-testid="wing-answer" data-passes={report.passes ? "true" : "false"}>
-        <h2>{words.verdict}</h2>
-        <p>{words.detail}</p>
-        <p className="studio-muted">{words.facts.join(" · ")}{stale ? " · updating for your last change" : ""}</p>
-        {problem ? <p className="studio-alert" role="alert">{problem} The results below are for the last wing that could be worked.</p> : null}
-      </section>
-      {feCheck ? <FeResults check={feCheck} stale={feCheckStale} /> : null}
-      {chosenCase ? (
-        <section className="studio-panel wing-views">
-          <div className="wing-toolbar">
-            <label htmlFor="wing-case">Case</label>
-            <select id="wing-case" value={index} onChange={(e) => setChosen(Number(e.target.value))} data-testid="wing-case">
-              {report.cases.map((c, i) => <option key={i} value={i}>{c.number} {c.label}, {shown(c.altitude, 5)} {report.units.altitude}{i === governingIndex ? " (governs)" : ""}</option>)}
-            </select>
-            <label htmlFor="wing-check">Check</label>
-            <select id="wing-check" value={check} onChange={(e) => setCheck(e.target.value as CheckChoice)} data-testid="wing-check">
-              <option value="lowest">Lowest of all</option>
-              {CHECK_NAMES.map((n) => <option key={n} value={n}>{CHECK_WORDS[n]}</option>)}
-            </select>
-          </div>
-          <h3>From above</h3>
-          <Planform views={views} margins={margins} governingAt={governingAt} units={length} />
-          <p className="wing-legend"><span className="wing-swatch" style={{ background: CRITICAL }} /> below 0 <span className="wing-swatch" style={{ background: marginColour(0) }} /> 0
-            <span className="wing-swatch" style={{ background: marginColour(0.5) }} /> +0.5 <span className="wing-swatch" style={{ background: marginColour(1) }} /> +1 or more: margin at ultimate load, the box between the spars
-            <span><span className="wing-swatch wing-swatch-line" /> line of shear centers</span><span><span className="wing-swatch wing-swatch-ring" /> where the case governs</span></p>
-          <h3>Margins along the span</h3>
-          <MarginChart views={views} index={index} units={length} />
-          <p className="wing-legend">{CHECK_NAMES.map((n, k) => <span key={n}><span className="wing-swatch" style={{ background: CATEGORICAL[k] }} /> {CHECK_WORDS[n]} </span>)}</p>
-          <div className="wing-toolbar">
-            <h3>Root section</h3>
-            <div className="wing-toggle" role="group" aria-label="What the walls show">
-              <button type="button" aria-pressed={field === "shear_flow"} onClick={() => setField("shear_flow")}>Shear flow</button>
-              <button type="button" aria-pressed={field === "load"} onClick={() => setField("load")}>Spanwise load</button>
-            </div>
-          </div>
-          <Section views={views} index={index} field={field} units={report.units} />
-          <p className="studio-muted" data-testid="wing-views-note">Case {chosenCase.number}, {chosenCase.label}: root shear {shown(chosenCase.root_shear, 4)} {unitText(report.units.force)}, moment {shown(chosenCase.root_moment, 4)} {unitText(report.units.moment)}, torque {shown(chosenCase.root_torque, 4)} {unitText(report.units.moment)}; tip {shown(chosenCase.tip_deflection, 3)} {unitText(report.units.deflection)} up, twist {shown(chosenCase.tip_twist, 3)}°.
-            {gCheck ? ` ${CHECK_WORDS[check === "lowest" && report.governing ? report.governing.check : (check as WingCheckName)]}: ${marginText(gCheck.margin_ultimate)}, ${whereWords(gCheck, report.units)}.` : ""}</p>
-        </section>
-      ) : null}
+  const slots = useCanvasSlots();
+  const canvas = slots !== null;
+  const toolbar = chosenCase ? (
+    <div className="wing-toolbar">
+      <label htmlFor="wing-case">Case</label>
+      <select id="wing-case" value={index} onChange={(e) => setChosen(Number(e.target.value))} data-testid="wing-case">
+        {report.cases.map((c, i) => <option key={i} value={i}>{c.number} {c.label}, {shown(c.altitude, 5)} {report.units.altitude}{i === governingIndex ? " (governs)" : ""}</option>)}
+      </select>
+      <label htmlFor="wing-check">Check</label>
+      <select id="wing-check" value={check} onChange={(e) => setCheck(e.target.value as CheckChoice)} data-testid="wing-check">
+        <option value="lowest">Lowest of all</option>
+        {CHECK_NAMES.map((n) => <option key={n} value={n}>{CHECK_WORDS[n]}</option>)}
+      </select>
+    </div>
+  ) : null;
+  const planformLegend = (
+    <p className="wing-legend"><span className="wing-swatch" style={{ background: CRITICAL }} /> below 0 <span className="wing-swatch" style={{ background: marginColour(0) }} /> 0
+      <span className="wing-swatch" style={{ background: marginColour(0.5) }} /> +0.5 <span className="wing-swatch" style={{ background: marginColour(1) }} /> +1 or more: margin at ultimate load, the box between the spars
+      <span><span className="wing-swatch wing-swatch-line" /> line of shear centers</span><span><span className="wing-swatch wing-swatch-ring" /> where the case governs</span></p>
+  );
+  const chartLegend = <p className="wing-legend">{CHECK_NAMES.map((n, k) => <span key={n}><span className="wing-swatch" style={{ background: CATEGORICAL[k] }} /> {CHECK_WORDS[n]} </span>)}</p>;
+  const sectionHead = (
+    <div className="wing-toolbar">
+      <h3>Root section</h3>
+      <div className="wing-toggle" role="group" aria-label="What the walls show">
+        <button type="button" aria-pressed={field === "shear_flow"} onClick={() => setField("shear_flow")}>Shear flow</button>
+        <button type="button" aria-pressed={field === "load"} onClick={() => setField("load")}>Spanwise load</button>
+      </div>
+    </div>
+  );
+  const note = chosenCase ? (
+    <p className="studio-muted" data-testid="wing-views-note">Case {chosenCase.number}, {chosenCase.label}: root shear {shown(chosenCase.root_shear, 4)} {unitText(report.units.force)}, moment {shown(chosenCase.root_moment, 4)} {unitText(report.units.moment)}, torque {shown(chosenCase.root_torque, 4)} {unitText(report.units.moment)}; tip {shown(chosenCase.tip_deflection, 3)} {unitText(report.units.deflection)} up, twist {shown(chosenCase.tip_twist, 3)}°.
+      {gCheck ? ` ${CHECK_WORDS[check === "lowest" && report.governing ? report.governing.check : (check as WingCheckName)]}: ${marginText(gCheck.margin_ultimate)}, ${whereWords(gCheck, report.units)}.` : ""}</p>
+  ) : null;
+  const verdict = (more: ReactNode = null) => (
+    <section className="studio-panel wing-answer" data-testid="wing-answer" data-passes={report.passes ? "true" : "false"}>
+      {canvas ? <p className="cv-eyebrow">Wing · margins at ultimate load</p> : null}
+      <h2>{words.verdict}</h2>
+      <p>{words.detail}</p>
+      <p className="studio-muted">{words.facts.join(" · ")}{stale ? " · updating for your last change" : ""}</p>
+      {problem ? <p className="studio-alert" role="alert">{problem} The results below are for the last wing that could be worked.</p> : null}
+      {more}
+    </section>
+  );
+  const rest = (
+    <>
       <section className="studio-panel">
         <h3>The wing</h3>
         <Design report={report} />
@@ -372,6 +377,61 @@ function Answer({ answer, stale, problem }: { answer: WingAnswer; stale: boolean
           <ul className="wing-needs">{report.not_run.map((n) => <li key={`${n.number}@${n.altitude}`}>{n.number} {n.label} at {shown(n.altitude, 5)} {report.units.altitude}: needs {n.needs}</li>)}</ul>
         </section>
       ) : null}
+    </>
+  );
+
+  if (canvas) {
+    // layout D (ADR-0134): the drawings across the model's area with the chart's own key under it, the case, the check and the planform's
+    // colours in the card, the answer in its short form beside them, and the rest (the finite element check, the design, every case) in
+    // the details over the drawings
+    return (
+      <div className="wing-stage wing-canvas" data-testid="wing-stage" data-state={stale ? "stale" : "current"}>
+        {chosenCase ? (
+          <div className="wing-views wing-canvas-views">
+            <figure className="wing-figure wing-figure-planform"><h3>From above</h3><Planform views={views} margins={margins} governingAt={governingAt} units={length} /></figure>
+            <figure className="wing-figure"><h3>Margins along the span</h3><MarginChart views={views} index={index} units={length} />{chartLegend}</figure>
+            <figure className="wing-figure">{sectionHead}<Section views={views} index={index} field={field} units={report.units} /></figure>
+          </div>
+        ) : <p className="studio-muted wing-canvas-empty">Every case waits for inputs; the drawings appear once one case can be worked.</p>}
+        <Slot name="view">
+          <div className="cv-model-words wing-card-views" data-testid="wing-card-views">
+            {toolbar}
+            {chosenCase ? planformLegend : null}
+          </div>
+        </Slot>
+        <Slot name="answer">{verdict(<>
+          {/* the finite element check's headline beside the hand calculation's verdict; its tables are under Details (ADR-0119) */}
+          {feCheck?.report ? <p className="cv-answer-note" data-testid="wing-fe-short">{feWords(feCheck.report).headline}{feCheckStale ? " For the wing as it was when the check started." : ""}</p> : null}
+          <div className="cv-answer-actions"><DetailsToggle open={slots.details} onToggle={slots.setDetails} /></div>
+        </>)}</Slot>
+        <Slot name="details">
+          {feCheck ? <FeResults check={feCheck} stale={feCheckStale} /> : null}
+          {note ? <section className="studio-panel">{note}</section> : null}
+          {rest}
+        </Slot>
+      </div>
+    );
+  }
+
+  return (
+    <div className="wing-stage" data-testid="wing-stage" data-state={stale ? "stale" : "current"}>
+      {verdict()}
+      {feCheck ? <FeResults check={feCheck} stale={feCheckStale} /> : null}
+      {chosenCase ? (
+        <section className="studio-panel wing-views">
+          {toolbar}
+          <h3>From above</h3>
+          <Planform views={views} margins={margins} governingAt={governingAt} units={length} />
+          {planformLegend}
+          <h3>Margins along the span</h3>
+          <MarginChart views={views} index={index} units={length} />
+          {chartLegend}
+          {sectionHead}
+          <Section views={views} index={index} field={field} units={report.units} />
+          {note}
+        </section>
+      ) : null}
+      {rest}
     </div>
   );
 }

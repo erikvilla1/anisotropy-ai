@@ -100,7 +100,7 @@ test("a model brought in as a file is read, solved as it stands and asked about,
   await expect(page.getByTestId("panel-run").locator(".studio-badge")).toHaveText("solved");
   await expect(page.getByTestId("tree-results-answer")).toContainText("Reaction");
   await rail.locator("button[data-field=S11]").click();
-  await expect(stage.getByTestId("field-controls").getByLabel("Field", { exact: true })).toHaveValue("S11");
+  await expect(page.getByTestId("ws-card").getByTestId("field-controls").getByLabel("Field", { exact: true })).toHaveValue("S11"); // in the card under the model (ADR-0134)
   await expect(page.getByTestId("tension-files")).toHaveCount(0);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: ".local/website/screenshots/model-tree-imported.png" });

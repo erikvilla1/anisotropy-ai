@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Line, OrbitControls } from "@react-three/drei";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { Grid, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { bounds, deformedHeights, deformedPositions, elementEdges, elementLoop, fieldAttribute, meanHeight, plateMesh, sampleNodes, setBox } from "@/lib/studio-geometry";
-import { CRITICAL, HELD, LOADED } from "@/lib/studio-colors";
+import { HELD, LOADED, overlayColors, type Palette } from "@/lib/studio-colors";
 import { applyScale, fieldMaterial, NO_VALUE, type FieldScale } from "./field-material";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
@@ -34,9 +34,11 @@ export type SceneProps = {
   picked?: number | null;
   wireframe?: boolean;
   onPick?: (element: number | null) => void;
+  /** the colour scale of the field shown: on a rainbow the critical element is outlined in white and the mesh lines are near black
+   * (ADR-0063 amendment 1) */
+  palette?: Palette;
 };
 
-const EDGE_COLOR = "#555555";
 const LIFT = 1e-3; // frames sit this fraction of the plate's size above the top face so they are not hidden by it
 
 const AXES: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -106,9 +108,9 @@ function frame(box: { min: number[]; max: number[] }, z: number): [number, numbe
 
 /** The plate: one geometry for the run, rebuilt only when the mesh or the deformed shape changes. A field uploads one float per
  * vertex and moves the material's uniforms, so switching fields keeps the geometry (ADR-0063). */
-function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, onPick }: {
+function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, edgeColor, onPick }: {
   nodes: number[][]; quads: number[][]; thickness: number; field?: SceneField | null; xy: number[][]; heights: number[] | null; wireframe: boolean;
-  onPick?: (element: number | null) => void;
+  edgeColor: string; onPick?: (element: number | null) => void;
 }) {
   const invalidate = useThree((state) => state.invalidate);
   const plate = useMemo(() => plateMesh(nodes, quads, thickness, xy, heights), [nodes, quads, thickness, xy, heights]);
@@ -144,7 +146,7 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, onPick 
       }}>
         {field ? <primitive object={material} attach="material" /> : <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />}
       </mesh>
-      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={EDGE_COLOR} /></lineSegments> : null}
+      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={edgeColor} /></lineSegments> : null}
     </group>
   );
 }
@@ -166,12 +168,55 @@ function CameraView({ at, view, centre, size }: { at: string; view: "home" | "to
   return null;
 }
 
+/** A spacing of 1, 2 or 5 times a power of ten, about a twentieth of the model: the floor grid's cell. */
+function gridStep(size: number): number {
+  const raw = size / 20;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const unit = raw / power;
+  return (unit < 1.5 ? 1 : unit < 3.5 ? 2 : unit < 7.5 ? 5 : 10) * power;
+}
+
+/** The floor under the part (ADR-0063 amendment 1): a grid in the plane just below its bottom face, fading with distance from the camera,
+ * a cell every twentieth of the model and a heavier line every fifth cell. Drawn, never picked. */
+function Floor({ centre, size, z }: { centre: readonly [number, number]; size: number; z: number }) {
+  const cell = gridStep(size);
+  return (
+    <Grid position={[centre[0], centre[1], z]} rotation={[Math.PI / 2, 0, 0]} args={[1, 1]} infiniteGrid fadeDistance={4 * size} fadeStrength={1.6}
+      cellSize={cell} sectionSize={5 * cell} cellThickness={0.6} sectionThickness={1} cellColor="#262626" sectionColor="#3a3a3a" raycast={() => null} />
+  );
+}
+
+const TRIAD: { axis: string; color: string; v: [number, number, number] }[] = [
+  { axis: "X", color: "#e0605a", v: [1, 0, 0] }, { axis: "Y", color: "#6cc070", v: [0, 1, 0] }, { axis: "Z", color: "#6a9be8", v: [0, 0, 1] },
+];
+
+/** Turns the X Y Z triad in the view's lower left corner with the camera at every frame drawn: each axis's direction as seen. */
+function TriadSync({ svg }: { svg: RefObject<SVGSVGElement | null> }) {
+  const v = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ camera }) => {
+    const root = svg.current;
+    if (!root) return;
+    TRIAD.forEach((t, i) => {
+      v.set(...t.v).transformDirection(camera.matrixWorldInverse);
+      const x = 28 * v.x, y = -28 * v.y;
+      const line = root.querySelector<SVGLineElement>(`[data-axis="${i}"] line`);
+      const label = root.querySelector<SVGTextElement>(`[data-axis="${i}"] text`);
+      line?.setAttribute("x2", x.toFixed(2)); line?.setAttribute("y2", y.toFixed(2));
+      label?.setAttribute("x", (1.3 * x).toFixed(2)); label?.setAttribute("y", (1.3 * y + 3.5).toFixed(2));
+      root.querySelector(`[data-axis="${i}"]`)?.setAttribute("opacity", v.z < -0.2 ? "0.55" : "1");
+    });
+  });
+  return null;
+}
+
 type Layer = "mesh" | "conditions" | "loads";
 const LAYER_WORDS: Record<Layer, string> = { mesh: "Mesh", conditions: "Boundary conditions", loads: "Loads" };
 
 export function SceneCanvas(props: SceneProps) {
   const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
-    highlight = null, picked = null, wireframe = true, onPick, emphasis = null } = props;
+    highlight = null, picked = null, wireframe = true, onPick, emphasis = null, palette = "classic" } = props;
+  const triad = useRef<SVGSVGElement>(null);
+  const overlay = overlayColors(field ? palette : "green"); // before a run the part is grey: the outlines of before
   const [focus, setFocus] = useState<string | null>(null); // the line of the list clicked: its region is drawn bolder
   const [hidden, setHidden] = useState<Layer[]>([]); // the layers switched off over the model
   const [view, setView] = useState<{ view: "home" | "top"; n: number }>({ view: "home", n: 0 });
@@ -180,9 +225,11 @@ export function SceneCanvas(props: SceneProps) {
   const xy = useMemo(() => (displacement && scale ? deformedPositions(nodes, displacement, scale) : nodes), [nodes, displacement, scale]);
   const heights = useMemo(() => (displacement && scale ? deformedHeights(displacement, scale) : null), [displacement, scale]);
   const extent = useMemo(() => bounds(nodes), [nodes]);
+  const lowest = useMemo(() => (heights ?? []).reduce((low, h) => (h < low ? h : low), 0), [heights]); // a part bent below its plane
   const size = Math.max(extent.size[0], extent.size[1], 1);
   const centre = [extent.min[0] + extent.size[0] / 2, extent.min[1] + extent.size[1] / 2] as const;
   const top = thickness / 2 + LIFT * size;
+  const floor = -thickness / 2 - 0.006 * size + lowest;
   const symbol = Math.min(0.03 * size, 0.15 * Math.max(Math.min(extent.size[0], extent.size[1]), 0.05 * size)); // a boundary condition's cone, kept within a narrow strip
   const arrow = 0.07 * size; // one of a load's arrows
   const allLoads = [...(loaded ? [loaded] : []), ...loads];
@@ -196,6 +243,7 @@ export function SceneCanvas(props: SceneProps) {
   return (
     <div className="studio-scene-wrap">
       <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""} data-emphasis={emphasis ?? ""}
+        data-palette={field ? palette : ""} data-lit={field ? String(Boolean(field.scale.lit)) : ""}
         data-shown={(["mesh", "conditions", "loads"] as Layer[]).filter(shows).join(" ")} data-view={view.view}>
       {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden */}
       <div className="studio-view-tools" role="toolbar" aria-label="View">
@@ -212,7 +260,8 @@ export function SceneCanvas(props: SceneProps) {
         onPointerMissed={() => onPick?.(null)}>
         <color attach="background" args={["#0d0d0d"]} />
         {field ? null : <PresentationLighting size={size} centre={centre} floor={-thickness / 2 - 0.004 * size} />}
-        <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe && shows("mesh")} onPick={onPick} />
+        <Floor centre={centre} size={size} z={floor} />
+        <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe && shows("mesh")} edgeColor={overlay.edges} onPick={onPick} />
         {(shows("conditions") ? held : []).map((marker, i) => {
           const box = setBox(xy, marker.nodes);
           if (!box) return null;
@@ -260,16 +309,26 @@ export function SceneCanvas(props: SceneProps) {
           );
         })}
         {highlight !== null && highlight >= 0 && highlight < quads.length ? (
-          <Line points={[...elementLoop(xy, quads[highlight], top, heights), elementLoop(xy, quads[highlight], top, heights)[0]] as [number, number, number][]} color={CRITICAL} lineWidth={3} />
+          <Line points={[...elementLoop(xy, quads[highlight], top, heights), elementLoop(xy, quads[highlight], top, heights)[0]] as [number, number, number][]} color={overlay.critical} lineWidth={3} />
         ) : null}
         {picked !== null && picked >= 0 && picked < quads.length && picked !== highlight ? (
-          <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color="#efefef" lineWidth={2} />
+          <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color={overlay.picked} lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
         <CameraView at={`${placed}|${view.view}|${view.n}`} view={view.view} centre={centre} size={size} />
+        <TriadSync svg={triad} />
       </Canvas>
+      {/* the axes as seen, in the view's lower left corner (ADR-0063 amendment 1) */}
+      <svg ref={triad} className="studio-triad" viewBox="-40 -40 80 80" aria-hidden="true" data-testid="view-triad">
+        {TRIAD.map((t, i) => (
+          <g key={t.axis} data-axis={i}>
+            <line x1="0" y1="0" x2="0" y2="0" stroke={t.color} strokeWidth="2.2" strokeLinecap="round" />
+            <text x="0" y="0" fill={t.color} fontSize="10" fontWeight="600" textAnchor="middle">{t.axis}</text>
+          </g>
+        ))}
+      </svg>
       </div>
-      <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} focus={focus} onFocus={setFocus} />
+      <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} />
     </div>
   );
 }
@@ -278,8 +337,9 @@ const PROPOSED_LOAD = "#8a6a2a"; // a proposed load's arrows: the load colour, d
 
 /** What is applied to the model, under it (ADR-0110): the boundary conditions and the loads, one line each in the words the assistant uses,
  * then what the assistant proposes and is not applied yet, then the model they act on. A line clicked draws its region bolder. */
-function AppliedList({ held, loads, proposed, about, critical, focus, onFocus }: {
-  held: SceneMarker[]; loads: SceneLoad[]; proposed: SceneProps["proposed"]; about: string[]; critical: boolean; focus: string | null; onFocus: (key: string | null) => void;
+function AppliedList({ held, loads, proposed, about, critical, criticalColor, focus, onFocus }: {
+  held: SceneMarker[]; loads: SceneLoad[]; proposed: SceneProps["proposed"]; about: string[]; critical: boolean; criticalColor: string; focus: string | null;
+  onFocus: (key: string | null) => void;
 }) {
   if (!held.length && !loads.length && !proposed?.held.length && !proposed?.loads.length && !about.length && !critical) return null;
   const line = (key: string, color: string, label: string, dashed = false) => (
@@ -306,7 +366,7 @@ function AppliedList({ held, loads, proposed, about, critical, focus, onFocus }:
       {about.length || critical ? (
         <p className="studio-applied-about" data-testid="applied-about">
           {about.join(" · ")}
-          {critical ? <span>{about.length ? " · " : ""}<span className="studio-key-swatch" style={{ borderColor: CRITICAL }} aria-hidden="true" /> the critical element</span> : null}
+          {critical ? <span>{about.length ? " · " : ""}<span className="studio-key-swatch" style={{ borderColor: criticalColor }} aria-hidden="true" /> the critical element</span> : null}
         </p>
       ) : null}
     </div>
