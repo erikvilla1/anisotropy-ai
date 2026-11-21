@@ -228,3 +228,46 @@ def repair_report(repair: Repair, units: str, load_n_per_m: float | None = None)
         report["lap"]["load"] = load_n_per_m / system["N"][0]
         report["lap"]["answer"] = lap_report(repair_lap(repair, load_n_per_m), units)
     return report
+
+
+def repair_views(repair: Repair, units: str, load_n_per_m: float | None = None, points_per_step: int = 41) -> dict:
+    """What a page draws beside the slice's rectangles (ADR-0135), in a unit system: the half panel's length, the lap's reach
+    from the repair's middle, every step boundary of the lap and, when a load is given, the hand calculation's shear stress
+    in the adhesive and the patch's force along the lap. `r` is the distance from the repair's middle, as in the
+    rectangles, so the curve runs from the repair's edge inward; each step has `points_per_step` points with both its ends."""
+    if units not in UNIT_SYSTEMS:
+        raise RepairError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
+    system = UNIT_SYSTEMS[units]
+    length, stress, force = system["length"][0], system["stress"][0], system["N"][0]
+    steps, names, _ = lap_steps(repair)
+    outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
+    boundaries, r = [{"name": "Edge of the repair", "r": outer / length}], outer
+    for name, step in zip(names, steps):
+        r -= step.length_m
+        boundaries.append({"name": name, "r": (r if r > 1e-9 * outer else 0.0) / length})  # the steps' sum ends at the middle but for rounding
+    views = {"half_length": repair.panel_length_m / 2 / length, "outer": outer / length, "boundaries": boundaries}
+    if load_n_per_m is not None:
+        x, shear, patch_force = repair_lap(repair, load_n_per_m).distribution(points_per_step)
+        views["lap"] = {"r": [max(float(outer - value), 0.0) / length for value in x], "shear": [float(value) / stress for value in shear],
+                        "patch_force": [float(value) / force for value in patch_force]}
+    return views
+
+
+def solve_needs(repair: Repair, load_n_per_m: float | None = None) -> list[dict]:
+    """What the solve of the slice (ADR-0132) still needs that the hand calculation does not, each with the place in the
+    repair file where it is stated and the need in words, to follow "needs"; empty when the slice can be solved."""
+    needs = []
+
+    def through(material: RepairMaterial, table: str, whose: str) -> None:
+        if material.through is None:
+            needs.append({"path": f"{table}.nu23", "words": f"{whose} constants through the thickness: nu23 for a unidirectional ply, or all of "
+                                                            f"{', '.join(THROUGH)}"})
+
+    through(repair.parent_material, "parent", "the laminate ply's")
+    if repair.patch_material is not repair.parent_material:
+        through(repair.patch_material, "patch", "the patch ply's")
+    if repair.adhesive.poisson_ratio is None:
+        needs.append({"path": "adhesive.poisson", "words": "the adhesive's Poisson's ratio"})
+    if load_n_per_m is None or load_n_per_m == 0:
+        needs.append({"path": "applied.load", "words": "a load per unit width that is not zero"})
+    return needs

@@ -22,7 +22,7 @@ import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/resul
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
-import { FEA_KINDS } from "../../lib/workspaces";
+import { ASKED_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
 import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
 import type { WingDescription, WingReport } from "../../lib/wing";
@@ -304,6 +304,7 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
 export function startAnswer(routed: StartRoute): Said {
   switch (routed.route) {
     case "set-up": return routed.kind === "wing" ? said("said", "Opens Wing analysis", ["The wing's own page under FEA, a new wing from the example."], { kind: "wing" })
+      : routed.kind === "repair" ? said("said", "Opens Patch repair", ["The repair's own page under FEA, with the repair this browser holds or the example."], { kind: "repair" })
       : said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });
     case "not-here": return said("said", "You are in FEA", ["Say what to analyse, or ask a question about it."]);
     case "open": return said("said", `Opens ${TARGET_TITLES[routed.target]}`);
@@ -395,7 +396,7 @@ export function modelRequests(question: Question): ModelRequest[] {
   const { route } = talk(question, true);
   // the FEA assistant of a blank project sends a question to the theory pages' reader, with the kinds of work it can set up (ADR-0124);
   // the coupon chat sends one of meaning with no kind, since its work is set up (ADR-0121 amendment 5)
-  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: question.page === "start" ? FEA_KINDS.map((k) => k.id) : [] } }];
+  if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: question.page === "start" ? [...ASKED_KINDS] : [] } }];
   if (route === "why") return s.facts ? [{ reader: "result-answers", body: { question: question.ask, facts: s.facts } }] : [];
   if (route !== "model") return [];
   const out: ModelRequest[] = [];

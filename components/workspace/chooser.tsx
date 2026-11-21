@@ -14,7 +14,7 @@ import { TEST_CHOICES } from "@/lib/studio-chat";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
 import { wingAbout, wingMaterial } from "@/lib/wing";
-import { readIntent, saysMore, sectionOf, type WorkTarget } from "@/lib/work-intent";
+import { readIntent, readRepair, saysMore, sectionOf, type WorkTarget } from "@/lib/work-intent";
 import { feaKind, WING_HREF, workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 import { goTo } from "./go-to";
 
@@ -134,6 +134,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   function start(value = said) {
     const text = value.trim();
     if (!text) return;
+    if (readRepair(text)) { carry("fea", text); return; } // a patch repair is FEA work: the FEA assistant opens its page, or answers about it (ADR-0135)
     const intent = readIntent(text);
     if (intent?.start) { carry(intent.target, text); return; }
     if (intent && sectionOf(intent.target) === "fea") { carry("fea", text); return; }

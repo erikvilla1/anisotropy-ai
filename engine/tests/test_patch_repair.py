@@ -545,3 +545,60 @@ def test_a_flush_file_takes_no_patch_overlap_or_shape():
     case["patch"] = {"layup": [0, 90, 0], "overlap": 5.0}
     with pytest.raises(RepairError, match=r"\[patch\]"):
         repair_from_dict(case)
+
+
+# ---- what a page draws of a repair, and what a solve of its slice still needs (ADR-0135)
+
+EXTERNAL_EXAMPLE = ENGINE / "examples" / "example-external-patch-repair.toml"
+
+
+@pytest.mark.parametrize("path", [EXAMPLE, EXTERNAL_EXAMPLE], ids=lambda path: path.stem)
+def test_the_curve_a_page_draws_is_the_laps_own_and_ends_on_the_values_the_report_gives(path):
+    from anisotropy_engine.repair import repair_views
+
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    stated, load = repair_from_dict(data)
+    report, views = repair_report(stated, data["units"], load), repair_views(stated, data["units"], load, points_per_step=5)
+    length = UNIT_SYSTEMS[data["units"]]["length"][0]
+    outer = (stated.patch_radius_m if stated.external else stated.cover_radius_m) / length
+    assert views["half_length"] == pytest.approx(stated.panel_length_m / 2 / length) and views["outer"] == pytest.approx(outer)
+    names = [step["name"] for step in report["lap"]["steps"]]
+    assert [b["name"] for b in views["boundaries"]] == ["Edge of the repair", *names]
+    reach = np.cumsum([step["length"] for step in report["lap"]["steps"]])
+    assert [b["r"] for b in views["boundaries"]] == pytest.approx([outer, *(outer - reach)], abs=1e-9)
+    # the lap ends at the hole's edge under a patch bonded on top, and at the repair's middle in a cut that leaves plies under the patch
+    assert views["boundaries"][-1]["r"] == pytest.approx(stated.damage_diameter_m / 2 / length if stated.external else 0.0, abs=1e-9)
+    lap, answer = views["lap"], report["lap"]["answer"]
+    assert len(lap["r"]) == len(lap["shear"]) == len(lap["patch_force"]) == 5 * len(names)
+    assert lap["r"][0] == pytest.approx(outer) and all(a >= b - 1e-12 for a, b in zip(lap["r"], lap["r"][1:])), "from the repair's edge inward"
+    for k, (start, end) in enumerate(answer["shear_at_ends"]):  # each step's first and last point are the report's two ends
+        assert lap["shear"][5 * k] == pytest.approx(start) and lap["shear"][5 * k + 4] == pytest.approx(end)
+        assert lap["patch_force"][5 * k] == pytest.approx(answer["boundary_forces"][k], abs=1e-9)
+        assert lap["patch_force"][5 * k + 4] == pytest.approx(answer["boundary_forces"][k + 1])
+    assert max(abs(value) for value in lap["shear"]) == pytest.approx(abs(answer["peak_shear"]["value"]))
+
+
+def test_a_repair_with_no_load_is_drawn_without_a_curve_and_an_unknown_unit_system_is_refused():
+    from anisotropy_engine.repair import repair_views
+
+    views = repair_views(repair(), "mm-MPa")
+    assert "lap" not in views and views["outer"] == pytest.approx(25 / 2 + 3 * 12) and views["half_length"] == pytest.approx(200.0)
+    with pytest.raises(RepairError, match="units must be one of"):
+        repair_views(repair(), "furlongs")
+
+
+def test_what_a_solve_still_needs_names_each_missing_value_and_where_it_is_stated():
+    from anisotropy_engine.repair import solve_needs, tape_through_thickness
+
+    assert [need["path"] for need in solve_needs(repair())] == ["parent.nu23", "adhesive.poisson", "applied.load"]
+    assert [need["path"] for need in solve_needs(repair(), 0.0)][-1] == "applied.load"
+    assert solve_needs(repair(), 1e5)[0]["words"].startswith("the laminate ply's constants through the thickness: nu23")
+    through = RepairMaterial(PLY.name, PLY.lamina, PLY.ply_thickness_m, tape_through_thickness(PLY.lamina, 0.4))
+    film = Adhesive(shear_modulus_pa=900e6, thickness_m=0.1e-3, shear_strength_pa=30e6, poisson_ratio=0.35)
+    assert solve_needs(repair(parent_material=through, adhesive=film), 1e5) == []
+    # a patch of its own material is asked for its own constants; a patch of the laminate's is not asked twice
+    other = RepairMaterial("Other ply", PLY.lamina, PLY.ply_thickness_m)
+    needs = solve_needs(repair(parent_material=through, adhesive=film, patch_material=other, patch_angles=(90, -45, 0, 45)), 1e5)
+    assert [need["path"] for need in needs] == ["patch.nu23"] and needs[0]["words"].startswith("the patch ply's")
+    for path in (EXAMPLE, EXTERNAL_EXAMPLE):  # the two examples a page opens with can be solved as they stand
+        assert solve_needs(*repair_from_dict(tomllib.loads(path.read_text(encoding="utf-8")))) == []

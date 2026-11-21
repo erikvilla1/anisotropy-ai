@@ -303,23 +303,51 @@ def read_step_volumes(step_path: Path | str) -> list[float]:
             gmsh.model.remove()
 
 
-def main(argv: list[str] | None = None) -> None:
-    """`python -m anisotropy_fea.repair_shape <repair.toml> [--step <file.step>] [--size <mm>]`: the slice's mesh measured
-    back against the engine, and the STEP file when one is asked for."""
-    import argparse
+def read_repair_file(path: Path | str) -> dict:
+    """A repair as a table of values: a repair file (TOML), or the same table as JSON, as a page sends it (ADR-0135). A
+    validation case's `expected` and `solve` tables are left out, so a case reads as a repair."""
+    import json
     import tomllib
 
-    from anisotropy_engine.repair import areas, bond_lengths, repair_from_dict, volumes
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(text) if path.suffix.lower() == ".json" else tomllib.loads(text)
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
+        raise ShapeError(f"{path.name} does not read as a repair file: {error}") from error
+    if not isinstance(data, dict):
+        raise ShapeError(f"{path.name} does not read as a repair file: it is not a table of values")
+    return {key: value for key, value in data.items() if key not in ("expected", "solve")}
+
+
+REFUSED = 2  # the exit status of a repair that cannot be read or shaped, its reason the last line on stderr
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m anisotropy_fea.repair_shape <repair.toml> [--step <file.step>] [--parts <file.json>] [--size <mm>]`: the
+    slice's mesh measured back against the engine, the STEP file when one is asked for, and with it the table of its solids
+    (each one's name, kind, ply angle and volume in mm^3)."""
+    import argparse
+    import json
+    import sys
+
+    from anisotropy_engine.repair import RepairError, areas, bond_lengths, repair_from_dict, volumes
 
     parser = argparse.ArgumentParser(description="The mesh of a stepped patch repair's slice, and its STEP file")
-    parser.add_argument("repair", type=Path, help="the repair, a TOML file (engine/examples/example-patch-repair.toml)")
+    parser.add_argument("repair", type=Path, help="the repair, a TOML file (engine/examples/example-patch-repair.toml) or the same table as .json")
     parser.add_argument("--step", type=Path, help="write the repair's solids to this STEP file")
+    parser.add_argument("--parts", type=Path, help="with --step: write the table of the solids to this JSON file")
     parser.add_argument("--size", type=float, help="the element size along the slice, mm")
     args = parser.parse_args(argv)
-    case = tomllib.loads(args.repair.read_text(encoding="utf-8"))
-    repair, _ = repair_from_dict({key: value for key, value in case.items() if key != "expected"})  # a validation case reads too
-    mesh = slice_mesh(repair, None if args.size is None else args.size * MM)
-    print(f"{case.get('title', args.repair.stem)}: {len(mesh.quads)} elements, {len(mesh.nodes_m)} nodes in the half slice")
+    try:
+        case = read_repair_file(args.repair)
+        repair, _ = repair_from_dict(case)
+        mesh = slice_mesh(repair, None if args.size is None else args.size * MM)
+    except (RepairError, ShapeError, OSError) as error:
+        print((str(error).splitlines() or [type(error).__name__])[0], file=sys.stderr)
+        return REFUSED
+    title = case.get("title") if isinstance(case.get("title"), str) and case.get("title") else args.repair.stem
+    print(f"{title}: {len(mesh.quads)} elements, {len(mesh.nodes_m)} nodes in the half slice")
     measured, stated = mesh.areas(), areas(repair)
     for kind in stated:
         print(f"  {kind:>9}: {measured[kind] / MM**2:12.5f} mm^2 in the mesh, {stated[kind] / MM**2:12.5f} mm^2 by the description")
@@ -328,12 +356,22 @@ def main(argv: list[str] | None = None) -> None:
           f"{sum(value for name, value in lengths.items() if name != 'cut_faces') / MM:.4f} mm by the description; "
           f"{bond['upright'] / MM:.4f} mm up the cut faces, {repair.depth_m / MM:.4f} mm by the description")
     if args.step:
-        shape = build_repair_shape(repair, args.step, case.get("title", "Stepped patch repair"))
+        try:
+            shape = build_repair_shape(repair, args.step, title if "title" in case else "Stepped patch repair")
+        except ShapeError as error:
+            print((str(error).splitlines() or [type(error).__name__])[0], file=sys.stderr)
+            return REFUSED
         solid, swept = shape.volumes(), volumes(repair)
         print(f"{args.step}: {len(shape.parts)} solids")
         for kind in swept:
             print(f"  {kind:>9}: {solid[kind] / MM**3:14.3f} mm^3 as solids, {swept[kind] / MM**3:14.3f} mm^3 by the description")
+        if args.parts:
+            table = {"title": title, "units": {"length": "mm", "volume": "mm^3"},
+                     "parts": [{"name": part.name, "kind": part.kind, "angle": part.angle_deg, "volume": part.volume_m3 / MM**3} for part in shape.parts],
+                     "volumes": {kind: value / MM**3 for kind, value in solid.items()}}
+            args.parts.write_text(json.dumps(table, indent=1), encoding="utf-8")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

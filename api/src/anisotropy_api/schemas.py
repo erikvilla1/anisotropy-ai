@@ -1479,3 +1479,57 @@ class WingShapeAnswer(Contract):
     run_id: str | None = None
     step: str
     parts: dict[str, Any]
+
+
+
+class RepairRequest(Contract):
+    """A stepped patch repair to work (ADR-0131, ADR-0135): its description as the JSON object of a repair file, or the file's TOML
+    text, in the file's own units. The engine reads it with the same rules as a file on disk and refuses anything unknown or missing."""
+
+    repair: dict[str, Any] | None = None
+    toml: Annotated[str, Field(min_length=1, max_length=200_000)] | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_form(self) -> Self:
+        if (self.repair is None) == (self.toml is None):
+            raise ValueError("Give exactly one of repair (a JSON object) or toml (the repair file's text)")
+        return self
+
+
+class RepairSolveRequest(RepairRequest):
+    """A repair whose slice is to be solved (ADR-0132, ADR-0135): the repair as for its hand calculation, and whether the adhesive on the
+    cut faces of a flush repair carries load (`bonded`) or nothing (`open`, ADR-0132's choice unless said)."""
+
+    cut_faces: Literal["open", "bonded"] = "open"
+
+
+class RepairAnswer(Contract):
+    """The hand calculation of a repair (ADR-0135): the description as the engine read it, what it works out to in the file's units as
+    `repair_report` gives it (sizes, the slice's rectangles, areas, volumes, the lap and its answer), what a page draws beside the
+    rectangles (`repair_views`) and what a solve of the slice still needs (`solve_needs`, empty when it can be solved)."""
+
+    run_id: str | None = None
+    engine_version: str
+    repair: dict[str, Any]
+    report: dict[str, Any]
+    views: dict[str, Any]
+    needs: list[dict[str, str]]
+
+
+class RepairSolveAnswer(Contract):
+    """A repair's slice solved (ADR-0132, ADR-0135): `slice_report` in the file's units (the model and its checks, the bondline's
+    stresses, the forces along the slice and at the lap's boundaries beside the hand calculation, the plies, what reaches its limit
+    first) and the solve in one line."""
+
+    run_id: str | None = None
+    headline: str
+    report: dict[str, Any]
+
+
+class RepairShapeAnswer(Contract):
+    """A repair's solids for a CAD program (ADR-0131, ADR-0135): its STEP file's text, in millimetres with every solid named, and the
+    table of the solids: each one's name, kind, ply angle and volume."""
+
+    run_id: str | None = None
+    step: str
+    parts: dict[str, Any]

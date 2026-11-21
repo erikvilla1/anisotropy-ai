@@ -1,5 +1,5 @@
 import { serviceHref, services } from "./services";
-import { WING_HREF, WORKSPACE_ROOT, WORKSPACES } from "./workspaces";
+import { REPAIR_HREF, WING_HREF, WORKSPACE_ROOT, WORKSPACES } from "./workspaces";
 
 /** The site's pages in the order of the audit of 2026-10-31 (ADR-0058). Calculator and Studio left the navigation: the
  * calculator has its own page and the studio is reached from the finite element page. The materials library's link reads
@@ -47,7 +47,7 @@ export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/stud
 
 /** The workspace's own pages: the projects, one page per workspace, the wing's page of the FEA section (ADR-0118 amendment 1, in layout D
  * since ADR-0134) and the viewer a solved coupon opens in. */
-const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), WING_HREF, `${WORKSPACE_ROOT}/fea/view`];
+const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), WING_HREF, REPAIR_HREF, `${REPAIR_HREF}/report`, `${WORKSPACE_ROOT}/fea/view`];
 
 /** The app's addresses: the workspace's pages, and the four old addresses that move to it. They get the workspace's own header and no
  * footer. Any other path under `/workspace`, `/chat` or `/studio` is the 404 page, which keeps the site's header it was built with.
@@ -58,11 +58,11 @@ export function isAppPath(pathname: string): boolean {
 }
 
 /** True where the workspace's header links back to the projects: a workspace page without a toolbar of its own, the viewer. The
- * workspaces' toolbars and the wing's card carry "All projects" already (components/workspace/shell.tsx, canvas-shell.tsx), and
+ * workspaces' toolbars and the wing's and the repair's cards carry "All projects" already (components/workspace/shell.tsx, canvas-shell.tsx), and
  * `/workspace` is the projects. */
 export function headerLinksToProjects(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "");
-  return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && path !== WING_HREF && !WORKSPACES.some((w) => w.href === path);
+  return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && path !== WING_HREF && path !== REPAIR_HREF && !WORKSPACES.some((w) => w.href === path);
 }
 
 /** The company's pages elsewhere, shown in the footer under the tagline (ADR-0077 amendment 60): LinkedIn and X, in that
