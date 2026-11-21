@@ -13,8 +13,8 @@ section ranks. The wing's chat will search them by its own subject (ADR-0125), w
 methods and allowables, which are of the subject "references" (ADR-0127): `wing_sections()`. A section may name the other words it is
 asked by in a line `<!-- also: taper, run-out, drop-off -->` under its heading; they count as its title's words and are not shown.
 
-The repair's sections (a `##` heading that names a file of `repair/`) are kept out of the default search the same way, as the subject
-"repair" (ADR-0102 amendment 5): no chat answers a question about a repair yet.
+The repair's sections (a `##` heading that names a file of the repair, as `repair/` or `repair_model.py`) are kept out of the default
+search the same way, as the subject "repair" (ADR-0102 amendments 5 and 6): no chat answers a question about a repair yet.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ also only one two both here ply plies value values""".split())
 # two spellings or forms of one word, so a question in one finds a page in the other
 SAME = {"max": "maximum", "min": "minimum", "tied": "tie", "fiber": "fibre", "sigma": "σ", "tau": "τ", "epsilon": "ε", "meshe": "mesh"}
 K1, B, TITLE_WEIGHT = 1.5, 0.75, 3
-# a heading that names a file of the wing (`wing/`, `wing_model.py`) or of the repair (`repair/`, `repair/step_lap.py`) gives its subject
-SUBJECT_FILES = (("wing", re.compile(r"\(`wing[/_][^`]*`\)\s*$")), ("repair", re.compile(r"\(`repair/[^`]*`\)\s*$")))
+# a heading that names a file of the wing (`wing/`, `wing_model.py`) or of the repair (`repair/`, `repair/step_lap.py`, `repair_model.py`) gives its subject
+SUBJECT_FILES = (("wing", re.compile(r"\(`wing[/_][^`]*`\)\s*$")), ("repair", re.compile(r"\(`repair[/_][^`]*`\)\s*$")))
 MAX_SECTION_CHARS = 6000  # what one section may hand a model; a longer one is cut at a paragraph
 
 

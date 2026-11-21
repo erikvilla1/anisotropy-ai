@@ -134,3 +134,13 @@ Options 2, 4, 7 and 8.
 **Decision.** (a). A `##` heading that names a file of `repair/` makes it and the sections under it subject "repair"; a coupon's question does not search them, and `of_subject("repair")` gives them to the repair's chat when it is built. Section 17's heading names `repair/`, and its first paragraph names its three files.
 
 **Evidence.** `cd api && uv run pytest -q tests/test_assistant_questions.py tests/test_theory.py tests/test_general_answers.py tests/test_result_answers.py`: 89 passed, 3 skipped, where 1 failed before (`test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search` is new); `cd api && uv run pytest -q`: 671 passed, 172 skipped; `cd mcp-server && uv run pytest -q`: 74 passed.
+
+## Amendment 6, 2026-11-21 (the repair's section of the finite element theory page is of the same subject; not yet confirmed by the founder)
+
+**Context.** The solve of a repair's slice ([ADR-0132](ADR-0132-a-repairs-slice-is-solved-in-calculix-as-a-plane-of-eight-node-elements-held-flat-with-the-laminates-far-field-width-strain-and-its-bondline-and-plies-are-read-back-as-means-by-the-engine.md)) added Section 18 to the engine's theory page, whose heading names `repair/solid.py`, and Section 11 to the finite element theory page, whose heading names `repair_model.py`, a file of `fea/`. Amendment 5's rule reads a heading that names a file of `repair/` only, so Section 11 and its five sub-sections would have joined a coupon's search, with a bondline's shear and peel stress and a ply's strength ratio among their words.
+
+**Options.** (a) Read a heading that names `repair_model.py` as the repair's too, as amendment 4 reads `wing_model.py` as the wing's. (b) Leave Section 11 in a coupon's search: its words are a coupon's too, the fault amendment 5 was written for.
+
+**Decision.** (a). A `##` heading that names a file whose path starts with `repair/` or `repair_` makes it and the sections under it subject "repair".
+
+**Evidence.** `cd api && uv run pytest -q tests/test_theory.py tests/test_assistant_questions.py tests/test_general_answers.py tests/test_result_answers.py`, run on 2026-11-21: 89 passed, 3 skipped. `test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search` names the new sections, and the two questions it pinned to Sections 16 and 17 still find them first.

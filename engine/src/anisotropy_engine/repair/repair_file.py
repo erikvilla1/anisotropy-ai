@@ -9,9 +9,17 @@ units (ADR-0131).
     [patch]     optional: a material as in [parent], and layup, deepest ply first. Left out, the patch is the laminate's own
                 material in the angles of the plies removed
     [cover]     optional: layup (lowest first) and overlap, how far the cover plies reach past the widest cut
-    [adhesive]  shear_modulus, thickness, shear_strength (optional)
+    [adhesive]  shear_modulus, thickness, shear_strength (optional), poisson and peel_strength (optional, for the solve)
     [panel]     length (along the load), width
     [applied]   optional: load, per unit width, tension positive
+
+The solve of the slice (ADR-0132) needs more than the hand calculation, and a file that leaves these out is still worked by
+hand: in a material's table its constants through the thickness, `nu23` alone for a unidirectional ply (E3 = E2,
+G13 = G12, nu13 = nu12 and G23 = E2 / (2 (1 + nu23)) follow) or all of `E3`, `G13`, `G23`, `nu13`, `nu23`; and the
+adhesive's `poisson`. The adhesive's `peel_strength`, the stress pulling the patch off that the bond can take (the
+adhesive's, or the laminate's own strength through its thickness when that is lower), is optional: with it the solve
+judges the peel stress, without it the peel stress is reported and not judged. A material typed in full may also state its ply strengths, all of `F1t`, `F1c`, `F2t`, `F2c`, `F6`,
+for the check of which ply fails first; a library material brings its own.
 
 A patch bonded on top over a hole (ADR-0131 amendment 1) says so and states its patch in full:
 
@@ -28,10 +36,10 @@ Nothing is guessed: a missing value, an unknown key or an unknown unit system is
 
 from __future__ import annotations
 
-from ..lamina import Lamina
+from ..lamina import Lamina, Strengths
 from ..library import library_material
 from ..units import UNIT_SYSTEMS
-from .description import PATCH_SHAPES, REPAIR_KINDS, Repair, RepairError, RepairMaterial
+from .description import PATCH_SHAPES, REPAIR_KINDS, Repair, RepairError, RepairMaterial, ThroughThickness, tape_through_thickness
 from .lap_file import lap_report
 from .patch_lap import lap_steps, repair_lap
 from .section import areas, bond_lengths, check_regions, regions, volumes
@@ -39,6 +47,8 @@ from .step_lap import Adhesive
 
 TABLES = ("parent", "damage", "steps", "patch", "cover", "adhesive", "panel", "applied")
 TYPED_MATERIAL = ("name", "E1", "E2", "G12", "nu12", "ply_thickness")
+THROUGH = ("E3", "G13", "G23", "nu13", "nu23")  # a ply's constants through the thickness, for the solve of the slice (ADR-0132)
+STRENGTHS = ("F1t", "F1c", "F2t", "F2c", "F6")
 
 
 def _keys(table: object, where: str, required: set[str], optional: set[str] = frozenset()) -> dict:
@@ -53,8 +63,29 @@ def _keys(table: object, where: str, required: set[str], optional: set[str] = fr
     return table
 
 
+def _through(table: dict, where: str, lamina: Lamina, si) -> ThroughThickness | None:
+    """A material's constants through the thickness: none stated, `nu23` alone (a unidirectional ply), or all five."""
+    stated = [key for key in THROUGH if key in table]
+    if not stated:
+        return None
+    for key in ("nu13", "nu23"):
+        if key in table and (isinstance(table[key], bool) or not isinstance(table[key], (int, float))):
+            raise RepairError(f"[{where}]: {key} must be a number, got {table[key]!r}")
+    try:
+        if stated == ["nu23"]:
+            return tape_through_thickness(lamina, table["nu23"])
+        if len(stated) == len(THROUGH):
+            return ThroughThickness(E3=si(table["E3"], "modulus"), G13=si(table["G13"], "modulus"), G23=si(table["G23"], "modulus"),
+                                    nu13=table["nu13"], nu23=table["nu23"])
+    except RepairError as error:
+        raise RepairError(f"[{where}]: {error}") from error
+    raise RepairError(f"[{where}]: through the thickness, give nu23 alone (a unidirectional ply) or all of {', '.join(THROUGH)}; "
+                      f"the table gives {', '.join(stated)}")
+
+
 def _material(table: dict, where: str, si) -> RepairMaterial:
-    """A library material by its id (its ply thickness may be replaced by a typed one), or one typed in full."""
+    """A library material by its id (its ply thickness may be replaced by a typed one), or one typed in full; either with
+    its constants through the thickness when the table states them."""
     if "library" in table:
         try:
             record = library_material(table["library"], table.get("dataset"))
@@ -63,19 +94,28 @@ def _material(table: dict, where: str, si) -> RepairMaterial:
         thickness = si(table["ply_thickness"], "length") if "ply_thickness" in table else record.ply_thickness_m
         if thickness is None:
             raise RepairError(f"[{where}]: the library record of {table['library']!r} has no ply thickness; give ply_thickness")
-        return RepairMaterial(record.name, record.lamina, thickness)
+        name, lamina = record.name, record.lamina
+    else:
+        strengths = [key for key in STRENGTHS if key in table]
+        if strengths and len(strengths) != len(STRENGTHS):
+            raise RepairError(f"[{where}]: give all of the ply strengths {', '.join(STRENGTHS)} or none; the table gives {', '.join(strengths)}")
+        try:
+            lamina = Lamina(E1=si(table["E1"], "modulus"), E2=si(table["E2"], "modulus"), G12=si(table["G12"], "modulus"), nu12=table["nu12"],
+                            strengths=Strengths(**{key: si(table[key], "stress") for key in STRENGTHS}) if strengths else None)
+        except ValueError as error:
+            raise RepairError(f"[{where}]: the ply constants E1, E2, G12 and nu12 and the strengths do not make a material: {error}") from error
+        name, thickness = table["name"], si(table["ply_thickness"], "length")
     try:
-        lamina = Lamina(E1=si(table["E1"], "modulus"), E2=si(table["E2"], "modulus"), G12=si(table["G12"], "modulus"), nu12=table["nu12"])
-    except ValueError as error:
-        raise RepairError(f"[{where}]: the ply constants E1, E2, G12 and nu12 do not make a material: {error}") from error
-    return RepairMaterial(table["name"], lamina, si(table["ply_thickness"], "length"))
+        return RepairMaterial(name, lamina, thickness, _through(table, where, lamina, si))
+    except RepairError as error:
+        raise error if str(error).startswith(f"[{where}]") else RepairError(f"[{where}]: {error}") from error
 
 
 def _material_keys(table: object, where: str, also: set[str], optional: set[str] = frozenset()) -> dict:
     """The keys of a table that names a material: by the library, or typed in full, never half of each."""
     if isinstance(table, dict) and "library" in table:
-        return _keys(table, where, {"library"} | also, {"dataset", "ply_thickness"} | optional)
-    return _keys(table, where, set(TYPED_MATERIAL) | also, optional)
+        return _keys(table, where, {"library"} | also, {"dataset", "ply_thickness"} | set(THROUGH) | optional)
+    return _keys(table, where, set(TYPED_MATERIAL) | also, set(THROUGH) | set(STRENGTHS) | optional)
 
 
 def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
@@ -98,11 +138,13 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
     parent = _material_keys(data.get("parent"), "parent", {"layup"})
     damage = _keys(data.get("damage"), "damage", {"diameter"})
     steps = _keys(data.get("steps"), "steps", {"count", "length"}, {"plies"})
-    stated = _keys(data.get("adhesive"), "adhesive", {"shear_modulus", "thickness"}, {"shear_strength"})
+    stated = _keys(data.get("adhesive"), "adhesive", {"shear_modulus", "thickness"}, {"shear_strength", "poisson", "peel_strength"})
     panel = _keys(data.get("panel"), "panel", {"length", "width"})
     try:
         adhesive = Adhesive(si(stated["shear_modulus"], "stress"), si(stated["thickness"], "length"),
-                            si(stated["shear_strength"], "stress") if "shear_strength" in stated else None)
+                            si(stated["shear_strength"], "stress") if "shear_strength" in stated else None,
+                            poisson_ratio=stated.get("poisson"),
+                            peel_strength_pa=si(stated["peel_strength"], "stress") if "peel_strength" in stated else None)
     except ValueError as error:
         raise RepairError(f"[adhesive]: {error}") from error
     kind = data.get("kind", "flush")

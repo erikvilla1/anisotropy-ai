@@ -587,6 +587,77 @@ def external_patch_repair(case: dict) -> dict:
     return answer
 
 
+# ----------------------------------------------------------------------------------------- a ply as a solid
+
+
+def turned_solid_ply(case: dict) -> dict:
+    """A ply as an orthotropic solid turned about the thickness, and the far field of a laminate of such plies held flat
+    (ADR-0132), without the engine and without a matrix inverse or a tensor rotation.
+
+    In the ply's axes, with nu21 = nu12 E2 / E1, nu31 = nu13 E3 / E1, nu32 = nu23 E3 / E2 and
+    D = 1 - nu12 nu21 - nu23 nu32 - nu13 nu31 - 2 nu21 nu32 nu13, the stiffnesses of an orthotropic solid are
+
+        C11 = E1 (1 - nu23 nu32) / D    C22 = E2 (1 - nu13 nu31) / D    C33 = E3 (1 - nu12 nu21) / D
+        C12 = E1 (nu21 + nu31 nu23) / D    C13 = E1 (nu31 + nu21 nu32) / D    C23 = E2 (nu32 + nu12 nu31) / D
+        C44 = G23    C55 = G13    C66 = G12
+
+    Turned by theta from x toward y about z (m = cos, n = sin), the thirteen stiffnesses of the turned ply are the
+    textbook's, written out term by term below. A layer free through its thickness has Q_ij = C_ij - C_i3 C_j3 / C_33 for
+    i, j of 1, 2, 6. The laminate far from a repair is held flat, free across its width and kept from shearing: with
+    A_ij the sum of Q_ij t over the plies, strain_x = N / (A11 - A12^2 / A22), strain_y = -(A12 / A22) strain_x, and a
+    ply's stress along x is Q11 strain_x + Q12 strain_y."""
+    if case["units"] != "mm-MPa":
+        raise ValueError("a solid ply case is stated in mm, MPa and N/mm, so nothing is converted")
+    mat = case["material"]
+    e1, e2, e3, g12, g13, g23 = (mat[key] for key in ("E1", "E2", "E3", "G12", "G13", "G23"))
+    nu12, nu13, nu23 = mat["nu12"], mat["nu13"], mat["nu23"]
+    nu21, nu31, nu32 = nu12 * e2 / e1, nu13 * e3 / e1, nu23 * e3 / e2
+    d = 1 - nu12 * nu21 - nu23 * nu32 - nu13 * nu31 - 2 * nu21 * nu32 * nu13
+    c11, c22, c33 = e1 * (1 - nu23 * nu32) / d, e2 * (1 - nu13 * nu31) / d, e3 * (1 - nu12 * nu21) / d
+    c12, c13, c23 = e1 * (nu21 + nu31 * nu23) / d, e1 * (nu31 + nu21 * nu32) / d, e2 * (nu32 + nu12 * nu31) / d
+    c44, c55, c66 = g23, g13, g12
+
+    def turned(angle: float) -> dict[str, float]:
+        m, n = np.cos(np.radians(angle)), np.sin(np.radians(angle))
+        return {
+            "11": c11 * m**4 + 2 * (c12 + 2 * c66) * m**2 * n**2 + c22 * n**4,
+            "12": (c11 + c22 - 4 * c66) * m**2 * n**2 + c12 * (m**4 + n**4),
+            "13": c13 * m**2 + c23 * n**2,
+            "16": (c11 - c12 - 2 * c66) * m**3 * n + (c12 - c22 + 2 * c66) * m * n**3,
+            "22": c11 * n**4 + 2 * (c12 + 2 * c66) * m**2 * n**2 + c22 * m**4,
+            "23": c13 * n**2 + c23 * m**2,
+            "26": (c11 - c12 - 2 * c66) * m * n**3 + (c12 - c22 + 2 * c66) * m**3 * n,
+            "33": c33,
+            "36": (c13 - c23) * m * n,
+            "44": c44 * m**2 + c55 * n**2,
+            "45": (c55 - c44) * m * n,
+            "55": c55 * m**2 + c44 * n**2,
+            "66": (c11 + c22 - 2 * c12 - 2 * c66) * m**2 * n**2 + c66 * (m**4 + n**4),
+        }
+
+    def reduced(c: dict[str, float]) -> dict[str, float]:
+        with_3 = {"1": c["13"], "2": c["23"], "6": c["36"]}  # each row's stiffness against the thickness strain
+        return {key: c[key] - with_3[key[0]] * with_3[key[1]] / c["33"] for key in ("11", "12", "22", "16", "26", "66")}
+
+    one = turned(case["ply"]["angle"])
+    q_one = reduced(one)
+    t, load = mat["ply_thickness"], case["applied"]["load"]
+    qs = [reduced(turned(angle)) for angle in case["laminate"]["layup"]]
+    a11, a12, a22 = (sum(q[key] for q in qs) * t for key in ("11", "12", "22"))
+    strain_x = load / (a11 - a12**2 / a22)
+    strain_y = -a12 / a22 * strain_x
+    return {
+        "stiffness": [one[key] for key in ("11", "12", "13", "16", "22", "23", "26", "33", "36", "44", "45", "55", "66")],
+        "reduced_stiffness": [q_one[key] for key in ("11", "12", "22", "16", "26", "66")],
+        "far_field_strains": [strain_x, strain_y],
+        "far_field_ply_stress": [q["11"] * strain_x + q["12"] * strain_y for q in qs],
+    }
+
+
+SOLID_CASES = {
+    "constructed-turned-ply-as-a-solid-and-its-laminates-far-field": turned_solid_ply,
+}
+
 LAP_CASES = {
     "constructed-flush-three-step-repair": stepped_lap,
     "constructed-single-step-lap-and-double-lap": stepped_lap,

@@ -1199,9 +1199,67 @@ A_{\text{laminate}} = \Bigl(a - \frac{d}{2}\Bigr) h, \qquad A_{\text{adhesive}} 
 
 In the panel a round patch is discs and its adhesive a ring; a strip patch's plies are bands $`2 R_j`$ long across the width $`W`$, of volume $`2 R_j W g`$, and its adhesive the band $`2 R_1`$ long less the hole's disc. The lap runs on the top face from the patch's edge inward: under the ledge of step $`j`$, patch groups 1 to $`j`$ over the whole laminate for one step length, and last the whole patch over the whole laminate for the overlap $`c`$. It ends at the hole's edge, where the laminate ends and the patch carries the whole load, and each stack's stiffness is its share of the bonded section's as above; two stacks of one Poisson's ratio, both at 0°, get their plain $`E t`$. This lap is the strip through the hole's middle: where laminate is left beside the hole, as under a strip patch on a panel wider than the hole, that laminate carries load past the hole and the lap does not count it, so the lap's load at the adhesive's elastic limit is low for the panel as a whole.
 
-Not covered, and refused where the description could state it: flush patch plies thicker or thinner than the laminate's, a scarf (a taper without ledges), steps of different lengths, a flush repair that is not round, a curved laminate, a backing under a cut through every ply, an external patch laid shortest ply first, a patch on both faces, and damage left in place under an external patch. The lap is one line through a round repair: it does not see the load that flows around the repair in the panel, the stress concentration at the cut, or anything that changes around the repair's edge. The length bonded on a ledge is taken as the step length; the adhesive on the cut faces carries no load in the lap. The finite element model of the slice is a later step. A repair's file and its report in a unit system are read and written by `repair/repair_file.py`.
+Not covered, and refused where the description could state it: flush patch plies thicker or thinner than the laminate's, a scarf (a taper without ledges), steps of different lengths, a flush repair that is not round, a curved laminate, a backing under a cut through every ply, an external patch laid shortest ply first, a patch on both faces, and damage left in place under an external patch. The lap is one line through a round repair: it does not see the load that flows around the repair in the panel, the stress concentration at the cut, or anything that changes around the repair's edge. The length bonded on a ledge is taken as the step length; the adhesive on the cut faces carries no load in the lap. The slice is solved by finite elements in `fea/` (ADR-0132; `fea/docs/theory.md`, Section 11), from the plies as solids of Section 18. A repair's file and its report in a unit system are read and written by `repair/repair_file.py`.
 
 Checks: `engine/tests/test_patch_repair.py`. Two of the cases of `engine/validation/patch_repair_cases/` are external patches, a strip of another material and ply thickness and a round one of the laminate's own ply, worked without the engine by `external_patch_repair` in `engine/validation/closed_forms.py`; over four external repairs the rectangles do not overlap, the two routes agree, and the areas, the volumes and the bondline equal the sums above. The cases of `engine/validation/patch_repair_cases/`, cross-ply laminates so that the stiffnesses can be written by hand, are worked without the engine in `engine/validation/closed_forms.py`: the sizes, areas and volumes from the sums above, each stack's stiffness as $`A_{11} - \nu A_{12}`$ with $`\nu`$ the contraction of the bonded section, and the lap by the general solution of every step with no shear stress at the middle; the engine agrees within $`10^{-9}`$. Over nine repairs (with and without cover plies, through and not, one or two plies a step) no two rectangles overlap, a grid of points over the slice gives the same part by both routes, and the areas and volumes equal the sums; the two stiffnesses of a bonded section add up to the section's and are the forces the stacks carry when the section is strained; a patch in the laminate's own angles restores the laminate's stiffness on every ledge; a lap of one step ending at a plane of symmetry equals its closed form. The mesh and the solids of the same rectangles are measured back in `fea/tests/test_repair_shape.py`.
+
+## 18. The repair's plies as solids (`repair/solid.py`)
+
+The finite element solve of a repair's slice (ADR-0132; `fea/docs/theory.md`, Section 11) carries stress through the thickness, which the laminate theory of Sections 1 to 3 leaves out. Each ply is then a solid with nine constants: the four of its plane and five through the thickness, $`E_3`$, $`G_{13}`$, $`G_{23}`$, $`\nu_{13}`$ and $`\nu_{23}`$. The slice's axes are $`x`$ along the load, $`y`$ across the panel's width and $`z`$ through the thickness; a ply's are 1 along its fibres, 2 across them in the ply and 3 through the thickness. Stresses and strains are listed in the order $`xx, yy, zz, yz, xz, xy`$ (11, 22, 33, 23, 13, 12 in the ply's axes), the shear strains engineering ones.
+
+In its own axes a ply's strains for its stresses are computed by `ply_compliance`:
+
+```math
+\begin{bmatrix}\varepsilon_1\\ \varepsilon_2\\ \varepsilon_3\end{bmatrix} =
+\begin{bmatrix} 1/E_1 & -\nu_{12}/E_1 & -\nu_{13}/E_1\\ -\nu_{12}/E_1 & 1/E_2 & -\nu_{23}/E_2\\ -\nu_{13}/E_1 & -\nu_{23}/E_2 & 1/E_3 \end{bmatrix}
+\begin{bmatrix}\sigma_1\\ \sigma_2\\ \sigma_3\end{bmatrix}, \qquad
+\gamma_{23} = \frac{\tau_{23}}{G_{23}}, \quad \gamma_{13} = \frac{\tau_{13}}{G_{13}}, \quad \gamma_{12} = \frac{\tau_{12}}{G_{12}}
+```
+
+and its stiffness $`\mathbf{C}`$ is the inverse. A description whose nine constants do not make a material, one that could give out work when strained, is refused: the three by three matrix above has to be positive definite. A unidirectional ply is the same in every direction across its fibres, so one number more, $`\nu_{23}`$, gives all five, computed by `tape_through_thickness`:
+
+```math
+E_3 = E_2, \qquad G_{13} = G_{12}, \qquad \nu_{13} = \nu_{12}, \qquad G_{23} = \frac{E_2}{2\,(1 + \nu_{23})}
+```
+
+A fabric ply is not the same across its thickness as in its plane, and states all five.
+
+<!-- code: ply_compliance, tape_through_thickness -->
+
+**Turned to its angle.** A ply at $`\theta`$ has its axis 1 turned from $`x`$ toward $`y`$ about $`z`$. With $`\mathbf{a}`$ the matrix whose columns are the ply's three axes in the slice's, the stiffness as a fourth-order tensor turns in each of its four directions, computed by `turned_stiffness`, and a ply's stiffness in the slice's axes from its material and angle is computed by `ply_stiffness`:
+
+```math
+C'_{ijkm} = a_{ip}\,a_{jq}\,a_{kr}\,a_{ms}\,C_{pqrs}, \qquad
+\mathbf{a} = \begin{bmatrix}\cos\theta & -\sin\theta & 0\\ \sin\theta & \cos\theta & 0\\ 0 & 0 & 1\end{bmatrix}
+```
+
+A turned ply couples $`xx`$, $`yy`$ and $`zz`$ with the shear $`xy`$, and $`yz`$ with $`xz`$. The adhesive is isotropic, from its shear modulus $`G`$ and Poisson's ratio $`\nu`$; with $`\lambda = 2G\nu/(1 - 2\nu)`$ a direct stress is $`(\lambda + 2G)`$ times its own strain and $`\lambda`$ times each of the other two, computed by `adhesive_stiffness`.
+
+<!-- code: turned_stiffness, ply_stiffness, adhesive_stiffness -->
+
+**Free through its thickness.** A layer with no stress on $`zz`$, $`yz`$ or $`xz`$ has those three strains solved for and put back. With $`k`$ the kept rows $`xx, yy, xy`$ and $`f`$ the freed ones, computed by `plane_stress_stiffness`:
+
+```math
+\bar{\mathbf{Q}} = \mathbf{C}_{kk} - \mathbf{C}_{kf}\,\mathbf{C}_{ff}^{-1}\,\mathbf{C}_{fk}
+```
+
+For a ply this is the transformed reduced stiffness of Section 2, whatever its five through-thickness constants are.
+
+**The far field.** Far from the repair the laminate is one flat plate under the load $`N`$ per unit width. In the slice it is held flat, it is free to contract across its width (no force across it), and it does not shear in its plane. With $`A_{11}`$, $`A_{12}`$ and $`A_{22}`$ the sums of each ply's $`\bar Q`$ times its thickness, the strains and each ply's stress along the load are computed by `far_field`:
+
+```math
+\varepsilon_x = \frac{N}{A_{11} - A_{12}^2 / A_{22}}, \qquad \varepsilon_y = -\frac{A_{12}}{A_{22}}\,\varepsilon_x, \qquad \sigma_x^{(k)} = \bar Q_{11}^{(k)}\,\varepsilon_x + \bar Q_{12}^{(k)}\,\varepsilon_y
+```
+
+For a laminate that is balanced and symmetric ($`A_{16} = A_{26} = 0`$, $`\mathbf{B} = 0`$) this is the laminate theory's response to the load alone (Section 4). A laminate that is not balanced would shear under the load if free to; the slice keeps it from shearing, and the force that takes is not reported.
+
+<!-- code: plane_stress_stiffness, far_field -->
+
+**A ply's own stresses.** From a ply's six strains in the slice's axes, its stresses there are its stiffness times them, and the stress tensor is then turned into the ply's axes, $`\boldsymbol{\sigma}_{123} = \mathbf{a}^T \boldsymbol{\sigma}_{xyz}\,\mathbf{a}`$, computed by `ply_axis_stress`. The three in-plane ones, $`\sigma_1`$, $`\sigma_2`$ and $`\tau_{12}`$, go to the strength ratios of Section 5.
+
+<!-- code: ply_axis_stress -->
+
+Checks: `engine/tests/test_repair_solid.py`. The case of `engine/validation/repair_solid_cases/`, a ply different in all three directions turned 30° and a laminate $`[0/30/-30/90]`$ of it, is worked without the engine by `turned_solid_ply` in `engine/validation/closed_forms.py`, from the orthotropic solid's stiffnesses written out and the textbook's term-by-term rotation, with no matrix inverse and no tensor rotation; the engine agrees within $`10^{-9}`$. A ply in its own axes returns its nine constants; a turned ply free through its thickness equals `rotation.py`'s transformed reduced stiffness at seven angles; a quarter turn swaps the ply's axes, turning back returns the stiffness, and an isotropic stiffness does not change; the far field of a balanced symmetric laminate equals `response.py`'s answer under the load alone, and that of an unbalanced one still carries the load; a ply's own stresses equal the laminate theory's when it is free through its thickness. Constants that do not make a material, a missing constant and a file that states them wrongly are refused in words.
 
 ## Not modeled yet
 
@@ -1210,7 +1268,7 @@ Checks: `engine/tests/test_patch_repair.py`. Two of the cases of `engine/validat
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - For a bonded lap: peel and bending, a yielding adhesive in a stepped lap and the bond's progressive failure, thermal mismatch (Section 16)
-- For a patch repair: the finite element solution of its slice, the load that flows around a repair or past the hole beside an external patch, a scarf, flush patch plies of another thickness (Section 17)
+- For a patch repair: the load that flows around a repair or past the hole beside an external patch, a scarf, flush patch plies of another thickness (Section 17); its slice is solved in `fea/` (ADR-0132), elastic and held flat, and what that leaves out is listed in `fea/docs/theory.md`
 - Hashin failure criteria
 - Ply drops in the stiffness: a change of layup is a step in the section, with no taper over the run-out; a drop's own stresses
 - Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates
