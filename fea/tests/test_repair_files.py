@@ -47,26 +47,30 @@ def block(text: str, opens: str) -> list[str]:
     return lines[start:stop]
 
 
-def ansys_table(model, results, digits: int = 15) -> str:
-    """What the Ansys file writes: the element's number, then the columns of ANSYS_COLUMNS, in mm, N and MPa."""
+def ansys_table(model, results) -> str:
+    """What the Ansys file writes: the element's number, then the columns of ANSYS_COLUMNS, in mm, N and MPa. Mechanical APDL
+    keeps an element table as 32-bit numbers and writes them out to fifteen figures ("0.375531406402588E+02", seen in a run
+    of 2026-11-20), so the stand-in rounds each value to a 32-bit number first."""
     stress, strain = results.stress / MPA, results.strain
     width = np.full(len(stress), model.far.strain_width)
     columns = [stress[:, 0], stress[:, 2], stress[:, 1], stress[:, 3], strain[:, 0], strain[:, 1], width, strain[:, 2]]
-    return "\n".join(f"{k + 1:10.0f}" + "".join(f"{column[k]:24.{digits}E}" for column in columns) for k in range(len(stress))) + "\n"
+    columns = [column.astype(np.float32).astype(float) for column in columns]
+    return "\n".join(f"{k + 1:9.0f}." + "".join(f"{column[k]:24.15E}" for column in columns) for k in range(len(stress))) + "\n"
 
 
 def abaqus_dat(model, results) -> str:
-    """What Abaqus prints for the file, in its own wording and its five figures: a table of S and a table of E at the four
-    integration points of every element, here each point given the element's mean."""
+    """What Abaqus prints for the file, in its own wording (read from a .dat of Abaqus 2025, 2026-11-20: the set's name on a
+    line of its own, the columns PT and FOOT-, the tag OR of an element with an orientation) and its four figures: a table of
+    S and a table of E at the four integration points of every element, here each point given the element's mean."""
     stress, strain = results.stress / MPA, results.strain
     tables = ((("S11", "S22", "S33", "S12"), np.column_stack([stress[:, 0], stress[:, 2], stress[:, 1], stress[:, 3]])),
               (("E11", "E22", "E33", "E12"), np.column_stack([strain[:, 0], strain[:, 1], np.zeros(len(strain)), strain[:, 2]])))
     out = ["", "   Abaqus 2025                                  Date 20-Nov-2026   Time 18:30:00", ""]
     for names, values in tables:
-        out += ["", "   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE CPE8R AND ELEMENT SET EALL", "",
-                "    ELEMENT  PT FOOT-   " + "".join(f"{name:<12}" for name in names), "                NOTE", ""]
+        out += ["", "   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE CPE8R AND ELEMENT SET ", "   EALL", "",
+                "    ELEMENT  PT FOOT-       " + "".join(f"{name:<12}" for name in names), "                NOTE ", ""]
         for k, row in enumerate(values):
-            out += [f"{k + 1:10d}{point:4d}  OR  " + "".join(f"{value:12.4E}" for value in row) for point in (1, 2, 3, 4)]
+            out += [f"{k + 1:12d}{point:4d}  OR  " + "".join(f"{value:12.3E}" for value in row) for point in (1, 2, 3, 4)]
         out.append("")
     return "\n".join(out) + "\n"
 
@@ -146,7 +150,7 @@ def test_what_ansys_writes_is_read_back_as_the_same_answer(model, solved):
     results, ours = solved
     theirs = slice_answer(model, read_ansys(model, ansys_table(model, results)))
     found = compare_answers(ours, theirs)
-    assert found["same_places"] and max(found["largest"].values()) < 1e-12
+    assert found["same_places"] and max(found["largest"].values()) < 1e-6  # the table's seven figures
     assert [what for what, _, _ in found["rows"]][-1].startswith("strength ratio of ") and len(found["rows"]) >= 5 + 4 + 1 + 3
     shifted = ansys_table(model, results).splitlines()
     with pytest.raises(SliceModelError, match="every element"):
@@ -166,7 +170,7 @@ def test_what_ansys_writes_is_read_back_as_the_same_answer(model, solved):
 
 
 @needs_ccx
-def test_what_abaqus_prints_is_read_back_to_its_five_figures(model, solved):
+def test_what_abaqus_prints_is_read_back_to_its_four_figures(model, solved):
     results, ours = solved
     text = abaqus_dat(model, results)
     table = parse_abaqus_dat(text).find("element", "EALL", "S11")
@@ -175,11 +179,11 @@ def test_what_abaqus_prints_is_read_back_to_its_five_figures(model, solved):
     assert read.solver == "Abaqus 2025"
     theirs = slice_answer(model, read, equilibrium_tolerance=1e-3)
     found = compare_answers(ours, theirs)
-    assert found["same_places"] and found["largest"]["element_stress"] < 1e-4 and found["largest"]["reported"] < 1e-3
+    assert found["same_places"] and found["largest"]["element_stress"] < 5e-4 and found["largest"]["reported"] < 1e-3
     with pytest.raises(SliceModelError, match="no element table"):
         read_abaqus(model, text.replace("EALL", "OTHER"))
     with pytest.raises(SliceModelError, match="every element"):
-        read_abaqus(model, "\n".join(line for line in text.splitlines() if not line.startswith("         7   3")))
+        read_abaqus(model, "\n".join(line for line in text.splitlines() if not line.startswith("           7   3")))
 
 
 @needs_ccx

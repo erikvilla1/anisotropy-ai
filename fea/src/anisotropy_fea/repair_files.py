@@ -14,13 +14,14 @@ assumptions.
 
 - Abaqus: CPE8R, each material `*Elastic, type=ORTHOTROPIC` in an orientation that is the global axes, the width strain as an
   expansion of -1 across the width and a temperature, the load as `*Dload` P2 on the elements of the panel's end. It prints
-  the stresses and the strains at every integration point (`*El Print`) and the reaction on the middle. Abaqus prints five
-  figures, so its numbers are compared to about four.
+  the stresses and the strains at every integration point (`*El Print`) and the reaction on the middle. Abaqus prints four
+  or five figures (37.55, 1.0510E-03), so its numbers are compared to about four.
 - Ansys: PLANE183 in plane strain (KEYOPT(3) = 2), x the load, y the thickness and z the width. Each material is stated by the
   nine engineering constants of its stiffness's orthotropic part (the inverse of the same nine terms the other two files
   hold), the width strain as ALPZ = -1 and a uniform temperature, the load as a pressure on face 2. The file itself writes a
   table of every element's stresses and elastic strains, each the mean of the element's integration points (`ERESX,NO` keeps
-  the integration points' values at the corners, and an element table item is the mean of the corners), to fifteen figures.
+  the integration points' values at the corners, and an element table item is the mean of the corners). Mechanical APDL keeps
+  an element table as 32-bit numbers, so the table holds seven figures however many it is written with.
 
 What is read back goes through the same reading as CalculiX's (`slice_answer`), after the same refusal: a program's stresses
 must be the engine's stiffness times its own strains.
@@ -38,13 +39,15 @@ from anisotropy_engine.units import UNIT_SYSTEMS
 
 from .abaqus_dat import AbaqusDatError, parse_abaqus_dat
 from .repair_model import (
-    CUT_FACES, EQUILIBRIUM_TOLERANCE, MATCH_TOLERANCE, MPA, SliceAnswer, SliceModel, SliceModelError, SliceResults, _number, _rows, build_slice_model,
+    CUT_FACES, EQUILIBRIUM_TOLERANCE, MPA, SliceAnswer, SliceModel, SliceModelError, SliceResults, _number, _rows, build_slice_model,
     end_pressures, held_nodes, material_groups, matched_results, run_slice_model, slice_answer,
 )
 from .repair_shape import MM
 from .write_ansys import _block, _comment, _real, ascii_text
 
-PRINTED_TOLERANCE = 1e-3  # for a program that prints five figures: its stresses against the stiffness times its strains, and its forces against the load
+PRINTED_TOLERANCE = 1e-3  # for a program that prints four figures: its stresses against the stiffness times its strains, and its forces against the load
+SINGLE_TOLERANCE = 1e-5  # for a table of 32-bit numbers, seven figures: its stresses against the stiffness times its strains
+WIDTH_TOLERANCE = 1e-6  # Ansys's elastic strain across the width against the far-field width strain it was given, as a 32-bit number
 ANSYS_COLUMNS = ("SX", "SY", "SZ", "SXY", "EPX", "EPY", "EPZ", "EPXY")  # the Ansys table's columns after the element's number
 ANSYS_ITEMS = (("S", "X"), ("S", "Y"), ("S", "Z"), ("S", "XY"), ("EPEL", "X"), ("EPEL", "Y"), ("EPEL", "Z"), ("EPEL", "XY"))
 
@@ -200,7 +203,7 @@ def _element_means(model: SliceModel, labels: np.ndarray, values: np.ndarray, pr
     return values[order].reshape(count, points, -1).mean(axis=1)
 
 
-def read_ansys(model: SliceModel, table_text: str, *, tolerance: float = MATCH_TOLERANCE) -> SliceResults:
+def read_ansys(model: SliceModel, table_text: str, *, tolerance: float = SINGLE_TOLERANCE) -> SliceResults:
     """The table the Ansys file wrote, in SI: one row for each element, its number and the eight columns of ANSYS_COLUMNS.
     Refused when a row is missing, or when the elastic strain across the width is not the far-field width strain."""
     try:
@@ -212,7 +215,7 @@ def read_ansys(model: SliceModel, table_text: str, *, tolerance: float = MATCH_T
     values = _element_means(model, rows[:, 0].astype(int), rows[:, 1:], "Ansys")
     stress, strain = values[:, :4] * MPA, values[:, 4:]
     width = float(np.max(np.abs(strain[:, 2] - model.far.strain_width))) / abs(model.far.strain_width)
-    if not width < 1e-9:
+    if not width < WIDTH_TOLERANCE:
         raise SliceModelError(f"Ansys's elastic strain across the width is not the far-field width strain (off by {width:.2e} of it)")
     return matched_results(model, strain[:, [0, 1, 3]], stress[:, [0, 2, 1, 3]], solver="Ansys Mechanical APDL", tolerance=tolerance, program="Ansys")
 
