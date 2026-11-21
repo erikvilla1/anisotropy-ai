@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Anchor, ArrowDownToLine, ArrowLeft, Box, ChartColumn, ClipboardCheck, FlaskConical, Footprints, Grid3x3, History, Layers, ListTree, MessagesSquare,
@@ -54,7 +54,10 @@ export function CanvasShell({ title, kind, tree, stage, assistant, status, resul
   /** the tabs the rail shows while the tree draws none (a project not set up yet) */
   blankTabs?: readonly TreeTab[];
 }) {
-  const [treeOpen, setTreeOpen] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 900px)").matches);
+  // open as the page is built, so the browser's first drawing matches it; a narrow screen closes it before the first paint, except on a
+  // project not set up yet, whose first question (what is analysed) is in the tree
+  const [treeOpen, setTreeOpen] = useState(true);
+  const blank = blankTabs.length > 0;
   const [assistantOpen, setAssistantOpen] = useState(true);
   // on a narrow screen the card and the chat are one sheet at the model's foot: the chat while a project is set up, the card from the
   // first results (ADR-0134); on a wide one both show and this changes nothing
@@ -69,6 +72,17 @@ export function CanvasShell({ title, kind, tree, stage, assistant, status, resul
     const at = (name: SlotName) => (el: HTMLElement | null) => setPlaces((p) => (p[name] === el ? p : { ...p, [name]: el }));
     return { project: at("project"), view: at("view"), answer: at("answer"), details: at("details"), over: at("over") };
   }, []);
+
+  // on a narrow screen the tree covers the page: closed from the start unless the project is blank, and closed once the project is set up
+  const wasBlank = useRef(blank);
+  useLayoutEffect(() => {
+    if (window.matchMedia("(max-width: 899px)").matches && !blank) setTreeOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the page first shows
+  }, []);
+  useEffect(() => {
+    if (wasBlank.current && !blank && window.matchMedia("(max-width: 899px)").matches) setTreeOpen(false);
+    wasBlank.current = blank;
+  }, [blank]);
 
   // the tree's first results close it once, unless the engineer has opened or closed it themselves; on a narrow screen, where the tree
   // covers the page, they close it whoever opened it, so the results are seen
