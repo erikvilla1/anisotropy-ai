@@ -128,7 +128,7 @@ prints each part's layup, thickness, area and mass. A STEP file holds no thickne
 
 ## A patch repair's slice and STEP file
 
-`anisotropy_fea.repair_shape` takes a stepped patch repair's file (the engine's description, ADR-0131) and makes two things from the rectangles the engine lists for it. `slice_mesh` meshes one half of the slice through the repair's middle with four-node quadrilaterals on a grid, every element in one part (a laminate ply, the adhesive, a patch ply or a cover ply); it needs NumPy only. `build_repair_shape` writes every ply and every piece of adhesive as a named solid of the whole repair in its panel to a STEP file in millimetres; it needs the optional extra `mesh`:
+`anisotropy_fea.repair_shape` takes a stepped patch repair's file (the engine's description, ADR-0131) and makes two things from the rectangles the engine lists for it. `slice_mesh` meshes one half of the slice through the repair's middle with four-node quadrilaterals on a grid, every element in one part (a laminate ply, the adhesive, a patch ply or a cover ply); it needs NumPy only. A patch bonded on top over a hole (`kind = "external"`, ADR-0131 amendment 1) is meshed and built the same way, a strip patch as slabs across the panel's width. `build_repair_shape` writes every ply and every piece of adhesive as a named solid of the whole repair in its panel to a STEP file in millimetres; it needs the optional extra `mesh`:
 
 ```
 uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape engine/examples/example-patch-repair.toml --step repair.step

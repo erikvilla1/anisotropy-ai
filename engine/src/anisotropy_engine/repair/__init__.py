@@ -1,5 +1,6 @@
 """A bonded repair worked by hand: the stepped lap between a patch and the laminate it covers (ADR-0130), and a stepped patch
-repair described by a few numbers, with the slice through it and the lap it makes (ADR-0131)."""
+repair described by a few numbers, flush in a stepped cut or bonded on top over a hole, with the slice through it and the lap it
+makes (ADR-0131 and its amendment 1)."""
 
 from .description import Repair, RepairError, RepairMaterial
 from .lap_file import lap_from_dict, lap_report

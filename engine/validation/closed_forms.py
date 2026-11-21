@@ -530,6 +530,63 @@ def stepped_patch_repair(case: dict) -> dict:
     return answer
 
 
+def external_patch_repair(case: dict) -> dict:
+    """A stepped patch bonded on top of a laminate over a round hole, both of plies at 0 and 90 degrees, from its description
+    (ADR-0131 amendment 1), without the engine.
+
+    Sizes: with a the hole's radius, c the patch's overlap and L the step length, step j of n (1 on the laminate) reaches
+    R_j = a + c + (n - j) L. With h the laminate's thickness, g the thickness of one step's patch plies and eta the
+    bondline, the half slice (out to half the panel's length, e) holds
+    - laminate: (e - a) h;  adhesive: (R_1 - a) eta;  patch: the sum of R_j g.
+    In the panel the laminate is its slab less the hole. A round patch is discs, and its adhesive a ring from the hole to
+    R_1; a strip patch is bands across the panel's width W, 2 R_j long, and its adhesive the band 2 R_1 long less the hole.
+
+    Stiffness: as in `stepped_patch_repair`, each stack's E t is A11 - nu A12 of its own with nu = A12 / A22 of the bonded
+    section, here with the patch's own material and ply thickness. The lap runs from the patch's edge inward: a step length
+    under each ledge (patch groups 1 to j over the whole laminate) and the overlap under the whole patch, and it ends at
+    the hole's edge, where the laminate ends."""
+    if case["units"] != "mm-MPa" or case.get("kind") != "external":
+        raise ValueError("an external patch repair case is stated in mm, MPa and N/mm, so nothing is converted")
+    parent, steps, adhesive, patch = case["parent"], case["steps"], case["adhesive"], case["patch"]
+    fabric = patch if "E1" in patch else parent
+    if any(angle not in (0, 90) for angle in parent["layup"] + patch["layup"]) or "library" in parent or "library" in patch:
+        raise ValueError("this closed form takes typed materials in plies at 0 and 90 degrees")
+    t, tp, layup, plies = parent["ply_thickness"], fabric["ply_thickness"], parent["layup"], patch["layup"]
+    n, per, length, eta = steps["count"], steps.get("plies", 1), steps["length"], adhesive["thickness"]
+    hole, overlap, width = case["damage"]["diameter"] / 2, patch["overlap"], case["panel"]["width"]
+    g, h, edge = per * tp, len(layup) * t, case["panel"]["length"] / 2
+    radius = [hole + overlap + (n - j) * length for j in range(1, n + 1)]  # step 1 first
+    disc = np.pi * hole**2
+    if patch["shape"] == "strip":
+        glue, cloth = (2 * radius[0] * width - disc) * eta, sum(2 * r * width * g for r in radius)
+    else:
+        glue, cloth = np.pi * (radius[0] ** 2 - hole**2) * eta, sum(np.pi * r**2 * g for r in radius)
+    answer = {
+        "cut_radii": radius,
+        "areas": [(edge - hole) * h, (radius[0] - hole) * eta, sum(r * g for r in radius), 0.0],
+        "volumes": [(case["panel"]["length"] * width - disc) * h, glue, cloth, 0.0],
+        "bond_on_laminate": [radius[0] - hole, 0.0],
+    }
+
+    def stretching(material: dict, angles: list) -> tuple[float, float, float]:
+        q, thick = q_on_axis(material["E1"], material["E2"], material["G12"], material["nu12"]), material["ply_thickness"]
+        zeros, nineties = angles.count(0), angles.count(90)
+        return (zeros * q[0, 0] + nineties * q[1, 1]) * thick, (zeros + nineties) * q[0, 1] * thick, (zeros * q[1, 1] + nineties * q[0, 0]) * thick
+
+    a11i, a12i, a22i = stretching(parent, layup)
+    rows = []
+    for groups in range(1, n + 1):
+        over = plies[:groups * per]
+        a11o, a12o, a22o = stretching(fabric, over)
+        nu = (a12o + a12i) / (a22o + a22i)
+        rows.append({"length": length if groups < n else overlap, "outer_thickness": len(over) * tp, "outer_modulus": (a11o - nu * a12o) / (len(over) * tp),
+                     "inner_thickness": h, "inner_modulus": (a11i - nu * a12i) / h})
+    lap = stepped_lap({"units": case["units"], "adhesive": adhesive, "steps": rows, "applied": case["applied"]})
+    answer["step_stiffnesses"] = [[row["outer_modulus"] * row["outer_thickness"], row["inner_modulus"] * row["inner_thickness"]] for row in rows]
+    answer.update({key: lap[key] for key in ("boundary_forces", "shear_at_ends", "peak_shear", "elastic_limit_load") if key in lap})
+    return answer
+
+
 LAP_CASES = {
     "constructed-flush-three-step-repair": stepped_lap,
     "constructed-single-step-lap-and-double-lap": stepped_lap,
@@ -538,4 +595,6 @@ LAP_CASES = {
 PATCH_REPAIR_CASES = {
     "constructed-cross-ply-patch-with-a-cover-ply": stepped_patch_repair,
     "constructed-cross-ply-patch-through-every-ply": stepped_patch_repair,
+    "constructed-external-strip-patch-of-another-material": external_patch_repair,
+    "constructed-external-round-patch-of-the-laminates-ply": external_patch_repair,
 }

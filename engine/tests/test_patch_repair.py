@@ -1,4 +1,4 @@
-"""A stepped patch repair from its description (ADR-0131): every case in validation/patch_repair_cases against the engine, its
+"""A stepped patch repair from its description (ADR-0131, and its amendment 1 for a patch bonded on top): every case in validation/patch_repair_cases against the engine, its
 expected numbers against the closed form worked without the engine in validation/closed_forms.py (ADR-0007, ADR-0042), the
 slice's rectangles against the level-by-level rule and against sums written out here, and what the description refuses."""
 
@@ -78,7 +78,7 @@ def answers(case: dict) -> dict:
         "cut_radii": report["sizes"]["cut_radii"],
         "areas": [report["areas"][kind] for kind in kinds],
         "volumes": [report["volumes"][kind] for kind in kinds],
-        "bond_on_laminate": [bond["ledges"] + bond["floor"] + bond["cover"], report["sizes"]["depth"]],
+        "bond_on_laminate": [sum(value for name, value in bond.items() if name != "cut_faces"), report["sizes"]["depth"]],
         "step_stiffnesses": [[step["patch_modulus"] * step["patch_thickness"], step["laminate_modulus"] * step["laminate_thickness"]]
                              for step in lap["steps"]],
     }
@@ -91,7 +91,7 @@ def answers(case: dict) -> dict:
 # ------------------------------------------------------------------------------------------------- the cases
 
 def test_there_are_cases_and_each_has_its_closed_form():
-    assert len(CASES) >= 2
+    assert len(CASES) >= 4 and sum(load(path).get("kind") == "external" for path in CASES) >= 2
     assert {path.stem for path in CASES} == set(closed_forms().PATCH_REPAIR_CASES)
 
 
@@ -371,3 +371,177 @@ def test_a_file_that_does_not_state_a_repair_is_refused_in_words(change, words):
         repair_from_dict(case)
     with pytest.raises(RepairError, match="units must be one of"):
         repair_report(repair(), "cgs")
+
+
+# ------------------------------------------------------------------------------------------------- a patch bonded on top
+
+FABRIC = RepairMaterial("Test fabric", Lamina(E1=24e9, E2=24e9, G12=5e9, nu12=0.15), 0.22e-3)
+STRIP_CASE = VALIDATION / "patch_repair_cases" / "constructed-external-strip-patch-of-another-material.toml"
+
+
+def external(**changes) -> Repair:
+    """Three steps of two fabric plies bonded on the eight-ply laminate over a 25 mm hole: 12 mm ledges, the shortest plies
+    20 mm past the hole's edge, a strip across a panel 400 mm by 80 mm."""
+    values = dict(parent_material=PLY, parent_angles=QUASI, damage_diameter_m=25e-3, steps=3, step_length_m=12e-3, adhesive=FILM,
+                  panel_length_m=0.4, panel_width_m=0.08, plies_per_step=2, kind="external", patch_material=FABRIC,
+                  patch_angles=(0, 45, 0, 45, 0, 0), patch_overlap_m=20e-3, patch_shape="strip")
+    return Repair(**{**values, **changes})
+
+
+EXTERNAL_FAMILY = {
+    "a strip of three steps of two plies": {},
+    "a round patch": dict(patch_shape="round", panel_width_m=0.3),
+    "one step, a plain doubler": dict(steps=1, patch_angles=(0, 90)),
+    "the laminate's own ply, one to a step": dict(patch_material=None, plies_per_step=1, steps=4, patch_angles=(0, 45, -45, 0)),
+}
+
+
+def test_an_external_patch_is_counted_from_the_laminate_up_and_cuts_no_step():
+    made = external()
+    assert [made.cut_radius_m(step) for step in (1, 2, 3)] == pytest.approx([56.5e-3, 44.5e-3, 32.5e-3])  # 12.5 + 20 + (3 - j) 12
+    assert made.patch_radius_m == pytest.approx(56.5e-3) == made.cover_radius_m
+    assert made.external and made.through and made.depth_m == 0 and made.plies_removed == 0 and made.patch_plies == 6
+    assert made.group_thickness_m == pytest.approx(0.44e-3) and made.patch_thickness_m == pytest.approx(1.32e-3)
+    assert [made.parent_ply_step(ply) for ply in range(1, 9)] == [None] * 8
+    assert [made.patch_group(step) for step in (1, 2, 3)] == [(0.0, 45.0), (0.0, 45.0), (0.0, 0.0)]  # step 1 lies on the laminate
+    assert external(patch_material=None).patch_material is PLY
+    assert not repair().external and repair().patch_plies == 4
+
+
+@pytest.mark.parametrize("changes, words", [
+    (dict(kind="scarf"), "The kind of repair is one of flush, external"),
+    (dict(patch_shape="square"), "The patch's shape is one of round, strip"),
+    (dict(patch_angles=None), "needs its plies listed, from the one on the laminate upward"),
+    (dict(patch_angles=(0, 0, 0)), "make a patch of 6 plies, and 3 are listed"),
+    (dict(cover_angles=(45,), cover_overlap_m=5e-3), "has no cover plies"),
+    (dict(patch_overlap_m=0.0), "The patch's overlap past the damage's edge must be a positive"),
+    (dict(patch_overlap_m=0.05e-3), "thinner than a step is long and than the patch's overlap"),
+    (dict(panel_length_m=0.1), "needs a panel longer than the patch and wider than the hole"),
+    (dict(damage_diameter_m=90e-3), "needs a panel longer than the patch and wider than the hole"),
+    (dict(patch_shape="round"), "so the panel must be longer and wider"),
+])
+def test_what_is_not_an_external_repair_is_refused_in_words(changes, words):
+    with pytest.raises(RepairError, match=words):
+        external(**changes)
+
+
+def test_a_flush_repair_takes_no_strip_and_no_patch_overlap():
+    for changes in (dict(patch_shape="strip"), dict(patch_overlap_m=5e-3)):
+        with pytest.raises(RepairError, match="belong to an external repair"):
+            repair(**changes)
+
+
+@pytest.mark.parametrize("name", EXTERNAL_FAMILY)
+def test_an_external_patchs_rectangles_do_not_overlap_and_agree_with_the_level_by_level_rule(name):
+    made = external(**EXTERNAL_FAMILY[name])
+    parts = regions(made)
+    check_regions(made)
+    for a, b in itertools.combinations(parts, 2):
+        assert min(a.r1, b.r1) - max(a.r0, b.r0) <= 1e-15 or min(a.z1, b.z1) - max(a.z0, b.z0) <= 1e-15, (a.name, b.name)
+    assert [part.kind for part in parts] == ["parent"] * made.plies + ["adhesive"] + ["patch"] * made.patch_plies
+    hole, h, eta = made.damage_diameter_m / 2, made.thickness_m, made.adhesive.thickness_m
+    assert all(part.r0 == hole and part.r1 == made.panel_length_m / 2 and not part.round for part in parts[:made.plies])
+    glue = parts[made.plies]
+    assert (glue.r0, glue.r1, glue.z0, glue.z1) == pytest.approx((hole, made.patch_radius_m, h, h + eta))
+    assert all(part.round == (made.patch_shape == "round") for part in parts[made.plies:])
+    # the hole is empty under the patch, the patch lies over it, and beyond each step's edge there is nothing at its level
+    assert region_at(made, hole / 2, h / 2) is None and region_at(made, hole / 2, h + eta / 2) is None
+    assert region_at(made, hole / 2, h + eta + made.patch_thickness_m * 0.99) == "patch"
+    assert region_at(made, made.cut_radius_m(made.steps) + 1e-6, h + eta + made.patch_thickness_m * 0.99) is None
+    assert region_at(made, made.patch_radius_m - 1e-6, h + eta + 1e-7) == "patch" and region_at(made, made.patch_radius_m + 1e-6, h + eta / 2) is None
+    assert region_at(made, made.patch_radius_m + 1e-6, h / 2) == "parent"
+    top = max(part.z1 for part in parts)
+    assert top == pytest.approx(h + eta + made.patch_thickness_m) and region_at(made, 0.0, top + 1e-9) is None
+
+
+@pytest.mark.parametrize("name", EXTERNAL_FAMILY)
+def test_an_external_patchs_areas_and_volumes_are_the_sums_written_out_from_the_description(name):
+    made = external(**EXTERNAL_FAMILY[name])
+    hole, h, eta, g, n = made.damage_diameter_m / 2, made.thickness_m, made.adhesive.thickness_m, made.group_thickness_m, made.steps
+    radius = [hole + made.patch_overlap_m + (n - j) * made.step_length_m for j in range(1, n + 1)]
+    area, volume = areas(made), volumes(made)
+    assert area["parent"] == pytest.approx((made.panel_length_m / 2 - hole) * h)
+    assert area["adhesive"] == pytest.approx((radius[0] - hole) * eta)
+    assert area["patch"] == pytest.approx(sum(r * g for r in radius)) and area["cover"] == 0
+    panel, width, disc = made.panel_length_m * made.panel_width_m, made.panel_width_m, math.pi * hole**2
+    assert volume["parent"] == pytest.approx((panel - disc) * h) and volume["cover"] == 0
+    if made.patch_shape == "strip":
+        assert volume["adhesive"] == pytest.approx((2 * radius[0] * width - disc) * eta)
+        assert volume["patch"] == pytest.approx(sum(2 * r * width * g for r in radius))
+    else:
+        assert volume["adhesive"] == pytest.approx(math.pi * (radius[0] ** 2 - hole**2) * eta)
+        assert volume["patch"] == pytest.approx(sum(math.pi * r**2 * g for r in radius))
+    assert bond_lengths(made) == {"top_face": pytest.approx(made.patch_overlap_m + (n - 1) * made.step_length_m)}
+
+
+def test_an_external_patchs_lap_runs_from_its_edge_to_the_hole_and_ends_there():
+    made = external()
+    steps, names, continues = lap_steps(made)
+    assert names == ["Ledge of step 1", "Ledge of step 2", "The whole patch"] and not continues
+    assert [step.length_m for step in steps] == pytest.approx([12e-3, 12e-3, 20e-3])
+    assert [step.outer_thickness_m for step in steps] == pytest.approx([0.44e-3, 0.88e-3, 1.32e-3])
+    assert all(step.inner_thickness_m == pytest.approx(made.thickness_m) for step in steps)
+    whole = stretching_matrix(PLY, QUASI)
+    for groups, step in enumerate(steps, 1):  # each step's two stiffnesses are the shares of its own bonded section
+        outer, inner = shared_stiffnesses(stretching_matrix(FABRIC, made.patch_angles[:2 * groups]), whole)
+        assert step.outer_modulus_pa * step.outer_thickness_m == pytest.approx(outer)
+        assert step.inner_modulus_pa * step.inner_thickness_m == pytest.approx(inner)
+    solved = repair_lap(made, 2e5)
+    direct = step_lap(steps, made.adhesive, 2e5)
+    assert solved.forces == pytest.approx(direct.forces) and solved.forces[0] == 0 and solved.forces[-1] == pytest.approx(2e5)
+    assert not solved.inner_continues
+
+
+def test_two_stacks_of_one_poissons_ratio_share_by_their_own_e_t():
+    # A fabric patch on a sheet of the same Poisson's ratio, both at 0: the bonded section's contraction is each one's own,
+    # so the shares are the plain E t of each, the stiffnesses a lap worked by hand with moduli and thicknesses uses.
+    sheet = RepairMaterial("Sheet", Lamina(E1=29e9, E2=29e9, G12=5e9, nu12=0.15), 1.6e-3)
+    made = external(parent_material=sheet, parent_angles=(0,), patch_angles=(0,) * 6, adhesive=Adhesive(900e6, 0.1e-3, 30e6))
+    for groups, step in enumerate(lap_steps(made)[0], 1):
+        assert step.outer_modulus_pa == pytest.approx(24e9) and step.inner_modulus_pa == pytest.approx(29e9)
+        assert step.outer_thickness_m == pytest.approx(groups * 0.44e-3)
+
+
+def test_an_external_repair_reads_from_a_file_and_reports_in_its_units():
+    case = load(STRIP_CASE)
+    case.pop("expected")
+    made, load_ = repair_from_dict(case)
+    assert made.external and made.patch_shape == "strip" and made.patch_material.name == "Constructed patch ply"
+    assert made.patch_overlap_m == pytest.approx(25e-3) and made.patch_material.ply_thickness_m == pytest.approx(0.2e-3)
+    report = repair_report(made, "mm-MPa", load_)
+    assert report["kind"] == "external" and report["patch_shape"] == "strip"
+    assert report["sizes"]["patch_thickness"] == pytest.approx(1.2) and report["sizes"]["plies_removed"] == 0
+    assert report["bond_lengths"] == {"top_face": pytest.approx(45.0)}
+    assert [step["name"] for step in report["lap"]["steps"]] == ["Ledge of step 1", "Ledge of step 2", "The whole patch"]
+    assert not report["lap"]["ends_at_the_middle"]
+    own = dict(case, patch={"layup": [0, 90, 0, 0, 90, 0], "overlap": 25.0, "shape": "round"}, panel={"length": 240.0, "width": 200.0})
+    assert repair_from_dict(own)[0].patch_material.name == "Constructed ply"  # no material said: the laminate's
+    assert repair_report(repair(), "mm-MPa")["kind"] == "flush"
+
+
+@pytest.mark.parametrize("change, words", [
+    (lambda case: case.update(kind="scarf"), "kind must be one of flush, external"),
+    (lambda case: case.pop("patch"), r"An external repair needs \[patch\]"),
+    (lambda case: case["patch"].pop("overlap"), r"\[patch\] is missing: overlap"),
+    (lambda case: case["patch"].pop("shape"), r"\[patch\] is missing: shape"),
+    (lambda case: case["patch"].update(shape="square"), r"\[patch\]: shape must be one of round, strip"),
+    (lambda case: case["patch"].pop("E2"), r"\[patch\] is missing: E2"),
+    (lambda case: case["patch"].update(taper=2.0), r"\[patch\] has values a repair does not read: taper"),
+    (lambda case: case.update(cover={"layup": [0], "overlap": 5.0}), r"An external patch has no \[cover\]"),
+    (lambda case: case["patch"].update(layup=[0, 90]), "make a patch of 6 plies, and 2 are listed"),
+    (lambda case: case["patch"].update(overlap="long"), "must be a number"),
+])
+def test_a_file_that_does_not_state_an_external_repair_is_refused_in_words(change, words):
+    case = load(STRIP_CASE)
+    case.pop("expected")
+    change(case)
+    with pytest.raises(RepairError, match=words):
+        repair_from_dict(case)
+
+
+def test_a_flush_file_takes_no_patch_overlap_or_shape():
+    case = load(WITH_COVER)
+    case.pop("expected")
+    case["patch"] = {"layup": [0, 90, 0], "overlap": 5.0}
+    with pytest.raises(RepairError, match=r"\[patch\]"):
+        repair_from_dict(case)

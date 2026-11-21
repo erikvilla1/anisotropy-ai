@@ -12,6 +12,12 @@ ledge. Each stretch of that path is one step of a stepped lap (`step_lap`):
 A cut through every ply has no floor: the lap ends at the deepest cut, where the laminate ends and the patch carries
 everything.
 
+An external repair (ADR-0131 amendment 1) makes a lap too, on the laminate's top face. From the patch's edge inward, under
+the ledge of step j (j = 1 on the laminate, the longest) lie patch groups 1 to j over the whole laminate, one step length
+each, and last the whole patch over the whole laminate for the patch's overlap. The lap ends at the
+hole's edge, where the laminate ends and the patch carries everything. It is the lap of the strip through the hole's
+middle: laminate left beside the hole, which carries load past it, is not in it.
+
 An adherend's stiffness in a step is its share of the bonded section's. Where the load has passed across, the patch and
 the laminate strain alike, as one laminate under the load along x, free to contract and to shear as a whole. With A_o and
 A_i the stretching (A) matrices of the two stacks (N/m) and a the inverse of their sum, that strain per unit load is the
@@ -70,6 +76,15 @@ def lap_steps(repair: Repair) -> tuple[list[Step], list[str], bool]:
         steps.append(Step(length, outer_t, outer_s / outer_t, inner_t, inner_s / inner_t))
         names.append(name)
 
+    if repair.external:
+        whole, per = stretching_matrix(parent, repair.parent_angles), repair.plies_per_step
+        lengths = [repair.step_length_m] * (repair.steps - 1) + [repair.patch_overlap_m]
+        for groups, length in enumerate(lengths, 1):
+            over = repair.patch_angles[:groups * per]
+            outer_t, outer_s, inner_s = len(over) * patch.ply_thickness_m, *shared_stiffnesses(stretching_matrix(patch, over), whole)
+            steps.append(Step(length, outer_t, outer_s / outer_t, repair.thickness_m, inner_s / repair.thickness_m))
+            names.append(f"Ledge of step {groups}" if groups < repair.steps else "The whole patch")
+        return steps, names, False
     if repair.cover_angles:
         add(repair.cover_overlap_m, 0, "Cover overlap")
     for step in range(1, repair.steps):

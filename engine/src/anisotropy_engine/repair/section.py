@@ -15,6 +15,11 @@ thickness and R_j the radius at which step j is cut (step 1 at the top):
   adhesive on the laminate;
 - a cut through every ply has nothing under its deepest patch group: the space of one bondline below it is left empty.
 
+An external repair (ADR-0131 amendment 1) is simpler: every laminate ply runs from the hole's edge outward, one layer of
+adhesive lies on the top face from the hole's edge to the edge of the patch's longest plies, and the patch's groups are
+stacked on it, group j (1 on the bondline) out to its own radius. Under the patch the hole is empty. A strip patch is not
+round: its rectangles are bands across the panel's width, as a laminate ply is.
+
 `regions` lists the rectangles from these rules; `region_at` answers the same question for one point by a different route
 (first the level, then the radius), so that one can check the other, and a mesh can ask it cell by cell.
 """
@@ -44,7 +49,9 @@ class Region:
     angle_deg: float | None = None
     ply: int | None = None
     step: int | None = None
-    round: bool = True  # a ring or a disc about the repair's middle; a laminate ply is the panel with a round hole instead
+    # A ring or a disc about the repair's middle. Otherwise a band across the panel's whole width, twice r1 long, less a
+    # round hole of radius r0: a laminate ply, and the plies and the adhesive of a strip patch.
+    round: bool = True
 
     @property
     def area(self) -> float:
@@ -68,6 +75,18 @@ def regions(repair: Repair) -> tuple[Region, ...]:
     edge, n = repair.panel_length_m / 2, repair.steps
     radius = repair.cut_radius_m
     out: list[Region] = []
+    if repair.external:
+        hole, tp, ring = repair.damage_diameter_m / 2, repair.patch_material.ply_thickness_m, repair.patch_shape == "round"
+        for ply, angle in enumerate(repair.parent_angles, 1):
+            out.append(Region("parent", f"Laminate ply {ply} ({_angle_name(angle)})", hole, edge, (ply - 1) * t, ply * t, angle, ply, round=False))
+        out.append(Region("adhesive", "Adhesive under the patch", hole, radius(1), h, h + eta, step=1, round=ring))
+        number = 0
+        for step in range(1, n + 1):
+            for k, angle in enumerate(repair.patch_group(step)):
+                number += 1
+                z0 = h + eta + (step - 1) * g + k * tp
+                out.append(Region("patch", f"Patch ply {number} ({_angle_name(angle)})", 0.0, radius(step), z0, z0 + tp, angle, number, step, round=ring))
+        return tuple(out)
     for ply, angle in enumerate(repair.parent_angles, 1):
         step = repair.parent_ply_step(ply)
         out.append(Region("parent", f"Laminate ply {ply} ({_angle_name(angle)})", radius(step) if step else 0.0, edge, (ply - 1) * t, ply * t,
@@ -102,6 +121,14 @@ def region_at(repair: Repair, r: float, z: float) -> str | None:
     t, g, eta, h = repair.ply_thickness_m, repair.group_thickness_m, repair.adhesive.thickness_m, repair.thickness_m
     if not 0 <= r <= repair.panel_length_m / 2 or z < 0:
         return None
+    if repair.external:
+        hole = repair.damage_diameter_m / 2
+        if z < h:
+            return "parent" if r >= hole else None
+        if z < h + eta:
+            return "adhesive" if hole <= r < repair.patch_radius_m else None
+        group = int((z - h - eta) / g) + 1  # how many whole groups lie under the point, and one
+        return "patch" if group <= repair.steps and r < repair.cut_radius_m(group) else None
     top = h + eta
     if z >= top:  # above the patch: cover plies, or nothing
         return "cover" if z < top + repair.cover_thickness_m and r < repair.cover_radius_m else None
@@ -134,22 +161,24 @@ def areas(repair: Repair) -> dict[str, float]:
 
 
 def volumes(repair: Repair) -> dict[str, float]:
-    """The volume of each kind of part in the whole panel, m^3: a part of the repair is its rectangle swept about the
-    middle, and a laminate ply is the panel's rectangle less the disc its step cuts."""
+    """The volume of each kind of part in the whole panel, m^3: a round part of the repair is its rectangle swept about the
+    middle; a laminate ply, or a part of a strip patch, is a band across the panel's width, twice its r1 long, less the
+    disc of its r0 (the disc a step cuts, or the hole)."""
     total = dict.fromkeys(KINDS, 0.0)
-    panel = repair.panel_length_m * repair.panel_width_m
     for region in regions(repair):
         if region.round:
             total[region.kind] += region.revolved_volume
         else:
-            total[region.kind] += (panel - math.pi * region.r0**2) * (region.z1 - region.z0)
+            total[region.kind] += (2 * region.r1 * repair.panel_width_m - math.pi * region.r0**2) * (region.z1 - region.z0)
     return total
 
 
 def bond_lengths(repair: Repair) -> dict[str, float]:
     """The bondline's length in the half slice, m: along the ledges (where the load passes), up the cut faces, over the
-    floor and under the cover plies."""
+    floor and under the cover plies; under an external patch, the one length on the laminate's top face."""
     eta, n = repair.adhesive.thickness_m, repair.steps
+    if repair.external:
+        return {"top_face": repair.patch_radius_m - repair.damage_diameter_m / 2}
     return {
         "ledges": (n - 1) * repair.step_length_m,
         "cut_faces": n * repair.group_thickness_m - (n - 1 if repair.through else n) * eta,  # each face less the bondline at its foot

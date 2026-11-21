@@ -1,0 +1,49 @@
+title = "Analytical check: a round stepped patch of the laminate's own ply bonded on top of a cross-ply laminate over a hole"
+source = "Constructed analytical check, not a printed problem, not a repair of anyone's and not a design: a laminate of three plies at 0, 90 and 0 degrees, 0.3 mm each, of a material with round constants of our own, with a 16 mm hole, in a panel 200 mm by 150 mm; on top, a round patch of two 0 degree plies of the same material in two steps of one ply and 12 mm, its shorter ply 18 mm past the hole's edge, on a 0.1 mm bondline. The closed form is validation/closed_forms.py `external_patch_repair`."
+units = "mm-MPa"
+kind = "external"
+
+[parent]
+name = "Constructed ply"
+E1 = 140000.0
+E2 = 10000.0
+G12 = 5000.0
+nu12 = 0.3
+ply_thickness = 0.3
+layup = [0, 90, 0]
+
+[damage]
+diameter = 16.0
+
+[steps]
+count = 2
+length = 12.0
+
+[patch]
+layup = [0, 0]
+overlap = 18.0
+shape = "round"
+
+[adhesive]
+shear_modulus = 700.0
+thickness = 0.1
+shear_strength = 22.0
+
+[panel]
+length = 200.0
+width = 150.0
+
+[applied]
+load = 60.0
+
+[expected]
+tolerance = 1e-9
+cut_radii = [38.0, 26.0]
+areas = [82.8, 3.0, 19.2, 0.0]
+volumes = [26819.0442632, 433.539786195, 1998.05292768, 0.0]
+bond_on_laminate = [30.0, 0.0]
+step_stiffnesses = [[42207.8064871, 87371.0830126], [84392.5233645, 87336.4485981]]
+boundary_forces = [0.0, 23.9689709022, 60.0]
+shear_at_ends = [[9.70427359085, 2.24511236996], [2.24511236996, 12.3263376152]]
+peak_shear = 12.3263376152
+elastic_limit_load = 107.087769393

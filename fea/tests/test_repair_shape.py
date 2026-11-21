@@ -1,4 +1,4 @@
-"""A stepped patch repair's shape (ADR-0131): the slice's mesh and the solids of its STEP file, each measured back against
+"""A stepped patch repair's shape (ADR-0131, flush or bonded on top): the slice's mesh and the solids of its STEP file, each measured back against
 the engine's figures and against sums written out here.
 
 The mesh needs nothing beyond NumPy. Every test that builds solids skips with a reason when Gmsh is not installed
@@ -20,6 +20,8 @@ from anisotropy_fea.repair_shape import ShapeError, build_repair_shape, main, re
 ENGINE = Path(__file__).parents[2] / "engine"
 EXAMPLE = ENGINE / "examples" / "example-patch-repair.toml"
 THROUGH = ENGINE / "validation" / "patch_repair_cases" / "constructed-cross-ply-patch-through-every-ply.toml"
+STRIP = ENGINE / "validation" / "patch_repair_cases" / "constructed-external-strip-patch-of-another-material.toml"
+ROUND = ENGINE / "validation" / "patch_repair_cases" / "constructed-external-round-patch-of-the-laminates-ply.toml"
 needs_gmsh = pytest.mark.skipif(gmsh_available() is None,
                                 reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
 
@@ -43,6 +45,12 @@ REPAIRS = {
     "through every ply": lambda: stated(THROUGH),
     "through every ply under a cover ply": lambda: stated(THROUGH, **{"cover.layup": [0, 90], "cover.overlap": 12.0}),
 }
+EXTERNAL = {
+    "a strip patch bonded on top": lambda: stated(STRIP),
+    "a round patch bonded on top": lambda: stated(ROUND),
+}
+EVERY = {**REPAIRS, **EXTERNAL}
+SOLIDS = ["the example", "through every ply", "a strip patch bonded on top", "a round patch bonded on top"]
 
 
 @pytest.mark.parametrize("name", REPAIRS)
@@ -64,9 +72,32 @@ def test_the_mesh_measures_back_to_the_description(name):
     assert eta < repair.group_thickness_m
 
 
-@pytest.mark.parametrize("name", REPAIRS)
+@pytest.mark.parametrize("name", EXTERNAL)
+def test_the_mesh_of_a_patch_bonded_on_top_measures_back_to_the_description(name):
+    repair = EXTERNAL[name]()
+    mesh = slice_mesh(repair)
+    hole, h, eta, g, n = repair.damage_diameter_m / 2, repair.thickness_m, repair.adhesive.thickness_m, repair.group_thickness_m, repair.steps
+    radius = [hole + repair.patch_overlap_m + (n - j) * repair.step_length_m for j in range(1, n + 1)]
+    measured = mesh.areas()
+    assert measured["parent"] == pytest.approx((repair.panel_length_m / 2 - hole) * h, rel=1e-10) == pytest.approx(areas(repair)["parent"])
+    assert measured["adhesive"] == pytest.approx((radius[0] - hole) * eta, rel=1e-10) == pytest.approx(areas(repair)["adhesive"])
+    assert measured["patch"] == pytest.approx(sum(r * g for r in radius), rel=1e-10) == pytest.approx(areas(repair)["patch"])
+    assert measured["cover"] == 0
+    for part, area in zip(mesh.regions, mesh.region_areas()):
+        assert area == pytest.approx(part.area, rel=1e-10), part.name
+    # one flat bondline on the laminate's top face, from the hole's edge to the patch's edge, and no cut face
+    bond = mesh.bond_to_laminate()
+    assert bond["flat"] == pytest.approx(radius[0] - hole, rel=1e-10) == pytest.approx(bond_lengths(repair)["top_face"])
+    assert bond["upright"] == 0
+    # nothing in the hole under the patch, and the patch spans it
+    centres = mesh.nodes_m[mesh.quads].mean(axis=1)
+    assert not ((centres[:, 0] < hole) & (centres[:, 1] < h + eta)).any()
+    assert ((centres[:, 0] < hole) & (centres[:, 1] > h + eta)).any()
+
+
+@pytest.mark.parametrize("name", EVERY)
 def test_every_element_is_one_part_and_the_mesh_has_no_gap_or_overlap(name):
-    repair = REPAIRS[name]()
+    repair = EVERY[name]()
     mesh = slice_mesh(repair, element_size_m=repair.step_length_m / 16, per_ply=2)
     r, z = mesh.nodes_m[mesh.quads, 0], mesh.nodes_m[mesh.quads, 1]
     signed = 0.5 * np.sum(r * np.roll(z, -1, axis=1) - np.roll(r, -1, axis=1) * z, axis=1)
@@ -83,9 +114,9 @@ def test_every_element_is_one_part_and_the_mesh_has_no_gap_or_overlap(name):
         for a, b in zip(quad, np.roll(quad, -1)):
             edges[(min(a, b), max(a, b))] = edges.get((min(a, b), max(a, b)), 0) + 1
     assert set(edges.values()) <= {1, 2}
-    # the elements are no longer than asked along the slice and no thicker than half a ply
+    # the elements are no longer than asked along the slice and no thicker than half a ply, the thinner of the two kinds
     assert (r.max(axis=1) - r.min(axis=1)).max() <= repair.step_length_m / 16 * (1 + 1e-9)
-    assert (z.max(axis=1) - z.min(axis=1)).max() <= repair.ply_thickness_m / 2 * (1 + 1e-9)
+    assert (z.max(axis=1) - z.min(axis=1)).max() <= min(repair.ply_thickness_m, repair.patch_material.ply_thickness_m) / 2 * (1 + 1e-9)
     # a finer mesh has more elements and the same areas
     coarse = slice_mesh(repair)
     assert len(mesh.quads) > len(coarse.quads) and mesh.areas()["adhesive"] == pytest.approx(coarse.areas()["adhesive"], rel=1e-10)
@@ -115,15 +146,15 @@ def built(tmp_path_factory):
     if gmsh_available() is None:
         pytest.skip("Gmsh is not available")
     made = {}
-    for name in ("the example", "through every ply"):
-        repair = REPAIRS[name]()
+    for name in SOLIDS:
+        repair = EVERY[name]()
         step = tmp_path_factory.mktemp("repair") / "repair.step"
         made[name] = (repair, build_repair_shape(repair, step, "A repair's name"), step)
     return made
 
 
 @needs_gmsh
-@pytest.mark.parametrize("name", ["the example", "through every ply"])
+@pytest.mark.parametrize("name", SOLIDS)
 def test_the_solids_measure_back_to_the_description(built, name):
     repair, shape, _ = built[name]
     parts = regions(repair)
@@ -131,16 +162,18 @@ def test_the_solids_measure_back_to_the_description(built, name):
     solid, swept = shape.volumes(), volumes(repair)
     for kind in swept:
         assert solid[kind] == pytest.approx(swept[kind], rel=1e-9, abs=1e-18), kind
-    panel = repair.panel_length_m * repair.panel_width_m
     for made, part in zip(shape.parts, parts):  # each solid against its own ring, disc or slab with a hole, written out here
         height = part.z1 - part.z0
-        expected = math.pi * (part.r1**2 - part.r0**2) * height if part.round else (panel - math.pi * part.r0**2) * height
+        slab = 2 * part.r1 * repair.panel_width_m  # a laminate ply is as long as the panel, a strip patch's ply as long as itself
+        expected = math.pi * (part.r1**2 - part.r0**2) * height if part.round else (slab - math.pi * part.r0**2) * height
+        if part.kind == "parent":
+            assert slab == pytest.approx(repair.panel_length_m * repair.panel_width_m)
         assert made.volume_m3 == pytest.approx(expected, rel=1e-9), part.name
         assert (made.kind, made.angle_deg) == (part.kind, part.angle_deg)
 
 
 @needs_gmsh
-@pytest.mark.parametrize("name", ["the example", "through every ply"])
+@pytest.mark.parametrize("name", SOLIDS)
 def test_the_step_file_names_every_solid_and_reads_back_with_the_same_volumes(built, name):
     repair, shape, step = built[name]
     text = step.read_text(encoding="ascii")
@@ -164,3 +197,12 @@ def test_the_command_reports_the_mesh_and_writes_the_file(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Example stepped patch repair" in out and "22 solids" in out and "mm^2 in the mesh" in out
     assert step.stat().st_size > 10_000
+
+
+@needs_gmsh
+def test_the_command_reads_a_case_of_a_patch_bonded_on_top(tmp_path, capsys):
+    step = tmp_path / "strip.step"
+    main([str(STRIP), "--step", str(step)])
+    out = capsys.readouterr().out
+    assert "11 solids" in out and "45.0000 mm flat in the mesh, 45.0000 mm by the description" in out  # four plies, the adhesive, six patch plies
+    assert "0.0000 mm up the cut faces, 0.0000 mm by the description" in out

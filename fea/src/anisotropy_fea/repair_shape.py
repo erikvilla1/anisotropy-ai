@@ -1,4 +1,4 @@
-"""A stepped patch repair's shape from its description (ADR-0131): the slice through its middle as a mesh of four-node
+"""A stepped patch repair's shape from its description (ADR-0131, flush or bonded on top): the slice through its middle as a mesh of four-node
 quadrilaterals, and the whole repair in its panel as named solids in a STEP file.
 
 Both are built from the rectangles the engine lists for the repair (anisotropy_engine.repair.regions), so the hand
@@ -7,13 +7,14 @@ calculation, the mesh and the file a CAD program opens describe one repair.
 The slice (`slice_mesh`): one half of the cut along the load through the repair's middle, r from the middle outward and z
 up from the laminate's bottom face, in metres. The mesh is a grid: a line of nodes runs along every edge of every rectangle,
 so each element lies in one part, and the stretches between those lines are divided to the element size along r and into
-`per_ply` elements for each ply's thickness along z. An element is given its part twice, by the rectangle that holds its
+`per_ply` elements for each ply's thickness along z (the thinner of the laminate's ply and the patch's). An element is given its part twice, by the rectangle that holds its
 centre and by the engine's level-by-level rule (`region_at`), and the mesh is refused where the two disagree. Where there
 is nothing (above the laminate outside the repair, and under the deepest plies of a patch in a cut through every ply),
 there is no element.
 
 The solids (`build_repair_shape`): every rectangle of the repair itself swept about the middle, a disc or a ring, and every
-laminate ply the panel's slab less the disc its step cuts, each one a solid with its part's name. The shape is built in
+laminate ply the panel's slab less the disc its step cuts, each one a solid with its part's name. The plies and the adhesive
+of a strip patch are slabs across the panel's width instead, the adhesive less the hole's disc. The shape is built in
 Gmsh's OpenCASCADE kernel in millimetres, the unit its STEP file states, x along the load, the repair's middle at x = y = 0
 and z = 0 at the laminate's bottom face. A STEP file holds shape and names only: no ply angle and no material. The part
 table (`RepairShape.parts`) gives each solid's kind, angle and volume.
@@ -106,7 +107,8 @@ def slice_mesh(repair: Repair, element_size_m: float | None = None, per_ply: int
         raise ShapeError("The elements for each ply's thickness must be a whole number, 1 or more")
     parts = regions(repair)
     r = _lines(sorted({edge for part in parts for edge in (part.r0, part.r1)}), float(element_size_m))
-    z = _lines(sorted({edge for part in parts for edge in (part.z0, part.z1)}), repair.ply_thickness_m / per_ply)
+    ply = min(repair.ply_thickness_m, repair.patch_material.ply_thickness_m)
+    z = _lines(sorted({edge for part in parts for edge in (part.z0, part.z1)}), ply / per_ply)
     rc, zc = (r[:-1] + r[1:]) / 2, (z[:-1] + z[1:]) / 2
     owner = np.full((len(rc), len(zc)), -1)
     for index, part in enumerate(parts):
@@ -161,12 +163,13 @@ def step_name(part: Region) -> str:
 
 
 def _solid(occ, repair: Repair, part: Region) -> int:
-    """One rectangle as a solid, in mm: a disc or a ring about the middle, or the panel's slab less its step's disc."""
+    """One rectangle as a solid, in mm: a disc or a ring about the middle, or a slab across the panel's width, twice the
+    rectangle's r1 long, less the disc of its r0."""
     z0, height = part.z0 / MM, (part.z1 - part.z0) / MM
     if part.round:
         solid = occ.addCylinder(0.0, 0.0, z0, 0.0, 0.0, height, part.r1 / MM)
     else:
-        length, width = repair.panel_length_m / MM, repair.panel_width_m / MM
+        length, width = 2 * part.r1 / MM, repair.panel_width_m / MM
         solid = occ.addBox(-length / 2, -width / 2, z0, length, width, height)
     if part.r0 > 0:
         hole = occ.addCylinder(0.0, 0.0, z0, 0.0, 0.0, height, part.r0 / MM)
@@ -244,7 +247,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--size", type=float, help="the element size along the slice, mm")
     args = parser.parse_args(argv)
     case = tomllib.loads(args.repair.read_text(encoding="utf-8"))
-    repair, _ = repair_from_dict(case)
+    repair, _ = repair_from_dict({key: value for key, value in case.items() if key != "expected"})  # a validation case reads too
     mesh = slice_mesh(repair, None if args.size is None else args.size * MM)
     print(f"{case.get('title', args.repair.stem)}: {len(mesh.quads)} elements, {len(mesh.nodes_m)} nodes in the half slice")
     measured, stated = mesh.areas(), areas(repair)
@@ -252,7 +255,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  {kind:>9}: {measured[kind] / MM**2:12.5f} mm^2 in the mesh, {stated[kind] / MM**2:12.5f} mm^2 by the description")
     bond, lengths = mesh.bond_to_laminate(), bond_lengths(repair)
     print(f"  bondline on the laminate: {bond['flat'] / MM:.4f} mm flat in the mesh, "
-          f"{(lengths['ledges'] + lengths['floor'] + lengths['cover']) / MM:.4f} mm by the description; "
+          f"{sum(value for name, value in lengths.items() if name != 'cut_faces') / MM:.4f} mm by the description; "
           f"{bond['upright'] / MM:.4f} mm up the cut faces, {repair.depth_m / MM:.4f} mm by the description")
     if args.step:
         shape = build_repair_shape(repair, args.step, case.get("title", "Stepped patch repair"))

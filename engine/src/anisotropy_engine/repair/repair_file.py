@@ -13,6 +13,16 @@ units (ADR-0131).
     [panel]     length (along the load), width
     [applied]   optional: load, per unit width, tension positive
 
+A patch bonded on top over a hole (ADR-0131 amendment 1) says so and states its patch in full:
+
+    kind = "external"                # "flush", the stepped cut above, unless said
+    [damage]    diameter             # of the hole
+    [steps]     count, length, plies (the patch plies of each step; 1 unless said)
+    [patch]     layup (from the ply on the laminate upward), overlap (how far the shortest plies reach past the hole's
+                edge) and shape ("round" or "strip", a band across the panel's width); a material as in [parent] when it
+                is not the laminate's
+    no [cover]
+
 Nothing is guessed: a missing value, an unknown key or an unknown unit system is refused (ADR-0003).
 """
 
@@ -21,7 +31,7 @@ from __future__ import annotations
 from ..lamina import Lamina
 from ..library import library_material
 from ..units import UNIT_SYSTEMS
-from .description import Repair, RepairError, RepairMaterial
+from .description import PATCH_SHAPES, REPAIR_KINDS, Repair, RepairError, RepairMaterial
 from .lap_file import lap_report
 from .patch_lap import lap_steps, repair_lap
 from .section import areas, bond_lengths, check_regions, regions, volumes
@@ -75,7 +85,7 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
     units = data.get("units")
     if units not in UNIT_SYSTEMS:
         raise RepairError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
-    unknown = sorted(set(data) - set(TABLES) - {"units", "title", "source"})
+    unknown = sorted(set(data) - set(TABLES) - {"units", "title", "source", "kind"})
     if unknown:
         raise RepairError(f"The repair has tables it does not read: {', '.join(unknown)}")
     system = UNIT_SYSTEMS[units]
@@ -95,8 +105,26 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
                             si(stated["shear_strength"], "stress") if "shear_strength" in stated else None)
     except ValueError as error:
         raise RepairError(f"[adhesive]: {error}") from error
+    kind = data.get("kind", "flush")
+    if kind not in REPAIR_KINDS:
+        raise RepairError(f"kind must be one of {', '.join(REPAIR_KINDS)}, got {kind!r}")
     patch_material = patch_angles = None
-    if "patch" in data:
+    patch_overlap, patch_shape = 0.0, "round"
+    if kind == "external":
+        if "cover" in data:
+            raise RepairError("An external patch has no [cover]: its longest plies are its first step")
+        patch = data.get("patch")
+        if not isinstance(patch, dict):
+            raise RepairError("An external repair needs [patch]: its layup, overlap and shape")
+        own = {"layup", "overlap", "shape"}
+        if set(patch) <= own:  # the laminate's material
+            _keys(patch, "patch", own)
+        else:
+            patch_material = _material(_material_keys(patch, "patch", own), "patch", si)
+        if patch["shape"] not in PATCH_SHAPES:
+            raise RepairError(f"[patch]: shape must be one of {', '.join(PATCH_SHAPES)}, got {patch['shape']!r}")
+        patch_angles, patch_overlap, patch_shape = patch["layup"], si(patch["overlap"], "length"), patch["shape"]
+    elif "patch" in data:
         patch = data["patch"]
         if isinstance(patch, dict) and set(patch) == {"layup"}:  # the laminate's material in the patch's own angles
             patch_angles = patch["layup"]
@@ -114,7 +142,8 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
         parent_material=_material(parent, "parent", si), parent_angles=parent["layup"], damage_diameter_m=si(damage["diameter"], "length"),
         steps=steps["count"], step_length_m=si(steps["length"], "length"), plies_per_step=steps.get("plies", 1), adhesive=adhesive,
         panel_length_m=si(panel["length"], "length"), panel_width_m=si(panel["width"], "length"), patch_material=patch_material,
-        patch_angles=patch_angles, cover_angles=cover_angles, cover_overlap_m=cover_overlap,
+        patch_angles=patch_angles, cover_angles=cover_angles, cover_overlap_m=cover_overlap, kind=kind, patch_overlap_m=patch_overlap,
+        patch_shape=patch_shape,
     )
     check_regions(repair)
     return repair, load
@@ -131,8 +160,11 @@ def repair_report(repair: Repair, units: str, load_n_per_m: float | None = None)
     report = {
         "units": {"length": system["length"][1], "area": f"{system['length'][1]}^2", "volume": f"{system['length'][1]}^3",
                   "modulus": system["modulus"][1], "force": system["N"][1], "stress": system["stress"][1]},
+        "kind": repair.kind,
+        "patch_shape": repair.patch_shape,
         "sizes": {
-            "thickness": repair.thickness_m / length, "depth": repair.depth_m / length, "through": repair.through,
+            "thickness": repair.thickness_m / length, "patch_thickness": repair.patch_thickness_m / length,
+            "depth": repair.depth_m / length, "through": repair.through,
             "plies_removed": repair.plies_removed, "plies_left": repair.plies - repair.plies_removed,
             "cut_radii": [repair.cut_radius_m(step) / length for step in range(1, repair.steps + 1)],
             "patch_diameter": 2 * repair.patch_radius_m / length, "repair_diameter": 2 * repair.cover_radius_m / length,
