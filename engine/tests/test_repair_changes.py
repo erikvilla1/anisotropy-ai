@@ -2,6 +2,7 @@
 here; a preview and a sweep's rows against the hand calculation called on those files directly; what is refused, in whose
 words; the pick and the flat stretch against rows written out here; and the example's numbers the decision record quotes."""
 
+import re
 import copy
 import math
 import tomllib
@@ -10,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from anisotropy_engine.repair import RepairChange, RepairError, RepairSweep, change_repair, preview_change, repair_from_dict, repair_report, sweep_repair
+from anisotropy_engine.repair import RepairChange, RepairError, RepairSweep, change_repair, pick_check, preview_change, repair_from_dict, repair_report, sweep_repair
 from anisotropy_engine.repair.changes import shown, tidy
 from anisotropy_engine.repair.sweeps import _flat_from, round_increment, round_values
 from anisotropy_engine.units import INCH, LBF
@@ -316,3 +317,36 @@ def test_numbers_in_a_sentence_have_four_figures_and_no_exponent():
     assert [shown(value) for value in (238.53884, 12.5766, 0.12, 74.0, 12345.6, 0.000123456, -3.14159, 0)] == \
         ["238.5", "12.58", "0.12", "74", "12346", "0.0001235", "−3.142", "0"]
     assert math.isclose(float(shown(1 / 3)), 1 / 3, rel_tol=1e-3)
+
+
+# ---- the pick held to a solved slice: the slice's report is the fea package's, written out here in what the check reads
+
+def solved_slice(**changes) -> dict:
+    report = {"units": {"length": "mm", "stress": "MPa", "force": "N/mm"}, "load": 100.0, "elastic_limit_load": 260.8, "peel_limit_load": None,
+              "bond": {"peak_shear": {"value": -11.5, "r": 37.3, "part": "Adhesive on the ledge of step 2"}, "peak_peel": {"value": 4.112, "r": 62.4, "part": "Adhesive under the cover plies"}},
+              "first": {"what": "adhesive", "load": 260.8}, "first_ply": {"name": "Laminate ply 6 (-45°)", "load": 466.1, "kind": "parent"}}
+    return report | changes
+
+
+def test_a_pick_is_held_by_its_slice_when_what_comes_first_there_is_at_or_above_the_load_named():
+    held = pick_check(230.0, solved_slice())
+    assert held["state"] == "solved" and held["holds"] is True and held["first"] == {"what": "adhesive", "load": 260.8}
+    assert held["peak_shear"]["value"] == -11.5 and held["first_ply"] == {"name": "Laminate ply 6 (-45°)", "load": 466.1}
+    assert held["words"] == ["The pick solved as a slice under 100 N/mm: largest bondline shear 11.5 MPa, largest peel stress 4.112 MPa.",
+                             "As the load grows, the adhesive reaches its elastic limit in shear first, at 260.8 N/mm.",
+                             "That is at or above the 230 N/mm named: the slice holds the pick."]
+    assert pick_check(260.8, solved_slice())["holds"] is True, "at the load itself the adhesive is still elastic"
+    below = pick_check(261.0, solved_slice())
+    assert below["holds"] is False and below["words"][-1] == "That is below the 261 N/mm named: the slice does not hold the pick."
+
+
+def test_what_the_hand_calculation_does_not_hold_can_come_first_in_the_slice():
+    peel = pick_check(230.0, solved_slice(peel_limit_load=180.0, first={"what": "peel", "load": 180.0}))
+    assert peel["holds"] is False and peel["peel_limit_load"] == 180.0
+    assert peel["words"][1] == "As the load grows, the bondline's peel stress reaches the peel strength first, at 180 N/mm."
+    ply = pick_check(230.0, solved_slice(first={"what": "ply", "load": 150.0}))
+    assert ply["words"][1] == "As the load grows, a ply reaches a strength (Laminate ply 6 (-45°)) first, at 150 N/mm."
+    none = pick_check(230.0, solved_slice(first=None, first_ply=None, elastic_limit_load=None))
+    assert none["holds"] is None and none["first_ply"] is None and "not checked" in none["words"][-1]
+    for words in (peel["words"], ply["words"], none["words"]):
+        assert not re.search(r"strength of the repair|repair's strength|carr|margin|design", " ".join(words))

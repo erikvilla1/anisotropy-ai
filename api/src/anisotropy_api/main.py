@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, TypeVar
+from typing import Annotated, Any, TypeVar
 from urllib.parse import unquote
 
 import numpy as np
@@ -27,7 +27,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
-from anisotropy_engine.repair import repair_from_dict, repair_report, repair_views, solve_needs
+from anisotropy_engine.repair import pick_check, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
@@ -44,7 +44,7 @@ from .proposals import model_view_of_form, source_guard
 from .general_answers import general_guard, general_schema, general_view
 from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
 from .result_questions import model_view, question_guard, question_schema
-from .theory import find as find_theory, wing_sections
+from .theory import find as find_theory, repair_sections, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
@@ -64,7 +64,8 @@ from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponModelReceipt, ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelProgram, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
-    WingRequest, WingShapeAnswer, RepairAnswer, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
+    WingRequest, WingShapeAnswer, RepairAnswer, RepairChangePreview, RepairChangeRequest, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
+    RepairSweepAnswer, RepairSweepRequest,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1888,6 +1889,36 @@ def analyze_repair_endpoint(problem: RepairRequest, actor: Actor, request: Reque
                         views=views, needs=needs)
 
 
+def _slice_solved(data: dict, cut_faces: str, timeout_s: float) -> tuple[str, Any]:
+    """A repair's slice built, solved and read back by the fea package's `repair_model` in a process of its own (ADR-0051, ADR-0132):
+    how it ended and what came of it. `("solved", report)` with the tool's report, its headline in it; `("refused", words)` in the tool's
+    words; `("absent", None)` where the tool is not installed; `("slow", None)` when it outlasts its time; `("failed", status)`, the cause
+    written to the log and to no reader (ADR-0091 amendment 2)."""
+    command = repair_model_command()
+    if command is None:
+        return "absent", None
+    with tempfile.TemporaryDirectory(prefix="repair-solve-") as folder:
+        stated, out = Path(folder) / "repair.json", Path(folder) / "model"
+        stated.write_text(json.dumps(data), encoding="utf-8")
+        try:
+            done = subprocess.run([*command, str(stated), "--out", str(out), "--cut-faces", cut_faces], capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+        except subprocess.TimeoutExpired:
+            return "slow", None
+        refusal = next((line.strip()[len("refused:"):].strip() for line in reversed(done.stdout.splitlines()) if line.strip().startswith("refused:")), "")
+        if done.returncode == REPAIR_REFUSED and refusal:
+            return "refused", refusal
+        try:
+            report = json.loads((out / REPAIR_REPORT).read_text(encoding="utf-8")) if done.returncode == 0 else None
+        except (OSError, ValueError):
+            report = None
+        if not isinstance(report, dict) or not isinstance(report.get("headline"), str) or not _finite(report):
+            cause = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
+            print(f"the repair's solve stopped with status {done.returncode}: {cause}", flush=True)  # the tool's own words stay in the log
+            return "failed", done.returncode
+    return "solved", report
+
+
 @app.post(REPAIR_SOLVE, response_model=RepairSolveAnswer)
 def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Request, response: Response) -> RepairSolveAnswer:
     """A repair's slice solved in CalculiX (ADR-0132) from the repair's page (ADR-0135): the engine reads the description first, so a
@@ -1901,28 +1932,18 @@ def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Re
         detail = "The solve of the slice needs: " + "; ".join(need["words"] for need in needs) + "."
         run_id = _record(request, actor, problem, error=detail)
         raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
-    command = repair_model_command()
-    if command is None:
+    ended, report = _slice_solved(data, problem.cut_faces, REPAIR_SOLVE_TIMEOUT_S)
+    if ended == "absent":
         raise HTTPException(status_code=503, detail="The solver is not installed here")
-    with tempfile.TemporaryDirectory(prefix="repair-solve-") as folder:
-        stated, out = Path(folder) / "repair.json", Path(folder) / "model"
-        stated.write_text(json.dumps(data), encoding="utf-8")
-        done = _repair_tool(request, actor, problem, [*command, str(stated), "--out", str(out), "--cut-faces", problem.cut_faces], Path(folder),
-                            "the solve of the slice", REPAIR_SOLVE_TIMEOUT_S)
-        refusal = next((line.strip()[len("refused:"):].strip() for line in reversed(done.stdout.splitlines()) if line.strip().startswith("refused:")), "")
-        if done.returncode == REPAIR_REFUSED and refusal:
-            run_id = _record(request, actor, problem, error=refusal)
-            raise HTTPException(status_code=422, detail=refusal, headers=_run_header(run_id))
-        report_path = out / REPAIR_REPORT
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8")) if done.returncode == 0 else None
-        except (OSError, ValueError):
-            report = None
-        if not isinstance(report, dict) or not isinstance(report.get("headline"), str) or not _finite(report):
-            cause = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
-            print(f"the repair's solve stopped with status {done.returncode}: {cause}", flush=True)  # the tool's own words stay in the log
-            run_id = _record(request, actor, problem, error=f"the solve stopped with status {done.returncode}")
-            raise HTTPException(status_code=503, detail=SLICE_NOT_NOW, headers=_run_header(run_id))
+    if ended == "slow":
+        run_id = _record(request, actor, problem, error="the solve of the slice took longer than the time allowed")
+        raise HTTPException(status_code=504, detail="The solve of the slice took too long", headers=_run_header(run_id))
+    if ended == "refused":
+        run_id = _record(request, actor, problem, error=report)
+        raise HTTPException(status_code=422, detail=report, headers=_run_header(run_id))
+    if ended == "failed":
+        run_id = _record(request, actor, problem, error=f"the solve stopped with status {report}")
+        raise HTTPException(status_code=503, detail=SLICE_NOT_NOW, headers=_run_header(run_id))
     headline = report.pop("headline")
     run_id = _record(request, actor, problem, response={"headline": headline, "model": report.get("model"), "checks": report.get("checks"),
                                                         "peak_shear": report.get("bond", {}).get("peak_shear"), "peak_peel": report.get("bond", {}).get("peak_peel"),
@@ -1930,6 +1951,75 @@ def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Re
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairSolveAnswer(run_id=None if run_id is None else str(run_id), headline=headline, report=report)
+
+
+REPAIR_CHANGES = "/v1/repairs/changes"
+REPAIR_SWEEPS = "/v1/repairs/sweeps"
+PICK_NOT_CHECKED = "The pick's slice could not be solved right now, so the pick is not checked by a solved slice."
+
+
+def _repair_worked(request: Request, actor: str, problem: RepairRequest, work):
+    """What the engine makes of a repair request's table (`work(data)`), every number finite; 422 in the engine's words otherwise."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.repair
+        found = work(data)
+        if not _finite(found):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else UNSOLVABLE_REPAIR
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    return found
+
+
+@app.post(REPAIR_CHANGES, response_model=RepairChangePreview)
+def preview_repair_change_endpoint(problem: RepairChangeRequest, actor: Actor, request: Request, response: Response) -> RepairChangePreview:
+    """A change previewed on a repair (ADR-0136): the engine makes it on a copy of the repair file (a quantity set, in the unit as
+    written; steps added, removed or regrouped) and works the repair as it is and as changed by hand, in milliseconds. Nothing is
+    kept: the engineer applies the change on the page, or not, and the chat and the MCP server only preview. A change the repair
+    cannot take is refused in the engine's words. Recorded with its actor (ADR-0026): the change, its sentence and both summaries."""
+    preview = _repair_worked(request, actor, problem, lambda data: preview_repair_change(data, problem.change))
+    run_id = _record(request, actor, problem, response={key: preview[key] for key in ("change", "words", "before", "after")})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairChangePreview(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), **preview)
+
+
+@app.post(REPAIR_SWEEPS, response_model=RepairSweepAnswer)
+def sweep_repair_endpoint(problem: RepairSweepRequest, actor: Actor, request: Request, response: Response) -> RepairSweepAnswer:
+    """One quantity of a repair swept (ADR-0136): the engine works the repair by hand at every value, in milliseconds, and with a load
+    named picks the smallest repair whose adhesive is still elastic at it. That pick is then solved as a slice here (ADR-0132, as
+    `/v1/repairs/solve` does, a few seconds) unless `confirm` is false, and `check` says what the slice makes of it: the largest
+    shear and peel, what reaches its limit first and at what load, and whether that load is at or above the load named. A repair
+    that lacks what a solve needs, or a solve that cannot run, leaves the sweep's answer whole and says the pick is not checked.
+    Nothing is kept or changed. Recorded with its actor: the sweep, its sentences, the pick's row and the check, not every row."""
+    found = _repair_worked(request, actor, problem, lambda data: sweep_repair(data, problem.sweep))
+    check = None
+    if found["pick"] is not None and problem.confirm:
+        repair, load = repair_from_dict(found["picked"])
+        needs = solve_needs(repair, load)
+        if needs:
+            check = {"state": "needs", "holds": None, "needs": needs,
+                     "words": ["The pick is not checked by a solved slice, which needs: " + "; ".join(need["words"] for need in needs) + "."]}
+        else:
+            ended, report = _slice_solved(found["picked"], problem.cut_faces, REPAIR_SOLVE_TIMEOUT_S)
+            if ended == "solved":
+                try:
+                    check = pick_check(found["target"], report) | {"headline": report["headline"]}
+                except (KeyError, TypeError, ValueError):  # a report without what the check reads: the pick stays unchecked
+                    check = {"state": "failed", "holds": None, "words": [PICK_NOT_CHECKED]}
+            elif ended == "refused":
+                check = {"state": "refused", "holds": None, "words": [f"The pick's slice was not solved: {report}", "The pick is not checked by a solved slice."]}
+            else:
+                check = {"state": "failed", "holds": None, "words": [PICK_NOT_CHECKED]}
+    pick = None if found["pick"] is None else found["rows"][found["pick"]]
+    run_id = _record(request, actor, problem, response={"sweep": found["sweep"], "words": found["words"], "rows": len(found["rows"]), "pick": pick,
+                                                        "target": found["target"], "flat_from": found["flat_from"],
+                                                        "check": None if check is None else {key: check.get(key) for key in ("state", "holds", "first", "words")}})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairSweepAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), check=check, **found)
 
 
 @app.post(REPAIR_SHAPE, response_model=RepairShapeAnswer)
@@ -2152,10 +2242,12 @@ def answer_general_question(asked: GeneralQuestionRequest, actor: Actor, request
 def find_theory_sections(asked: TheorySectionsRequest, actor: Actor, request: Request, response: Response) -> TheorySectionsResponse:
     """The sections of our theory pages a question's words find, with their text (ADR-0107): what `result-answers` hands the API's own
     model, handed to a reader whose own model writes, such as an MCP client; a wing's question (`about="wing"`) searches the wing's theory
-    and the reference pages instead (ADR-0128). No result is sent here, no model is called and nothing is computed: the sections are the
+    and the reference pages instead (ADR-0128), and a repair's (`about="repair"`) the repair's theory and the page "Bonded repairs"
+    (ADR-0136). No result is sent here, no model is called and nothing is computed: the sections are the
     documents' text, cut and ranked (`theory.py`). Recorded with its actor (ADR-0026) as the question and
     the ids of the sections found, never their text, so the questions that find nothing can be read back."""
-    among = wing_sections() if asked.about == "wing" else None  # a wing's question: its theory and the reference pages (ADR-0127)
+    # a wing's question: its theory and the reference pages (ADR-0127); a repair's: its theory and the page "Bonded repairs" (ADR-0136)
+    among = wing_sections() if asked.about == "wing" else repair_sections() if asked.about == "repair" else None
     found = [section for section, _ in find_theory(asked.question, among=among, limit=asked.limit)]
     run_id = _record(request, actor, asked, response={"sections": [section.id for section in found]})
     if run_id is not None:

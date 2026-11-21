@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from anisotropy_api.theory import MAX_SECTION_CHARS, SOURCES, find, of_subject, sections, split, wing_sections, words_of
+from anisotropy_api.theory import MAX_SECTION_CHARS, SOURCES, find, of_subject, repair_sections, sections, split, wing_sections, words_of
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -99,7 +99,7 @@ def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
     slice_sections = {s.id for s in repair if s.source == "fea"}
     assert {s.id for s in repair} - slice_sections == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair", "engine:18-the-repair-s-plies-as-solids"}
     assert len(slice_sections) == 7 and all(name.startswith("fea:11-the-repair-s-slice-in-calculix") for name in slice_sections)
-    assert set(repair) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
+    assert set(repair) | set(of_subject("repair-references")) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
     for question in ("how come the 0 ply carries most of the load", "why does the adhesive's shear stress peak at the end of a step?"):
         assert all(s.subject == "" for s, _ in find(question, limit=10)), question
     assert find("why does the adhesive's shear stress peak at the end of a step?", among=repair)[0][0].id == "engine:16-stepped-lap-bond"
@@ -113,7 +113,7 @@ def test_the_wings_sections_are_read_but_searched_only_by_their_subject():
     wing = of_subject("wing")
     assert {s.id for s in wing} >= {"engine:13-wing", "engine:15-spar-caps-and-layups-that-change-along-the-span", "fea:10-the-wing-in-calculix"}
     assert all(s.subject == "wing" for s in wing)
-    assert set(wing) | set(of_subject("references")) | set(of_subject("repair")) | set(of_subject()) == set(sections())
+    assert set(wing) | set(of_subject("references")) | set(of_subject("repair")) | set(of_subject("repair-references")) | set(of_subject()) == set(sections())
     assert "engine:14-design-rules-of-a-stack" in {s.id for s in of_subject()}  # a laminate's rules are not the wing's alone
     question = "why do spar caps carry the bending?"
     assert all(s.subject == "" for s, _ in find(question, limit=10))
@@ -178,3 +178,51 @@ def test_the_reference_pages_cite_their_sources_name_no_program_and_hold_no_valu
         numbers = set(re.findall(r"\d+\.\d+", cited))
         assert not numbers & values, (section.title, numbers & values)  # a value is read from the record, never from a page
 
+
+
+# What an engineer asks the repair's chat to explain (tests/assistant-questions/repair.json holds the bank's own) and the section of the
+# page "Bonded repairs" each must find first among what the repair's chat searches (ADR-0136). Every number in an answer is the
+# repair's report's or its solved slice's; the section only explains it.
+REPAIR_ASKS = {
+    "why does the shear stress peak at the end of a step?": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
+    "why is the shear highest at the ends": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
+    "what is shear lag": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
+    "does a longer step help?": "repairs:why-a-longer-step-stops-helping",
+    "how long should a step be": "repairs:why-a-longer-step-stops-helping",
+    "why do more steps lower the shear": "repairs:why-more-steps-lower-the-peak",
+    "how many steps should I use": "repairs:why-more-steps-lower-the-peak",
+    "what does a thicker bondline do": "repairs:why-a-thicker-bondline-lowers-the-peak-shear",
+    "what is peel stress": "repairs:peel-stress",
+    "why is there no peel in the hand calculation": "repairs:peel-stress",
+    "is the elastic limit load the strength?": "repairs:the-load-at-the-adhesive-s-elastic-limit-is-not-the-strength",
+    "why is it not the repair's strength": "repairs:the-load-at-the-adhesive-s-elastic-limit-is-not-the-strength",
+    "what are cover plies for": "repairs:cover-plies",
+    "what is the difference between a flush and an external patch": "repairs:flush-and-external-patches",
+    "why does the patch layup matter": "repairs:a-patch-as-stiff-as-the-laminate",
+    "what does the sweep's pick mean": "repairs:what-a-sweep-and-its-pick-mean",
+}
+
+
+def test_the_repairs_page_is_searched_only_with_the_repairs_theory_and_answers_the_repairs_questions_first():
+    page = of_subject("repair-references")
+    assert {s.source for s in page} == {"repairs"} and len(page) == 10 and all(s.document == "Bonded repairs" for s in page)
+    assert set(repair_sections()) == set(page) | set(of_subject("repair"))
+    for question, section in REPAIR_ASKS.items():
+        found = [s.id for s, _ in find(question, among=repair_sections(), limit=3)]
+        assert found[0] == section, (question, found)
+        assert all(s.subject == "" for s, _ in find(question, limit=10)), question  # a coupon's chat never finds them
+        assert all(s.subject in ("wing", "references") for s, _ in find(question, among=wing_sections(), limit=10)), question  # nor the wing's
+    # a question the theory answers better still finds the theory
+    assert find("why is the peel stress read as a mean over a square of adhesive?", among=repair_sections())[0][0].id.endswith("11-2-what-is-read-back")
+
+
+def test_the_repairs_page_cites_its_sources_names_no_program_gives_no_verdict_and_holds_no_value_of_a_material():
+    library = json.loads((REPO / "engine" / "src" / "anisotropy_engine" / "data" / "material-library.json").read_text(encoding="utf-8"))
+    values = {f"{p['sourceValue']:g}" for d in library["datasets"] for p in d["properties"] if p.get("sourceValue") and p["sourceValue"] >= 1}
+    for section in of_subject("repair-references"):
+        assert "Sources: " in section.text, section.title  # each section names where it comes from
+        assert section.also, section.title  # every section names the other words it is asked by
+        assert not any(name in section.text for name in ("Abaqus", "CalculiX", "PrePoMax", "Ansys", "Claude", "`", "engine")), section.title
+        assert not re.findall(r"\d+\.\d+", section.text), section.title  # no decimal number: nothing to copy as a result
+        cited = re.sub(r"CR-\d+|\(\d{4}\)|pp?\. \S+(?: to \S+)?|Mechanics \d+|Luftfahrtforschung \d+|Volume \d+|Chapter \d+|MIL-HDBK-17-3F", "", section.text)
+        assert not set(re.findall(r"\d{2,}", cited)) & values, section.title  # a value is read from the repair, never from a page

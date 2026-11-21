@@ -11,7 +11,7 @@ from .patch_lap import lap_steps, repair_lap, shared_stiffnesses, stretching_mat
 from .repair_file import repair_from_dict, repair_report, repair_views, solve_needs
 from .section import Region, areas, bond_lengths, check_regions, region_at, regions, volumes
 from .solid import FarField, adhesive_stiffness, far_field, plane_stress_stiffness, ply_axis_stress, ply_compliance, ply_stiffness, turned_stiffness
-from .sweeps import RepairSweep, sweep_repair
+from .sweeps import RepairSweep, pick_check, sweep_repair
 from .step_lap import (
     Adhesive, Step, StepLap, boundary_forces, double_lap_strength, elastic_limit_load, long_overlap_strength, step_constants, step_lap,
 )
@@ -19,7 +19,7 @@ from .step_lap import (
 __all__ = [
     "Adhesive", "FarField", "Region", "Repair", "RepairChange", "RepairError", "RepairMaterial", "RepairSweep", "Step", "StepLap", "ThroughThickness", "adhesive_stiffness", "areas",
     "bond_lengths", "boundary_forces", "change_repair", "check_regions", "double_lap_strength", "elastic_limit_load", "far_field", "lap_from_dict", "lap_report",
-    "lap_steps", "long_overlap_strength", "plane_stress_stiffness", "ply_axis_stress", "ply_compliance", "ply_stiffness", "preview_change", "region_at", "regions",
+    "lap_steps", "long_overlap_strength", "pick_check", "plane_stress_stiffness", "ply_axis_stress", "ply_compliance", "ply_stiffness", "preview_change", "region_at", "regions",
     "repair_from_dict", "repair_lap", "repair_report", "repair_views", "shared_stiffnesses", "solve_needs", "step_constants", "step_lap",
     "stretching_matrix", "sweep_repair", "tape_through_thickness", "turned_stiffness", "volumes",
 ]

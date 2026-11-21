@@ -14,7 +14,8 @@ methods and allowables, which are of the subject "references" (ADR-0127): `wing_
 asked by in a line `<!-- also: taper, run-out, drop-off -->` under its heading; they count as its title's words and are not shown.
 
 The repair's sections (a `##` heading that names a file of the repair, as `repair/` or `repair_model.py`) are kept out of the default
-search the same way, as the subject "repair" (ADR-0102 amendments 5 and 6): no chat answers a question about a repair yet.
+search the same way, as the subject "repair" (ADR-0102 amendments 5 and 6). The repair's chat searches them with the page "Bonded
+repairs", which is of the subject "repair-references" (ADR-0136): `repair_sections()`.
 """
 
 from __future__ import annotations
@@ -34,9 +35,13 @@ SOURCES: dict[str, tuple[str, Path]] = {  # by id: the name an engineer reads, a
     "rules": ("Design rules for laminates", REPO / "engine" / "docs" / "references" / "design-rules.md"),
     "tests": ("Test methods behind a strength", REPO / "engine" / "docs" / "references" / "test-methods.md"),
     "allowables": ("Allowables and design values", REPO / "engine" / "docs" / "references" / "allowables.md"),
+    # the repair's reference in our own words (ADR-0136): searched only with the repair's theory, by the repair's chat
+    "repairs": ("Bonded repairs", REPO / "engine" / "docs" / "references" / "bonded-repairs.md"),
 }
-SUBJECT_OF = {"rules": "references", "tests": "references", "allowables": "references"}  # a page whose every section is of one subject
+# a page whose every section is of one subject
+SUBJECT_OF = {"rules": "references", "tests": "references", "allowables": "references", "repairs": "repair-references"}
 WING_SUBJECTS = ("wing", "references")  # what the wing's chat searches
+REPAIR_SUBJECTS = ("repair", "repair-references")  # what the repair's chat searches
 HEADING = re.compile(r"^(#{2,3})\s+(.*?)\s*$")
 MARKER = re.compile(r"^<!-- code: .*? -->\n?", re.MULTILINE)  # the line that pairs an equation with its function: the code's, not a reader's
 ALSO = re.compile(r"^<!-- also: (.*?) -->\n?", re.MULTILINE)  # the other words a section is asked by: counted as its title's, never shown
@@ -143,6 +148,11 @@ def of_subject(subject: str = "") -> tuple[Section, ...]:
 def wing_sections() -> tuple[Section, ...]:
     """What the wing's chat searches: the wing's theory and the three reference pages (ADR-0127)."""
     return tuple(section for section in sections() if section.subject in WING_SUBJECTS)
+
+
+def repair_sections() -> tuple[Section, ...]:
+    """What the repair's chat searches: the repair's theory and the page "Bonded repairs" (ADR-0136)."""
+    return tuple(section for section in sections() if section.subject in REPAIR_SUBJECTS)
 
 
 def find(question: str, among: tuple[Section, ...] | None = None, limit: int = 2) -> list[tuple[Section, float]]:

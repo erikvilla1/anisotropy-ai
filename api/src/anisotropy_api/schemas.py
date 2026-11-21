@@ -13,6 +13,7 @@ from anisotropy_engine.library import LibraryMaterial, library_material
 from anisotropy_engine.response import Loads
 from anisotropy_engine.summary import FailureSummary, LaminateSummary
 from anisotropy_engine.units import UNIT_SYSTEMS
+from anisotropy_engine.repair import RepairChange, RepairSweep
 from anisotropy_engine.wing.changes import PlyChange
 
 
@@ -1144,8 +1145,9 @@ class TheorySectionsRequest(Contract):
     question: Annotated[str, Field(min_length=1, max_length=2000)]
     limit: Annotated[int, Field(ge=1, le=5)] = 3
     # what the question is about: a coupon's result searches the theory pages as before; a wing searches the wing's theory and the three
-    # reference pages of design rules, test methods and allowables (ADR-0127, ADR-0128)
-    about: Literal["coupon", "wing"] = "coupon"
+    # reference pages of design rules, test methods and allowables (ADR-0127, ADR-0128); a repair searches the repair's theory and the page
+    # "Bonded repairs" (ADR-0136)
+    about: Literal["coupon", "wing", "repair"] = "coupon"
 
 
 class TheorySection(Contract):
@@ -1524,6 +1526,60 @@ class RepairSolveAnswer(Contract):
     run_id: str | None = None
     headline: str
     report: dict[str, Any]
+
+
+class RepairChangeRequest(RepairRequest):
+    """A change to preview on a repair (ADR-0136): the repair as for its hand calculation, and one change: a quantity set to a value,
+    in the unit as written, or steps added, removed or regrouped. The repair sent is never kept or changed."""
+
+    change: RepairChange
+
+
+class RepairChangePreview(Contract):
+    """A change worked before it is applied (ADR-0136): the change in one sentence, the repair file it gives, and the summary of the
+    repair as it is and as changed (its steps, its width, the largest bondline shear and where, the load at the adhesive's elastic
+    limit), in the file's units. Applying it is the engineer's tap on the page."""
+
+    run_id: str | None = None
+    engine_version: str
+    change: dict[str, Any]
+    words: str
+    repair: dict[str, Any]
+    before: dict[str, Any]
+    after: dict[str, Any]
+    units: dict[str, Any]
+
+
+class RepairSweepRequest(RepairRequest):
+    """One quantity of a repair to sweep (ADR-0136): the repair as for its hand calculation, the sweep (the quantity, optionally its
+    range and a load the adhesive is to stay elastic at), whether a pick is then solved as a slice (`confirm`), and how that slice's
+    cut faces are taken (as `/v1/repairs/solve`)."""
+
+    sweep: RepairSweep
+    confirm: bool = True
+    cut_faces: Literal["open", "bonded"] = "open"
+
+
+class RepairSweepAnswer(Contract):
+    """A sweep's answer (ADR-0136), as `sweep_repair` gives it in the file's units: a row for every value (the repair's width, the
+    largest shear and where, the load at the adhesive's elastic limit, or the refusal of that value), the pick's row index and its
+    repair file when a load was named, from which value the limit load no longer changes, and the answer in sentences. `check` is
+    what a solved slice of the pick says (`pick_check`), or why it was not solved; null with no pick or with `confirm` false."""
+
+    run_id: str | None = None
+    engine_version: str
+    sweep: dict[str, Any]
+    quantity: dict[str, Any]
+    units: dict[str, Any]
+    load: float
+    target: float | None
+    rows: list[dict[str, Any]]
+    pick: int | None
+    picked: dict[str, Any] | None
+    flat_from: dict[str, Any] | None
+    most: dict[str, Any] | None
+    words: list[str]
+    check: dict[str, Any] | None = None
 
 
 class RepairShapeAnswer(Contract):

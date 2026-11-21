@@ -32,6 +32,8 @@ FLAT_WITHIN = 0.01  # the limit load "no longer changes" where it stays within t
 FLAT_SHARE = 0.25  # and only when that stretch is at least this share of the range worked
 SWEPT_VALUES = ("step_length", "bondline", "cover_overlap", "patch_overlap")
 ROUND = (1.0, 2.0, 2.5, 5.0)
+FIRST = {"adhesive": "the adhesive reaches its elastic limit in shear", "peel": "the bondline's peel stress reaches the peel strength",
+         "ply": "a ply reaches a strength"}  # what comes first in a solved slice, in the words of anisotropy_fea.repair_model.FIRST_WORDS
 PICKED = {"step_length": "a step length", "bondline": "a bondline", "cover_overlap": "a cover overlap", "patch_overlap": "a patch overlap"}
 
 
@@ -214,3 +216,29 @@ def sweep_repair(data: dict, sweep: RepairSweep) -> dict:
     return {"sweep": sweep.model_dump(), "quantity": {"name": sweep.quantity, "words": name, "unit": unit}, "units": base["units"],
             "load": base["lap"]["load"], "target": target, "rows": rows, "pick": pick, "picked": None if pick is None else files[pick],
             "flat_from": flat, "most": None if most is None else {"value": most["value"], "elastic_limit_load": most["elastic_limit_load"]}, "words": words}
+
+
+def pick_check(target: float, solved: dict) -> dict:
+    """What a solved slice of a sweep's pick says of it (ADR-0132, ADR-0136). `solved` is the slice's report in the file's units,
+    as `anisotropy_fea.repair_model` writes it; `target` is the load named, in the same units. The slice holds what the hand
+    calculation does not, the peel stress and every ply's stresses, so what reaches its limit first there may not be the
+    adhesive's shear: the pick is held when that first limit is at or above the load named. No number is worked here beyond
+    that comparison."""
+    force, stress = solved["units"]["force"], solved["units"]["stress"]
+    bond, first = solved["bond"], solved.get("first")
+    holds = None if first is None else first["load"] >= target
+    words = [f"The pick solved as a slice under {shown(solved['load'])} {force}: largest bondline shear {shown(abs(bond['peak_shear']['value']))} {stress}, "
+             f"largest peel stress {shown(bond['peak_peel']['value'])} {stress}."]
+    if first is None:
+        words.append("The repair states no strength the slice could be held to, so the pick is not checked by it.")
+    else:
+        came = FIRST[first["what"]]
+        if first["what"] == "ply" and solved.get("first_ply"):
+            came += f" ({solved['first_ply']['name']})"
+        words.append(f"As the load grows, {came} first, at {shown(first['load'])} {force}.")
+        words.append(f"That is at or above the {shown(target)} {force} named: the slice holds the pick." if holds else
+                     f"That is below the {shown(target)} {force} named: the slice does not hold the pick.")
+    return {"state": "solved", "holds": holds, "first": first, "elastic_limit_load": solved.get("elastic_limit_load"), "peel_limit_load": solved.get("peel_limit_load"),
+            "peak_shear": bond["peak_shear"], "peak_peel": bond["peak_peel"],
+            "first_ply": None if not solved.get("first_ply") else {"name": solved["first_ply"]["name"], "load": solved["first_ply"]["load"]},
+            "words": words}
