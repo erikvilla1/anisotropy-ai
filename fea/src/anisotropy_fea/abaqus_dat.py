@@ -3,9 +3,10 @@
 A table opens with a line that holds "THE FOLLOWING TABLE IS PRINTED", runs on until a blank line and names its set after the
 word SET ("ELEMENT SET ASSEMBLY_PROBE-CENTRE", "NODE SET ASSEMBLY_RF-TOP"); the assembly prefix Abaqus adds is dropped from
 the name this module reports. Then a column line ("ELEMENT  SEC FOOT-   S11  S22  S12", "NODE FOOT-  RF1 ... RM3") whose
-columns are the words after FOOT-, with SEC marking a section-point column, and one or more lines of footnote headings up to
-a blank line. The rows follow until the next blank line: the element or node label, the section point when the table has
-one, an optional footnote tag such as OR, then the values. A `totals=YES` table ends with a TOTAL line, which is kept.
+columns are the words after FOOT-, with PT marking an integration-point column (a table printed at the integration points,
+"ELEMENT  PT FOOT-") and SEC a section-point column, and one or more lines of footnote headings up to a blank line. The rows
+follow until the next blank line: the element or node label, the integration point and the section point when the table has
+them, an optional footnote tag such as OR, then the values. A `totals=YES` table ends with a TOTAL line, which is kept.
 The wording was read from a real file (Abaqus 2025, 2026-11-08, `AS48552-UNT-L1-abaqus-plies.dat`). Nothing is converted or
 transformed here (ADR-0002); what a line does not say is refused by its number rather than guessed (ADR-0003).
 """
@@ -35,6 +36,7 @@ class DatRow:
     point: int | None  # section point, in a table that has the column
     tag: str  # the footnote tag, "OR" for an element with an *Orientation, else ""
     values: tuple[float, ...]
+    integration_point: int | None = None  # in a table printed at the integration points
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,7 @@ def parse_abaqus_dat(text: str) -> AbaqusDat:
             raise AbaqusDatError(f".dat line {i + 1}: cannot read the columns of the table of set {set_name!r}: {lines[i].strip()!r}")
         at = tokens.index("FOOT-")
         has_point = "SEC" in tokens[:at]
+        has_integration = "PT" in tokens[:at]
         columns = tuple(tokens[at + 1:])
         if not columns:
             raise AbaqusDatError(f".dat line {i + 1}: the table of set {set_name!r} names no columns")
@@ -131,7 +134,7 @@ def parse_abaqus_dat(text: str) -> AbaqusDat:
             i += 1
         rows: list[DatRow] = []
         while i < len(lines) and lines[i].strip():
-            rows.append(_row(lines[i], i + 1, has_point, len(columns), set_name))
+            rows.append(_row(lines[i], i + 1, has_point, len(columns), set_name, has_integration))
             i += 1
         total = None
         j = i
@@ -145,9 +148,9 @@ def parse_abaqus_dat(text: str) -> AbaqusDat:
     return AbaqusDat(version=version, tables=tuple(tables))
 
 
-def _row(line: str, number: int, has_point: bool, width: int, set_name: str) -> DatRow:
+def _row(line: str, number: int, has_point: bool, width: int, set_name: str, has_integration: bool = False) -> DatRow:
     tokens = line.split()
-    ids = 2 if has_point else 1
+    ids = 1 + has_integration + has_point  # the label, then the integration point, then the section point
     if len(tokens) < ids + width or not all(NUMBER.match(t) and "." not in t and "E" not in t.upper() for t in tokens[:ids]):
         raise AbaqusDatError(f".dat line {number}: cannot read {line.strip()!r} as a row of set {set_name!r}")
     values = tokens[-width:]
@@ -156,4 +159,5 @@ def _row(line: str, number: int, has_point: bool, width: int, set_name: str) -> 
     tag = " ".join(tokens[ids:-width])
     if tag and any(NUMBER.match(t) for t in tag.split()):
         raise AbaqusDatError(f".dat line {number}: {line.strip()!r} has more numbers than the table has columns")
-    return DatRow(label=int(tokens[0]), point=int(tokens[1]) if has_point else None, tag=tag, values=tuple(_number(t) for t in values))
+    return DatRow(label=int(tokens[0]), point=int(tokens[ids - 1]) if has_point else None, tag=tag, values=tuple(_number(t) for t in values),
+                  integration_point=int(tokens[1]) if has_integration else None)

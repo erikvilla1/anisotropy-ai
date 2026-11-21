@@ -170,6 +170,40 @@ def region_stiffness(repair: Repair, part: Region) -> np.ndarray:
     return ply_stiffness(repair.parent_material if part.kind == "parent" else repair.patch_material, part.angle_deg)
 
 
+def material_groups(mesh: SliceMesh, stiffness: tuple[np.ndarray, ...]) -> list[tuple[int, list[int], np.ndarray]]:
+    """The model's materials: the rectangles that share one stiffness share one. Each is its number, its rectangles and its
+    elements; a material none of whose elements is in the mesh is left out and its number is not used."""
+    groups: dict[bytes, list[int]] = {}
+    for index, matrix in enumerate(stiffness):
+        groups.setdefault(np.round(matrix / MPA, 6).tobytes(), []).append(index)
+    found = []
+    for number, members in enumerate(groups.values(), 1):
+        inside = np.flatnonzero(np.isin(mesh.region, members))
+        if inside.size:
+            found.append((number, members, inside))
+    return found
+
+
+def held_nodes(nodes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The nodes on the middle of the repair (r = 0) and those on the laminate's bottom face (z = 0)."""
+    close = 1e-9 * float(nodes[:, 0].max())
+    return np.flatnonzero(nodes[:, 0] < close), np.flatnonzero(nodes[:, 1] < close)
+
+
+def end_pressures(mesh: SliceMesh, far: FarField) -> list[tuple[int, float]]:
+    """The load: for every element on the panel's end, the pressure (Pa) on its edge at the larger r, which is face 2 of the
+    element. A pressure pushes into an element, so a ply in tension has a negative one. Refused when the repair reaches the
+    end of the panel."""
+    last = int(mesh.cell[:, 0].max())
+    loads = []
+    for e in np.flatnonzero(mesh.cell[:, 0] == last):
+        part = mesh.regions[mesh.region[e]]
+        if part.kind != "parent":
+            raise SliceModelError("The panel's end must be laminate only: the repair reaches the end of the panel")
+        loads.append((int(e), -float(far.ply_stress_x[part.ply - 1])))
+    return loads
+
+
 def _deck(repair: Repair, mesh: SliceMesh, nodes: np.ndarray, elements: np.ndarray, stiffness: tuple[np.ndarray, ...], far: FarField,
           hold: str, load_n_per_m: float) -> str:
     """The CalculiX deck, in mm, N and MPa. CalculiX's x is the load's direction, its y the thickness and its z the width, so a
@@ -181,13 +215,7 @@ def _deck(repair: Repair, mesh: SliceMesh, nodes: np.ndarray, elements: np.ndarr
            f"** Load {_number(load_n_per_m / 1e3)} N/mm of width; the far-field width strain {_number(far.strain_width)} is put on as a temperature.",
            "*NODE, NSET=NALL"]
     out += [f"{k + 1}, {_number(r / MM)}, {_number(z / MM)}" for k, (r, z) in enumerate(nodes)]
-    groups: dict[bytes, list[int]] = {}  # the rectangles that share one stiffness share one material
-    for index, matrix in enumerate(stiffness):
-        groups.setdefault(np.round(matrix / MPA, 6).tobytes(), []).append(index)
-    for number, members in enumerate(groups.values(), 1):
-        inside = np.flatnonzero(np.isin(mesh.region, members))
-        if inside.size == 0:
-            continue
+    for number, members, inside in material_groups(mesh, stiffness):
         c = stiffness[members[0]] / MPA  # rows and columns: xx, yy (width), zz (thickness), yz, xz, xy
         out.append(f"** Material {number}: {', '.join(mesh.regions[index].name for index in members)}")
         out.append(f"*ELEMENT, TYPE=CPE8R, ELSET=M{number}")
@@ -199,21 +227,16 @@ def _deck(repair: Repair, mesh: SliceMesh, nodes: np.ndarray, elements: np.ndarr
                 f"*SOLID SECTION, ELSET=M{number}, MATERIAL=MAT{number}", "1."]
     out.append("*ELSET, ELSET=EALL, GENERATE")
     out.append(f"1, {len(elements)}, 1")
-    close = 1e-9 * float(nodes[:, 0].max())
+    middle, bottom = held_nodes(nodes)
     out.append("*NSET, NSET=MIDDLE")
-    out += _rows([k + 1 for k in np.flatnonzero(nodes[:, 0] < close)])
+    out += _rows([k + 1 for k in middle])
     out.append("*NSET, NSET=BOTTOM")
-    out += _rows([k + 1 for k in np.flatnonzero(nodes[:, 1] < close)])
+    out += _rows([k + 1 for k in bottom])
     out += ["*BOUNDARY", "MIDDLE, 1, 1, 0.", f"{'NALL' if hold == 'everywhere' else 'BOTTOM'}, 2, 2, 0.",
             "*INITIAL CONDITIONS, TYPE=TEMPERATURE", "NALL, 0.",
             "*STEP", "*STATIC", "*TEMPERATURE", f"NALL, {_number(far.strain_width)}",
             "** The load: each ply's far-field stress on the panel's end (face 2 of an element is its edge at the larger r).", "*DLOAD"]
-    last = int(mesh.cell[:, 0].max())
-    for e in np.flatnonzero(mesh.cell[:, 0] == last):
-        part = mesh.regions[mesh.region[e]]
-        if part.kind != "parent":
-            raise SliceModelError("The panel's end must be laminate only: the repair reaches the end of the panel")
-        out.append(f"{e + 1}, P2, {_number(-far.ply_stress_x[part.ply - 1] / MPA)}")
+    out += [f"{e + 1}, P2, {_number(pressure / MPA)}" for e, pressure in end_pressures(mesh, far)]
     out += ["*EL PRINT, ELSET=EALL", "S, E", "*END STEP"]
     return "\n".join(out) + "\n"
 
@@ -265,10 +288,20 @@ def read_results(model: SliceModel, dat_text: str, seconds: float = 0.0, equatio
     printed_stress, printed_strain = means(dat.stresses("EALL")) * MPA, means(dat.strains("EALL"))  # xx, yy, zz, xy, xz, yz
     strain = np.column_stack([printed_strain[:, 0], printed_strain[:, 1], 2 * printed_strain[:, 3]])
     stress = np.column_stack([printed_stress[:, 0], printed_stress[:, 2], printed_stress[:, 1], printed_stress[:, 3]])
+    return matched_results(model, strain, stress, float(seconds), equations, solver)
+
+
+def matched_results(model: SliceModel, strain: np.ndarray, stress: np.ndarray, seconds: float = 0.0, equations: int | None = None,
+                    solver: str | None = None, *, tolerance: float = MATCH_TOLERANCE, program: str = "CalculiX") -> SliceResults:
+    """A program's element means as the slice's results, refused when its stress is not the engine's stiffness times its own
+    strain within `tolerance` of the largest stress. `strain` and `stress` are in SI, one row for each element, as
+    `SliceResults` holds them."""
+    if strain.shape != (len(model.elements), 3) or stress.shape != (len(model.elements), 4) or not (np.isfinite(strain).all() and np.isfinite(stress).all()):
+        raise SliceModelError(f"{program} did not give every element's three strains and four stresses")
     ours = _stress_in_slice_axes(model, strain)
     off = float(np.max(np.abs(ours[:, [0, 1, 2, 4]] - stress))) / float(np.max(np.abs(stress)))
-    if not off < MATCH_TOLERANCE:
-        raise SliceModelError(f"CalculiX's stresses are not the engine's stiffness times its strains (off by {off:.2e} of the largest stress)")
+    if not off < tolerance:
+        raise SliceModelError(f"{program}'s stresses are not the engine's stiffness times its strains (off by {off:.2e} of the largest stress)")
     return SliceResults(strain, stress, float(seconds), equations, solver)
 
 
@@ -451,10 +484,12 @@ class SliceAnswer:
         return min(limits, key=lambda limit: limit[1]) if limits else None
 
 
-def slice_answer(model: SliceModel, results: SliceResults, criterion: str = "max_stress") -> SliceAnswer:
+def slice_answer(model: SliceModel, results: SliceResults, criterion: str = "max_stress", *,
+                 equilibrium_tolerance: float = EQUILIBRIUM_TOLERANCE) -> SliceAnswer:
     """Read the solved slice: the forces at every station, the bondline's stresses, the lap's boundaries beside the hand
     calculation, and every ply's weakest station by `criterion` ("max_stress" or "tsai_hill"). Refused when the forces do not
-    add up to the load or the far field is not the laminate theory's."""
+    add up to the load or the far field is not the laminate theory's. `equilibrium_tolerance` is wider only for results a
+    program printed to a few figures (`repair_files`)."""
     if criterion not in CHECKED_CRITERIA or criterion not in CRITERIA:
         raise SliceModelError(f"The plies of a slice are checked by one of {', '.join(CHECKED_CRITERIA)}, got {criterion!r}")
     repair, mesh, load = model.repair, model.mesh, model.load_n_per_m
@@ -470,7 +505,7 @@ def slice_answer(model: SliceModel, results: SliceResults, criterion: str = "max
 
     patch, laminate, adhesive = force("patch", "cover"), force("parent"), force("adhesive")
     equilibrium = float(np.max(np.abs(patch + laminate + adhesive - load))) / abs(load)
-    if not equilibrium < EQUILIBRIUM_TOLERANCE:
+    if not equilibrium < equilibrium_tolerance:
         raise SliceModelError(f"The forces along the load do not add up to the load at every station (off by {equilibrium:.2e} of it)")
     outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
     midway = int(np.argmin(np.abs(stations - (outer + repair.panel_length_m / 2) / 2)))

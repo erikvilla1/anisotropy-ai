@@ -98,7 +98,7 @@ def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
     # amendment 6: the solve of the slice (ADR-0132) added a section to each theory page; the finite element one names `repair_model.py`
     slice_sections = {s.id for s in repair if s.source == "fea"}
     assert {s.id for s in repair} - slice_sections == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair", "engine:18-the-repair-s-plies-as-solids"}
-    assert len(slice_sections) == 6 and all(name.startswith("fea:11-the-repair-s-slice-in-calculix") for name in slice_sections)
+    assert len(slice_sections) == 7 and all(name.startswith("fea:11-the-repair-s-slice-in-calculix") for name in slice_sections)
     assert set(repair) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
     for question in ("how come the 0 ply carries most of the load", "why does the adhesive's shear stress peak at the end of a step?"):
         assert all(s.subject == "" for s, _ in find(question, limit=10)), question
