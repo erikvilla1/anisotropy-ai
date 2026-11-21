@@ -33,6 +33,21 @@ async function openView(page: Page) {
   const menu = page.getByTestId("view-menu");
   if ((await menu.getAttribute("open")) === null) await menu.locator("summary").click();
 }
+/** The middle of the part of the window the floating panels leave clear, where the model is framed (ADR-0134 amendment 1); the canvas's
+ * own middle where the page has no canvas shell. */
+async function modelMiddle(page: Page): Promise<{ x: number; y: number }> {
+  const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+  const free = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>("[data-testid=workspace-shell]");
+    if (!shell) return null;
+    const style = getComputedStyle(shell);
+    const side = ["--free-l", "--free-r", "--free-t", "--free-b"].map((name) => parseFloat(style.getPropertyValue(name)));
+    return side.every(Number.isFinite) ? side : null;
+  });
+  if (!free) return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const [l, r, t, b] = free;
+  return { x: box.x + (l + box.width - r) / 2, y: box.y + (t + box.height - b) / 2 };
+}
 /** The details over the model, open: the full answer, its tables, the summary, the explanation and the files (ADR-0134). */
 async function openDetails(page: Page) {
   const toggle = page.getByTestId("details-toggle");
@@ -713,8 +728,8 @@ test.describe("the model tree", () => {
     // clicked on the model: the face is loaded from the click, and the Loads tab opens with its row to fill in
     await expect(page.getByTestId("preview")).toBeVisible();
     await expect(async () => { // the scene takes a click once it has drawn the new model
-      const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      const middle = await modelMiddle(page); // the model is framed in the part the panels leave clear, not the canvas's middle
+      await page.mouse.click(middle.x, middle.y);
       await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
     }).toPass({ timeout: 20_000 });
     await page.screenshot({ path: ".local/website/screenshots/model-tree-plate-click.png" });
@@ -1737,8 +1752,8 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   // an element clicked on the model is “here”: the page says which regions that is, and sends them with the next message
   await expect(page.getByTestId("chat-here")).toHaveCount(0);
   await expect(async () => { // the scene takes a click once it has drawn the new model: on a slow machine the first one can come too early
-    const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const middle = await modelMiddle(page); // the model is framed in the part the panels leave clear, not the canvas's middle
+    await page.mouse.click(middle.x, middle.y);
     await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId("chat-here")).toContainText("Face");
@@ -1806,12 +1821,13 @@ test("a plate with nothing held shows its shape, and the first hold is the edge 
   await expect(page.getByTestId("preview-shape")).toContainText("Nothing is held or loaded yet");
   expect(lives.at(-1)!.values.supports ?? []).toEqual([]);
   await expect(page.getByTestId("plate-words")).toHaveCount(0);
-  // an element on an edge is clicked: the canvas is walked up from its centre, towards the plate's far edges, until the page names an edge
+  // an element on an edge is clicked: the canvas is walked up from the model's middle, towards the plate's far edges, until the page names an edge
   const canvas = page.getByTestId("studio-scene").locator("canvas");
   let clicked = "";
   for (let step = 0; step < 60 && !clicked; step += 1) {
     const box = (await canvas.boundingBox())!; // read at every click: the line under the model moves the page
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - step * box.height / 130);
+    const middle = await modelMiddle(page);
+    await page.mouse.click(middle.x, middle.y - step * box.height / 130);
     await page.waitForTimeout(60);
     const picked = page.getByTestId("picked-regions");
     clicked = ((await picked.count()) ? await picked.innerText() : "").match(/Edge-(Bottom|Top|Left|Right)/)?.[0] ?? "";
