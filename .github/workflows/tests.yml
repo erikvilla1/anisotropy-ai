@@ -180,13 +180,13 @@ jobs:
           retention-days: 7
 
   other-browsers:
-    # The site's and the workspace's browser specs in Firefox and in WebKit, the engine of Safari and of every browser on an iPhone
-    # (ADR-0114); the jobs above run them in Chromium. The phone check is an iPhone in WebKit. One job per browser and per suite
-    # (ADR-0114 amendment 2), so the two suites run side by side instead of one after the other.
+    # The site's and the workspace's browser specs in WebKit, the engine of Safari and of every browser on an iPhone (ADR-0114); the jobs
+    # above run them in Chromium. The phone check is an iPhone in WebKit. One job per suite (ADR-0114 amendment 2), so the two suites
+    # run side by side. Firefox runs the same specs once a week on main instead, in firefox-weekly.yml (ADR-0114 amendment 3).
     strategy:
       fail-fast: false
       matrix:
-        browser: [firefox, webkit]
+        browser: [webkit]
         suite: [site, studio]
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -205,8 +205,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # On a virtual display: Firefox runs with its window, as without one it gives no WebGL (playwright.config.ts). WebKit needs none.
-      # The workspace's specs play the API from tests/fixtures/studio.
+      # On a virtual display, as in firefox-weekly.yml, where Firefox needs one for WebGL (playwright.config.ts); WebKit needs none, and
+      # the display keeps the step the same for both. The workspace's specs play the API from tests/fixtures/studio.
       - name: The ${{ matrix.suite }} specs
         run: xvfb-run -a npm run test:${{ matrix.suite }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
