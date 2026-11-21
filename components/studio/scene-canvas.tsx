@@ -9,6 +9,8 @@ import { HELD, LOADED, overlayColors, type Palette } from "@/lib/studio-colors";
 import { applyScale, fieldMaterial, NO_VALUE, type FieldScale } from "./field-material";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
+import { FitCamera } from "./fit-camera";
+import { Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
 
 /** A field on the plate (ADR-0063): the package's values, one per node (smooth) or per element (flat), and the scale that colours them. */
 export type SceneField = { by: "node" | "element"; values: (number | null)[]; scale: FieldScale };
@@ -151,23 +153,6 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, edgeCol
   );
 }
 
-/** Puts the camera at its home view, or straight above the model, each time `at` changes: the view buttons and a model of a new size
- * (ADR-0111 amendment 2). OrbitControls is the scene's default controls, so its target moves with the camera. */
-function CameraView({ at, view, centre, size }: { at: string; view: "home" | "top"; centre: readonly [number, number]; size: number }) {
-  const { camera, controls, invalidate } = useThree();
-  useEffect(() => {
-    const [x, y] = centre;
-    if (view === "top") camera.position.set(x, y, 2.6 * size);
-    else camera.position.set(x + 0.9 * size, y - 1.1 * size, 0.9 * size);
-    camera.up.set(0, 0, 1);
-    camera.lookAt(x, y, 0);
-    const orbit = controls as unknown as { target: THREE.Vector3; update(): void } | null;
-    if (orbit) { orbit.target.set(x, y, 0); orbit.update(); }
-    invalidate();
-  }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
-  return null;
-}
-
 /** A spacing of 1, 2 or 5 times a power of ten, about a twentieth of the model: the floor grid's cell. */
 function gridStep(size: number): number {
   const raw = size / 20;
@@ -216,6 +201,7 @@ export function SceneCanvas(props: SceneProps) {
   const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
     highlight = null, picked = null, wireframe = true, onPick, emphasis = null, palette = "classic" } = props;
   const triad = useRef<SVGSVGElement>(null);
+  const canvas = useCanvasSlots(); // in the FEA workspace's layout the model is framed clear of the panels, its tools in the View menu (ADR-0134 amendment 1)
   const overlay = overlayColors(field ? palette : "green"); // before a run the part is grey: the outlines of before
   const [focus, setFocus] = useState<string | null>(null); // the line of the list clicked: its region is drawn bolder
   const [hidden, setHidden] = useState<Layer[]>([]); // the layers switched off over the model
@@ -236,6 +222,11 @@ export function SceneCanvas(props: SceneProps) {
   const mode = field ? "results" : "presentation";
   // a model of another size or place is framed again; a finer mesh of the same plate is not
   const placed = [extent.min[0], extent.min[1], extent.size[0], extent.size[1]].map((v) => v.toPrecision(6)).join(",");
+  // the box the camera frames: the plate, with room for the supports' cones and the loads' arrows around and above it
+  const highest = useMemo(() => (heights ?? []).reduce((high, h) => (h > high ? h : high), 0), [heights]);
+  const pad = 0.035 * size;
+  const boxMin = [extent.min[0] - pad, extent.min[1] - pad, -thickness / 2 + lowest] as const;
+  const boxMax = [extent.min[0] + extent.size[0] + pad, extent.min[1] + extent.size[1] + pad, thickness / 2 + highest + 0.04 * size] as const;
   const shows = (layer: Layer) => !hidden.includes(layer);
   const toggle = (layer: Layer) => setHidden((h) => (h.includes(layer) ? h.filter((l) => l !== layer) : [...h, layer]));
   if (webgl === false) return <WebGLMissing />;
@@ -245,20 +236,33 @@ export function SceneCanvas(props: SceneProps) {
       <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""} data-emphasis={emphasis ?? ""}
         data-palette={field ? palette : ""} data-lit={field ? String(Boolean(field.scale.lit)) : ""}
         data-shown={(["mesh", "conditions", "loads"] as Layer[]).filter(shows).join(" ")} data-view={view.view}>
-      {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden */}
-      <div className="studio-view-tools" role="toolbar" aria-label="View">
-        <button type="button" onClick={() => setView((v) => ({ view: "home", n: v.n + 1 }))} data-testid="view-fit" title="Back to the whole model">Fit</button>
-        <button type="button" onClick={() => setView((v) => ({ view: "top", n: v.n + 1 }))} data-testid="view-top" title="Straight above the model">Top</button>
-        <span className="studio-view-sep" aria-hidden="true" />
-        {(["mesh", "conditions", "loads"] as Layer[]).map((layer) => (
-          <button key={layer} type="button" aria-pressed={shows(layer)} onClick={() => toggle(layer)} data-testid={`show-${layer}`}
-            title={`${shows(layer) ? "Hide" : "Show"} ${LAYER_WORDS[layer].toLowerCase()}`}>{LAYER_WORDS[layer]}</button>
-        ))}
-      </div>
+      {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden; in the FEA
+          workspace's layout they are in the card's View menu, with the supports and loads applied (ADR-0134 amendment 1) */}
+      <Slot name="look" here>
+        <div className="studio-view-tools" role="toolbar" aria-label="View">
+          {canvas ? <span>Look from</span> : null}
+          <span className="cv-seg">
+            <button type="button" aria-pressed={canvas ? view.view === "home" : undefined} onClick={() => setView((v) => ({ view: "home", n: v.n + 1 }))} data-testid="view-fit"
+              title="Back to the whole model">{canvas ? "Whole model" : "Fit"}</button>
+            <button type="button" aria-pressed={canvas ? view.view === "top" : undefined} onClick={() => setView((v) => ({ view: "top", n: v.n + 1 }))} data-testid="view-top"
+              title="Straight above the model">Top</button>
+          </span>
+          <span className="studio-view-sep" aria-hidden="true" />
+          {canvas ? <span>Show</span> : null}
+          <span className="cv-seg">
+            {(["mesh", "conditions", "loads"] as Layer[]).map((layer) => (
+              <button key={layer} type="button" aria-pressed={shows(layer)} onClick={() => toggle(layer)} data-testid={`show-${layer}`}
+                title={`${shows(layer) ? "Hide" : "Show"} ${LAYER_WORDS[layer].toLowerCase()}`}>{LAYER_WORDS[layer]}</button>
+            ))}
+          </span>
+        </div>
+        {canvas ? <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} /> : null}
+      </Slot>
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }}
         camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}
         onPointerMissed={() => onPick?.(null)}>
-        <color attach="background" args={["#0d0d0d"]} />
+        {/* in the workspace's layout the page's own ground shows through, lighter behind the model (ADR-0134 amendment 1) */}
+        {canvas ? null : <color attach="background" args={["#0d0d0d"]} />}
         {field ? null : <PresentationLighting size={size} centre={centre} floor={-thickness / 2 - 0.004 * size} />}
         <Floor centre={centre} size={size} z={floor} />
         <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe && shows("mesh")} edgeColor={overlay.edges} onPick={onPick} />
@@ -315,7 +319,7 @@ export function SceneCanvas(props: SceneProps) {
           <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color={overlay.picked} lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
-        <CameraView at={`${placed}|${view.view}|${view.n}`} view={view.view} centre={centre} size={size} />
+        <FitCamera at={`${placed}|${view.view}|${view.n}`} view={view.view} min={boxMin} max={boxMax} free={canvas?.free ?? null} />
         <TriadSync svg={triad} />
       </Canvas>
       {/* the axes as seen, in the view's lower left corner (ADR-0063 amendment 1) */}
@@ -328,7 +332,7 @@ export function SceneCanvas(props: SceneProps) {
         ))}
       </svg>
       </div>
-      <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} />
+      {canvas ? null : <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} />}
     </div>
   );
 }

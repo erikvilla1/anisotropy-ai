@@ -7,8 +7,10 @@ import { hexToRgb } from "@/lib/studio-colors";
  * Bands cut the ramp into equal steps of the legend, with an isoline drawn one pixel wide at every step boundary (`fwidth`, so the
  * line is as wide on a zoomed-out plate as on a zoomed-in one); 0 bands is the smooth ramp. A missing value is the named grey.
  * The side faces are darkened a little so the thickness reads; the top and bottom faces are the pure colour. The ramp has up to nine
- * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on, a light
- * from the viewer's side shades every face from 0.6 to 1 of its colour: a picture of the part, no longer one colour per value.
+ * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on (the default
+ * since ADR-0063 amendment 2, the look of the mockup the founder chose) a key light up and to the left of the camera, moving with it, a
+ * weaker fill from the right and a little shine shade every face: a face turned to the viewer keeps about its colour, a side turned away
+ * falls to half of it, so the part reads as a solid. Lighting off is the exact colours: a colour on the plate is the legend's.
  */
 
 /** The float written where the package wrote no value (a node no element touches): any real value is above it. */
@@ -56,12 +58,17 @@ const fragmentShader = /* glsl */ `
   void main() {
     float flatFace = step(0.5, abs(vNormal.z));
     float shade = mix(0.78, 1.0, flatFace);
+    float shine = 0.0;
     if (uLit > 0.5) {
+      // in the camera's frame: x right, y up, z toward the viewer; the lights ride with the camera, so every view is lit alike
       vec3 n = normalize(gl_FrontFacing ? vViewNormal : -vViewNormal);
-      shade = 0.6 + 0.4 * max(dot(n, normalize(vec3(0.35, 0.5, 1.0))), 0.0);
+      vec3 key = normalize(vec3(-0.42, 0.62, 0.72));
+      vec3 fill = normalize(vec3(0.7, -0.25, 0.65));
+      shade = 0.55 + 0.5 * max(dot(n, key), 0.0) + 0.12 * max(dot(n, fill), 0.0);
+      shine = 0.08 * pow(max(dot(n, normalize(key + vec3(0.0, 0.0, 1.0))), 0.0), 38.0);
     }
     if (vValue < -1.0e29) {
-      gl_FragColor = vec4(uMissing * shade, 1.0);
+      gl_FragColor = vec4(uMissing * shade + shine, 1.0);
       return;
     }
     float t = clamp((vValue - uMin) / max(uMax - uMin, 1.0e-30), 0.0, 1.0);
@@ -81,7 +88,7 @@ const fragmentShader = /* glsl */ `
     } else {
       color = rampAt(t);
     }
-    gl_FragColor = vec4(color * shade, 1.0);
+    gl_FragColor = vec4(color * shade + shine, 1.0);
   }`;
 
 export type FieldScale = { min: number; max: number; stops: string[]; bands: number; /** a light from the viewer's side (ADR-0063 amendment 1) */ lit?: boolean };

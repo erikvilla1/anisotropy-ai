@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import test from "node:test";
-import { MOVED_ADDRESSES, headerLinksToProjects, isAppPath } from "../lib/site-nav";
+import { MOVED_ADDRESSES, headerLinksToProjects, isAppPath, isCanvasPath } from "../lib/site-nav";
 import { bannedIn } from "../lib/studio-copy";
 import { MOVED_PAGES } from "../worker/routing";
 
@@ -92,6 +92,9 @@ test("the app's addresses get the workspace's header, and only the pages without
   assert.deepEqual([...MOVED_ADDRESSES].sort(), Object.keys(MOVED_PAGES).sort(), "the shell's old addresses are the Worker's");
   for (const path of ["/workspace/fea/view", "/workspace/fea/view/"]) assert.ok(headerLinksToProjects(path), path);
   for (const path of ["/workspace", "/workspace/", "/workspace/fea", "/workspace/laminate", "/workspace/cad", "/workspace/wing", "/chat", "/about"]) assert.ok(!headerLinksToProjects(path), path);
+  // the pages in layout D draw no header: a floating logo leads back to the projects (ADR-0134 amendment 1)
+  for (const path of ["/workspace/fea", "/workspace/fea/", "/workspace/wing"]) assert.ok(isCanvasPath(path) && isAppPath(path), path);
+  for (const path of ["/workspace", "/workspace/fea/view", "/workspace/laminate", "/workspace/cad", "/chat", "/studio", "/"]) assert.ok(!isCanvasPath(path), path);
 });
 
 test("↗ marks only a link that opens a new tab and says so, in the shell, the library's property table and a job's files", () => {

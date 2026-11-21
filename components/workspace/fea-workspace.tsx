@@ -17,7 +17,9 @@ import { goTo } from "./go-to";
 import { ImportRail } from "./import-rail";
 import { PastRail } from "./past-rail";
 import { TensionScreen } from "./tension-screen";
-import { CanvasShell } from "./canvas-shell";
+import { CanvasShell, type Stage } from "./canvas-shell";
+import { isActive } from "@/lib/studio-api";
+import { shownResults } from "@/components/studio/use-coupon-run";
 import { MODEL_TREE } from "@/lib/model-tree";
 
 /** The FEA section (ADR-0062, ADR-0124) in layout D (ADR-0134): the model tree in a flyout from an icon rail on the left, the sketch, the
@@ -49,6 +51,7 @@ function FeaColumns({ apiBaseUrl, onSwitch }: { apiBaseUrl: string; onSwitch: (t
       results={Boolean(run.fields) && !imported.open && !past.open}
       blankTabs={blank ? MODEL_TREE.map((t) => ({ id: t.id, title: t.title })) : []}
       status={<ProjectStatus blank={blank} />}
+      stages={blank || imported.open || past.open ? [] : stagesOf(run)}
       kind={project.analysis === "none" ? workspace("fea").title : `${workspace("fea").title} · ${feaKind(project.analysis).title}`}
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
       // a model brought in as a file has the left and the centre while it is open (ADR-0105); the coupon's rows wait behind it
@@ -62,6 +65,18 @@ function FeaColumns({ apiBaseUrl, onSwitch }: { apiBaseUrl: string; onSwitch: (t
       assistant={blank ? <FeaStartChat /> : <CouponChat apiBaseUrl={apiBaseUrl} onSwitch={onSwitch} />}
     />
   );
+}
+
+/** The coupon's four stages under its name in the card (ADR-0134 amendment 1): set up once its check passes, meshed once the package has
+ * drawn its mesh, solved once a run's results are in, its results once any are shown (a preview's too). */
+function stagesOf(run: ReturnType<typeof useProject>["run"]): Stage[] {
+  const shown = shownResults(run).fields !== null;
+  return [
+    { label: "Set up", state: run.fields || run.checked?.state === "ready" ? "done" : "now" },
+    { label: "Mesh", state: run.fields || run.checked?.preview ? "done" : "todo" },
+    { label: "Solve", state: run.fields ? "done" : isActive(run.job?.state) ? "now" : "todo" },
+    { label: "Results", state: shown ? "done" : "todo" },
+  ];
 }
 
 /** What the project is at, under its name in the results card (ADR-0134): the next step before a run; the run's own steps take over once

@@ -49,6 +49,15 @@ export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/stud
  * since ADR-0134) and the viewer a solved coupon opens in. */
 const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), WING_HREF, `${WORKSPACE_ROOT}/fea/view`];
 
+/** The pages in layout D (ADR-0134 amendment 1): the FEA section and the wing's page. They have no header: the model takes the whole
+ * window, under a floating logo that leads back to the projects. */
+const CANVAS_PAGES: readonly string[] = [`${WORKSPACE_ROOT}/fea`, WING_HREF];
+
+/** True on a page in layout D, which draws no header (ADR-0134 amendment 1). */
+export function isCanvasPath(pathname: string): boolean {
+  return CANVAS_PAGES.includes(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
+}
+
 /** The app's addresses: the workspace's pages, and the four old addresses that move to it. They get the workspace's own header and no
  * footer. Any other path under `/workspace`, `/chat` or `/studio` is the 404 page, which keeps the site's header it was built with.
  * `/workspace/cad` is a section's page again (ADR-0124). */

@@ -60,6 +60,7 @@
 .studio-view-tools button[aria-pressed="true"] { color: #efefef; border-color: #6a6a6a; background: rgba(48, 48, 48, 0.9); }
 .studio-view-tools button[aria-pressed="false"] { text-decoration: line-through; color: #8a8a8a; }
 .studio-view-sep { width: 1px; background: #383838; margin: 2px 2px; }
+.studio-view-tools > .cv-seg { display: contents; } /* its buttons' groups, rows of their own in the workspace's View menu (ADR-0134 amendment 1) */
 /* "Download model" over the model (ADR-0129): a small menu of the files offered */
 .studio-model-tools { position: relative; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 12px; font-weight: 400; letter-spacing: 0; }
 .studio-viewer-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }

@@ -254,10 +254,10 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveAttribute("href", /\/files\/reference_results\?name=/); // by a neutral name
   await expect(page.getByTestId("downloads")).toHaveCount(0); // not twice: the centre leaves the files to the left column
   await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await openView(page); // the field and the ply are chosen in the View menu (ADR-0134 amendment 1)
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
   await page.getByLabel("Ply", { exact: true }).selectOption("3");
   await expect(page.getByTestId("legend")).toContainText("Ply stress σ₂ (ply 3, -45°)");
-  await openView(page);
   await page.getByLabel("Shown as", { exact: true }).selectOption("element");
   await expect(page.getByTestId("legend")).toContainText("element values");
   await expect(page.getByTestId("studio-scene").locator("canvas")).toHaveAttribute("data-kept", "yes"); // the field switch uploads values; the mesh and the canvas stay
@@ -279,6 +279,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("Tresca");
   await expect(probe).toContainText("S13 and S23 are not modelled (membrane state)");
   await expect(probe.getByTestId("probe-csv")).toHaveAttribute("download", /^probe-element-\d+\.csv$/);
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("tresca");
   await expect(page.getByLabel("Shown as", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -308,9 +309,10 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   expect(sent.span).toBe(48);
   expect(sent.tab_length).toBeUndefined(); // the hidden rows are not sent
   expect(sent.grips).toBeUndefined();
-  await expect(page.getByTestId("preview")).toContainText("Left support: held along z"); // the sets in words (audit fea-run-16)
-  await expect(page.getByTestId("preview")).toContainText("Left pin: held along x, y");
-  await expect(page.getByTestId("preview")).not.toContainText("Pin-Left");
+  const applied = page.getByTestId("applied"); // the list of what is applied is in the View menu (ADR-0134 amendment 1)
+  await expect(applied).toContainText("Left support: held along z"); // the sets in words (audit fea-run-16)
+  await expect(applied).toContainText("Left pin: held along x, y");
+  await expect(applied).not.toContainText("Pin-Left");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed twice on CI runners that ran every test of this file at half speed
@@ -320,6 +322,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
   await expect(page.getByTestId("answer")).toHaveAttribute("data-basis", "whole"); // no gauge section: the whole model answers (ADR-0085)
   await expect(page.getByTestId("answer-table")).toContainText("bottom face");
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (mm)");
   await page.getByLabel("Field", { exact: true }).selectOption("S11");
@@ -358,12 +361,13 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   expect(sent.loads).toEqual([{ region: "Face", pressure: -0.01 }]);
   expect(sent.control).toBeUndefined();
   expect(sent.grips).toBeUndefined();
-  await expect(page.getByTestId("preview")).toContainText("pressure");
+  await expect(page.getByTestId("applied")).toContainText("pressure"); // in the View menu's list of what is applied (ADR-0134 amendment 1)
   await expect(page.getByTestId("preview-card")).toContainText("Click an element to hold or load");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed on a CI runner that ran every test of this file at half speed (10.2 min for the suite), as for the bending coupon above
   await expect(page.getByTestId("summary-reaction")).toContainText("holding the plate down");
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (mm)");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -617,13 +621,15 @@ test.describe("the model tree", () => {
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Ply shown", { exact: true }).selectOption("2");
     await expect(viewer.getByLabel("Ply", { exact: true })).toHaveValue("2");
+    await openView(page); // the viewer's own controls are in the View menu under the legend (ADR-0134 amendment 1)
     await viewer.getByLabel("Field", { exact: true }).selectOption("u_mag");
     await expect(tree.locator("button[data-field=u_mag]")).toHaveAttribute("aria-pressed", "true");
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "false");
     await tree.locator("button[data-field=S11]").click();
     await page.screenshot({ path: ".local/website/screenshots/model-tree-after-run.png" });
-    // the model's own view buttons: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
+    // the model's own view buttons, in the View menu: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
     await expect(scene).toHaveAttribute("data-shown", "mesh conditions loads");
+    await openView(page);
     await page.getByTestId("show-conditions").click();
     await expect(scene).toHaveAttribute("data-shown", "mesh loads");
     await expect(page.getByTestId("show-conditions")).toHaveAttribute("aria-pressed", "false");
@@ -1845,13 +1851,15 @@ test("what is applied is drawn and listed under the model before and after a run
   await say("what is a BC?");
   await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "boundary-condition");
   await expect(page.getByTestId("chat-term").last()).toContainText("Holds part of the model still");
-  // under the model: each boundary condition with what it holds, the load, and the model they act on
+  // in the View menu: each boundary condition with what it holds, the load, and the model they act on (ADR-0134 amendment 1)
   const applied = page.getByTestId("applied");
   await expect(applied.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
   await expect(applied.getByTestId("applied-conditions")).toContainText("Top grip: free to move along the coupon only");
   await expect(applied.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
   await expect(applied.getByTestId("applied-about")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the canvas's clipped box
+  await openView(page);
+  await applied.scrollIntoViewIfNeeded();
+  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the menu's own scroll
   const bottom = applied.getByRole("button", { name: "Bottom grip: fixed (encastre)" });
   await bottom.click();
   await expect(bottom).toHaveAttribute("aria-pressed", "true"); // its set is framed on the model

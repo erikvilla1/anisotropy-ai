@@ -1,6 +1,6 @@
 # ADR-0063: The viewer colours fields on the graphics card from the package's values and ranges, unlit for results, and lights the model for presentation without external assets
 
-- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1
+- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1; results lit by default with a key light that moves with the view, Lighting off for the exact colours, and a Thickness ×2.4 choice, amendment 2
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-06 ("what do you think about this, is this good to add? A 'presentation' lighting mode", drei's Environment, ContactShadows, a clearcoat MeshPhysicalMaterial; "Colour the stresses on the graphics card"; "A small shader could take the raw values and draw smooth or banded contours with crisp isolines"; "Results mode should stay mostly unlit so the shading never skews the colours"; then "lets do it no mistakes" for this part) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (part 4); `fea/src/anisotropy_fea/fields.py`, `components/studio/field-material.ts`, `components/studio/scene-lighting.tsx`, `components/studio/scene-canvas.tsx`, `lib/studio-colors.ts`, `lib/studio-fields.ts`; risk R-20
@@ -72,3 +72,33 @@ Easier: a colour on the plate is the legend's colour for that value; the legend'
 - **Unchanged.** The package writes the ranges, the legend's ends are its ends, the contours default to 8 bands with an isoline at each boundary, and the presentation mode before a run.
 
 **Evidence.** The founder's words above. Scale tests in `tests/studio-colors.test.ts`. Screenshots are named in the As built of [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md). No evidence yet that the rainbow is read correctly by an engineer with red-green colour blindness; Spectrum, Green and the legend's numbers are the way around it.
+
+## Amendment 2, 2026-11-21 (results lit by default, the exact colours one tap away, and a Thickness ×2.4 choice; decided by the founder)
+
+**Context.**
+- Amendment 1 kept results unlit by default. Its light was a weak one from the viewer's side, and the lit and unlit pictures of the built page hardly differed (`/mnt/project-files/workspace-design/build/lit/`).
+- The mockup the founder chose ([ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md)) draws results lit, with a key light, a fill and a little shine. It also draws the plate 2.4 times as thick as it is.
+- On 2026-11-21 he said the live page "doesn't look like how we planned it". A plan offered four choices on a card (https://claude.ai/artifact/S4tPFkM7J9Nery2cjtaP1a). Two of them were:
+  - lit by default with the mockup's light, with exact colours one tap away;
+  - the true thickness by default, with a choice that draws it 2.4 times as thick and says so on screen.
+- He chose "Go with the recommendations".
+
+**Options.**
+1. *Unlit by default, as amendment 1.* Rejected by the founder: the model reads flat.
+2. *Lit by default with the mockup's light, and Lighting off for the exact colours.* Chosen.
+3. *The mockup's 2.4 times thickness by default.* Rejected: a drawing that is not to scale by default misleads. It is a choice instead.
+
+**Decision.**
+- **Lit by default.** Results are lit when the page opens, with lights fixed to the camera, so every view is lit alike:
+  - a key light up and to the left of the camera;
+  - a weaker fill from the right;
+  - a small highlight.
+- **How much it shades.** A face turned to the viewer keeps about its colour. A side turned away falls to about half of it.
+- **Lighting off.** View, Lighting, off, draws every colour exactly as the legend's. The menu says so under the switch ("Off: every colour is exactly the legend's."), and the legend's full sentence for a screen reader says the shading changes the colours while it is on.
+- **Thickness ×2.4.** A choice in View, off by default. It draws the plate's thickness 2.4 times as large. While it is on, the legend's line says "thickness ×2.4", and the menu says it draws the plate thicker than it is.
+- **Unchanged.** The package's values and ranges, the legend's ends, the bands and the isolines, and the presentation mode before a run.
+
+**As built (2026-11-21).** `components/studio/field-material.ts` (the lit branch of the fragment shader), `components/studio/results-view.tsx` (`lit` true by default, `thick` and `THICKNESS_SHOWN`, the hints in the View menu, the note on the legend). The switches are not remembered between visits.
+
+**Evidence.** The founder's choice above. Screenshots of the lit default beside the mockup in `/mnt/project-files/workspace-design/build/compare/v2-*.png`. No evidence yet that an engineer misreads a lit colour; Lighting off is the way to read a value by colour alone.
+
