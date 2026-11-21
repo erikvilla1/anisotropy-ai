@@ -1,5 +1,5 @@
 import { serviceHref, services } from "./services";
-import { WING_HREF, WORKSPACE_ROOT, WORKSPACES } from "./workspaces";
+import { REPAIR_HREF, WING_HREF, WORKSPACE_ROOT, WORKSPACES } from "./workspaces";
 
 /** The site's pages in the order of the audit of 2026-10-31 (ADR-0058). Calculator and Studio left the navigation: the
  * calculator has its own page and the studio is reached from the finite element page. The materials library's link reads
@@ -47,11 +47,11 @@ export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/stud
 
 /** The workspace's own pages: the projects, one page per workspace, the wing's page of the FEA section (ADR-0118 amendment 1, in layout D
  * since ADR-0134) and the viewer a solved coupon opens in. */
-const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), WING_HREF, `${WORKSPACE_ROOT}/fea/view`];
+const APP_PAGES: readonly string[] = [WORKSPACE_ROOT, ...WORKSPACES.map((w) => w.href), WING_HREF, REPAIR_HREF, `${REPAIR_HREF}/report`, `${WORKSPACE_ROOT}/fea/view`];
 
-/** The pages in layout D (ADR-0134 amendment 1): the FEA section and the wing's page. They have no header: the model takes the whole
- * window, under a floating logo that leads back to the projects. */
-const CANVAS_PAGES: readonly string[] = [`${WORKSPACE_ROOT}/fea`, WING_HREF];
+/** The pages in layout D (ADR-0134 amendment 1): the FEA section, the wing's page and the repair's page. They have no header: the model
+ * takes the whole window, under a floating logo that leads back to the projects. The repair's report is a page for paper and keeps it. */
+const CANVAS_PAGES: readonly string[] = [`${WORKSPACE_ROOT}/fea`, WING_HREF, REPAIR_HREF];
 
 /** True on a page in layout D, which draws no header (ADR-0134 amendment 1). */
 export function isCanvasPath(pathname: string): boolean {
@@ -67,11 +67,11 @@ export function isAppPath(pathname: string): boolean {
 }
 
 /** True where the workspace's header links back to the projects: a workspace page without a toolbar of its own, the viewer. The
- * workspaces' toolbars and the wing's card carry "All projects" already (components/workspace/shell.tsx, canvas-shell.tsx), and
+ * workspaces' toolbars and the wing's and the repair's cards carry "All projects" already (components/workspace/shell.tsx, canvas-shell.tsx), and
  * `/workspace` is the projects. */
 export function headerLinksToProjects(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "");
-  return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && path !== WING_HREF && !WORKSPACES.some((w) => w.href === path);
+  return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && path !== WING_HREF && path !== REPAIR_HREF && !WORKSPACES.some((w) => w.href === path);
 }
 
 /** The company's pages elsewhere, shown in the footer under the tagline (ADR-0077 amendment 60): LinkedIn and X, in that

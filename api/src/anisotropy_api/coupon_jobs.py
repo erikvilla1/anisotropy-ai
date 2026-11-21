@@ -195,6 +195,20 @@ def wing_check_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "--extra", "mesh", "python", "-m", "anisotropy_fea.wing_check"]
 
 
+def repair_model_command() -> list[str] | None:
+    """`uv run --project fea python -m anisotropy_fea.repair_model`, the solve of a repair's slice in CalculiX (ADR-0132, ADR-0135);
+    None when uv is not on PATH. It needs no Gmsh: the slice's mesh is the engine's rectangles cut into rows and columns."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_model"]
+
+
+def repair_shape_command() -> list[str] | None:
+    """`uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape`, a repair's STEP file and the table of its solids
+    (ADR-0131, ADR-0135); None when uv is not on PATH."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "--extra", "mesh", "python", "-m", "anisotropy_fea.repair_shape"]
+
+
 def is_wing(job: "Job") -> bool:
     """Whether a job is a wing's finite element check (ADR-0119), as its row's inputs say."""
     return (job.inputs or {}).get("kind") == WING

@@ -3,21 +3,22 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  Anchor, ArrowDownToLine, Box, ChartColumn, Check, ClipboardCheck, FlaskConical, Footprints, Grid3x3, History, House, Layers, ListTree, MessagesSquare,
-  PanelRightClose, Plane, Play, Ruler, Shapes, SlidersHorizontal, SquareDashed, Tag, Wind, X,
+  Anchor, ArrowDownToLine, Bandage, Blend, Box, ChartColumn, Check, CircleDashed, ClipboardCheck, Droplet, FileText, FlaskConical, Footprints, Grid3x3,
+  History, House, Layers, ListTree, MessagesSquare, PanelRightClose, PanelTop, Plane, Play, Ruler, Shapes, SlidersHorizontal, SquareDashed, Tag, Wind, X,
 } from "lucide-react";
 import { WORKSPACE_ROOT } from "@/lib/workspaces";
 import { CanvasSlotsProvider, type CanvasSlots, type FreeArea, type SlotName } from "./canvas-slots";
 import { PANEL_EVENT } from "./panels/step-panel";
 
-/** The icon of each tab of a model tree on the icon rail (ADR-0111 amendment 3), by its id without the wing's `wing-` prefix; a tab not
- * listed takes the plain square. */
+/** The icon of each tab of a model tree on the icon rail (ADR-0111 amendment 3), by its id without the wing's `wing-` or the repair's
+ * `repair-` prefix; a tab not listed takes the plain square. */
 const TAB_ICONS: Record<string, ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = {
   test: FlaskConical, project: Tag, geometry: Ruler, material: Shapes, layup: Layers, step: Footprints, conditions: Anchor, loads: ArrowDownToLine,
   mesh: Grid3x3, validate: ClipboardCheck, run: Play, solve: Play, outputs: ChartColumn, results: ChartColumn, history: History, advanced: SlidersHorizontal,
   wing: Plane, aero: Wind, supports: Anchor, fe: Grid3x3, shape: Box,
+  repair: Bandage, laminate: Layers, damage: CircleDashed, patch: Blend, cover: PanelTop, adhesive: Droplet, report: FileText,
 };
-const iconOf = (id: string) => TAB_ICONS[id] ?? TAB_ICONS[id.replace(/^wing-/, "")] ?? SquareDashed;
+const iconOf = (id: string) => TAB_ICONS[id] ?? TAB_ICONS[id.replace(/^(wing|repair)-/, "")] ?? SquareDashed;
 
 export type TreeTab = { id: string; title: string; state?: string };
 /** One of the project's stages under its name in the card (ADR-0134 amendment 1): Set up, Mesh, Solve, Results, each done, under way or

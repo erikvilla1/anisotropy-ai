@@ -2,6 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
+import type { RepairAnswer, RepairDescription, RepairShape, RepairSolve } from "./repair";
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
@@ -668,6 +669,40 @@ export async function shapeWing(apiBaseUrl: string, request: { wing: WingDescrip
     throw unreadable("the wing's shape: not a shape");
   }
   return payload as unknown as WingShape;
+}
+
+/** The repair page's hand calculation (ADR-0135): the description as it stands, or a repair file's text; the engine reads it and answers
+ * with what it works out to, what the page draws and what a solve of the slice still needs. A refusal names the value that is wrong. */
+export async function analyzeRepair(apiBaseUrl: string, request: { repair: RepairDescription } | { toml: string }, signal?: AbortSignal): Promise<RepairAnswer> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/analyze`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the repair calculation");
+  if (!isObject(payload) || !isObject(payload.repair) || !isObject(payload.report) || !isObject(payload.views) || !Array.isArray(payload.needs)
+    || !Array.isArray(payload.report.regions) || !isObject(payload.report.lap) || !Array.isArray(payload.report.lap.steps) || !Array.isArray(payload.views.boundaries)) {
+    throw unreadable("the repair calculation: not a repair's answer");
+  }
+  return payload as unknown as RepairAnswer;
+}
+
+/** A repair's slice solved in CalculiX (ADR-0132, ADR-0135): a few seconds, waited for. The engine reads the description first, so a
+ * repair the calculation refuses is refused here in the same words; a solve that lacks a value, or that the solver's checks refuse,
+ * says so. */
+export async function solveRepair(apiBaseUrl: string, repair: RepairDescription, cutFaces: "open" | "bonded" = "open", signal?: AbortSignal): Promise<RepairSolve> {
+  const body = JSON.stringify({ repair, cut_faces: cutFaces });
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/solve`, { method: "POST", headers, body, signal }, "the solve of the slice");
+  const report = isObject(payload) ? payload.report : null;
+  if (!isObject(payload) || typeof payload.headline !== "string" || !isObject(report) || !isObject(report.bond) || !Array.isArray(report.bond.lines)
+    || !isObject(report.model) || !isObject(report.checks) || !isObject(report.forces) || !Array.isArray(report.boundaries) || !Array.isArray(report.plies)) {
+    throw unreadable("the solve of the slice: not a solved slice");
+  }
+  return payload as unknown as RepairSolve;
+}
+
+/** A repair's solids for a CAD program (ADR-0131, ADR-0135): its STEP file's text and the table of the solids. */
+export async function shapeRepair(apiBaseUrl: string, repair: RepairDescription, signal?: AbortSignal): Promise<RepairShape> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/shape`, { method: "POST", headers, body: JSON.stringify({ repair }), signal }, "the repair's shape");
+  if (!isObject(payload) || typeof payload.step !== "string" || !isObject(payload.parts) || !Array.isArray(payload.parts.parts)) {
+    throw unreadable("the repair's shape: not a shape");
+  }
+  return payload as unknown as RepairShape;
 }
 
 /** A change of plies previewed on the wing as it stands (ADR-0128): the engine makes it on a copy and works both, and nothing is kept.

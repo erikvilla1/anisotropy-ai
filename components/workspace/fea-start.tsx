@@ -9,8 +9,8 @@ import { answerGeneral, StudioError, type GeneralAnswer } from "@/lib/studio-api
 import { generalLines } from "@/lib/result-why";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
-import { routeStart, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
-import { FEA_KINDS, feaKind, type FeaKind } from "@/lib/workspaces";
+import { readRepair, routeStart, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
+import { ASKED_KINDS, FEA_KINDS, feaKind, REPAIR_HREF, type FeaKind } from "@/lib/workspaces";
 import { tabStorage, useProject } from "@/components/studio/project-context";
 import { goTo } from "./go-to";
 
@@ -19,12 +19,14 @@ const couponReads = (text: string): boolean => applyMessage({ ...blankForm(), da
 
 /** Sets the open FEA project up for a kind of work in place (ADR-0124): its name and history stay, the kind's own chat takes over with
  * the message that set it up at its head, and the message itself when it says more than the kind. A wing is a project of its own kind
- * (ADR-0122): it opens on its own page under FEA, this blank project left as it was (ADR-0118 amendment 1). */
+ * (ADR-0122): it opens on its own page under FEA, this blank project left as it was (ADR-0118 amendment 1). A patch repair opens on
+ * its own page too, with the repair this browser holds or the example (ADR-0135). */
 function useSetUp() {
   const { setAnalysis } = useProject();
   const router = useRouter();
   return useCallback((kind: FeaKind["id"], said: string) => {
     if (kind === "wing") { goTo("wing", {}, router.push); return; }
+    if (kind === "repair") { router.push(REPAIR_HREF); return; }
     putHandoff(tabStorage(), { setUp: said, prompt: saysMore(said, couponReads) ? said : "" });
     setAnalysis(kind);
   }, [setAnalysis, router]);
@@ -112,7 +114,13 @@ export function FeaStartChat() {
         <div className="chat-chips">{offer("coupon")}{offer("wing")}</div></> });
   }
 
+  /** The repair's page, offered under an answer to a question that names a patch repair: it has no chat to answer it yet (ADR-0135). */
+  const offerRepair = () => (
+    <button type="button" key="repair" data-testid="fea-start-offer" data-target="repair" onClick={() => setUp("repair", feaKind("repair").title)}><Plus size={14} /> Open {feaKind("repair").title}</button>
+  );
+
   async function ask(text: string, named: WorkTarget | null) {
+    const repair = readRepair(text) === "about";
     if (!apiBaseUrl) {
       add({ role: "assistant", title: "Answers are not available on this page", testId: "fea-start-answer",
         body: <><p>Questions are answered by the analysis service, which this page cannot reach. You can still set up a model.</p>
@@ -122,7 +130,7 @@ export function FeaStartChat() {
     setAsking(true); busy.current = true;
     let answer: GeneralAnswer | null = null;
     let failed = "";
-    try { answer = await answerGeneral(apiBaseUrl, text, FEA_KINDS.map((k) => k.id)); }
+    try { answer = await answerGeneral(apiBaseUrl, text, [...ASKED_KINDS]); }
     catch (error) { failed = error instanceof StudioError ? error.message : "Try again."; }
     finally { setAsking(false); busy.current = false; }
     if (!answer) {
@@ -137,7 +145,7 @@ export function FeaStartChat() {
         {prose.length ? prose.map((line, i) => <p key={i}>{line}</p>)
           : sources.length ? <p>Our theory pages hold this. Read:</p> : <p>Our theory pages do not cover that yet.</p>}
         {sources.length ? <ul className="chat-understood" data-testid="fea-start-sources">{sources.map((s) => <li key={s}>{s}</li>)}</ul> : null}
-        {offered ? <div className="chat-chips">{offer(offered)}</div> : null}
+        {offered || repair ? <div className="chat-chips">{offered ? offer(offered) : null}{repair ? offerRepair() : null}</div> : null}
       </div>
     ) });
   }

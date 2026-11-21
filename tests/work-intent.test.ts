@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readIntent, saysMore, sectionOf, TARGET_TITLES } from "../lib/work-intent";
+import { readIntent, readRepair, routeStart, saysMore, sectionOf, TARGET_TITLES } from "../lib/work-intent";
 import { HANDOFF_KEY, putHandoff, takeHandoff } from "../lib/handoff";
-import { COUPON_HREF, FEA_KINDS, WORKSPACES, workspace } from "../lib/workspaces";
+import { ASKED_KINDS, COUPON_HREF, FEA_KINDS, WORKSPACES, workspace } from "../lib/workspaces";
 
 // ADR-0124: what a message asks to work on, read by fixed words the same way on the start screen and in every section's chat
 
@@ -10,8 +10,9 @@ test("the workspace has three sections, FEA, CAD and Laminate, in that order, an
   assert.deepEqual(WORKSPACES.map((w) => w.title), ["FEA", "CAD", "Laminate"]);
   assert.deepEqual(WORKSPACES.map((w) => w.href), ["/workspace/fea", "/workspace/cad", "/workspace/laminate"]);
   assert.equal(workspace("cad").planned, true);
-  assert.deepEqual(FEA_KINDS.map((k) => k.id), ["coupon", "wing"]); // the wing on its own page under FEA (ADR-0118 amendment 1)
-  assert.deepEqual(FEA_KINDS.map((k) => k.href), [undefined, "/workspace/wing"]);
+  assert.deepEqual(FEA_KINDS.map((k) => k.id), ["coupon", "wing", "repair"]); // the wing and the repair on their own pages under FEA (ADR-0118 amendment 1, ADR-0135)
+  assert.deepEqual(FEA_KINDS.map((k) => k.href), [undefined, "/workspace/wing", "/workspace/repair"]);
+  assert.deepEqual(ASKED_KINDS, ["coupon", "wing"]); // a model is offered only the kinds whose page it has been taught
   assert.equal(COUPON_HREF, "/workspace/fea?for=coupon");
 });
 
@@ -74,4 +75,19 @@ test("words a coupon's own chat uses about its setup ask for no other section", 
     const read = readIntent(text);
     assert.ok(!read || read.target === "coupon" || !read.start, text);
   }
+});
+
+test("a patch repair is asked for by its own words, first: a statement starts it, a question only names it (ADR-0135)", () => {
+  for (const text of ["step patch repair", "I need to analyse a bonded patch repair", "a bonded repair over an open hole", "set up a scarf repair", "repair",
+    "Patch repair", "scraf repair", "can you start a stepped patch?", "a step-lap joint in IM7/8552", "external patch on a 25 mm hole"]) {
+    assert.equal(readRepair(text), "start", text);
+    assert.deepEqual(routeStart(text), { route: "set-up", kind: "repair" }, text);
+  }
+  for (const text of ["what is a scarf repair?", "how is a bonded repair analysed?", "why does a stepped patch peel at its edge"]) {
+    assert.equal(readRepair(text), "about", text);
+    assert.equal(routeStart(text).route, "general", text);
+  }
+  // words that are not a repair's: a coupon, a question about repairing something else, a patch of a mesh
+  for (const text of ["I want to test some coupons", "an open-hole coupon", "how do I repair a failed run?", "refine the mesh in a patch near the hole", ""]) assert.equal(readRepair(text), null, text);
+  assert.deepEqual(routeStart("an open-hole coupon"), { route: "set-up", kind: "coupon" });
 });

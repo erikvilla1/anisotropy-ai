@@ -32,6 +32,22 @@ const ASKS_FOR = /\b(can you|could you|can we|can i|please|help me|set (it )?up|
 
 const words = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
 
+/** A stepped patch repair's own words (ADR-0135): a patch, bonded, scarf or step-lap repair, a repair patch, a stepped or scarf patch,
+ * a step-lap or scarf joint. Read at the FEA start and on the start screen only: the repair has a page and no chat yet, so the other
+ * sections' chats and the model are not taught the word until its chat is built. */
+const REPAIR = /\b((patch|bonded|scarf|flush|external|step(ped)?([- ]lap)?) repairs?|repair patch(es)?|(bonded|stepped|step|scarf|external) patch(es)?|step(ped)?[- ]lap( joints?)?|scarf joints?)\b/i;
+
+/** Whether a message asks to work on a patch repair ("start"), only asks about one ("about"), or names none (null): the same rule as
+ * `readIntent`'s, a statement naming the work asks for it and a question does not unless it asks for the work itself. "Repair" said
+ * alone or nearly so is a pick. */
+export function readRepair(text: string): "start" | "about" | null {
+  const said = text.trim();
+  if (!said) return null;
+  if (words(said) <= 3 && /\brepairs?\b/i.test(said) && !/\?\s*$/.test(said)) return "start";
+  if (!REPAIR.test(said)) return null;
+  return !QUESTION.test(said) || ASKS_FOR.test(said) ? "start" : "about";
+}
+
 /** What a message asks to work on, or null when it names no section and no kind of work. */
 export function readIntent(text: string): Intent | null {
   const said = text.trim();
@@ -50,13 +66,15 @@ export function readIntent(text: string): Intent | null {
  * ask at least one question that takes each (ADR-0121, `tests/assistant-questions/sections.json`, page "start"). */
 export const START_ROUTES = ["set-up", "not-here", "open", "general"] as const;
 export type StartRoute =
-  | { route: "set-up"; kind: "coupon" | "wing" } // a kind of FEA work: a coupon set up in place, a wing opened on its own page (ADR-0118 amendment 1)
+  | { route: "set-up"; kind: "coupon" | "wing" | "repair" } // a kind of FEA work: a coupon set up in place, a wing or a patch repair opened on its own page (ADR-0118 amendment 1, ADR-0135)
   | { route: "not-here"; target: "fea" } // FEA itself, where the engineer already is
   | { route: "open"; target: "laminate" | "cad" } // another section, opened at once with the message: a blank project holds no work
   | { route: "general"; named: WorkTarget | null }; // anything else, answered in words from the theory pages (`/v1/workspace/questions`)
 
 /** Who answers a message in the FEA assistant of a blank project: `components/workspace/fea-start.tsx` answers by the route this returns. */
 export function routeStart(text: string): StartRoute {
+  // a repair's words first: "a bonded repair over an open hole" is a repair, though an open hole is a coupon's word too
+  if (readRepair(text) === "start") return { route: "set-up", kind: "repair" };
   const intent = readIntent(text);
   if (intent?.start) {
     if (intent.target === "coupon" || intent.target === "wing") return { route: "set-up", kind: intent.target };

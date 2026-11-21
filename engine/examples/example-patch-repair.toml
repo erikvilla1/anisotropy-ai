@@ -1,5 +1,5 @@
 title = "Example stepped patch repair"
-source = "An example made for the engine's tests and documents, not a repair of ours or of anyone's, and not a design. Every size is a round value chosen for the example; the ply material comes from the library, and the adhesive's values are round numbers of our own, not a product's. So is nu23, the ply's Poisson's ratio across its fibres, which the library record does not hold: a round value for the example, not a measured property."
+source = "An example made for tests and documents, not a repair of ours or of anyone's, and not a design. Every size is a round value chosen for the example; the ply material comes from the library, and the adhesive's values are round numbers of our own, not a product's. So is nu23, the ply's Poisson's ratio across its fibres, which the library record does not hold: a round value for the example, not a measured property."
 units = "mm-MPa"
 
 [parent]
