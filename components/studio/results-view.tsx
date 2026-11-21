@@ -19,9 +19,10 @@ import type { ProposedInputs } from "./project-context";
 import { remember, remembered } from "./local";
 import { DetailsToggle, Slot, useCanvasSlots, ViewMenu } from "@/components/workspace/canvas-slots";
 
-/** The contour choices: the smooth ramp, or bands with an isoline at every band boundary, each boundary a labelled tick (ADR-0063). */
-export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"]];
-export const DEFAULT_CONTOURS = 8;
+/** The contour choices: the smooth ramp, or bands of one flat colour each with no line between them (ADR-0063). Twelve by default, as
+ * the mockup the founder chose draws them, so the stress through the gauge and at the grips reads in steps (ADR-0063 amendment 3). */
+export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"], [12, "12 bands"]];
+export const DEFAULT_CONTOURS = 12;
 
 export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = false, note = "" }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number;
   /** the lighting is on: the shading changes the colours, which the legend says (ADR-0063 amendment 1) */ lit?: boolean;
@@ -45,7 +46,8 @@ export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = 
       </div>
     );
   }
-  const ticks = legendTicks(scale, bands ? bands + 1 : 5);
+  // a tick at every band boundary up to ten bands; more than that labels every other one, so the numbers keep apart
+  const ticks = legendTicks(scale, !bands ? 5 : bands > 10 && bands % 2 === 0 ? bands / 2 + 1 : bands + 1);
   return (
     <div className="studio-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
       <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />

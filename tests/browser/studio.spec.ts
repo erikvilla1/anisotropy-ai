@@ -218,10 +218,10 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   expect((calls as { fieldsReads?: number }).fieldsReads).toBeGreaterThanOrEqual(2); // the first read of the fields failed and the page read them again
   await expect(page.getByTestId("legend")).toContainText("Failure index 1/R, worst ply");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
-  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "8");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "12");
   await expect(page.getByTestId("legend")).toHaveAttribute("data-source", "package"); // the legend's ends are the package's
   const written = fixture("fields").ranges.failure_index.tsai_hill.nodal as [number, number];
-  await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 8 bands`);
+  await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 12 bands`);
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   // the validation table (ADR-0066): laminate theory beside Anisotropy, one row per ply in the fibre axes; the peaks apart, per ply, collapsed
@@ -281,7 +281,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByLabel("Contours", { exact: true }).selectOption("0");
   await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
-  await page.getByLabel("Contours", { exact: true }).selectOption("8");
+  await page.getByLabel("Contours", { exact: true }).selectOption("12");
   await openDetails(page); // a press outside the View menu puts it away
   await expect(page.getByTestId("view-menu")).not.toHaveAttribute("open", "");
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)

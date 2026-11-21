@@ -42,6 +42,8 @@ export type SceneProps = {
 };
 
 const LIFT = 1e-3; // frames sit this fraction of the plate's size above the top face so they are not hidden by it
+const SYMBOL_INSET = 0.25; // supports and loads over an area sit this share in from its edges, off the line where the field changes
+const EDGE_OPACITY = 0.42; // the mesh lines over a field: black at this opacity, the mockup's, so a colour reads through them (ADR-0063 amendment 3)
 
 const AXES: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 const UP = new THREE.Vector3(0, 1, 0); // a cone's own axis, tip at +height/2
@@ -69,7 +71,7 @@ function Cone({ tip, toward, height, color, back = 0, opacity = 1 }: { tip: numb
 /** A boundary condition's symbols at a few of its nodes (ADR-0110): a cone pointing at the node for each held move, a double cone on the
  * far side for each held turn. A move along z is drawn from above, so it is seen from the default view; the in-plane ones lie flat. */
 function HeldSymbols({ xy, nodes, dofs, z, height, opacity = 1 }: { xy: number[][]; nodes: number[]; dofs: number[]; z: number; height: number; opacity?: number }) {
-  const at = sampleNodes(xy, nodes, 2, 4);
+  const at = sampleNodes(xy, nodes, 2, 4, SYMBOL_INSET);
   return (
     <group>
       {at.flatMap((n) => dofs.map((dof) => {
@@ -92,7 +94,7 @@ function HeldSymbols({ xy, nodes, dofs, z, height, opacity = 1 }: { xy: number[]
  * grip's travel or force. An arrow along -z arrives onto the plate from above; any other leaves its node in the load's direction. */
 function LoadArrows({ xy, nodes, direction, z, length, color = LOADED }: { xy: number[][]; nodes: number[]; direction: string; z: number; length: number; color?: string }) {
   const v = along(direction);
-  const at = sampleNodes(xy, nodes, 3, 5);
+  const at = sampleNodes(xy, nodes, 3, 5, SYMBOL_INSET);
   return (
     <group>
       {at.map((n) => {
@@ -148,7 +150,8 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, edgeCol
       }}>
         {field ? <primitive object={material} attach="material" /> : <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />}
       </mesh>
-      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={edgeColor} /></lineSegments> : null}
+      {/* the mesh lines see-through, as the mockup draws them: the colours read through them (ADR-0063 amendment 3) */}
+      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={edgeColor} transparent opacity={EDGE_OPACITY} depthWrite={false} /></lineSegments> : null}
     </group>
   );
 }

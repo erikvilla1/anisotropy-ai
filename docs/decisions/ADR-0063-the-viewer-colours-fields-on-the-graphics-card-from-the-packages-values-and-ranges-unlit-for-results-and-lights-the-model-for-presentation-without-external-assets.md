@@ -1,6 +1,6 @@
 # ADR-0063: The viewer colours fields on the graphics card from the package's values and ranges, unlit for results, and lights the model for presentation without external assets
 
-- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1; results lit by default with a key light that moves with the view, Lighting off for the exact colours, and a Thickness ×2.4 choice, amendment 2
+- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1; results lit by default with a key light that moves with the view, Lighting off for the exact colours, and a Thickness ×2.4 choice, amendment 2; twelve bands by default, no line between bands, and the mesh lines see-through, amendment 3
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-06 ("what do you think about this, is this good to add? A 'presentation' lighting mode", drei's Environment, ContactShadows, a clearcoat MeshPhysicalMaterial; "Colour the stresses on the graphics card"; "A small shader could take the raw values and draw smooth or banded contours with crisp isolines"; "Results mode should stay mostly unlit so the shading never skews the colours"; then "lets do it no mistakes" for this part) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (part 4); `fea/src/anisotropy_fea/fields.py`, `components/studio/field-material.ts`, `components/studio/scene-lighting.tsx`, `components/studio/scene-canvas.tsx`, `lib/studio-colors.ts`, `lib/studio-fields.ts`; risk R-20
@@ -102,3 +102,26 @@ Easier: a colour on the plate is the legend's colour for that value; the legend'
 
 **Evidence.** The founder's choice above. Screenshots of the lit default beside the mockup in `/mnt/project-files/workspace-design/build/compare/v2-*.png`. No evidence yet that an engineer misreads a lit colour; Lighting off is the way to read a value by colour alone.
 
+## Amendment 3, 2026-11-21 (twelve bands, no line between bands, see-through mesh lines; asked for by the founder)
+
+**Context.**
+- After the rebuild of [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md) amendment 1, the founder compared the built coupon with the mockup and wrote: "black lines show FEA, not good for engineers to look at not intuitive, wheras on the mockup clearly we can see the stress on the bottom grip, and throughout the entire module which is what i want".
+- Three things made the lines black. The mesh lines were opaque near-black (`#1c1c1c`). Every band boundary had an isoline, and where the field is steep, at the tab line, eight isolines sat a few pixels apart and read as one black band. Eight bands also put most of the gauge in one or two colours.
+- The mockup (`/mnt/project-files/workspace-design/canvas/fea3d.js`) draws twelve bands with no line between them, and its mesh lines black at 42 % opacity.
+
+**Options.**
+1. *Keep the isolines, thinner.* Rejected: at the tab line the field changes by most of the scale in a few elements, so any line per boundary stacks.
+2. *Twelve bands, no isolines, the mesh lines see-through, as the mockup.* Chosen.
+3. *The smooth ramp by default.* Rejected: a band can be read against the legend; a smooth colour cannot be read as closely. Smooth stays a choice.
+
+**Decision.**
+- The contours default to twelve bands. The choices are smooth, 5, 8, 10 and 12.
+- Bands are flat colours with no line between them. The isoline uniform and its code are gone from `field-material.ts`.
+- Mesh lines over a rainbow are black at 42 % opacity and do not write depth, so the colour reads through them. On the green ramp they stay grey (`#555555`) at the same opacity. Mesh lines stay a layer in View.
+- The symbols of a support or a load over an area (a grip) sit a quarter of the area in from its edges, so they no longer cover the tab line, where the field changes most (`sampleNodes`' `inset`). A support or load along a line still runs end to end.
+- The legend's ticks (the form outside the workspace) label every band boundary up to ten bands, and every other one above that.
+- **Unchanged.** The package's values and ranges, the legend's ends, the lighting of amendment 2.
+
+**As built (2026-11-21).** `components/studio/field-material.ts`, `components/studio/results-view.tsx` (`CONTOURS`, `DEFAULT_CONTOURS`, the tick count), `components/studio/scene-canvas.tsx` (`EDGE_OPACITY`, `SYMBOL_INSET`), `lib/studio-colors.ts` (`overlayColors`), `lib/studio-geometry.ts` (`sampleNodes`).
+
+**Evidence.** The founder's words above. The side-by-side pictures in `/mnt/project-files/workspace-design/build/compare/v3-*.png`, with a close-up of the bottom grip. The mockup's orange patches near the grip come from its own colour lookup, which puts the last band edge at about 94 % where its legend draws it at 90.5 %; the gauge there is 92 to 96 % used, so bands that follow the legend draw it all in the top band. No evidence yet that twelve bands read better than eight to an engineer beyond the founder's own reading.

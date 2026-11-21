@@ -188,8 +188,10 @@ export function nodeMeans(quads: number[][], nodeCount: number, elementValues: n
 
 /** A few nodes of a set, spread over it, where the model draws a boundary condition's symbols or a load's arrows (ADR-0110): along a
  * line (an edge, or a set whose box is thin) up to `perLine` nodes from end to end, over an area a `perSide` by `perSide` grid. Each
- * grid point takes the set's nearest node, once; the result is in grid order. An empty set gives none. */
-export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, perLine = 5): number[] {
+ * grid point takes the set's nearest node, once; the result is in grid order. An empty set gives none. `inset` keeps an area's grid
+ * that share of the box in from its edges, so the symbols sit on a grip's face and leave its edge, where the field changes, in view
+ * (ADR-0063 amendment 3); a line still runs end to end. */
+export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, perLine = 5, inset = 0): number[] {
   const box = setBox(nodes, indices);
   if (!box) return [];
   const span = [box.max[0] - box.min[0], box.max[1] - box.min[1]];
@@ -206,7 +208,8 @@ export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, p
       targets.push(t);
     }
   } else {
-    for (let j = 0; j < perSide; j += 1) for (let i = 0; i < perSide; i += 1) targets.push([box.min[0] + at(i, perSide) * span[0], box.min[1] + at(j, perSide) * span[1]]);
+    const inside = (k: number) => inset + (1 - 2 * inset) * at(k, perSide);
+    for (let j = 0; j < perSide; j += 1) for (let i = 0; i < perSide; i += 1) targets.push([box.min[0] + inside(i) * span[0], box.min[1] + inside(j) * span[1]]);
   }
   const picked: number[] = [];
   for (const [tx, ty] of targets) {

@@ -4,8 +4,9 @@ import { hexToRgb } from "@/lib/studio-colors";
 /**
  * The results material (ADR-0063): the graphics card colours every fragment from one float per vertex, the package's value there,
  * and the scale's ends and ramp. Unlit, so no light skews a colour: a colour on the plate is the legend's colour for that value.
- * Bands cut the ramp into equal steps of the legend, with an isoline drawn one pixel wide at every step boundary (`fwidth`, so the
- * line is as wide on a zoomed-out plate as on a zoomed-in one); 0 bands is the smooth ramp. A missing value is the named grey.
+ * Bands cut the ramp into equal steps of the legend, each step one flat colour and no line between them (ADR-0063 amendment 3: a
+ * dark line at every step stacked into a black band where the field is steep, at the tab line, and hid the stress there); 0 bands
+ * is the smooth ramp. A missing value is the named grey.
  * The side faces are darkened a little so the thickness reads; the top and bottom faces are the pure colour. The ramp has up to nine
  * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on (the default
  * since ADR-0063 amendment 2, the look of the mockup the founder chose) a key light up and to the left of the camera, moving with it, a
@@ -16,7 +17,6 @@ import { hexToRgb } from "@/lib/studio-colors";
 /** The float written where the package wrote no value (a node no element touches): any real value is above it. */
 export const NO_VALUE = -1e30;
 export const MISSING_GRAY = "#3a3f3b";
-const ISOLINE = "#0c0e0d"; // the background's colour, so a line reads as a cut through the ramp
 const STOP_COUNT = 9; // the most stops a ramp may have; `uCount` says how many it has
 
 const vertexShader = /* glsl */ `
@@ -38,9 +38,7 @@ const fragmentShader = /* glsl */ `
   uniform float uCount;
   uniform float uLit;
   uniform float uBands;
-  uniform float uIsoline;
   uniform vec3 uMissing;
-  uniform vec3 uIsoColor;
   varying float vValue;
   varying vec3 vNormal;
   varying vec3 vViewNormal;
@@ -77,14 +75,6 @@ const fragmentShader = /* glsl */ `
       float f = t * uBands;
       float band = min(floor(f), uBands - 1.0);
       color = rampAt((band + 0.5) / uBands);
-      float toBoundary = min(fract(f), 1.0 - fract(f));
-      float pixel = max(fwidth(f), 1.0e-7);
-      float halfWidth = 0.5 * uIsoline * pixel;
-      float line = 1.0 - smoothstep(halfWidth, halfWidth + pixel, toBoundary);
-      // No line at the scale's two ends. The 1e-3 of a band keeps a face whose value sits exactly at an end (a gripped tab at the
-      // largest displacement) from catching rounding noise as a speckle of line pixels.
-      if (f < halfWidth + pixel + 1.0e-3 || f > uBands - halfWidth - pixel - 1.0e-3) line = 0.0;
-      color = mix(color, uIsoColor, line * flatFace);
     } else {
       color = rampAt(t);
     }
@@ -100,9 +90,9 @@ export function fieldMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader, fragmentShader, side: THREE.DoubleSide,
     uniforms: {
-      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uIsoline: { value: 1.2 }, uCount: { value: 7 }, uLit: { value: 0 },
+      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uCount: { value: 7 }, uLit: { value: 0 },
       uStops: { value: Array.from({ length: STOP_COUNT }, () => new THREE.Vector3(0.5, 0.5, 0.5)) },
-      uMissing: { value: vec(MISSING_GRAY) }, uIsoColor: { value: vec(ISOLINE) },
+      uMissing: { value: vec(MISSING_GRAY) },
     },
   });
 }
