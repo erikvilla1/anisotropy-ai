@@ -74,6 +74,8 @@ def abaqus_dat(model, results) -> str:
 def test_the_abaqus_file_states_the_decks_model(model):
     text, deck = abaqus_file(model), model.deck
     assert text.isascii() and text.startswith("*Heading\n")
+    assert max(len(line) for line in text.splitlines()) <= 120  # Abaqus cuts a line at 256 characters, with a warning
+    assert "** Material 5: Adhesive on the floor," in text and "\n**    the cut face of step 3," in text
     assert block(text, "*Node,") == block(deck, "*NODE,")
     elements = [line for line in text.splitlines() if line[:1].isdigit() and line.count(",") == 8]
     assert len(elements) == len(model.elements) and text.count("type=CPE8R") == deck.count("TYPE=CPE8R")

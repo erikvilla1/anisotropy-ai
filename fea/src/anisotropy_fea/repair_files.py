@@ -49,6 +49,20 @@ ANSYS_COLUMNS = ("SX", "SY", "SZ", "SXY", "EPX", "EPY", "EPZ", "EPXY")  # the An
 ANSYS_ITEMS = (("S", "X"), ("S", "Y"), ("S", "Z"), ("S", "XY"), ("EPEL", "X"), ("EPEL", "Y"), ("EPEL", "Z"), ("EPEL", "XY"))
 
 
+ABAQUS_LINE = 120  # characters in a comment line of the Abaqus file; Abaqus cuts an input line at 256 and warns
+
+
+def _abaqus_comment(text: str) -> list[str]:
+    """`** text`, in ASCII, wrapped at spaces."""
+    pieces, words = [], []
+    for word in ascii_text(text).split():
+        if words and len(" ".join(["**", *words, word])) > ABAQUS_LINE:
+            pieces.append(" ".join(["**", *words]))
+            words = ["  "]
+        words.append(word)
+    return [*pieces, " ".join(["**", *words])]
+
+
 def abaqus_file(model: SliceModel) -> str:
     """The slice as an Abaqus/Standard input file, in mm, N and MPa. Abaqus's 1 is the load's direction, 2 the thickness and 3
     the width, as in CalculiX's deck."""
@@ -61,7 +75,7 @@ def abaqus_file(model: SliceModel) -> str:
             "*Orientation, name=SLICE", "1., 0., 0., 0., 1., 0.", "3, 0."]
     for number, members, inside in material_groups(mesh, model.stiffness):
         c = model.stiffness[members[0]] / MPA  # rows and columns: xx, yy (width), zz (thickness), yz, xz, xy
-        out.append(f"** Material {number}: {ascii_text(', '.join(mesh.regions[index].name for index in members))}")
+        out += _abaqus_comment(f"Material {number}: {', '.join(mesh.regions[index].name for index in members)}")
         out.append(f"*Element, type=CPE8R, elset=M{number}")
         out += [", ".join(str(v) for v in [e + 1, *(elements[e] + 1)]) for e in inside]
         out += [f"*Solid Section, elset=M{number}, material=MAT{number}, orientation=SLICE", "1.",
