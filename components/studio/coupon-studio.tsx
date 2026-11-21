@@ -7,6 +7,7 @@ import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, typ
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { revealPanel } from "@/components/workspace/panels/step-panel";
+import { Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
 import { JobProgress } from "./job-progress";
 import { ModelDownloadMenu } from "./model-download";
 import { useProject } from "./project-context";
@@ -23,13 +24,20 @@ export function PreviewScene({ preview, onPick, picked, proposed, emphasis = nul
   /** what can be done with the model as a whole, at the right of its heading: the download of its file (ADR-0129) */
   tools?: ReactNode }) {
   const { held, loads, about } = sceneInputs(preview);
-  return (
-    <div className="studio-panel" data-testid="preview">
-      <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span>{tools}</h3>
-      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
-        about={about} onPick={onPick} picked={picked ?? null} emphasis={emphasis} />
+  const canvas = useCanvasSlots(); // in the FEA workspace's layout the heading and the words go to the results card (ADR-0134)
+  const heading = <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span>{tools}</h3>;
+  const words = (
+    <>
       {preview.shape?.length ? <p className="studio-muted" data-testid="preview-shape">{shapeWords(preview.shape)}</p> : null}
       {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
+    </>
+  );
+  return (
+    <div className="studio-panel" data-testid="preview">
+      {canvas ? null : heading}
+      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
+        about={about} onPick={onPick} picked={picked ?? null} emphasis={emphasis} />
+      {canvas ? <Slot name="view"><div className="cv-model-words" data-testid="preview-card">{heading}{words}</div></Slot> : words}
     </div>
   );
 }
@@ -56,18 +64,24 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const pickedElement = shown ? null : picked;
   useEffect(() => { if (!shown) setPicked(null); }, [previewed, shown, setPicked]);
   const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const canvas = useCanvasSlots(); // in the FEA workspace's layout the run's steps and the files go to the card's project column (ADR-0134)
   const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
-      {job ? <JobProgress job={job} brief={!allTests} /> : null}
-      {shown ? (
-        <>
-          {/* the model as a file for the engineer's own program, once there is a model to write (ADR-0129): beside the results' link
-              here, and in the model's heading before a run, so it takes no room of its own from the model */}
+      <Slot name="project">
+        {job ? <JobProgress job={job} brief={!allTests} /> : null}
+        {/* the model as a file for the engineer's own program, once there is a model to write (ADR-0129): beside the results' link
+            here, and in the model's heading before a run, so it takes no room of its own from the model. In the FEA workspace's layout
+            it stays here from the first model on, one menu that a run's results arriving does not close (ADR-0134) */}
+        {shown || (canvas && checked?.preview) ? (
           <div className="studio-viewer-row">
-            {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : <span />}
+            {shown && viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : <span />}
             <ModelDownloadMenu />
           </div>
+        ) : null}
+      </Slot>
+      {shown ? (
+        <>
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
             live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
             onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} emphasis={emphasis} view={view} onShown={setShownField} />
@@ -76,9 +90,9 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         <>
           {checked?.preview ? (
             <>
-              <PreviewScene preview={checked.preview} tools={<ModelDownloadMenu />} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
+              <PreviewScene preview={checked.preview} tools={canvas ? null : <ModelDownloadMenu />} onPick={isPlate ? setPicked : undefined} picked={pickedElement}
                 proposed={isPlate ? proposedInputs(checked.preview, proposed) : null} emphasis={emphasis} />
-              {isPlate && pickedElement !== null ? (() => {
+              {isPlate && pickedElement !== null ? <Slot name="over">{(() => {
                 const preview = checked.preview;
                 const touched = regionsOfElement(pickedElement, preview.mesh.quads, preview.mesh.node_sets, preview.mesh.element_sets, regionOptions(form, plate));
                 return (
@@ -92,13 +106,13 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
                     {!touched.length ? <span className="studio-muted">no named region; draw a box around it</span> : null}
                   </div>
                 );
-              })() : null}
+              })()}</Slot> : null}
             </>
           ) : sketch ? (
             <div className="studio-panel" data-testid="sketch">
-              <h3>The coupon <span className="studio-badge">sketch, not meshed</span></h3>
+              {canvas ? null : <h3>The coupon <span className="studio-badge">sketch, not meshed</span></h3>}
               <SketchScene sketch={sketch} />
-              <p className="studio-muted">{sketch.width} × {sketch.length} {sketch.lengthUnit}{sketch.tabs !== null ? `, ${sketch.tabs} ${sketch.lengthUnit} tabs` : ""}{sketch.tabThickness !== null ? ` bonded ${sketch.tabThickness} ${sketch.lengthUnit} thick with a ${sketch.tabBevel}° bevel` : ""}{sketch.hole !== null ? `, a ${sketch.hole} ${sketch.lengthUnit} hole` : ""}{sketch.dogbone !== null ? `, a dog-bone narrowing to ${sketch.dogbone.narrowWidth} by ${sketch.dogbone.narrowLength} ${sketch.lengthUnit} through ${sketch.dogbone.radius} ${sketch.lengthUnit} fillets${sketch.dogbone.outerRadius !== null ? ` and ${sketch.dogbone.outerRadius} ${sketch.lengthUnit} outer radii` : ""}` : ""}{sketch.strain !== null ? `, a ${sketch.strain.length} ${sketch.lengthUnit} ${sketch.strain.device} at the centre` : ""}{sketch.isotropic && sketch.toScale ? `, ${sketch.thickness} ${sketch.lengthUnit} thick` : ""}.{sketch.standard ? ` Sized for ${sketch.standard}${sketch.specimen ? `, ${sketch.specimen}` : ""}.` : ""}</p>
+              <SketchWords canvas={canvas !== null}><p className="studio-muted">{sketch.width} × {sketch.length} {sketch.lengthUnit}{sketch.tabs !== null ? `, ${sketch.tabs} ${sketch.lengthUnit} tabs` : ""}{sketch.tabThickness !== null ? ` bonded ${sketch.tabThickness} ${sketch.lengthUnit} thick with a ${sketch.tabBevel}° bevel` : ""}{sketch.hole !== null ? `, a ${sketch.hole} ${sketch.lengthUnit} hole` : ""}{sketch.dogbone !== null ? `, a dog-bone narrowing to ${sketch.dogbone.narrowWidth} by ${sketch.dogbone.narrowLength} ${sketch.lengthUnit} through ${sketch.dogbone.radius} ${sketch.lengthUnit} fillets${sketch.dogbone.outerRadius !== null ? ` and ${sketch.dogbone.outerRadius} ${sketch.lengthUnit} outer radii` : ""}` : ""}{sketch.strain !== null ? `, a ${sketch.strain.length} ${sketch.lengthUnit} ${sketch.strain.device} at the centre` : ""}{sketch.isotropic && sketch.toScale ? `, ${sketch.thickness} ${sketch.lengthUnit} thick` : ""}.{sketch.standard ? ` Sized for ${sketch.standard}${sketch.specimen ? `, ${sketch.specimen}` : ""}.` : ""}</p></SketchWords>
             </div>
           ) : (
             <div className="studio-empty" data-testid="empty-scene">
@@ -111,4 +125,10 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
       )}
     </section>
   );
+}
+
+/** The sketch's words: under it, or in the results card in the FEA workspace's layout (ADR-0134), with its heading. */
+function SketchWords({ canvas, children }: { canvas: boolean; children: ReactNode }) {
+  if (!canvas) return <>{children}</>;
+  return <Slot name="view"><div className="cv-model-words" data-testid="sketch-card"><h3>The coupon <span className="studio-badge">sketch, not meshed</span></h3>{children}</div></Slot>;
 }

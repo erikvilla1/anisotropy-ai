@@ -50,6 +50,9 @@
 .studio-scene-block { display: grid; gap: 10px; }
 .studio-canvas { position: relative; height: 520px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
 .studio-canvas canvas { display: block; }
+/* the X Y Z axes as seen, in the view's lower left corner (ADR-0063 amendment 1) */
+.studio-triad { position: absolute; left: 8px; bottom: 8px; z-index: 1; width: 84px; height: 84px; pointer-events: none; overflow: visible; }
+.studio-triad text { font-family: ui-monospace, monospace; }
 /* the view's buttons over the model (ADR-0111 amendment 2): fit, top, and each layer shown (pressed) or hidden */
 .studio-view-tools { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: calc(100% - 16px); }
 .studio-view-tools button { padding: 4px 9px; border-radius: 6px; border: 1px solid #383838; background: rgba(20, 20, 20, 0.85); color: #bdbdbd; font-size: 12px; cursor: pointer; }

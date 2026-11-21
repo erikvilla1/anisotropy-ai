@@ -92,7 +92,7 @@ test("a new wing opens on the example and shows the engine's answer, drawings an
   await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click(); // a wing is FEA work (ADR-0118 amendment 1)
   await page.getByTestId("fea-start-kinds").locator("[data-kind=wing]").click();
   await expect(page).toHaveURL(/\/workspace\/wing\/?$/);
-  await expect(page.locator(".ws-title span")).toHaveText("FEA · Wing analysis");
+  await expect(page.locator(".cv-kind > span")).toHaveText("FEA · Wing analysis");
   const answer = page.getByTestId("wing-answer");
   await expect(answer.getByRole("heading", { level: 2 })).toHaveText("Passes the 34 cases run");
   await expect(answer).toContainText("Lowest margin +0.059 on B-basis strengths: skin strength, upper skin, at the root, 0° ply, longitudinal compression");
@@ -224,7 +224,7 @@ test("the finite element check runs in the background, shows its stage, then set
   await page.getByLabel("Half span").fill("2");
   await expect(page.getByTestId("wing-fe")).toHaveAttribute("data-state", "current");
   await page.reload();
-  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  await expect(page.getByTestId("wing-fe-short")).toBeVisible(); // the check's headline in the card; its tables under Details (ADR-0134)
 });
 
 test("a check the model cannot make says why, in the words it was refused with (ADR-0119)", async ({ page }) => {
@@ -265,7 +265,7 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   // the check names the wing project it is made for
   await page.getByTestId("panel-wing-fe").locator("summary").click();
   await page.getByTestId("wing-fe-start").click();
-  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  await expect(page.getByTestId("wing-fe-short")).toBeVisible(); // the check's headline in the card; its tables under Details (ADR-0134)
   expect((checks[0] as Record<string, unknown>).project_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   await expect(page.getByTestId("wing-version-4")).toContainText("Checked: Lowest margin +0.106");
 
@@ -288,7 +288,7 @@ test("a wing is a project: listed with the others, each opened as it was left, i
   await page.getByTestId("workspace-projects").locator("tr[data-kind=wing]", { hasText: "First wing" }).getByRole("button", { name: "Open" }).click();
   await expect(page.getByTestId("project-name")).toHaveValue("First wing");
   await expect(page.getByLabel("Half span")).toHaveValue("2");
-  await expect(page.getByTestId("wing-fe-headline")).toBeVisible(); // its check comes back with it
+  await expect(page.getByTestId("wing-fe-short")).toBeVisible(); // its check comes back with it
   await expect(page.getByTestId("panel-wing-history").locator(".ws-panel-note")).toHaveText("version 4");
 });
 
@@ -304,7 +304,7 @@ test("a wing this browser kept before wings were projects becomes the first wing
   }, [old, { jobId: CHECK_ID, wing: old }] as const);
   await page.goto("/workspace/wing");
   await expect(page.getByTestId("project-name")).toHaveValue("Kept wing");
-  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  await expect(page.getByTestId("wing-fe-short")).toBeVisible(); // the check's headline in the card; its tables under Details (ADR-0134)
   expect(await page.evaluate(() => localStorage.getItem("anisotropy.wing.v1"))).toBeNull();
   await page.goto("/workspace");
   await expect(page.getByTestId("workspace-projects").locator("tr[data-kind=wing]")).toContainText("Kept wing");
@@ -452,7 +452,7 @@ test("the wing workspace names no tool, no machinery and no record, with every p
   await download;
   await expect(page.getByTestId("wing-parts")).toBeVisible();
   await page.getByTestId("wing-fe-start").click();
-  await expect(page.getByTestId("wing-fe-headline")).toBeVisible();
+  await expect(page.getByTestId("wing-fe-short")).toBeVisible(); // the check's headline in the card; its tables under Details (ADR-0134)
   const words = await page.evaluate(() => {
     const main = document.querySelector("main") ?? document.body;
     const attributes = [...main.querySelectorAll("[aria-label], [title], [placeholder]")]
