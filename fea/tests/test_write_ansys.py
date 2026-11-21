@@ -156,7 +156,7 @@ def test_strength_limits_are_negative_in_compression_and_leave_the_thickness_unc
     assert 10 not in read_back(unstated)["tbdata"] and "states no Tsai-Wu interaction term" in unstated
     plain = write_ansys(dataclasses.replace(model, material=dataclasses.replace(model.material, strengths=None, f12_star=None)))
     assert "TB,FCLI" not in plain and "TBDATA" not in plain and "FCTYP" not in plain
-    # Mechanical APDL 2026 R1 lists no failure measure while the maximum strain criterion is asked for and no strain limit is stated
+    # Mechanical APDL lists no failure measure while the maximum strain criterion is asked for and no strain limit is stated
     text = write_ansys(model)
     assert text.index("SET,LAST") < text.index("FCTYP,DELE,ALL\nFCTYP,ADD,SMAX\n") < text.index("PRRSOL")
 

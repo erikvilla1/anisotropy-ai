@@ -1875,8 +1875,7 @@ def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> 
 
 def _ansys_model(request: Request) -> bool:
     """Whether the model may be downloaded as an Ansys file by this request (ADR-0129): everyone's since amendment 3, on the founder's
-    word after one coupon's file ran in Ansys and agreed with ours (amendment 2). It was offered where the import is until then; a
-    False here closes it again, and the route answers 403."""
+    word. It was offered where the import is until then; a False here closes it again, and the route answers 403."""
     return True
 
 
