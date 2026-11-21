@@ -10,7 +10,9 @@ so each element lies in one part, and the stretches between those lines are divi
 `per_ply` elements for each ply's thickness along z (the thinner of the laminate's ply and the patch's). An element is given its part twice, by the rectangle that holds its
 centre and by the engine's level-by-level rule (`region_at`), and the mesh is refused where the two disagree. Where there
 is nothing (above the laminate outside the repair, and under the deepest plies of a patch in a cut through every ply),
-there is no element.
+there is no element. For a solve (ADR-0132) the mesh is graded along r: with `fine_m`, the elements beside every edge of a
+rectangle (a step's end, the patch's edge, a cut) are that long, each one further away longer by `growth`, up to the element
+size; and the bondline can be given more than one element through its thickness (`adhesive_layers`).
 
 The solids (`build_repair_shape`): every rectangle of the repair itself swept about the middle, a disc or a ring, and every
 laminate ply the panel's slab less the disc its step cuts, each one a solid with its part's name. The plies and the adhesive
@@ -42,12 +44,17 @@ TOLERANCE = 1e-12  # m: two edges of rectangles closer than this are one line of
 @dataclass(frozen=True)
 class SliceMesh:
     """The half slice as four-node quadrilaterals. `nodes_m` is (n, 2): r and z; `quads` is (m, 4), each element's corners
-    counterclockwise; `region` gives each element's rectangle as an index into `regions`."""
+    counterclockwise; `region` gives each element's rectangle as an index into `regions`. The mesh is a grid: `r_lines_m`
+    and `z_lines_m` are its lines, and `cell` (m, 2) gives each element's column along r and its layer along z, so the
+    elements of one station through the thickness are those of one column."""
 
     nodes_m: np.ndarray
     quads: np.ndarray
     region: np.ndarray
     regions: tuple[Region, ...]
+    cell: np.ndarray
+    r_lines_m: np.ndarray
+    z_lines_m: np.ndarray
 
     @property
     def element_areas(self) -> np.ndarray:
@@ -96,19 +103,81 @@ def _lines(edges: list[float], size: float) -> np.ndarray:
     return np.array(lines)
 
 
-def slice_mesh(repair: Repair, element_size_m: float | None = None, per_ply: int = 1) -> SliceMesh:
+def _marks(edges: list[float]) -> list[float]:
+    """The edges of the rectangles along one axis, in order, two closer than the tolerance counted once."""
+    marks = [edges[0]]
+    for value in sorted(edges)[1:]:
+        if value - marks[-1] > TOLERANCE:
+            marks.append(value)
+    return marks
+
+
+def _grown(length: float, fine: float, coarse: float, growth: float) -> list[float]:
+    """Element lengths that fill `length` from a mark outward: `fine` first, each next one `growth` times longer and none
+    longer than `coarse`; all shortened alike so that they end exactly at `length`."""
+    sizes, total, size = [], 0.0, fine
+    while total < length * (1 - 1e-12):
+        sizes.append(size)
+        total += size
+        size = min(size * growth, coarse)
+    return [value * length / total for value in sizes]
+
+
+def _graded_lines(edges: list[float], fine: float, coarse: float, growth: float) -> np.ndarray:
+    """The grid's lines along r for a graded mesh: every edge of a rectangle, the elements beside each edge `fine` long and
+    growing away from it. The slice's two ends, the repair's middle and the panel's end, are not edges to refine at unless a
+    rectangle ends within the slice there."""
+    marks = _marks(edges)
+    lines = [marks[0]]
+    for k, (low, high) in enumerate(zip(marks, marks[1:])):
+        at_low, at_high = k > 0, k < len(marks) - 2
+        if at_low and at_high:
+            half = _grown((high - low) / 2, fine, coarse, growth)
+            sizes = half + half[::-1]
+        elif at_low or at_high:
+            sizes = _grown(high - low, fine, coarse, growth)
+            sizes = sizes if at_low else sizes[::-1]
+        else:
+            count = max(1, math.ceil((high - low) / coarse - 1e-9))
+            sizes = [(high - low) / count] * count
+        lines.extend((low + np.cumsum(sizes))[:-1])
+        lines.append(high)
+    return np.array(lines)
+
+
+def slice_mesh(repair: Repair, element_size_m: float | None = None, per_ply: int = 1, *, fine_m: float | None = None, growth: float = 1.3,
+               adhesive_layers: int = 1) -> SliceMesh:
     """The half slice of a repair as quadrilaterals: `element_size_m` long at most along r (an eighth of the step length
-    unless said) and `per_ply` elements for each ply's thickness."""
+    unless said) and `per_ply` elements for each ply's thickness. With `fine_m` the mesh is graded along r: `fine_m` long
+    beside every edge of a rectangle, each element further from it `growth` times longer, up to the element size. A layer as
+    thin as the bondline gets `adhesive_layers` elements through its thickness."""
     if element_size_m is None:
         element_size_m = repair.step_length_m / 8
     if not (isinstance(element_size_m, (int, float)) and math.isfinite(element_size_m) and element_size_m > 0):
         raise ShapeError("The element size must be a positive number")
     if isinstance(per_ply, bool) or not isinstance(per_ply, int) or per_ply < 1:
         raise ShapeError("The elements for each ply's thickness must be a whole number, 1 or more")
+    if isinstance(adhesive_layers, bool) or not isinstance(adhesive_layers, int) or adhesive_layers < 1:
+        raise ShapeError("The elements through the bondline's thickness must be a whole number, 1 or more")
     parts = regions(repair)
-    r = _lines(sorted({edge for part in parts for edge in (part.r0, part.r1)}), float(element_size_m))
+    r_edges = sorted({edge for part in parts for edge in (part.r0, part.r1)})
+    if fine_m is None:
+        r = _lines(r_edges, float(element_size_m))
+    else:
+        if not (isinstance(fine_m, (int, float)) and math.isfinite(fine_m) and 0 < fine_m <= element_size_m):
+            raise ShapeError("The element size beside an edge must be a positive number, no larger than the element size")
+        if not (isinstance(growth, (int, float)) and math.isfinite(growth) and 1 < growth <= 2):
+            raise ShapeError("Each element may be longer than its neighbour by a factor above 1 and no more than 2")
+        r = _graded_lines(r_edges, float(fine_m), float(element_size_m), float(growth))
     ply = min(repair.ply_thickness_m, repair.patch_material.ply_thickness_m)
-    z = _lines(sorted({edge for part in parts for edge in (part.z0, part.z1)}), ply / per_ply)
+    marks, bondline = _marks(sorted({edge for part in parts for edge in (part.z0, part.z1)})), repair.adhesive.thickness_m
+    z = [marks[0]]
+    for low, high in zip(marks, marks[1:]):
+        count = max(1, math.ceil((high - low) / (ply / per_ply) - 1e-9))
+        if high - low <= bondline * (1 + 1e-9):
+            count = max(count, adhesive_layers)
+        z.extend(low + (high - low) * k / count for k in range(1, count + 1))
+    z = np.array(z)
     rc, zc = (r[:-1] + r[1:]) / 2, (z[:-1] + z[1:]) / 2
     owner = np.full((len(rc), len(zc)), -1)
     for index, part in enumerate(parts):
@@ -129,7 +198,8 @@ def slice_mesh(repair: Repair, element_size_m: float | None = None, per_ply: int
     renumber[used] = np.arange(len(used))
     grid_r, grid_z = np.meshgrid(r, z, indexing="ij")
     nodes = np.column_stack([grid_r.ravel(), grid_z.ravel()])[used]
-    return SliceMesh(nodes_m=nodes, quads=renumber[quads], region=owner[cells[:, 0], cells[:, 1]], regions=parts)
+    return SliceMesh(nodes_m=nodes, quads=renumber[quads], region=owner[cells[:, 0], cells[:, 1]], regions=parts, cell=cells, r_lines_m=r,
+                     z_lines_m=z)
 
 
 @dataclass(frozen=True)

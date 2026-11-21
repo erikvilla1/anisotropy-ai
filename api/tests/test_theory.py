@@ -95,12 +95,17 @@ def test_the_page_of_reasons_names_no_program_and_writes_no_value_of_a_result():
 def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
     # ADR-0102 amendment 5: no chat answers a question about a repair yet, and its words ("the 0° ply carries", "the load") are a coupon's too
     repair = of_subject("repair")
-    assert {s.id for s in repair} == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair"}
+    # amendment 6: the solve of the slice (ADR-0132) added a section to each theory page; the finite element one names `repair_model.py`
+    slice_sections = {s.id for s in repair if s.source == "fea"}
+    assert {s.id for s in repair} - slice_sections == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair", "engine:18-the-repair-s-plies-as-solids"}
+    assert len(slice_sections) == 6 and all(name.startswith("fea:11-the-repair-s-slice-in-calculix") for name in slice_sections)
     assert set(repair) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
     for question in ("how come the 0 ply carries most of the load", "why does the adhesive's shear stress peak at the end of a step?"):
         assert all(s.subject == "" for s, _ in find(question, limit=10)), question
     assert find("why does the adhesive's shear stress peak at the end of a step?", among=repair)[0][0].id == "engine:16-stepped-lap-bond"
     assert find("how stiff is a patch ply at an angle on a ledge?", among=repair)[0][0].id == "engine:17-stepped-patch-repair"
+    assert find("how is a ply turned to its angle as a solid?", among=repair)[0][0].id == "engine:18-the-repair-s-plies-as-solids"
+    assert find("why is the peel stress read as a mean over a square of adhesive?", among=repair)[0][0].id.endswith("11-2-what-is-read-back")
 
 
 def test_the_wings_sections_are_read_but_searched_only_by_their_subject():

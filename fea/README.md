@@ -134,7 +134,17 @@ prints each part's layup, thickness, area and mass. A STEP file holds no thickne
 uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape engine/examples/example-patch-repair.toml --step repair.step
 ```
 
-prints the mesh's size and, part by part, the area in the mesh beside the area by the description, the bondline that touches the laminate, and each kind of solid's volume beside the description's. `--size 2.5` sets the element size along the slice in millimetres. A STEP file holds shape and names only: a ply's angle is in its name, and its material is not in the file. Nothing is solved here: the finite element model of the slice is a later step.
+prints the mesh's size and, part by part, the area in the mesh beside the area by the description, the bondline that touches the laminate, and each kind of solid's volume beside the description's. `--size 2.5` sets the element size along the slice in millimetres. A STEP file holds shape and names only: a ply's angle is in its name, and its material is not in the file. Nothing is solved here: the next section solves the slice.
+
+## A patch repair's slice in CalculiX
+
+`anisotropy_fea.repair_model` solves the slice of the same repair file in CalculiX (ADR-0132): eight-node plane elements on `slice_mesh`'s grid, graded to an eighth of the bondline's thickness beside every step's end, every ply an orthotropic solid turned to its angle and the adhesive an isotropic one (the engine's `repair.solid`), the laminate's far-field strain across the width, the middle a plane of symmetry and the laminate's bottom face held flat, the load on the panel's end as each ply's far-field stress.
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.repair_model engine/examples/example-patch-repair.toml --out run
+```
+
+prints, beside the hand calculation's, the force the patch carries at every boundary of the lap, the largest shear and peel stress in the bondline (each a mean over a square of adhesive as long as the bondline is thick), the load at the adhesive's elastic limit, every ply's lowest strength ratio and where, and which of the three comes first; `--out` keeps the deck, CalculiX's files and `repair-solve.json`. The file has to state what a solve needs and a hand calculation does not: `nu23` for a unidirectional ply or `E3`, `G13`, `G23`, `nu13` and `nu23` for another, the adhesive's `poisson`, and strengths for the ply check; a solve without them is refused in words. `--cut-faces bonded` counts the adhesive on a flush repair's cut faces as bonded (left open otherwise, as the hand calculation takes it); `--criterion tsai_hill`, `--size` and `--fine` set the ply check and the mesh. Every solve checks itself and is refused otherwise: the forces add up to the load at every station, the strain far from the repair is the laminate theory's, and CalculiX's stresses are the engine's stiffness times its strains. The slice is the strip through the repair's middle, elastic and held flat: it does not count the laminate beside a hole narrower than the panel, a yielding adhesive, or a panel free to bend, and the load at the adhesive's elastic limit is not the repair's strength (`docs/theory.md`, Section 11). It needs CalculiX on the PATH or in `ANISOTROPY_CCX`.
 
 ## A wing in CalculiX
 

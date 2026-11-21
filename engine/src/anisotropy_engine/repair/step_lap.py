@@ -39,12 +39,15 @@ def _positive(value: float, name: str) -> float:
 @dataclass(frozen=True)
 class Adhesive:
     """The bondline: shear modulus (Pa) and thickness (m); the shear strength (Pa) and the plastic shear strain it can take
-    beyond its elastic limit, when a strength is asked for."""
+    beyond its elastic limit, when a strength is asked for; and, for a solve of the repair's slice (ADR-0132), which a lap
+    does not use, Poisson's ratio and the peel stress the bond can take (Pa), when the peel stress is to be judged."""
 
     shear_modulus_pa: float
     thickness_m: float
     shear_strength_pa: float | None = None
     plastic_strain: float = 0.0
+    poisson_ratio: float | None = None
+    peel_strength_pa: float | None = None
 
     def __post_init__(self):
         _positive(self.shear_modulus_pa, "The adhesive's shear modulus")
@@ -53,6 +56,12 @@ class Adhesive:
             _positive(self.shear_strength_pa, "The adhesive's shear strength")
         if isinstance(self.plastic_strain, bool) or not math.isfinite(self.plastic_strain) or self.plastic_strain < 0:
             raise ValueError(f"The adhesive's plastic shear strain must be finite and not negative, got {self.plastic_strain!r}")
+        if self.peel_strength_pa is not None:
+            _positive(self.peel_strength_pa, "The bond's peel strength")
+        if self.poisson_ratio is not None:
+            nu = self.poisson_ratio
+            if isinstance(nu, bool) or not isinstance(nu, (int, float)) or not math.isfinite(nu) or not -1 < nu < 0.5:
+                raise ValueError(f"The adhesive's Poisson's ratio must be above -1 and below 0.5, got {nu!r}")
 
     @property
     def strength(self) -> float:

@@ -77,12 +77,45 @@ def _angles(values, name: str) -> tuple[float, ...]:
 
 
 @dataclass(frozen=True)
+class ThroughThickness:
+    """A ply's constants through its thickness (ADR-0132), 3 the thickness direction: Young's modulus E3 and the shear
+    moduli G13 and G23 (Pa), and Poisson's ratios nu13 and nu23 (the strain along 3 for a strain along 1 or 2, with the sign
+    changed). A hand calculation in the laminate's plane does not use them; the solve of a repair's slice does."""
+
+    E3: float
+    G13: float
+    G23: float
+    nu13: float
+    nu23: float
+
+    def __post_init__(self) -> None:
+        for name in ("E3", "G13", "G23"):
+            object.__setattr__(self, name, _positive(getattr(self, name), name))
+        for name in ("nu13", "nu23"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise RepairError(f"{name} must be a finite number, got {value!r}")
+            object.__setattr__(self, name, float(value))
+
+
+def tape_through_thickness(lamina: Lamina, nu23: float) -> ThroughThickness:
+    """The through-thickness constants of a unidirectional ply from one number. Such a ply is the same in every direction
+    across its fibres, so E3 = E2, G13 = G12 and nu13 = nu12, and the shear modulus across the fibres follows from E2 and
+    nu23 as in an isotropic material: G23 = E2 / (2 (1 + nu23))."""
+    if isinstance(nu23, bool) or not isinstance(nu23, (int, float)) or not math.isfinite(nu23) or not -1 < nu23 < 1:
+        raise RepairError(f"nu23 must be above -1 and below 1, got {nu23!r}")
+    return ThroughThickness(E3=lamina.E2, G13=lamina.G12, G23=lamina.E2 / (2 * (1 + nu23)), nu13=lamina.nu12, nu23=float(nu23))
+
+
+@dataclass(frozen=True)
 class RepairMaterial:
-    """A ply material of a repair: its name, its in-plane constants and its cured ply thickness."""
+    """A ply material of a repair: its name, its in-plane constants and its cured ply thickness; and, when the slice is to be
+    solved, its constants through the thickness."""
 
     name: str
     lamina: Lamina
     ply_thickness_m: float
+    through: ThroughThickness | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -90,6 +123,19 @@ class RepairMaterial:
         if not isinstance(self.lamina, Lamina):
             raise RepairError(f"Material {self.name!r} needs its ply constants (E1, E2, G12, nu12)")
         object.__setattr__(self, "ply_thickness_m", _positive(self.ply_thickness_m, f"The ply thickness of {self.name!r}"))
+        if self.through is not None:
+            if not isinstance(self.through, ThroughThickness):
+                raise RepairError(f"The through-thickness constants of {self.name!r} must be E3, G13, G23, nu13 and nu23")
+            # The three direct strains under the three direct stresses: a material stores energy under every load only when
+            # this matrix is positive definite, which its three leading minors say.
+            la, th = self.lamina, self.through
+            s11, s22, s33 = 1 / la.E1, 1 / la.E2, 1 / th.E3
+            s12, s13, s23 = -la.nu12 / la.E1, -th.nu13 / la.E1, -th.nu23 / la.E2
+            minor = s11 * s22 - s12**2
+            whole = s11 * (s22 * s33 - s23**2) - s12 * (s12 * s33 - s23 * s13) + s13 * (s12 * s23 - s22 * s13)
+            if minor <= 0 or whole <= 0:
+                raise RepairError(f"The constants of {self.name!r} do not make a material: with these Poisson's ratios it would give "
+                                  "energy back under some load (nu13 and nu23 are too large for E1, E2 and E3)")
 
 
 @dataclass(frozen=True)

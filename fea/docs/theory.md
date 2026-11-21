@@ -405,6 +405,78 @@ The box (`skins = "box"`) keeps each cap whole, its outer half too, as the hand 
 
 <!-- code: shell_sections -->
 
+## 11. The repair's slice in CalculiX (`repair_model.py`)
+
+A stepped patch repair's slice (the engine's theory, Section 17) is solved in CalculiX in its elastic state under the load (ADR-0132). The slice is one half of the cut along the load through the repair's middle, $`r`$ from the middle outward and $`z`$ up from the laminate's bottom face, every ply and every piece of adhesive a rectangle of its own. This package writes the deck and reads the result; every stiffness in the deck and every ply stress in the answer is the engine's (the engine's theory, Section 18; ADR-0001, ADR-0067). The solve adds to the hand calculation of the stepped lap (the engine's theory, Section 16) what that leaves out: the bondline's peel stress, the bending of the patch where it takes load, the adherends' shear through their thickness, and the stresses of each ply where a step ends.
+
+### 11.1 The model
+
+**Mesh.** The grid of `repair_shape.py`'s `slice_mesh`, graded along $`r`$: the elements beside every end of every rectangle (a step's end, a cut, the patch's edge, the hole's edge) are an eighth of the bondline's thickness long, each next one 1.3 times longer, up to an eighth of the step length. Through the thickness there are two elements in the bondline and one in each ply. Each four-node cell becomes an eight-node plane element with reduced integration (CalculiX's CPE8R) by a node at the middle of every edge.
+
+**Materials.** Each ply is an orthotropic solid turned to its angle and the adhesive an isotropic one; a rectangle's stiffness in the slice's axes is computed by `region_stiffness`. The deck holds the nine terms CalculiX's `*ELASTIC, TYPE=ORTHO` takes. A turned ply has four more, which tie its shear in the laminate's plane and across the width to the rest; the slice has neither of those two shear strains, so they make no stress in the slice's plane, and the engine puts them back when it works out the ply's own stresses (Section 11.2).
+
+**Across the width.** A plane-strain element has no strain across the width, which would hold the laminate from its Poisson contraction and put a stress across the width into every ply that the panel does not have. The slice is instead given the strain across the width the laminate has far from the repair, $`\varepsilon_y^{\infty}`$ of the engine's far field: every material gets a thermal expansion of $`-1`$ across the width and none in the plane, and the whole slice a temperature $`T = \varepsilon_y^{\infty}`$. The strain that makes stress across the width is the total less the thermal one,
+
+```math
+\varepsilon_y - \alpha_y T = 0 - (-1)\,\varepsilon_y^{\infty} = \varepsilon_y^{\infty} ,
+```
+
+everywhere in the slice. Far from the repair every ply's stress is then the laminate theory's, and the plies' stresses across the width cancel.
+
+**Supports and load.** The middle is a plane of symmetry: no movement along $`r`$ there. The laminate's bottom face is held flat: no movement along $`z`$. The load is put on the panel's end as each ply's far-field stress $`\sigma_x^{(k)}`$, so the end is the laminate theory's and their sum is the load $`N`$ per unit width.
+
+**The cut faces.** In a flush repair the adhesive also lies up each cut face, a butt joint one bondline wide between the end of a laminate ply and the patch ply that fills its place; whether a rectangle is one is computed by `is_cut_face`. By default those elements are left out (`cut_faces = "open"`): the butt joint carries nothing, as the hand calculation takes it and as a joint in tension across a thin layer of adhesive is the first thing to crack. With `cut_faces = "bonded"` they are solved as bonded and the mean stress across each is reported. The model is computed by `build_slice_model`.
+
+<!-- code: region_stiffness, is_cut_face, build_slice_model -->
+
+### 11.2 What is read back
+
+CalculiX prints the stress and the strain at every integration point; each element's mean is taken, in the slice's axes, with CalculiX's tensor shear strain doubled to the engineering one, computed by `read_results`. Every quantity below is a sum or a mean of those over the elements of one column of the grid, a station $`r`$, with $`\Delta z`$ an element's height.
+
+A bond is a flat stretch of adhesive with the patch or the cover plies on it and the laminate under it. The corner of adhesive under a cut face or over one joins nothing and is not read. The force per unit width along the load in a set of parts (the patch with the cover plies, the laminate, the adhesive), and at each station of a bond of thickness $`\eta`$ the adhesive's shear stress and its peel stress, are
+
+```math
+P(r) = \sum \sigma_x\,\Delta z, \qquad \bar\tau(r) = -\frac{1}{\eta}\sum \tau_{xz}\,\Delta z, \qquad \bar\sigma_{\text{peel}}(r) = \frac{1}{\eta}\sum \sigma_z\,\Delta z
+```
+
+The shear stress is positive when it passes tension into the patch: between the patch's edge at $`R`$ and a station, $`\int_r^R \bar\tau\,dr`$ is the force the patch carries there. The peel stress is positive when it pulls the patch off. Both are means through the bondline's thickness, and no single point's value is reported: the stress at the corner where a step ends has no upper bound in an elastic solution.
+
+Where a bond ends at a square corner the mean through the thickness is itself steep within one bondline's thickness of the corner. On a laminate cut through, with its cut faces open, the peel stress read at 0.1, 0.5 and 1 bondline's thickness from the corner was 39, 18 and 5 MPa, the same on meshes from 8 to 64 elements to the bondline's thickness, so the value at the last station follows the mesh. The largest shear and the largest peel stress are therefore each the largest mean over a length $`\eta`$ of one bond, a square of adhesive:
+
+```math
+\tau_{\max} = \max_s \left| \frac{1}{\eta} \int_s^{s+\eta} \bar\tau\,dr \right|, \qquad \sigma_{\text{peel},\max} = \max_s \frac{1}{\eta} \int_s^{s+\eta} \bar\sigma_{\text{peel}}\,dr
+```
+
+The stresses are constant over each column of elements, so the mean over a moving length changes at a constant rate between the positions where one of its ends meets a column's end, and the largest is at one of those positions, computed by `BondLine.largest_mean`. These two settle: from 8 to 64 elements to the bondline's thickness, over seven solved repairs, the largest shear stress moved by 0.6 % at most and the largest peel stress by 1.7 % at most, that one beside the open cut face above (ADR-0132). The length $`\eta`$ is a choice: at a patch's free edge, where the mean through the thickness does settle at the last station, the square's mean is about a quarter below that value.
+
+Each ply's strains are averaged through its thickness at every station, the far-field width strain is put with them, and the engine turns them into the ply's stresses in its own axes (the engine's theory, Section 18). $`\sigma_1`$, $`\sigma_2`$ and $`\tau_{12}`$ go to the engine's strength ratio by maximum stress or Tsai-Hill (the engine's theory, Section 5), and a ply's weakest station is kept.
+
+Three loads follow, each the applied load scaled, since the solution is linear. With $`\tau_p`$ the adhesive's shear strength, $`\sigma_p`$ the bond's peel strength when the description states one, and $`R_k`$ ply $`k`$'s lowest strength ratio:
+
+```math
+N_{\text{shear}} = N\,\frac{\tau_p}{\tau_{\max}}, \qquad N_{\text{peel}} = N\,\frac{\sigma_p}{\sigma_{\text{peel},\max}}, \qquad N_{\text{ply}} = N\,\min_k R_k
+```
+
+The lowest of the three is what happens first as the load grows. $`N_{\text{shear}}`$ is the load at the adhesive's elastic limit and not the repair's strength: a ductile adhesive yields there and carries more. The patch's force at each boundary of the stepped lap is read beside the hand calculation's. The answer is computed by `slice_answer`, and the same answer as plain numbers in a unit system is computed by `slice_report`.
+
+<!-- code: read_results, BondLine.largest_mean, slice_answer, slice_report -->
+
+### 11.3 Checks made on every solve
+
+A solve is refused unless all three hold. CalculiX's stress in every element equals the engine's stiffness times CalculiX's strain within $`10^{-6}`$ of the largest stress, so the materials solved are the ones the answer is worked out with. At every station the forces in the patch, the laminate and the adhesive add up to the load within $`10^{-4}`$ of it. Midway between the repair and the panel's end, every ply's strain along the load is the far field's within 1 %; a panel too short for that is refused with those words. The solve itself, CalculiX run on the deck and its result read, is computed by `run_slice_model`.
+
+<!-- code: run_slice_model -->
+
+### 11.4 Against the hand calculation
+
+The stepped lap assumes that each adherend strains alike through its thickness and that nothing moves through the thickness. The model is brought to those assumptions by three changes: every node is held from moving along $`z`$ (`hold = "everywhere"`), every Poisson's ratio is zero, and the plies' shear moduli through the thickness are ten thousand times their in-plane one. It then returns the lap's closed form for a strip patch bonded on top (case `constructed-external-strip-held-to-the-stepped-laps-assumptions` of `fea/checks/repair_cases/`, its numbers worked without the engine by `external_patch_repair` in `engine/validation/closed_forms.py`): the patch's force at every boundary within 0.5 % of the load and the adhesive's shear stress along the whole bondline within 0.5 % of its peak (0.16 % and 0.23 % on 2,744 elements), with no peel stress; its largest shear stress, a mean over a square, is the closed form's curve averaged over the same length within 0.5 %.
+
+With the bottom face alone held, the answer differs from the lap's where the lap's assumptions do not hold. On that strip patch with its real constants the patch's forces at the boundaries stay within a tenth of the load of the lap's, but the largest shear stress, at the hole's edge, is about 0.6 of the lap's: the patch bends where it takes the whole load and its plies shear through their thickness, which spreads the transfer. The bondline is pressed together at the hole's edge and pulled apart at the patch's tip. On the flush example repair with its cut faces open, the patch's forces are within a hundredth of the load of the lap's and the largest shear stress, on the same ledge, is 0.91 of it. The lap's own largest is the value at one point of its curve; averaged over the same square it would be a few percent lower.
+
+### 11.5 What the slice is not
+
+The slice is the strip through the repair's middle, of unit width. It does not hold the laminate beside a hole narrower than the panel, which carries load past the hole, nor the load that flows around a round repair; both need the panel in three dimensions. It is elastic: past the adhesive's elastic limit and past the first ply's strength it says nothing. The laminate's bottom face is held flat, as a panel on its structure nearly is; a one-sided patch on a panel free to bend also bends the panel, which needs a large-deflection solution and is not solved. The strain across the width is the far field's everywhere, and the laminate is kept from shearing in its plane, so a laminate that is not balanced is stiffer here than free.
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -423,6 +495,7 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Closed forms (cases `plate-ss-isotropic-uniform-pressure-navier`, `plate-ss-isotropic-thin-no-locking`, `plate-ss-cross-ply-sinusoidal-navier`, `strip-cantilever-tip-load-timoshenko`): the simply supported isotropic square plate under uniform pressure reproduces Whitney's Navier series with transverse shear deformation within 0.5 % on 16 by 16 elements, and does so unchanged when the plate is a thousand times thinner than wide, where a displacement-based bilinear element would lock; the simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure reproduces the one-term solution, both faces of every ply included, within 1 % on 32 by 32 elements; the cantilever strip with $`\nu = 0`$ reproduces the Timoshenko beam's tip deflection, shear part included, within 0.02 % and its tip rotation, root moment and shear force to 1e-9 (`test_fe_validation_cases.py`; the closed forms themselves are checked in `test_plate_closed_forms.py` against the tabulated 0.00406 coefficient, the Kirchhoff limit and the plate equation).
 
 - The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
+- The repair's slice in CalculiX (Section 11): the graded mesh has a line of nodes on every edge of every rectangle, fine elements beside it, no element much longer than its neighbour and the description's areas; the deck has one material for each ply angle and the adhesive, the far-field width strain as its temperature and the far-field stresses on its end, summing to the load; on a strip patch, the flush example and the example with bonded cut faces the forces add up at every station and, well outside the repair, every ply's stress is the laminate theory's with nothing through the thickness and nothing across the width in sum; held to the lap's assumptions the model returns the lap's closed form (case `constructed-external-strip-held-to-the-stepped-laps-assumptions`, Section 11.4); a patch bonded on top carries the whole load at the hole's edge, what its bondline's shear passes to it is the load within 1 %, it is pressed on at the hole's edge and pulled off at its tip; twice the load doubles every stress and compression changes every sign; the largest mean over a length of bond is found exactly on a bond worked by hand; elements half as long beside the edges change the largest shear stress by less than 0.5 %, the largest peel stress by less than 1 % and the patch's forces by less than 0.2 % on the strip patch and on the flush example, where the value at a bond's last station beside an open cut face grows by more than a fifth; on the flush example the adhesive's elastic limit comes before the first ply, which reaches its transverse tensile strength inside the repair at a lower load than a 90° ply does far from it; bonded cut faces take load off the ledges, so leaving them open is the lower reading; what a solve lacks is refused in words (`test_repair_model.py`).
 
 ## Not modeled yet
 
@@ -432,3 +505,4 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)
 - Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
 - Eigenvalue buckling of joined shells (CalculiX's `*BUCKLE` misses a wing web's buckle; the wing's panels are flat Ritz plates on the model's mean loads, Section 10.4); a web panel's buckling under its own bending stress; buckling of a curved panel; the load after buckling
+- For a repair's slice (Section 11): a panel free to bend under a one-sided patch (a large-deflection solution); a yielding adhesive and the bond's progressive failure; the laminate beside a hole narrower than the panel and the load that flows around a round repair (the panel in three dimensions); a slice free to shear in the laminate's plane (generalized plane strain); thermal mismatch from the cure
