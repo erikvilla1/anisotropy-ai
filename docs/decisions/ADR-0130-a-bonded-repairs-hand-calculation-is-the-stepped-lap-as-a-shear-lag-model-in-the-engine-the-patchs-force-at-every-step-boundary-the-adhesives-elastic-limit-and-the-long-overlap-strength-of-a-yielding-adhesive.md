@@ -1,6 +1,6 @@
 # ADR-0130: A bonded repair's hand calculation is the stepped lap as a shear-lag model in the engine: the patch's force at every step boundary, the adhesive's elastic limit, and the long-overlap strength of a yielding adhesive
 
-- Status: Proposed
+- Status: Proposed; a lap may also end at a plane of symmetry since amendment 1, and a repair stated by its plies gives each step's moduli by [ADR-0131](ADR-0131-a-stepped-patch-repair-is-one-description-of-a-few-numbers-in-the-engine-its-slice-is-a-set-of-rectangles-and-the-hand-calculation-the-mesh-and-the-step-file-are-all-made-from-them.md)
 - Date: 2026-11-20
 - Decided by: Founder, 2026-11-20 ("ideally the next project is step patch", on what comes after the wing; then "Downloads, then repair hand calc", his choice on the card "Start building now, and with which piece first?", whose plan names the repair's hand calculation as the step-lap shear-lag model, Volkersen per step and Hart-Smith after it). The form of the model in code, its boundary conditions, what a file states, the cases and what is left for later are the drafter's | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0007](ADR-0007-validation-cases-store-numbers-only.md), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md), [ADR-0115](ADR-0115-a-wing-is-one-description-worked-first-as-a-beam-by-the-engine-over-every-flight-case-at-once-and-the-finite-element-model-of-the-same-description-is-its-check.md), `engine/src/anisotropy_engine/repair/`, `engine/docs/theory.md` Section 16, `engine/validation/repair_cases/`, `engine/validation/closed_forms.py`, `engine/tests/test_step_lap.py`
@@ -64,3 +64,13 @@
 - A finite element model of the same lap, with adherends that only stretch and an adhesive that only shears, differs from these boundary forces or shear stresses by more than its mesh error.
 - On the published repair benchmark, the shear-lag model's ranking of designs (more steps, longer steps, softer adhesive) disagrees with the tests' ranking.
 - Students or the professor report that the course's method gives different numbers for a joint this model is meant to cover.
+
+## Amendment 1, 2026-11-20 (a lap may end at a plane of symmetry that both adherends cross; not yet confirmed by the founder)
+
+**Context.** The lap of this record ends where the inner adherend ends, with the outer one carrying the whole load. A patch over a cavity that does not go through every ply is another lap: the laminate carries on under the patch, and the lap runs to the repair's middle, which the patch and the laminate both cross ([ADR-0131](ADR-0131-a-stepped-patch-repair-is-one-description-of-a-few-numbers-in-the-engine-its-slice-is-a-set-of-rectangles-and-the-hand-calculation-the-mesh-and-the-step-file-are-all-made-from-them.md)).
+
+**Options.** (1) End the lap at the last ledge as before: the patch would be given the whole load, which it does not carry. (2) Add the plies left under the patch to the patch's side of the last step: the bond between them is the adhesive on the floor, which the model would then leave out. (3) A second end condition: no shear stress at a plane of symmetry, the outer adherend's force there one more unknown. Chosen.
+
+**Decision.** `boundary_forces` and `step_lap` take `inner_continues`. With it the system has one more row, the shear stress at the end of the last step set to zero, and the last boundary force is part of the answer. Without it nothing changes. A lap file (`lap_file.py`) does not state it yet; a repair's description sets it.
+
+**Evidence.** `engine/tests/test_patch_repair.py`: one step equals its closed form, N(L) = P (1 - 1 / cosh(lambda L)) and tau(0) = P lambda tanh(lambda L), within 10^-12; a step cut in three gives the same answer; a step half a metre long hands the patch its whole share. The cases of `engine/validation/patch_repair_cases/` work the same end by the general solution of every step in `closed_forms.py` and agree within 10^-9. The 16 tests of `engine/tests/test_step_lap.py` pass unchanged.
