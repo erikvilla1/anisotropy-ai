@@ -54,7 +54,9 @@ CASES = CHECKS / "cases"
 CHECK_DECKS = CHECKS / "decks"
 CONVENTIONS = CHECKS / "calculix-conventions.toml"
 RUBRIC = ROOT / "docs" / "audit" / "rubric.toml"  # what every coupon audit checks (ADR-0043)
-NOT_TESTS = {"cases", "decks", "checks"}  # folders that hold no test of their own: under checks/, and .local/fea/checks/ (local runs of the checks)
+# folders that hold no coupon test of their own: under checks/ (a repair's cases are repair files, not coupon specs, ADR-0132), and
+# .local/fea/checks/ (local runs of the checks)
+NOT_TESTS = {"cases", "decks", "checks", "repair_cases"}
 TEAM_FILES, OURS, DOCUMENTS = "team", "ours", "documents"  # a coupon's three parts (ADR-0040 amendment 3)
 VERIFICATION, RUNS, LATEX = "verification", "runs", "latex"  # inside ours/
 MANIFEST = "team-comparison.toml"  # the team comparison's manifest, in ours/verification/ (ADR-0035); not a record
