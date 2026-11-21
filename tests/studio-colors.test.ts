@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { angleSlots, CATEGORICAL, colorAt, colorsOf, DIVERGING, hexToRgb, legendGradient, legendTicks, percentChange, printed, ramp, scaleFor, SEQUENTIAL, settled } from "../lib/studio-colors";
+import { angleSlots, CATEGORICAL, CLASSIC, colorAt, colorsOf, DEFAULT_PALETTE, DIVERGING, hexToRgb, isPalette, legendGradient, legendTicks, overlayColors, PALETTES, percentChange, printed, ramp, scaleFor, SEQUENTIAL, settled, SPECTRUM } from "../lib/studio-colors";
+import { RAINBOW } from "../lib/rainbow";
 
 test("the ramps: one hue dark to light for a magnitude, two hues around a neutral grey for a signed field", () => {
   assert.equal(SEQUENTIAL.length, 7);
@@ -81,4 +82,34 @@ test("the scale's ends are the package's range when it wrote one, the values' ex
 test("ply angles take fixed slots in order of first appearance", () => {
   const slots = angleSlots([45, 0, -45, 90, 90, -45, 0, 45]);
   assert.deepEqual([...slots.entries()], [[45, CATEGORICAL[0]], [0, CATEGORICAL[1]], [-45, CATEGORICAL[2]], [90, CATEGORICAL[3]]]);
+});
+
+test("the rainbow palettes run every field from its lowest to its highest value; Green keeps its ramps (ADR-0063 amendment 1)", () => {
+  assert.equal(DEFAULT_PALETTE, "classic");
+  assert.deepEqual(PALETTES.map(([p]) => p), ["classic", "spectrum", "green"]);
+  assert.ok(isPalette("spectrum") && !isPalette("turbo"));
+  // Classic is the home page demo's rainbow, the one list both draw from (ADR-0098 amendment 12)
+  assert.deepEqual(CLASSIC.map(hexToRgb), RAINBOW);
+  assert.equal(SPECTRUM.length, 7);
+  for (const palette of ["classic", "spectrum"] as const) {
+    const signed = scaleFor([-1, 0.2, 3], false, null, palette); // a signed field is not centred on zero: blue is its lowest value
+    assert.deepEqual([signed.kind, signed.min, signed.max, signed.palette], ["sequential", -1, 3, palette]);
+    assert.deepEqual(signed.stops, palette === "classic" ? CLASSIC : SPECTRUM);
+    const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) < 1e-12);
+    assert.ok(near(colorAt(signed, -1), hexToRgb(signed.stops[0])));
+    assert.ok(near(colorAt(signed, 3), hexToRgb(signed.stops[signed.stops.length - 1])));
+    const written = scaleFor([0.2], false, [-2, 1], palette);
+    assert.deepEqual([written.min, written.max, written.ends, written.source], [-2, 1, [-2, 1], "package"]);
+  }
+  const green = scaleFor([-1, 0.2, 3], false, null, "green"); // as before: symmetric around the grey
+  assert.deepEqual([green.kind, green.min, green.max, green.stops], ["diverging", -3, 3, DIVERGING]);
+  assert.deepEqual(scaleFor([-1, 3]), green); // Green stays the default of the function, so callers that name no palette are unchanged
+});
+
+test("on a rainbow the critical element is outlined in white; on Green in the critical red (ADR-0063 amendment 1)", () => {
+  assert.deepEqual(overlayColors("classic"), overlayColors("spectrum"));
+  assert.equal(overlayColors("classic").critical, "#ffffff");
+  assert.equal(overlayColors("classic").criticalWord, "white");
+  assert.equal(overlayColors("green").criticalWord, "red");
+  assert.notEqual(overlayColors("green").critical, "#ffffff");
 });

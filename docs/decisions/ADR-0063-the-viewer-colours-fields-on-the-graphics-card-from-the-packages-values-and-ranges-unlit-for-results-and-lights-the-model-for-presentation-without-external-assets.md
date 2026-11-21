@@ -1,6 +1,6 @@
 # ADR-0063: The viewer colours fields on the graphics card from the package's values and ranges, unlit for results, and lights the model for presentation without external assets
 
-- Status: Proposed
+- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-06 ("what do you think about this, is this good to add? A 'presentation' lighting mode", drei's Environment, ContactShadows, a clearcoat MeshPhysicalMaterial; "Colour the stresses on the graphics card"; "A small shader could take the raw values and draw smooth or banded contours with crisp isolines"; "Results mode should stay mostly unlit so the shading never skews the colours"; then "lets do it no mistakes" for this part) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (part 4); `fea/src/anisotropy_fea/fields.py`, `components/studio/field-material.ts`, `components/studio/scene-lighting.tsx`, `components/studio/scene-canvas.tsx`, `lib/studio-colors.ts`, `lib/studio-fields.ts`; risk R-20
@@ -51,3 +51,24 @@ Easier: a colour on the plate is the legend's colour for that value; the legend'
 - A colour on the plate that is not the legend's colour for its value, or a legend end the package did not write.
 - The lit model still reads flat and the founder asks for ambient occlusion: option 3 then.
 - A field switch or an orbit drops below a smooth frame rate on a laptop at the mesh sizes the checklist admits.
+
+## Amendment 1, 2026-11-21 (the FEA look: a rainbow by default, Spectrum and Green as choices, a white critical outline, a floor grid and axes, and a Lighting switch; decided by the founder)
+
+**Context.** On 2026-11-20 the founder asked whether the workspace's FEA could "look more like FEA, like how the images look like". The mockups ([ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md)) drew the real coupon and wing records in the home page's rainbow, with element edges, a floor grid, an axis triad, a white outline on the critical element, and lights on the part. Asked whether the rainbow should colour signed stresses too, from lowest to highest as Abaqus and Ansys do, he answered "second yes agree" on 2026-11-21. Asked whether results should be lit, he asked what lit and unlit mean; he was told that unlit, his own choice in this record ("Results mode should stay mostly unlit so the shading never skews the colours"), stays the default, with a switch for the lit look, and that he may still choose lit.
+
+**Options.**
+1. *Keep the green ramps.* Rejected by the founder.
+2. *The rainbow only for unsigned fields, the grey at zero kept for signed ones.* Rejected by the founder ("second yes agree" to the rainbow for signed stresses).
+3. *Lit results by default, as in the mockups.* Not chosen for now: a shaded face shows one legend colour for two values, which this record ruled out; offered as a switch.
+4. *A rainbow by default for every field, Turbo and the green ramps as choices, unlit by default with a Lighting switch, and the drawing aids of the mockups.* Chosen.
+
+**Decision.**
+- **Colours, under View.** Classic, the default: `RAINBOW` (`lib/rainbow.ts`, the demo's), blue through cyan, green and yellow to red ([ADR-0098](ADR-0098-the-home-pages-demo-shows-an-example-wing-whole-apart-analysed-and-whole-again-from-one-recorded-solve-of-the-mesh-it-draws.md) amendment 12). Spectrum: Turbo's seven stops of [ADR-0071](ADR-0071-the-hero-lens-plays-our-own-public-results-recorded-from-the-workspace-viewer-in-the-turbo-spectrum.md) (amendment 2). Green: the two ramps of before. The choice is remembered in the browser.
+- **Signed fields.** Under Classic and Spectrum every field runs from its lowest to its highest value, the ends the package wrote, as finite element programs draw it; zero has no colour of its own and the ticks say where it falls. Under Green a signed field keeps the grey at zero, symmetric about it, as before.
+- **The shader** takes up to nine ramp stops and their count, so Classic's five are drawn exactly and not resampled.
+- **Outlines and edges.** Under Classic and Spectrum the critical element's outline is white, since red is the rainbow's top, the picked element's is black, and the mesh lines are near black; under Green they stay as before. Mesh lines stay on by default.
+- **Ground and axes.** A floor grid under the part that fades with distance, and an X Y Z triad in the model's lower left corner that turns with the view, in both modes.
+- **Lighting.** Results stay unlit by default. View, Lighting, turns on a light from the viewer's side: each colour is the ramp's times a shade from 0.6 to 1, and the legend says the shading changes the colours while it is on.
+- **Unchanged.** The package writes the ranges, the legend's ends are its ends, the contours default to 8 bands with an isoline at each boundary, and the presentation mode before a run.
+
+**Evidence.** The founder's words above. Scale tests in `tests/studio-colors.test.ts`. Screenshots are named in the As built of [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md). No evidence yet that the rainbow is read correctly by an engineer with red-green colour blindness; Spectrum, Green and the legend's numbers are the way around it.

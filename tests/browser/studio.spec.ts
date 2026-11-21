@@ -17,6 +17,27 @@ const API = /https?:\/\/[^/]+\/v1\//;
 const pickTest = (page: Page, test: string) => page.getByTestId("question-test").locator(`input[value="${test}"]`).check();
 const pickStandard = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`).check();
 const standardChoice = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`);
+/** The model tree's flyout, open: it closes once when a run's first results show (ADR-0111 amendment 3). */
+async function openTree(page: Page) {
+  const toggle = page.getByTestId("tree-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+/** The model tree opened again once a run's first results have closed it (ADR-0111 amendment 3). */
+async function reopenTree(page: Page) {
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-expanded", "false");
+  await page.getByTestId("tree-toggle").click();
+}
+/** The View menu under the legend, open: what is shown, the contours, the colours, the deformation, the mesh lines, the lighting (ADR-0134). */
+async function openView(page: Page) {
+  const menu = page.getByTestId("view-menu");
+  if ((await menu.getAttribute("open")) === null) await menu.locator("summary").click();
+}
+/** The details over the model, open: the full answer, its tables, the summary, the explanation and the files (ADR-0134). */
+async function openDetails(page: Page) {
+  const toggle = page.getByTestId("details-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
 
 // THROTTLE=4 npm run test:studio slows the browser's CPU fourfold, to find on this machine the timing a slower CI runner meets
 test.beforeEach(async ({ page }) => {
@@ -159,7 +180,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("empty-scene")).toBeVisible();
   await page.getByRole("button", { name: "Load example" }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
-  await expect(page.getByTestId("sketch")).toContainText("25 × 250 mm, 56 mm tabs"); // the typed rows drawn before any check (ADR-0062)
+  await expect(page.getByTestId("sketch-card")).toContainText("25 × 250 mm, 56 mm tabs"); // the typed rows drawn before any check (ADR-0062)
   await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "none");
   await page.getByTestId("check-button").click();
   await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "pass");
@@ -172,7 +193,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   expect(sent.library).toBe("im7-8552");
   expect(sent.form_version).toBe(fixture("values").form_version);
   await expect(page.getByTestId("preview")).toBeVisible();
-  await expect(page.getByTestId("preview")).toContainText("50 elements");
+  await expect(page.getByTestId("preview-card")).toContainText("50 elements");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "presentation"); // the model lit, the results unlit (ADR-0063)
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
@@ -236,6 +257,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
   await page.getByLabel("Ply", { exact: true }).selectOption("3");
   await expect(page.getByTestId("legend")).toContainText("Ply stress σ₂ (ply 3, -45°)");
+  await openView(page);
   await page.getByLabel("Shown as", { exact: true }).selectOption("element");
   await expect(page.getByTestId("legend")).toContainText("element values");
   await expect(page.getByTestId("studio-scene").locator("canvas")).toHaveAttribute("data-kept", "yes"); // the field switch uploads values; the mesh and the canvas stay
@@ -245,6 +267,8 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
   await page.getByLabel("Contours", { exact: true }).selectOption("8");
+  await openDetails(page); // a press outside the View menu puts it away
+  await expect(page.getByTestId("view-menu")).not.toHaveAttribute("open", "");
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("critical");
   await expect(page.getByTestId("readout")).toContainText("Tsai-Hill: ply");
@@ -335,7 +359,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   expect(sent.control).toBeUndefined();
   expect(sent.grips).toBeUndefined();
   await expect(page.getByTestId("preview")).toContainText("pressure");
-  await expect(page.getByTestId("preview")).toContainText("Click an element to hold or load");
+  await expect(page.getByTestId("preview-card")).toContainText("Click an element to hold or load");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed on a CI runner that ran every test of this file at half speed (10.2 min for the suite), as for the bending coupon above
@@ -404,8 +428,8 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await page.getByRole("button", { name: /Use Specimen B/ }).click();
   await expect(page.getByLabel("Specimen", { exact: true })).toHaveValue("B");
   await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("3");
-  await expect(page.getByTestId("sketch")).toContainText("10 × 60 mm, 15 mm tabs, a 3 mm hole");
-  await expect(page.getByTestId("sketch")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
+  await expect(page.getByTestId("sketch-card")).toContainText("10 × 60 mm, 15 mm tabs, a 3 mm hole");
+  await expect(page.getByTestId("sketch-card")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
 });
 
 test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
@@ -430,8 +454,8 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
   await page.getByLabel("Own material: E (MPa)", { exact: true }).fill("3000");
   await page.getByLabel("Own material: nu", { exact: true }).fill("0.35");
   await expect(page.getByLabel("G13 (MPa)", { exact: true })).toHaveCount(0); // no ply material for a plastic
-  await expect(page.getByTestId("sketch")).toContainText("a dog-bone narrowing to 13 by 57 mm through 76 mm fillets");
-  await expect(page.getByTestId("sketch")).toContainText("3.2 mm thick");
+  await expect(page.getByTestId("sketch-card")).toContainText("a dog-bone narrowing to 13 by 57 mm through 76 mm fillets");
+  await expect(page.getByTestId("sketch-card")).toContainText("3.2 mm thick");
   await page.getByTestId("check-button").click();
   await expect.poll(() => calls.checks.length).toBeGreaterThan(0);
   const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
@@ -562,6 +586,7 @@ test.describe("the model tree", () => {
     await page.getByTestId("build-button").click();
     await expect.poll(() => calls.solves.length).toBe(1);
     expect((calls.checks.at(-1) as { values: Record<string, unknown> }).values.element_size).toBe(4);
+    await reopenTree(page);
     // a tab of the model lights its part on the model while it is open, and lists it in the words under the model
     const scene = page.getByTestId("studio-scene");
     const conditions = page.getByTestId("panel-conditions");
@@ -752,6 +777,7 @@ test("a run ends without its PDF; Report (PDF) writes it when asked, says so, an
   await expect(page.getByTestId("job-progress").locator("li[data-step=report]")).toHaveAttribute("data-state", "done");
   expect(calls.reports ?? 0).toBe(0); // nothing is written before someone asks
 
+  await openTree(page); // the files are on the Outputs tab, and the tree closed when the results first showed (ADR-0111 amendment 3)
   await ask.click(); // the first try fails at the service: the page says so and offers it again
   await expect(ask).toBeDisabled();
   await expect(files.getByTestId("report-note")).toHaveText("Writing the report. It downloads when it is ready, in about half a minute.");
@@ -876,7 +902,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect([sent.G13, sent.G23]).toEqual([4688, 2988]);
   expect(String(sent.notes)).toContain("tape estimate");
   await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(page.getByTestId("preview")).toContainText("50 elements");
+  await expect(page.getByTestId("preview-card")).toContainText("50 elements");
 
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("make it [0/90]2s");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
@@ -940,6 +966,7 @@ test("the assistant answers a question about a ply's stress from the results on 
   await expect(page.getByTestId("chat-value-facts").last()).toContainText("ply 2 (0°) · element 125");
 
   // “here” is the element picked on the model: the answer card's Show picks the governing element
+  await openDetails(page); // the answer's table is under Details, over the model (ADR-0134)
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click();
   const title = await page.getByTestId("probe").locator("summary").innerText();
   const here = title.replace("Ply results at element ", "").trim();
@@ -2411,6 +2438,7 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   phase = "done";
   await expect(run).toHaveAttribute("data-state", "done", { timeout: 30_000 });
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "anthropic", { timeout: 15_000 }); // a model wrote it; the page does not say so
+  await openDetails(page); // the answer's table is under Details, over the model (ADR-0134)
   await page.getByTestId("answer-table").getByRole("button", { name: "Show" }).first().click();
   await expect(page.getByTestId("probe")).toBeVisible();
   await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveText("Abaqus input file (.inp)");
@@ -2419,6 +2447,7 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   // the card of the user's own Abaqus (ADR-0094 part 7), with a model that differs, an upload key just made and every fold open: it names
   // Abaqus and the connector's file and nothing else of the list; the rest of the page still names neither
   const card = page.getByTestId("abaqus-card");
+  await openDetails(page); // Show closed the details to show the place; the card is under them again
   await expect(card.getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places");
   await card.getByTestId("abaqus-keys").locator("summary").click();
   await card.getByTestId("abaqus-key-create").click();
