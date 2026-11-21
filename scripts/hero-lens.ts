@@ -82,6 +82,7 @@ async function open(page: Page, dir: string) {
   if (!swapped) throw new Error("The viewer's colour ramps were not found in the page's code: has lib/studio-colors.ts changed?");
   await page.selectOption('select[aria-label="Field"]', "u_mag");
   await page.selectOption('select[aria-label="Contours"]', "10");
+  await page.selectOption('select[aria-label="Colours"]', "green"); // the ramps swapped above are Green's; Classic is the default (ADR-0071 amendment 2)
   // The scene alone, at the recording's size, in the page's top left corner.
   await page.addStyleTag({ content: `
     .studio-canvas { position: fixed !important; inset: 0 auto auto 0 !important; width: ${WIDTH}px !important; height: ${HEIGHT}px !important; z-index: 2147483647 !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; }

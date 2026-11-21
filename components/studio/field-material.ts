@@ -6,22 +6,26 @@ import { hexToRgb } from "@/lib/studio-colors";
  * and the scale's ends and ramp. Unlit, so no light skews a colour: a colour on the plate is the legend's colour for that value.
  * Bands cut the ramp into equal steps of the legend, with an isoline drawn one pixel wide at every step boundary (`fwidth`, so the
  * line is as wide on a zoomed-out plate as on a zoomed-in one); 0 bands is the smooth ramp. A missing value is the named grey.
- * The side faces are darkened a little so the thickness reads; the top and bottom faces are the pure colour.
+ * The side faces are darkened a little so the thickness reads; the top and bottom faces are the pure colour. The ramp has up to nine
+ * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on, a light
+ * from the viewer's side shades every face from 0.6 to 1 of its colour: a picture of the part, no longer one colour per value.
  */
 
 /** The float written where the package wrote no value (a node no element touches): any real value is above it. */
 export const NO_VALUE = -1e30;
 export const MISSING_GRAY = "#3a3f3b";
 const ISOLINE = "#0c0e0d"; // the background's colour, so a line reads as a cut through the ramp
-const STOP_COUNT = 7;
+const STOP_COUNT = 9; // the most stops a ramp may have; `uCount` says how many it has
 
 const vertexShader = /* glsl */ `
   attribute float value;
   varying float vValue;
   varying vec3 vNormal;
+  varying vec3 vViewNormal;
   void main() {
     vValue = value;
     vNormal = normal;
+    vViewNormal = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }`;
 
@@ -29,19 +33,22 @@ const fragmentShader = /* glsl */ `
   uniform float uMin;
   uniform float uMax;
   uniform vec3 uStops[${STOP_COUNT}];
+  uniform float uCount;
+  uniform float uLit;
   uniform float uBands;
   uniform float uIsoline;
   uniform vec3 uMissing;
   uniform vec3 uIsoColor;
   varying float vValue;
   varying vec3 vNormal;
+  varying vec3 vViewNormal;
 
   vec3 rampAt(float t) {
-    float p = clamp(t, 0.0, 1.0) * float(${STOP_COUNT - 1});
+    float p = clamp(t, 0.0, 1.0) * (uCount - 1.0);
     vec3 color = uStops[0];
     for (int i = 0; i < ${STOP_COUNT - 1}; i++) {
       float lo = float(i);
-      if (p >= lo && p <= lo + 1.0) color = mix(uStops[i], uStops[i + 1], p - lo);
+      if (lo < uCount - 1.0 && p >= lo && p <= lo + 1.0) color = mix(uStops[i], uStops[i + 1], p - lo);
     }
     return color;
   }
@@ -49,6 +56,10 @@ const fragmentShader = /* glsl */ `
   void main() {
     float flatFace = step(0.5, abs(vNormal.z));
     float shade = mix(0.78, 1.0, flatFace);
+    if (uLit > 0.5) {
+      vec3 n = normalize(gl_FrontFacing ? vViewNormal : -vViewNormal);
+      shade = 0.6 + 0.4 * max(dot(n, normalize(vec3(0.35, 0.5, 1.0))), 0.0);
+    }
     if (vValue < -1.0e29) {
       gl_FragColor = vec4(uMissing * shade, 1.0);
       return;
@@ -73,7 +84,7 @@ const fragmentShader = /* glsl */ `
     gl_FragColor = vec4(color * shade, 1.0);
   }`;
 
-export type FieldScale = { min: number; max: number; stops: string[]; bands: number };
+export type FieldScale = { min: number; max: number; stops: string[]; bands: number; /** a light from the viewer's side (ADR-0063 amendment 1) */ lit?: boolean };
 
 function vec(hex: string): THREE.Vector3 { const [r, g, b] = hexToRgb(hex); return new THREE.Vector3(r, g, b); } // raw sRGB: the shader writes it as is
 
@@ -82,7 +93,7 @@ export function fieldMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader, fragmentShader, side: THREE.DoubleSide,
     uniforms: {
-      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uIsoline: { value: 1.2 },
+      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uIsoline: { value: 1.2 }, uCount: { value: 7 }, uLit: { value: 0 },
       uStops: { value: Array.from({ length: STOP_COUNT }, () => new THREE.Vector3(0.5, 0.5, 0.5)) },
       uMissing: { value: vec(MISSING_GRAY) }, uIsoColor: { value: vec(ISOLINE) },
     },
@@ -93,9 +104,12 @@ export function applyScale(material: THREE.ShaderMaterial, scale: FieldScale): v
   material.uniforms.uMin.value = scale.min;
   material.uniforms.uMax.value = scale.max;
   material.uniforms.uBands.value = scale.bands;
+  material.uniforms.uLit.value = scale.lit ? 1 : 0;
+  const count = Math.min(STOP_COUNT, Math.max(2, scale.stops.length));
+  material.uniforms.uCount.value = count;
   const stops = material.uniforms.uStops.value as THREE.Vector3[];
   for (let i = 0; i < STOP_COUNT; i++) {
-    const [r, g, b] = hexToRgb(scale.stops[Math.min(i, scale.stops.length - 1)]);
+    const [r, g, b] = hexToRgb(scale.stops[Math.min(i, count - 1)]);
     stops[i].set(r, g, b);
   }
 }

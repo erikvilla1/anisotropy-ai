@@ -34,7 +34,15 @@ Option 4, for the FEA section: the coupon (set up, imported, a past analysis ope
 
 ## As built (2026-11-21)
 
-Not built yet. Written first, on the branch that builds it.
+- **Where.** `components/workspace/canvas-shell.tsx` (the rail, the flyout, the card, the chat, the phone's sheet, the keys), `components/workspace/canvas-slots.tsx` (the card's places: project, view, answer, details, over the model), `app/workspace/canvas.css`. The coupon fills the places from `components/studio/coupon-studio.tsx` and `results-view.tsx`; the wing from `components/workspace/wing-stage.tsx` and `wing-workspace.tsx`. The look is ADR-0063 amendment 1 and ADR-0071 amendment 2 (`lib/rainbow.ts`, `lib/studio-colors.ts`, `components/studio/scene-canvas.tsx`).
+- **Differences from the plan.**
+  - Narrow screens: the sheet has two buttons, Project (Results once there are results) and Assistant. It opens on the chat and turns to the card once when the first results show; on a phone the tree also closes then, even if the engineer opened it, because it covers the page.
+  - The wing: its tree stays open on a wide screen when its answer first shows, since it is worked again on every change. The margin chart's key sits under the chart, so only the planform's colours are in the card. Its assistant keeps the answer in words above the chat, as before, and the box to type in stays at the column's foot.
+  - The wing's page now has the workspace header, as the coupon's has (`lib/site-nav.ts`); it had the site's header and footer.
+  - The legend's numbers sit under the bar at their own places, in two staggered rows.
+  - The View menu is a popover that closes on a press outside it or on Esc.
+  - The model's download is one menu in the project column, the same before and after a run.
+- **Checked.** In a local browser at 1440 by 900 after a run, the model's area is 985 by 543 px with the tree closed and the card 300 px tall. The browser specs that read the old columns were changed (`tests/browser/studio.spec.ts`, `workspace.spec.ts`, `import.spec.ts`, `wing.spec.ts`): `wing.spec.ts` 15 passed; the studio scenarios that failed on the first run passed when run again with fewer workers at once. The colour tests (`tests/studio-colors.test.ts`) 10 pass. The full browser suite runs on the pull request.
 
 ## Why (evidence)
 

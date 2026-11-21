@@ -28,11 +28,15 @@ export function StepPanel({ id, title, step, state = "none", word, open = true, 
   );
 }
 
+/** The event a panel opened from elsewhere sends, its id the detail: the canvas shell opens the model tree for it (ADR-0111 amendment 3). */
+export const PANEL_EVENT = "ws:panel";
+
 /** Opens a panel and brings it into view: what a failed checklist item's link and the assistant's suggestions do. */
 export function showPanel(id: string) {
   const element = document.getElementById(`panel-${id}`);
   if (!element) return;
   (element as HTMLDetailsElement).open = true;
+  window.dispatchEvent(new CustomEvent(PANEL_EVENT, { detail: id }));
   element.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -42,6 +46,7 @@ export function revealPanel(id: string) {
   const element = document.getElementById(`panel-${id}`);
   if (!element) return;
   (element as HTMLDetailsElement).open = true;
+  window.dispatchEvent(new CustomEvent(PANEL_EVENT, { detail: id }));
   element.scrollIntoView({ behavior: "smooth", block: "nearest" });
   element.classList.remove("ws-panel-changed");
   void (element as HTMLElement).offsetWidth; // restart the mark when the same panel changes twice
