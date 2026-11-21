@@ -25,7 +25,7 @@ export type ProjectContextValue = {
   imports: boolean;
   /** Whether a plate may be set up on the model tree, held and loaded on any edge or face (ADR-0089 amendment 7): where the import is. */
   plates: boolean;
-  /** Whether the model downloads as an Ansys file too (ADR-0129): where the import is, until the file has been run in Ansys. */
+  /** Whether the model downloads as an Ansys file too (ADR-0129): where the import is, until the founder opens it to everyone. */
   ansysModel: boolean;
   /** Whether this form's every row is offered: every test is, or it is a plate where plates are (ADR-0089 amendment 7). */
   offersAll: boolean;

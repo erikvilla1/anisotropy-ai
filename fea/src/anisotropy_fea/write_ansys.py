@@ -3,9 +3,7 @@
 The file is the model the Abaqus deck states, in Mechanical APDL's own commands: the nodes, elements and components as the blocks an
 archive file holds (`NBLOCK`, `EBLOCK`, `CMBLOCK`, the form `CDWRITE` writes), and the element type, the material, the layered section,
 the supports, the loads and one linear static solution as plain commands. Numbers are written in the deck's unit system from the model's
-SI values, and the text is deterministic. One coupon's file has run in Mechanical APDL 2026 R1 (ADR-0129 amendment 2: an unnotched
-tension strip of four-node shells, pulled by a displacement and by a force); a pressure, the eight-node shell, a file in metres and
-Workbench's External Model have not. Each convention below is stated from the command and element reference, and the tests of this
+SI values, and the text is deterministic. Each convention below is stated from the command and element reference, and the tests of this
 repository check it only by reading the text back.
 
 What Mechanical APDL does differently from Abaqus, and what this file does about it:
@@ -25,7 +23,7 @@ What Mechanical APDL does differently from Abaqus, and what this file does about
   `*Fail Stress` does. Compressive limits are negative. The Tsai-Wu coefficient XYCP is twice our f12*; zero is written 1E-14 because a
   zero there means Ansys's own default of -1.
 - Failure measures are worked out after the solution, for the criteria `FCTYP` names. Its own choice includes the maximum strain
-  criterion, and with stress limits alone Mechanical APDL 2026 R1 then stops at an error and lists none, so the file names the maximum
+  criterion, and with stress limits alone Mechanical APDL then stops at an error and lists none, so the file names the maximum
   stress criterion alone (ADR-0129 amendment 2).
 """
 

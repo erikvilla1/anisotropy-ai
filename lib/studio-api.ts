@@ -854,7 +854,7 @@ export async function answerGeneral(apiBase: string, question: string, kinds: st
  * founder's sign-in is offered where the tests are not (amendment 6); `plates`, a plate set up on the model tree, held and loaded on any
  * edge or face, offered where the import is (amendment 7). */
 export type Offered = { all: boolean; imports: boolean; plates: boolean;
-  /** The model downloads as an Ansys file too (ADR-0129): offered where the import is, until the file has been run in Ansys. */
+  /** The model downloads as an Ansys file too (ADR-0129): offered where the import is, until the founder opens it to everyone. */
   ansysModel: boolean };
 const NOTHING_MORE: Offered = { all: false, imports: false, plates: false, ansysModel: false };
 const couponTestAnswers = new Map<string, Promise<Offered>>();

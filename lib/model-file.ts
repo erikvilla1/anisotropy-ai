@@ -61,10 +61,10 @@ export function modelFileAnswer(program: ModelProgram | null, c: ModelFileContex
   }
   if (program === "ansys" && !c.ansys) {
     return { title: "Not as an Ansys file yet", offers: ["abaqus"],
-      lines: ["The Ansys file is being checked in Ansys before it is offered.", "Today the model downloads as the file below."] };
+      lines: ["The Ansys file is not offered yet.", "Today the model downloads as the file below."] };
   }
   const offers: ModelProgram[] = program ? [program] : c.ansys ? ["abaqus", "ansys"] : ["abaqus"];
   return { title: "Download the model", offers,
     lines: ["The model as it is set up now: the mesh, the layup, the material, the supports and the loads, ready to run in your own copy of the program.",
-      ...(offers.includes("ansys") ? ["The Ansys file was checked in Ansys on one tension coupon. Compare its reaction with the one shown here before relying on it."] : [])] };
+      ...(offers.includes("ansys") ? ["Compare the Ansys file's reaction with the one shown here before relying on it."] : [])] };
 }

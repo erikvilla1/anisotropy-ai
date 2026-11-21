@@ -1973,7 +1973,7 @@ test("the model downloads as a file for the engineer's own program, from the men
   expect(asked.map((a) => a.program)).toEqual(["ansys", "abaqus"]);
   await say("donwload ansys modle"); // typed fast
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
-  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("Compare the Ansys file's reaction with the one shown here");
   await say("export the model"); // no program named: every file offered
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "abaqus ansys");
   // a setup the package cannot write is said in its own words, and nothing is saved
@@ -2042,7 +2042,7 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   await message.press("Enter");
   await expect(page.getByTestId("coupon-chat").locator("h4").last()).toHaveText("Download the model");
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
-  await expect(page.getByTestId("chat-model-file").last()).toContainText("was checked in Ansys on one tension coupon");
+  await expect(page.getByTestId("chat-model-file").last()).toContainText("Compare the Ansys file's reaction with the one shown here");
   await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
 });
 
