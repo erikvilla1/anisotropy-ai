@@ -14,7 +14,7 @@ holds the runs and their output.
 
 The two fea failures are conditions of this machine, not of the change:
 
-- `tests/test_abaqus.py::test_abaqus_solves_the_public_check_deck_and_the_kernel_reproduces_the_export`: the Abaqus run needs the UCSD teaching licence over the VPN (ADR-0045); the reason captured on the rerun is quoted at the end of this note.
+- `tests/test_abaqus.py::test_abaqus_solves_the_public_check_deck_and_the_kernel_reproduces_the_export`: the Abaqus run needs Abaqus's licence server in reach (ADR-0045); the reason captured on the rerun is quoted at the end of this note.
 - `tests/test_write_abaqus.py::test_every_test_folder_has_the_same_shape`: the local coupon `.local/fea/IM7UNT-UNT-L5/`, made on 2026-10-27 by the founder's end-to-end run of ADR-0050, has its CalculiX record but not yet the hand-written reading `IM7UNT-UNT-L5-calculix.md` beside it (the run tool prints "Next, by hand: the record's reading"). The test asks for one; it is the founder's to write or the coupon's to remove. Nothing on this branch touches it.
 
 New tests on this branch, all in the counts above: `fea/tests/test_values_input.py` (28), `test_checks.py` (14), `test_fields.py` (8), `test_studio_tool.py` (6), the extended `test_intake.py` (35) and `test_run_coupon.py` (8, two with CalculiX); `api/tests/test_coupon_check_api.py` (12, one with the database) and the extended `test_coupon_jobs_api.py` (30, two with the database).
@@ -74,5 +74,5 @@ and row count, never the rows; a request under the actor `studio` is recorded, w
 ## Appendix: the Abaqus rerun
 
 `cd fea && uv run pytest -q tests/test_abaqus.py` on 2026-10-28: 1 failed, 4 passed in 41 s. The failing solve's message file,
-`unnotched-im7-8552-coupling-abaqus.msg`, holds `*** Error: Abaqus Error: License for standard is not available.`: the UCSD teaching
-licence (ADR-0045) was not reachable from this machine at the time. The deck is unchanged on this branch.
+`unnotched-im7-8552-coupling-abaqus.msg`, holds `*** Error: Abaqus Error: License for standard is not available.`: the licence
+server (ADR-0045) was not reachable from this machine at the time. The deck is unchanged on this branch.

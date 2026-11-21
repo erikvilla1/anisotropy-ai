@@ -140,7 +140,7 @@ def variables_line(lines: list[str], i: int) -> str:
 
 @pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
 def test_the_stress_and_strain_tables_of_a_membrane_coupon_list_every_layers_middle_section_point(spec_path):
-    """Abaqus printed section points 1 and 24 alone for the 8-layer coupon run on 2026-11-08, so the validation table had plies 1 and 8
+    """With no list, Abaqus prints section points 1 and 24 alone for an 8-layer coupon, so the validation table would have plies 1 and 8
     only (ADR-0066): the writer lists the middle of every layer (point 3k - 1 at 3 Simpson points per layer) on the S and E tables of a
     membrane coupon, and leaves a bending coupon's tables at Abaqus's default, the faces."""
     needs_mesher(spec_path)

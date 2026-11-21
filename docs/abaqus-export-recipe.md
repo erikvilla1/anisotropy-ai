@@ -31,7 +31,7 @@ The script pairs the engineer's elements with ours by number (our deck) or by po
 
 **Reading a value in CAE the way our page shows it.** Query > Probe Values on the element by its number, the layer's middle section point, Result Options > Averaging off (CAE averages at nodes, 75 % by default), the layer's material axes (CAE's default for a composite layer). Our studio's probe table for a clicked element lists the same numbers. S13 and S23 are not in a shell layer's S: Abaqus reports the transverse shear as TSHR13 and TSHR23; our membrane kernel does not model it.
 
-What Abaqus 2025 showed about its own output is in `fea/checks/abaqus-conventions.toml`; what round (a) showed is in `fea/checks/d3039-im7-8552/README.md`.
+How Abaqus 2025 reports its own output is in `fea/checks/abaqus-conventions.toml`; how round (a) is compared and what it is held to is in `fea/checks/d3039-im7-8552/README.md`.
 
 ## Reading a composite result the way the page reads it (ADR-0066, 2026-11-08)
 
@@ -80,13 +80,13 @@ SF, SE
 S, E
 ```
 
-Open questions, and what the run of 2026-11-08 (Abaqus/Standard 2025, S4R, our deck `AS48552-UNT-L1-abaqus.inp` run from the command line) settled:
+How Abaqus/Standard 2025 prints a composite shell's results, checked on 2026-11-08, and what is still open:
 
-1. Section points: **settled.** With no section-point list, `*El Print` of a composite writes two section points only, the bottom of ply 1 and the top of the last ply (points 1 and 24 for 8 layers at 3 Simpson points each). The middle of layer k is section point 3k − 1 (2, 5, 8, 11, 14, 17, 20, 23), and the list goes on the first data line of `*El Print`, before the variable. Our writer lists them on the `S` and `E` tables of every membrane coupon since 2026-11-08 (`fea/src/anisotropy_fea/write_abaqus.py`), so every ply's centroid stress is printed. Verified on 2026-11-08: the regenerated `AS48552-UNT-L1` deck printed `S` and `E` at section points 2, 5, 8, 11, 14, 17, 20 and 23 for both probe elements, one row per ply, bottom first.
-2. Axes: **settled.** `S11`, `S22`, `S12` at a layer's section point are in that ply's material axes: the 45° ply of the gauge element read 170.0 / 15.22 / −23.00 MPa, the fibre-axis values our engine gives (170.1 / 15.2 / −23.0), not the section orientation's.
-3. Shear strain: **settled.** `E12` is the engineering shear strain, twice the tensor value: 0.004767 for the 45° ply, which is ε_y − ε_x of the laminate. Our engine uses the same (ADR-0004).
+1. Section points: **settled.** With no section-point list, `*El Print` of a composite writes two section points only, the bottom of ply 1 and the top of the last ply (points 1 and 24 for 8 layers at 3 Simpson points each). The middle of layer k is section point 3k − 1 (2, 5, 8, 11, 14, 17, 20, 23), and the list goes on the first data line of `*El Print`, before the variable. Our writer lists them on the `S` and `E` tables of every membrane coupon since 2026-11-08 (`fea/src/anisotropy_fea/write_abaqus.py`), so every ply's centroid stress is printed. With the list, `S` and `E` are printed at section points 2, 5, 8, 11, 14, 17, 20 and 23, one row per ply, bottom first.
+2. Axes: **settled.** `S11`, `S22`, `S12` at a layer's section point are in that ply's material axes, the fibre-axis values our engine gives, not the section orientation's.
+3. Shear strain: **settled.** `E12` is the engineering shear strain, twice the tensor value: for a 45° ply it is ε_y − ε_x of the laminate. Our engine uses the same (ADR-0004).
 4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes? Still UNVERIFIED.
-5. The reaction: **settled.** `RF2` at the loaded reference node with `totals=YES` is the coupon's force (4705.40 N against our 4706.78 N, 0.03 %); the `TOTAL` line is the one node.
+5. The reaction: **settled.** `RF2` at the loaded reference node with `totals=YES` is the coupon's force; the `TOTAL` line is the one node.
 
 ### Reading the `.dat` beside ours (2026-11-08)
 

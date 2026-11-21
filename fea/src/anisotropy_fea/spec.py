@@ -211,7 +211,7 @@ class AbaqusOutput(Record):
     every_layer: bool = False
     # the deck's element for a mesh of order 1: S4R (one reduced-integration point and hourglass control, CAE's default) or S4 (full
     # integration, as our kernel's element is). The founder chose S4 for the tension coupon's comparison on 2026-11-11 (ADR-0089
-    # amendment 2): with it every gauge value of Abaqus agreed with our kernel within 0.0074 %, against 1.61 % with S4R
+    # amendment 2): S4's integration is our element's, and S4R's reduced integration and hourglass control are not
     element: Literal["S4R", "S4"] = "S4R"
 
 

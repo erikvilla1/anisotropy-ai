@@ -1,7 +1,7 @@
 """The connector's watched folder (ADR-0094, step 8): `tools/anisotropy_connector.py --watch <folder>` deals with each job as it
 finishes there. A job is the files Abaqus leaves: `<job>.odb`, `<job>.inp`, a `.sta` whose last line is Abaqus's own ending, and a
 `.lck` while it runs. The ODB reader is replaced as in test_anisotropy_connector.py and the site is the server of
-test_connector_send.py. No Abaqus runs here: the watch under `abaqus python` is checked on the founder's machine."""
+test_connector_send.py. No Abaqus runs here: the watch under `abaqus python` is checked where Abaqus is installed."""
 
 from __future__ import annotations
 

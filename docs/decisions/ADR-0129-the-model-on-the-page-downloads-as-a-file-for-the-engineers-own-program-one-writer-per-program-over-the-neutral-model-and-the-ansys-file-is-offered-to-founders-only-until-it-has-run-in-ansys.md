@@ -17,7 +17,7 @@
 ## Options considered
 
 1. **One writer per program over the neutral model, the file written on request from the rows as they stand (chosen).** No run is needed, no solver is touched, and the next program is one more writer. The Ansys writer is new code that only a run in Ansys can fully check.
-2. **Write the Ansys file through PyMAPDL or PyACP.** They are MIT licensed, but they drive a running, licensed Ansys, so they cannot run on the hosted site. Rejected for the product; they stay useful for the check on the founder's PC.
+2. **Write the Ansys file through PyMAPDL or PyACP.** They are MIT licensed, but they drive a running, licensed Ansys, so they cannot run on the hosted site. Rejected for the product; they stay useful for a check of the file in Ansys.
 3. **Translate the Abaqus file with a third-party converter.** Two translations instead of one, and the layup, the orientation and the grips are where converters differ. Rejected.
 4. **Wait until the Ansys import exists and use its reader as the check.** The founder put the download before the import (2026-11-20). A full reader of our own would also check our writer against our own reading of the manual, not against Ansys. Rejected for now; the tests carry a strict reader of exactly the commands the writer may emit, and an independent open-source reader for the mesh.
 5. **Plain `N` and `E` commands in place of blocked data.** Readable, but several times larger, slower to read in, and not what Ansys itself writes. Rejected: the file follows the archive layout `CDWRITE` produces, which the open-source reader also understands.
@@ -80,7 +80,7 @@ A grip whose reference point may turn, or that carries a moment, is refused with
 
 ## How we will know it was wrong
 
-- The file does not read into Mechanical APDL without errors, or its reaction at the grip differs from ours by more than 1 %, the mark the Abaqus comparison is held to (ADR-0089), on the first check on the founder's PC.
+- The file does not read into Mechanical APDL without errors, or its reaction at the grip differs from ours by more than 1 %, the mark the Abaqus comparison is held to (ADR-0089), on a first check.
 - An engineer reports plies turned by 90°, a pressure pointing the wrong way, or a grip that carries a different load than the page shows.
 - A request for the file is read as something else, or another question is read as a request, in the question bank's real-model run or on the live site.
 

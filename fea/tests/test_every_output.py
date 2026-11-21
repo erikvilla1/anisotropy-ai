@@ -182,7 +182,7 @@ class StubField:
 
 def test_the_exporter_reads_a_coupled_grips_reaction_on_its_reference_point_and_keeps_the_section_points(tmp_path, monkeypatch):
     """`read` runs only under Abaqus, where a mistake in it ends a job with exit code 0. A stand-in ODB of one element under kinematic
-    couplings, shaped as Abaqus 2025 gave it on 2026-11-12: every reaction of the instance zero, the pull on two nodes of the assembly."""
+    couplings, shaped as Abaqus 2025 gives it: every reaction of the instance zero, the pull on two nodes of the assembly."""
     import types
 
     monkeypatch.syspath_prepend(str(TOOLS))

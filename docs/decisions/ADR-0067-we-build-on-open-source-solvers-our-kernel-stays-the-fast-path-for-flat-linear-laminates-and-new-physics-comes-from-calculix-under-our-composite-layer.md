@@ -22,7 +22,7 @@ Growth is already built on open source in places: CalculiX solves the twin (`wri
 1. **Grow our own kernel for each new physics** (solids, nonlinear geometry, buckling eigenvalues, contact, dynamics). Every equation would be in `fea/docs/theory.md` with a code marker, one code path. But each new element and procedure re-implements what CalculiX already has and needs its own validation ladder; years of work that does not reach the composite layer, and against the founder's direction.
 2. **Keep the kernel for what it does today, and take every new physics from CalculiX, with our composite layer applied to CalculiX's results.** The kernel stays the fast path and the independent check where both solvers apply; new kinds reach users at the cost of writing a deck and reading results, not a solver.
 3. **Retire the kernel and run everything through CalculiX.** One solver to maintain. But it loses the sub-second solve the chat relies on, loses the independent second answer (CalculiX would have no twin), loses the four-node composite shell CalculiX refuses, and every result would rest on a binary whose conventions we detect by running it (R-17).
-4. **Build on a commercial solver (Abaqus).** Rejected: the only installation is the founder's teaching licence, not for company work (ADR-0030), and the founder ruled it out of the product (ADR-0066 amendment 1, "open source calculix is enough").
+4. **Build on a commercial solver (Abaqus).** Rejected: licensed software cannot run in the hosted product (ADR-0030), and the founder ruled it out of the product (ADR-0066 amendment 1, "open source calculix is enough").
 
 ## Decision
 

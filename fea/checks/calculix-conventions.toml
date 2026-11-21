@@ -37,7 +37,7 @@ shear_strain = "tensor"
 # on one isotropic S8R plate, 20 by 10 by 1 mm, E = 70000 MPa, nu = 0.3, clamped along x = 0, under P = 0.01 MPa: the free-edge nodes moved
 # w = +2.693197e-02 mm (the kernel's one MITC4 element on the same plate under its own pressure of 0.01 MPa: -3.3495823e-02 mm), and the
 # clamped edge's printed total reaction was RFz = -1.666667 N. A CalculiX deck therefore writes the kernel's pressure with the opposite sign.
-# The file first said that the Abaqus P label was the kernel's sign; a run of Abaqus 2025 on 2026-11-17 showed that *Dload P on a shell
+# The file first said that the Abaqus P label was the kernel's sign; in Abaqus 2025, checked on 2026-11-17, *Dload P on a shell
 # element pushes along the normal too, as CalculiX does (ADR-0053 amendment 1), so both decks now carry the same number.
 pressure_label = "P"
 pressure_direction = "along the element normal (+z for counterclockwise nodes), as the P label of Abaqus's *Dload on a shell element"

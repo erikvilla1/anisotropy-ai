@@ -3,7 +3,7 @@
     uv run python tools/record_from_report.py ../.local/fea/<coupon>/team/<date>/<team deck>.inp --units mm-MPa \
         --reports ../.local/fea/<coupon>/team/<date>/results/<report S11>.csv ../.local/fea/<coupon>/team/<date>/results/<report S22>.csv \
                   ../.local/fea/<coupon>/team/<date>/results/<report Mises>.csv \
-        --elements 545 546 --version 2026 --run-by "the team" --machine "UCSD lab, Abaqus/CAE 2026" \
+        --elements 545 546 --version 2026 --run-by "the team" --machine "the team's lab, Abaqus/CAE 2026" \
         --tolerance 0.01 --floor 0.02 --title "..." --out ../.local/fea/<coupon>/comparison/<record>.toml
 
 Both solvers ran the same deck, so `deck_kernel` and `deck_reference` are that deck. A record of a deck whose material is not

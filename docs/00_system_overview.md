@@ -48,7 +48,7 @@ The planned layers each use the validation evidence differently. None of them is
 | numpy, pydantic, pytest | Engine math, input checking, tests | `engine/uv.lock` |
 | FastAPI, Uvicorn, Pydantic, NumPy, pytest, HTTPX2 | Local API, serving, validation and integration tests | `api/uv.lock` |
 | Node.js 24, Next.js 16, React 19 | Website | `package-lock.json` |
-| CalculiX, Gmsh, Tectonic; Abaqus (optional, teaching licence) | Reference solver, hole meshes, the coupon document; a second reference solver | [installing the tools](installation-fea-tools.md), `fea/uv.lock` |
+| CalculiX, Gmsh, Tectonic; Abaqus (optional) | Reference solver, hole meshes, the coupon document; a second reference solver | [installing the tools](installation-fea-tools.md), `fea/uv.lock` |
 | GitHub | Code, pull requests, automated tests | |
 | Language model provider | Anthropic Claude through the `anthropic` SDK, behind a setting; the template writer without it (ADR-0052) | `api/uv.lock` |
 
