@@ -1,6 +1,6 @@
 # ADR-0071: The hero lens plays our own public results, recorded from the workspace's viewer in the Turbo spectrum
 
-- Status: Proposed; the lens is hidden for now (amendment 1)
+- Status: Proposed; the lens is hidden for now (amendment 1); the workspace offers Turbo as Spectrum and the lens keeps it, amendment 2
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 (the lens showing models of different applications; "try spectrum?" for its colours) | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendments 3 and 9 (the hero, the first lens and its removal), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the clip under it), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (the Abaqus licence), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays off the repository), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the viewer's shader), `scripts/hero-lens.ts`, `components/home/hero-lens.tsx`, `lib/hero-lens.ts`, `app/home.css`, `tests/hero-lens.test.ts`, `tests/browser/home.spec.ts`
@@ -88,3 +88,13 @@ Options 3, 4c and 5.
 **Decision.** The home page no longer renders the lens. Everything that makes it stays in the repository: the component, its styles, the recording, its poster, the timing file and the script. Adding `<HeroLens />` back to the hero in `app/page.tsx` brings it back. Its browser test now checks that the hero has no lens and that the recording is still served.
 
 **Evidence.** On 2026-11-10, against a build without the hero clip and with the local engine running, `home.spec.ts`, `calculator.spec.ts` and `workspace.spec.ts` passed 19 of 19, including the new check. `npm run typecheck` was clean, and `npm test` passed 196 with 1 skipped (after merging main).
+
+## Amendment 2, 2026-11-21 (the workspace offers Turbo as Spectrum; the lens keeps it; decided by the founder)
+
+**Context.** This record's Decision says "The workspace keeps its own colours" and has the recording swap the viewer's two green ramps for Turbo. On 2026-11-21 the founder agreed the rainbow as the workspace's default for every field ([ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) amendment 1), with Turbo and today's green as choices.
+
+**Options.** (1) Drop Turbo: rejected, it reads better than the plain rainbow for some fields and the lens uses it. (2) Offer it in the workspace as Spectrum, with the same seven stops the recording uses, and keep the lens's recording as it is: chosen.
+
+**Decision.** The workspace's colours are now ADR-0063 amendment 1's: Classic by default, Spectrum (these Turbo stops, t = 0.08 to 0.96) and Green under View, Colours. The lens is still recorded in Turbo: `scripts/hero-lens.ts` picks Green under Colours before it swaps the green ramps for Turbo, so its swap still finds them. The recording also now shows the viewer's floor grid and axes.
+
+**Evidence.** No evidence yet: the lens has not been recorded again (it is hidden, amendment 1), so the script's change is UNVERIFIED.

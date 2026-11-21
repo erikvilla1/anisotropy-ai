@@ -1,6 +1,6 @@
 # ADR-0098: The home page's demo shows an example wing, whole, apart, analysed and whole again, from one recorded solve of the mesh it draws
 
-- Status: Proposed, with amendment 1
+- Status: Proposed, with amendment 1; the workspace now shares the demo's rainbow, amendment 12
 - Date: 2026-11-14
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-14 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0095](ADR-0095-the-home-page-demonstrates-the-product-the-coupon-workspace-in-a-white-box-under-the-hero-with-one-recorded-run-the-laminate-calculator-and-its-tour-are-archived.md), whose stage, beats, hand-over and scroll rules stay and whose centre model and cards this replaces; ADR-0001 (the engine computes every number in a result); ADR-0067 (new physics comes from CalculiX under our composite layer); ADR-0091 (the product view's words)
@@ -178,3 +178,13 @@ UNVERIFIED: the buckling factor (the mesh was not refined for it, and it is run 
 
 **Evidence.** `python3 scripts/demo-wing.py --solve` on 2026-11-14 (CalculiX 2.21; 2733 nodes, 804 elements, 11 sections): the span cell beside the root carries 500.37 N against 500 N applied; 80 mm from the root the upper caps are in compression and the lower in tension (front spar -61.8 and +62.0 MPa, rear -73.3 and +73.6 MPa); the caps carry 0.849 of the bending moment there by the solver's stresses, against 0.836 to 0.880 by hand; the tip rises 79.90 mm, 3.74 % of the span; the most loaded part is the rear spar, 0.0755 of its strength used 80 mm from the root, ply 8 (0 degrees) in fibre compression; the front spar reaches 0.0592 and the ribs 0.0723. `--buckle`: factors 4.998, 5.363, 5.447 and 6.461 under 500 N. `npm test`: 333 tests, 332 passed, 1 skipped. `npx tsc --noEmit` clean. `demo.spec.ts`: 13 of 13 against the dev server. The four beats were captured at 1440 px and looked at. UNVERIFIED: the buckling factors (the mesh was not refined for buckling, and of each mode only where it moves most was read); the by-hand estimate of option 2; whether a structures engineer on the team would choose these caps and layups; the ribs' largest value, which is on the tip rib where two load points sit and may be a local effect of how the load is put on; real GPUs, Safari, Firefox and phones.
 
+
+## Amendment 12, 2026-11-21 (the workspace now uses the demo's rainbow; decided by the founder)
+
+**Context.** The Consequences of this record say "The rainbow is the demo's alone; the workspace keeps its own scale." On 2026-11-20 the founder asked for the workspace's FEA to look "more like FEA, like how the images look like", the mockups drew the coupon and the wing in this rainbow, and on 2026-11-21 he agreed the rainbow for every field, signed stresses included ("second yes agree").
+
+**Options.** (1) Keep the rainbow to the demo: rejected by the founder. (2) A second rainbow for the workspace: rejected, two rainbows would differ for no reason. (3) The workspace uses this rainbow, `RAINBOW` in `lib/demo-wing.ts`, as its default scale: chosen.
+
+**Decision.** The sentence "The rainbow is the demo's alone; the workspace keeps its own scale" no longer holds. The workspace's default colour scale, Classic ([ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) amendment 1), is `RAINBOW`, read from `lib/demo-wing.ts` so the home page and the workspace draw the same colours. The demo itself does not change.
+
+**Evidence.** The founder's words above; the mockups are linked from [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md).
