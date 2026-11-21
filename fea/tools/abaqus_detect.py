@@ -15,7 +15,7 @@ With --run it runs `abaqus datacheck` on each, then a full run of those the data
 error Abaqus gave, and the columns of each printed table (read with `anisotropy_fea.abaqus_dat`). Nothing is concluded here: the person
 running it copies what it printed into `fea/checks/abaqus-conventions.toml`. Which identifiers exist, where a section-point list goes under
 `*Element Output`, the order of the principal stresses at a shell section point and whether CFAILURE is 1/R or 1/R squared are UNVERIFIED
-until this has run. Needs Abaqus (ANISOTROPY_ABAQUS or `abaqus` on PATH) and a licence seat (the founder's, over the UCSD VPN).
+until this has run. Needs Abaqus (ANISOTROPY_ABAQUS or `abaqus` on PATH) and a licence seat.
 """
 
 from __future__ import annotations

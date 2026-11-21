@@ -8,7 +8,7 @@
 
 ## Context
 
-On 2026-11-08 the founder put three views of the hosted coupon `AS48552-UNT-L1` (AS4/8552 [45/0/-45/90]s, 250 by 25 mm, 56 mm tabs, 0.5 mm pull) side by side and found no two numbers alike: the studio's Summary said the largest σ₁ is 536.6 MPa in ply 2 (0°) at element 1164; PrePoMax on the CalculiX `.frd` said von Mises 630.1 and S22 633 MPa at node 68288, S11 from -167.4 to 159.7 and S12 from -174.9 to 165.6 MPa; Abaqus/Standard 2025 on `Job-1.odb` said S11 332.8, S22 25.72 and Mises 328.0 MPa for "SNEG, Layer = 1, Avg 75 %". His words: as an engineer he would be confused, validation is hard to explain and the result looks untrustworthy.
+On 2026-11-08 the founder put three views of the hosted coupon `AS48552-UNT-L1` (AS4/8552 [45/0/-45/90]s, 250 by 25 mm, 56 mm tabs, 0.5 mm pull) side by side and found no two numbers alike: the studio's Summary said the largest σ₁ is 536.6 MPa in ply 2 (0°) at element 1164; PrePoMax on the CalculiX `.frd` said von Mises 630.1 and S22 633 MPa at node 68288, S11 from -167.4 to 159.7 and S12 from -174.9 to 165.6 MPa; and an Abaqus view of the same coupon gave other numbers again, for one face of one layer with 75 % averaging. His words: as an engineer he would be confused, validation is hard to explain and the result looks untrustworthy.
 
 Read from the two decks he sent (`AS48552-UNT-L1-abaqus.inp`, `AS48552-UNT-L1-nodal-ccx.inp`) and from runs of both in a container (CalculiX 2.21; our kernel on the Abaqus deck), the three sources are one model solved three ways, and every visible difference is a difference of presentation:
 
@@ -67,7 +67,7 @@ The runs of 2026-11-08, in a cloud container, `apt` CalculiX 2.21, `anisotropy_f
 - `examples/convert_to_calculix.py` on `AS48552-UNT-L1-abaqus.inp` (nu13 = nu23 = 0, E3 = E2): CalculiX total grip force 4690.66 N, kernel 4706.78 N (0.34 %); centre-element strain [-0.001127, 0.003641, ~0] in both.
 - `frd_peaks` on the `-nodal` `.frd`: von Mises 630.05 at node 68288 (0, 57, -0.254), SYY 632.99 at the same node, SXX 159.69 / -167.42, |SXY| 174.94, gauge SYY 488.23: PrePoMax's numbers to the digit.
 - The `.frd` rotated per ply into the fibre axes, gauge-section median against the kernel's centre element: ply 1 (45°) 169.9 / 15.2 / -23.0 against 170.1 / 15.2 / -23.0 MPa; ply 2 (0°) 479.1 / -0.3 / 0.0 against 479.2 / -0.3 / 0.0; ply 4 (90°) -139.0 / 30.7 against -139.0 / 30.7.
-- The same per-ply peaks: ply 2 σ₁ 633.0 at the corner node against 536.6 at the centroid of element 1164 (the Summary's number); ply 1 σ₁ 363.8 at node 68850 against 357.8 at the centroid of element 348, and Abaqus's screen 332.8 for Layer 1 at 75 % averaging; ply 1 σ₂ 27.2 at the centroid against Abaqus's 25.72.
+- The same per-ply peaks: ply 2 σ₁ 633.0 at the corner node against 536.6 at the centroid of element 1164 (the Summary's number); ply 1 σ₁ 363.8 at node 68850 against 357.8 at the centroid of element 348; ply 1 σ₂ 27.2 at the centroid.
 - The converted coupled deck's nodal per-ply peaks equal the `-nodal` deck's to four figures (633.0, 363.8, 350.6).
 - The team's earlier deck `Tension-test-print.inp` (local, ADR-0042): `*Orientation, name=Ori-1` / `1., 0., 0., 0., 1., 0.`, axis 1 along global x.
 - Not yet seen: the `Job-1.odb` fields as numbers (the screenshots only), so the Abaqus column above is read off a legend; UNVERIFIED until `tools/abaqus_extract_fields.py` runs on it.
@@ -87,15 +87,14 @@ The runs of 2026-11-08, in a cloud container, `apt` CalculiX 2.21, `anisotropy_f
 
 ## Amendment 1, 2026-11-08 (the Abaqus column leaves the page; an Abaqus run is read on the command line; decided by the founder)
 
-**Context.** The tables shipped the same evening with the Abaqus column empty: no Abaqus is reachable from the hosted solvers (the install is the
-founder's Windows machine under a teaching licence, ADR-0045), so the column could only fill from files a person brings. A drop zone for the run's
-`.dat` was started, then an agent on the founder's machine was proposed to make it automatic. The founder stopped both: "we want it to be easy for the
+**Context.** The tables shipped the same evening with the Abaqus column empty: no Abaqus is reachable from the hosted solvers (ADR-0045), so the column could only fill from files a person brings. A drop zone for the run's
+`.dat` was started, then an agent on a local machine was proposed to make it automatic. The founder stopped both: "we want it to be easy for the
 user, should be automatic"; then "don't put abaqus in table, open source calculix is enough".
 
 **Decision.** The page's validation table has three columns, Laminate theory | Anisotropy | CalculiX, and the peaks table two; the coupon document prints an
 Abaqus column only where the team's exported fields fill it (a team coupon with a comparison manifest), never an empty one. CalculiX stays the one
-reference the site runs. An Abaqus run of our own deck, when the founder makes one, is read by `fea/tools/abaqus_beside.py`: `anisotropy_fea.abaqus_dat`
-parses the `.dat`'s printed tables (the layout read from `AS48552-UNT-L1-abaqus-plies.dat`, Abaqus 2025), `anisotropy_fea.abaqus_summary` puts the reaction
+reference the site runs. An Abaqus run of our own deck, made by whoever has Abaqus, is read by `fea/tools/abaqus_beside.py`: `anisotropy_fea.abaqus_dat`
+parses the `.dat`'s printed tables (the layout Abaqus 2025 prints), `anisotropy_fea.abaqus_summary` puts the reaction
 (the `RF` TOTAL at the moving grip's reference node), the gauge strain (`SE2, SE1, -SE3`: the layup's axis 1 runs along the coupon, so the section strains
 turn by a quarter) and every ply's σ₁ σ₂ τ₁₂ at the middle section point of each layer beside the kernel's on the same deck, with the record's tolerance
 and floor; a `.dat` that prints the faces (an older deck) is refused with the points it printed. The `.dat` reader replaces nothing: the CSV field reports of
@@ -123,5 +122,5 @@ says where the Abaqus check lives. No API endpoint and no agent were added.
 
 **As built, the viewer (2026-11-11).** The studio's Field list offers Tresca, the maximum, middle and minimum principal stresses and the pressure under Abaqus's names ("S, Tresca", "S, Max. Principal"), and each ply's strains E11, E22, E12 (engineering shear), as element values only. Clicking an element opens, beside its readout, every ply of that element as Abaqus/CAE's Query > Probe Values reads it for a composite shell: the element's number in its instance, the centroid, no averaging, each ply in its material axes, S11 S22 S12, Mises, Tresca, the principal stresses, the pressure and the strains, with "S13 and S23: not modelled (membrane state)" and a CSV of the same numbers (`lib/studio-fields.ts` `probeTable`, `probeCsv`; `components/studio/results-view.tsx` `ProbePanel`). Tests: `tests/probe-table.test.ts` and the first scenario of `tests/browser/studio.spec.ts`.
 
-**Verified, 2026-11-11.** Abaqus 2025 on our D3039 deck: its Mises, Tresca, pressure and principal stresses at a shell layer follow `recovery.ply_invariants` (the principal stresses with the zero among them), its E12 is the engineering shear strain, and S13 and S23 are not part of a shell layer's S (Abaqus reports TSHR13, TSHR23). `fea/checks/abaqus-conventions.toml`; every gauge value of the comparison in ADR-0089 amendment 1.
+**Verified, 2026-11-11.** In Abaqus, the Mises, Tresca, pressure and principal stresses at a shell layer follow `recovery.ply_invariants` (the principal stresses with the zero among them), E12 is the engineering shear strain, and S13 and S23 are not part of a shell layer's S (Abaqus reports TSHR13, TSHR23). `fea/checks/abaqus-conventions.toml`.
 

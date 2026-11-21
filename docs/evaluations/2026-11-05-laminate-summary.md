@@ -55,7 +55,7 @@ FAILED tests/test_abaqus.py::test_abaqus_solves_the_public_check_deck_and_the_ke
 FAILED tests/test_write_abaqus.py::test_every_test_folder_has_the_same_shape
 ```
 
-Both failures are on `main` before this change: the first needs the Abaqus licence over the VPN, the second asserts two
+Both failures are on `main` before this change: the first needs Abaqus's licence server in reach, the second asserts two
 check records where `fea/checks/` has held four since the bending and plate records (pull request #115, `fix/ci-red-jobs`,
 changes that count to four). Every deck-writer test passes: the committed Abaqus and CalculiX decks are what their specs
 write, so the deck headers are unchanged by the two new citations. The seven skips are the local coupons and the Gmsh

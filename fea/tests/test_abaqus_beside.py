@@ -1,7 +1,7 @@
 """The `.dat` of an Abaqus run of our deck, read for the validation table (ADR-0066 amendment 1): `abaqus_dat` reads the printed tables as
 Abaqus 2025 lays them out, `abaqus_summary` puts the numbers beside the kernel's at the gauge element, and `tools/abaqus_beside.py`
 prints them. The `.dat` here is written in that layout from the kernel's own numbers at four figures, as Abaqus prints, so the two
-agree by construction; a real run's file (`AS48552-UNT-L1-abaqus-plies.dat`, 2026-11-08) read with the same code gave 28 of 28."""
+agree by construction."""
 
 import importlib.util
 import json

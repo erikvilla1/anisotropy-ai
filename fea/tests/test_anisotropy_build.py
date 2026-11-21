@@ -2,7 +2,7 @@
 the public D3039 check: the build script our writer writes (`write_cae_script`), the data the site reads from that script's head
 (`api/src/anisotropy_api/abaqus_coupon.py`, loaded here by its path), and what `tools/anisotropy_build.py` asks Abaqus/CAE for from
 that data. The script and the builder run against the same stand-in for Abaqus, which records every call, and the two lists of calls
-must be the same. No Abaqus runs here: that Abaqus/CAE takes the calls is checked on the founder's machine."""
+must be the same. No Abaqus runs here: that Abaqus/CAE takes the calls is checked where Abaqus is installed."""
 
 from __future__ import annotations
 

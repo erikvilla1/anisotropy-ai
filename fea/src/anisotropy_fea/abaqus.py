@@ -7,9 +7,8 @@ under `abaqus python` on an ODB and returns the CSV files it wrote, which `abaqu
 of a failed run was read from Abaqus 2025 (2026-10-24): `***ERROR` paragraphs in the `.dat` and `.msg`, and the `.sta` ending
 "THE ANALYSIS HAS NOT BEEN COMPLETED" instead of "THE ANALYSIS HAS COMPLETED SUCCESSFULLY".
 
-Abaqus is an optional second reference beside CalculiX (ADR-0030): the install on the founder's machine is a UC San Diego
-teaching licence, usable for the course and the team comparison, never for a customer deliverable, and every solve takes
-tokens from a shared pool. Nothing in the pipeline needs it; the tests that do skip when it is absent.
+Abaqus is an optional second reference beside CalculiX (ADR-0030), for internal comparison only and never for a customer
+deliverable. Nothing in the pipeline needs it; the tests that do skip when it is absent.
 """
 
 from __future__ import annotations

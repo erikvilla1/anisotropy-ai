@@ -36,7 +36,7 @@ Option 3, with the gauge probes and a row for every run.
 
 - `fea/tools/run_coupon.py`; `gauge_probes` and a `kind` argument to `next_commands` in `fea/src/anisotropy_fea/intake.py`; `fea/tools/coupon_from_form.py` prints the one command; `fea/tools/regenerate_decks.py` prints paths outside the repository as they are.
 - `fea/tests/test_run_coupon.py`: the public IM7/8552 form to its package under a temporary root (CalculiX needed; CI installs it), a failed step's row, the refusals without CalculiX and with a lagging log, and the record's tolerance and probes against the case page's command.
-- Not in this step: the record's reading (`<record>.md`, written by a person, ADR-0031; the tool says so, and until it exists `test_every_test_folder_has_the_same_shape` names the record on that machine); the Abaqus run (`tools/run_abaqus.py` needs the teaching licence and stays a separate command); a failure-index output request in the Abaqus deck (waits for the founder); the case page text written by `intake.case_page` (it still lists the six commands; `coupon_from_form.py` prints the one command).
+- Not in this step: the record's reading (`<record>.md`, written by a person, ADR-0031; the tool says so, and until it exists `test_every_test_folder_has_the_same_shape` names the record on that machine); the Abaqus run (`tools/run_abaqus.py` needs an Abaqus installation and stays a separate command); a failure-index output request in the Abaqus deck (waits for the founder); the case page text written by `intake.case_page` (it still lists the six commands; `coupon_from_form.py` prints the one command).
 
 ## Why (evidence)
 

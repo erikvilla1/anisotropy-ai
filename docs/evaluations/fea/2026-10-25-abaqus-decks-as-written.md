@@ -2,7 +2,7 @@
 
 - Scope: `write_abaqus` writes one variable per `*El Print` table and wraps heading comments longer than 256 bytes; the `split_print_tables` option is gone; `tools/run_abaqus.py` writes the spec's deck unchanged; `reactions_by_set` moves to `anisotropy_fea.abaqus` and matches the instance name without regard to case. The five committed Abaqus decks are regenerated, and the two committed CalculiX records that name one take its new digest. New tests: the input rules on every spec's deck, the byte-wise wrap, the reactions per grip set; the Abaqus test solves the committed coupling deck itself and checks for no truncation warning.
 - Branch: `feat/abaqus-direct-and-ingest` (worktree `Composite_AI-abaqus-pipeline`, from main a71ab87).
-- Environment: Windows 11, uv 0.13.0, Python 3.12.14, Gmsh 4.15.2, Abaqus 2025 under the UCSD teaching licence (one seat per solve).
+- Environment: Windows 11, uv 0.13.0, Python 3.12.14, Gmsh 4.15.2, Abaqus 2025.
 
 ## Commands and captured output
 
@@ -31,26 +31,7 @@ open-hole-im7-8552-calculix.toml: HEAD deck = record digest 0171f31d16d0f228; sa
 unnotched-im7-8552-nodal-calculix.toml: HEAD deck = record digest e3082666d89e0304; same model (22 items, largest node offset 0); kernel reaction identical [...]; new digest 6e78a4429346d642
 ```
 
-First direct run, with the tables split and the comments wrapped by characters: `uv run python tools/run_abaqus.py checks/open-hole-im7-8552/open-hole-im7-8552.toml --out ../.local/fea/checks/open-hole-im7-8552/runs/abaqus --tolerance 0.03 --floor 0.02 --element-probes far ...`
-
-```text
-Abaqus 2025: 26.0 s, 2 warnings; results in ...
-  warning: ***WARNING: Line #7 has been truncated.
-  warning: ***WARNING: NO BIAXIAL STRESS LIMIT GIVEN.  DEFAULT F12 USED.
-written ...open-hole-im7-8552-abaqus-record.toml | rows per group: {'ply_stress_local': 2, 'ply_mises': 2}
-```
-
-Line 7 was 253 characters and 258 bytes (five "·"); the reactions file listed the instance as `"COUPON-1"` against the deck's `*Instance, name=Coupon-1`. After wrapping by bytes, matching the instance without case, regenerating and moving the digests again, the same command:
-
-```text
-Abaqus 2025: 26.3 s, 1 warnings; results in ...
-  warning: ***WARNING: NO BIAXIAL STRESS LIMIT GIVEN.  DEFAULT F12 USED.
-exported open-hole-im7-8552-abaqus-RF.csv: 581 rows, sha256 57bc4f6f4d8b26a0...
-written ...open-hole-im7-8552-abaqus-record.toml | rows per group: {'ply_stress_local': 2, 'ply_mises': 2, 'rf': 2}
-kernel against the record: 12 numbers compared, 0 outside 0.03 (floor 0.02)
-```
-
-`sha256sum` of the committed deck and the run's deck: both `8c222726eee8282f0a4c...`. The `.sta` ends `THE ANALYSIS HAS COMPLETED SUCCESSFULLY`. The record holds `"Grip-Top" = [3.18e-10, 15909.053275]` N; the kernel gave 15915.1 N and CalculiX 15862.6 N on this coupon ([2026-10-19](2026-10-19-gmsh-open-hole.md)).
+The open-hole deck, with the tables split and the comments wrapped by characters, drew a truncation warning from Abaqus/Standard: line 7 was 253 characters and 258 bytes (five "·"), and Abaqus reads 256 bytes. The reactions file listed the instance as `"COUPON-1"` against the deck's `*Instance, name=Coupon-1`. After wrapping by bytes, matching the instance without regard to case, regenerating and moving the digests again, the deck is read with no truncation warning and the reactions per grip set are recorded. The committed deck and the deck that was solved have the same SHA-256. The run's output is kept privately.
 
 After every change: `uv run pytest -q -ra tests ../engine/tests`
 

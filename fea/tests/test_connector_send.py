@@ -1,6 +1,6 @@
 """The connector sending its bundle (ADR-0094, step 5): `tools/anisotropy_connector.py --send` against a server on this machine that
 plays the API's one route. The ODB reader is replaced as in test_anisotropy_connector.py; the request itself is the real one, over a
-socket. No Abaqus runs here: sending from Abaqus's own Python is checked on the founder's machine."""
+socket. No Abaqus runs here: sending from Abaqus's own Python is checked where Abaqus is installed."""
 
 from __future__ import annotations
 

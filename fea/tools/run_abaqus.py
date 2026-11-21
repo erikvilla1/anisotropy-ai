@@ -1,7 +1,7 @@
 """Run one of our specs in Abaqus/Standard without the GUI, export its fields, and write the comparison record against the kernel (ADR-0045).
 
     uv run python tools/run_abaqus.py checks/<test>/<spec>.toml --out <run folder>/abaqus \
-        --run-by "<role>" --machine "<platform, Abaqus version and licence>" --tolerance 0.01 --floor 0.02 \
+        --run-by "<role>" --machine "<platform and Abaqus version>" --tolerance 0.01 --floor 0.02 \
         --within 0 10 25 55 [--element-probes centre] [--elements 395 396] [--notes "..."] [--record <path>]
 
 Needs Abaqus (ANISOTROPY_ABAQUS or abaqus on PATH; docs/installation-fea-tools.md) and a licence seat. Writes into --out the deck
@@ -9,8 +9,8 @@ Needs Abaqus (ANISOTROPY_ABAQUS or abaqus on PATH; docs/installation-fea-tools.m
 the extraction script makes, and the record `<spec>-abaqus-record.toml` (--record puts it elsewhere); then prints how many of the
 record's numbers the kernel reproduces. The elements recorded are those named (--elements), the spec's element probes
 (--element-probes), or every element whose centroid lies in a box (--within XMIN XMAX YMIN YMAX, deck units): one of the three.
-The reaction at every RF-* and Grip-* node set that carries one is recorded as [RF1, RF2]. The licence is a teaching licence:
-the course and the team comparison only, never a customer deliverable.
+The reaction at every RF-* and Grip-* node set that carries one is recorded as [RF1, RF2]. Abaqus is for
+internal comparison only, never a customer deliverable (ADR-0045).
 """
 
 from __future__ import annotations

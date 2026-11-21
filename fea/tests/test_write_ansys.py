@@ -1,6 +1,6 @@
 """The Ansys Mechanical APDL file of a model (ADR-0129): read back by the small reader below and compared with the model it was written
 from, the conventions checked by hand-made cases, and the mesh blocks read by an independent open-source reader when it is installed.
-Nothing here runs Ansys: that check is the founder's, on his own computer (ADR-0129, "How we will know it was wrong")."""
+Nothing here runs Ansys: that check needs Ansys (ADR-0129, "How we will know it was wrong")."""
 
 from __future__ import annotations
 

@@ -1,15 +1,14 @@
-# How Abaqus reports a composite shell section of our deck, detected by running it, not assumed (ADR-0066 amendment 2, ADR-0089 part 7).
+# How Abaqus reports a composite shell section of our deck, detected, not assumed (ADR-0066 amendment 2, ADR-0089 part 7).
 # Detected with fea/tools/abaqus_detect.py on the public D3039 check (IM7/8552 [45/0/-45/90]s, S4R, 8 layers of 3 Simpson points),
-# then read from the runs' .dat and ODB. Re-run the detection when the Abaqus version changes. The runs' files stay in
-# .local/fea/checks/d3039-im7-8552/runs/abaqus-detect-2026-11-11/ (the teaching licence: ADR-0045).
+# from the .dat and the ODB. Detect again when the Abaqus version changes. Abaqus's own files are not kept in the repository (ADR-0045).
 
 abaqus_version = "Abaqus/Standard 2025"
 detected_on = "2026-11-11"
-detected_by = "Anisotropy engineering: Windows 11, Abaqus 2025 (UC San Diego teaching licence)"
+detected_by = "Anisotropy engineering: Windows 11, Abaqus 2025"
 
 # *Element Output accepts the section points as the data line before the variables, as *El Print does: the ODB then holds S and E at
 # each listed point ("fraction = -0.875000, Layer = 1" and so on for the middle of each of 8 layers), beside PRESELECT's two faces of the
-# whole section ("SNEG, (fraction = -1.0), Layer = 1" and "SPOS, (fraction = 1.0), Layer = 8"). datacheck and the run both accepted it.
+# whole section ("SNEG, (fraction = -1.0), Layer = 1" and "SPOS, (fraction = 1.0), Layer = 8"). Abaqus accepts it.
 field_section_points = "data line before the variables"
 
 # The stress field of an S4R composite layer has S11, S22, S33 and S12, in the layer's material axes; S33 is 0 (plane stress). S13 and
@@ -20,8 +19,7 @@ transverse_shear = "TSHR13, TSHR23 (identifier TSHR)"
 # The invariants odbAccess gives for a layer's stress (what CAE shows under S): Mises of the plane state; the three principal stresses
 # with the zero through the thickness among them, ordered (in the 90 deg ply, in compression along its fibres and in tension across them,
 # the middle one is the zero); Tresca the largest less the smallest of those three; the pressure -(S11 + S22 + S33) / 3. These are
-# recovery.ply_invariants' definitions: at the gauge-centre element every one agreed with our kernel within 0.05 %. Abaqus's own numbers
-# stay with the runs (the teaching licence); this file states only what they showed.
+# recovery.ply_invariants' definitions. This file states definitions only, no number of Abaqus's.
 principal_order = "the three principal stresses, the zero through the thickness among them, ordered max, mid, min"
 tresca = "max principal minus min principal, the zero among them"
 pressure = "-(S11 + S22 + S33) / 3"
@@ -30,12 +28,11 @@ pressure = "-(S11 + S22 + S33) / 3"
 # zero (unlike the ODB's Max/Mid/Min Principal); EP prints EP1, EP2; CFAILURE prints MSTRS, TSAIH, TSAIW, AZZIT, to 4 significant figures.
 dat_identifiers = ["SINV", "SP", "TSHR", "CFAILURE", "EP"]
 
-# A strain's E12 at a shell layer is the engineering shear strain: it equals our gamma_12 in every gauge element and ply within 1 %.
+# A strain's E12 at a shell layer is the engineering shear strain, our gamma_12.
 shear_strain = "engineering"
 
 # CFAILURE's indices are 1/R for each criterion: MSTRS our maximum stress 1/R, TSAIH our Tsai-Hill 1/R, TSAIW our Tsai-Wu 1/R with f12* = 0,
-# the value Abaqus takes when *Fail Stress gives no sixth; each within 0.05 % at the gauge-centre element, every layer (1/R squared is off by
-# a factor of two to four).
+# the value Abaqus takes when *Fail Stress gives no sixth (and not 1/R squared).
 failure_index = "1/R"
 tsai_wu_f12_star_when_absent = 0.0
 

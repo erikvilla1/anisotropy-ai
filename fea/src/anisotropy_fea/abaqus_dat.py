@@ -7,7 +7,7 @@ columns are the words after FOOT-, with PT marking an integration-point column (
 "ELEMENT  PT FOOT-") and SEC a section-point column, and one or more lines of footnote headings up to a blank line. The rows
 follow until the next blank line: the element or node label, the integration point and the section point when the table has
 them, an optional footnote tag such as OR, then the values. A `totals=YES` table ends with a TOTAL line, which is kept.
-The wording was read from a real file (Abaqus 2025, 2026-11-08, `AS48552-UNT-L1-abaqus-plies.dat`). Nothing is converted or
+The wording is as Abaqus 2025 prints it. Nothing is converted or
 transformed here (ADR-0002); what a line does not say is refused by its number rather than guessed (ADR-0003).
 """
 

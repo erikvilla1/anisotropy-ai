@@ -11,7 +11,7 @@
 After the 3D lens left the hero (ADR-0077 amendment 3), the lead found the hero "empty/spacious" and noted that PhysicsX's "lens is animated". The lead asked for "the abaqus models animated/appearing within the lens … showcasing like different applications", with Abaqus tutorial screenshots as the reference.
 
 - Those screenshots belong to Dassault Systèmes and the tutorials' authors.
-- The team's Abaqus licence is a teaching licence. ADR-0045 limits it to "the course and the team comparison only, never a customer deliverable", and the site is neither.
+- ADR-0045 keeps Abaqus for internal comparison only, never a customer deliverable, and the site is neither.
 - The team's coupon models stay off this public repository (ADR-0042).
 - The repository already holds three public results from our own solver, as browser fixtures:
   - `tests/fixtures/studio`: IM7-UNT-L1, unnotched tension, IM7/8552 [45/0/-45/90]s.

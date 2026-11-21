@@ -1,5 +1,5 @@
 """The Abaqus runner: finding the command, reading a failed run, and, when Abaqus is present, a solve of the public check deck whose
-exported fields the kernel reproduces (ADR-0045). The licence on the founder's machine is a teaching licence; CI has none and skips."""
+exported fields the kernel reproduces (ADR-0045). CI has no Abaqus and skips."""
 
 import os
 from pathlib import Path

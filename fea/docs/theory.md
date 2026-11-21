@@ -149,7 +149,7 @@ The von Mises stress of a ply's in-plane state, $`\sigma_\mathrm{M} = \sqrt{\sig
 
 <!-- code: ply_mises -->
 
-The other invariants Abaqus prints at a shell section point are taken from the same plane state, with the stress through the thickness zero. The in-plane principal stresses are $`\sigma_\mathrm{I,II} = \tfrac{1}{2}(\sigma_1 + \sigma_2) \pm \sqrt{\tfrac{1}{4}(\sigma_1 - \sigma_2)^2 + \tau_{12}^2}`$; with the zero beside them they are ordered as the maximum, middle and minimum principal stresses. Tresca is the largest of the three less the smallest, so it reaches the zero when both in-plane principals have the same sign, and the pressure is $`p = -\tfrac{1}{3}(\sigma_1 + \sigma_2)`$. They are computed by `ply_invariants` as comparison quantities beside Mises (ADR-0066 amendment 2), never as a ply's failure; Abaqus 2025 orders them the same way at a shell section point, the zero among them, and its Tresca, pressure and Mises at a layer are these (`fea/checks/abaqus-conventions.toml`, detected 2026-11-11).
+The other invariants Abaqus prints at a shell section point are taken from the same plane state, with the stress through the thickness zero. The in-plane principal stresses are $`\sigma_\mathrm{I,II} = \tfrac{1}{2}(\sigma_1 + \sigma_2) \pm \sqrt{\tfrac{1}{4}(\sigma_1 - \sigma_2)^2 + \tau_{12}^2}`$; with the zero beside them they are ordered as the maximum, middle and minimum principal stresses. Tresca is the largest of the three less the smallest, so it reaches the zero when both in-plane principals have the same sign, and the pressure is $`p = -\tfrac{1}{3}(\sigma_1 + \sigma_2)`$. They are computed by `ply_invariants` as comparison quantities beside Mises (ADR-0066 amendment 2), never as a ply's failure; Abaqus 2025 orders them the same way at a shell section point, the zero among them, and its Tresca, pressure and Mises at a layer are these (`fea/checks/abaqus-conventions.toml`).
 
 <!-- code: ply_invariants -->
 
@@ -266,7 +266,7 @@ A uniform pressure $`p`$ on an element (`*Dload` with the P label) becomes the c
 f_{w,i} = -\,p \sum_g w_g\, \det \mathbf{J}_g\, N_i(\xi_g, \eta_g) ,
 ```
 
-the sign being positive against the element normal, which is $`+z`$ for counterclockwise nodes: the pressure presses on the top face, as Abaqus's `*Dsload` P on a shell's SPOS face does. The P label of `*Dload` on a shell element is positive along the normal in Abaqus and in CalculiX alike (Abaqus 2025, run on 2026-11-17, ADR-0053 amendment 1; CalculiX, run on 2026-10-28, `fea/checks/calculix-conventions.toml`, `pressure_direction`), so both decks write $`-p`$ and the deck reader takes a `*Dload` P as $`-p`$.
+the sign being positive against the element normal, which is $`+z`$ for counterclockwise nodes: the pressure presses on the top face, as Abaqus's `*Dsload` P on a shell's SPOS face does. The P label of `*Dload` on a shell element is positive along the normal in Abaqus and in CalculiX alike (Abaqus 2025, ADR-0053 amendment 1; CalculiX, run on 2026-10-28, `fea/checks/calculix-conventions.toml`, `pressure_direction`), so both decks write $`-p`$ and the deck reader takes a `*Dload` P as $`-p`$.
 
 <!-- code: pressure_loads -->
 

@@ -40,7 +40,7 @@ Option 1 in each group. The tension coupon specs `tension-coupon-x840-{coupling,
 ## Why (evidence)
 
 - With the new seeding, every node sits within the single-precision rounding of CAE coordinates of the team's, every element matches one to one and every physical item agrees; our kernel run on both decks gives the same stresses to roundoff (numbers in a local note (ADR-0042)).
-- Away from the grips, the team's Abaqus S11, S22 and Mises and ours agree within half a percent of each quantity's largest value (numbers in a local note (ADR-0042)).
+- Away from the grips, the team's Abaqus S11, S22 and Mises and ours agree within the record's tolerance (numbers in a local note (ADR-0042)).
 - Our CSV in the team's layout reads back with the same element numbers, centroids, faces and instance name as the team's own report.
 - Output is in `.local/notes/evaluations/fea/2026-10-20-team-comparison.md` (local, ADR-0042).
 

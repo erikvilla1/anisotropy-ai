@@ -1,7 +1,7 @@
 """The connector that writes a bundle under the user's own Abaqus (ADR-0094, step 2): `tools/anisotropy_connector.py` with the two
 readers that need Abaqus replaced. The ODB reader's stand-in gives our own kernel's run of the public D3039 check in the shape
 `abaqus_every_output.read` returns; the `.cae` reader is run on objects shaped as Abaqus's scripting interface documents them. No
-Abaqus runs here: the two readers themselves are checked on the founder's machine."""
+Abaqus runs here: the two readers themselves are checked where Abaqus is installed."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class Unset:
 
 
 def cae_model(broken: bool = False):
-    """A model shaped as Abaqus 2025 gave one on the first trial: a symmetric layup listing half its plies, each angle one of Abaqus's
+    """A model shaped as Abaqus 2025 gives one: a symmetric layup listing half its plies, each angle one of Abaqus's
     choices, a region as a tuple, and a displacement's value on the step's states and not on the boundary condition."""
     ply = lambda name, given, value=0.0: SimpleNamespace(plyName=name, material="IM7-8552", thickness=0.18288, numIntPoints=3,  # noqa: E731
                                                          orientationType=Constant(given), orientationValue=value, angle=0.0,
@@ -311,7 +311,7 @@ def test_the_odb_readers_own_refusal_is_said_as_a_refusal(connector, job, tmp_pa
 
 def test_our_arguments_are_found_among_abaqus_caes_own_with_the_two_dashes_or_without(connector):
     ours = ["Job-1.odb", "--units", "mm-MPa", "--cae", "coupon.cae"]
-    flags = ["ABQcaeK.exe", "-cae", "-noGUI", "-academic", "TEACHING", "-tmpdir", "C:\\temp", "-lmlog", "ON"]
+    flags = ["ABQcaeK.exe", "-cae", "-noGUI", "-tmpdir", "C:\\temp", "-lmlog", "ON"]
     assert connector.command_line([*flags, "--", *ours]) == ours
     assert connector.command_line([*flags, *ours]) == ours  # Abaqus 2025's launcher drops the two dashes: ours start at the ODB
     assert connector.command_line(["anisotropy_connector.py", "--units", "m-Pa", "Job-1.odb"]) == ["--units", "m-Pa", "Job-1.odb"]  # abaqus python

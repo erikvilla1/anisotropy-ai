@@ -1,6 +1,6 @@
 """Abaqus's numbers beside ours, read from the `.dat` of a run of our own deck (ADR-0066 amendment 1): the validation table's rows, on the
-command line, for the founder's own check of a coupon against Abaqus. The site's table shows laminate theory, Anisotropy and CalculiX
-only (the founder, 2026-11-08: "open source calculix is enough"); this tool is the Abaqus column, printed when he runs the deck.
+command line, for a check of a coupon against Abaqus. The site's table shows laminate theory, Anisotropy and CalculiX
+only (the founder, 2026-11-08: "open source calculix is enough"); this tool is the Abaqus column, printed for whoever runs the deck.
 
     abaqus job=<coupon>-abaqus input=<coupon>-abaqus.inp interactive          # on the machine with Abaqus, in a working folder
     uv run python tools/abaqus_beside.py <coupon>-abaqus.inp <coupon>-abaqus.dat [--units mm-MPa] [--json <file>]
