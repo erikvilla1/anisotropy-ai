@@ -180,7 +180,7 @@ def gauge_reading(deck: Deck, solution: Solution) -> dict[str, Any] | None:
     if not keys:
         return None
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return None
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
@@ -216,7 +216,7 @@ def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
     without grips (a plate, a bending coupon)."""
     mesh = solution.mesh
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return set()
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
@@ -230,7 +230,7 @@ def held_in_grips(deck: Deck, solution: Solution) -> np.ndarray:
     mesh = solution.mesh
     flags = np.zeros(mesh.element_count, dtype=bool)
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return flags
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}

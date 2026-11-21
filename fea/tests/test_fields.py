@@ -370,6 +370,25 @@ def test_a_finer_mesh_moves_the_grip_edge_and_not_the_answer():
     assert run_answer({**summary, "verdict": None}) is None  # no criterion, no answer to list
 
 
+def test_a_grip_driven_by_a_force_is_still_a_grip():
+    """ADR-0108 amendment 1: a coupled grip moves its tab as one body whether its reference node is pulled or pushed by a force, so a
+    coupon under a force has the same clamped tab elements, the same gauge section and an answer read there, as under a pull. Before,
+    the force's grip went unseen: no gauge section, the tabs coloured by value and the answer taken at the grip's corner."""
+    from anisotropy_fea.convergence import solve
+    from anisotropy_fea.spec import load_spec
+
+    spec = load_spec(paths.FEA / "checks" / "unnotched-im7-8552" / "unnotched-im7-8552-coupling.toml")
+    meshes = {}
+    for control, value in (("displacement", spec.loading.value), ("force", 16000.0)):
+        _, deck, solution = solve(spec.model_copy(update={"loading": spec.loading.model_copy(update={"control": control, "value": value})}))
+        data = field_data(deck, solution, UNITS)
+        summary = data["summary"]
+        assert summary["applied"]["control"] == control and summary["verdict"]["basis"] == "gauge" and summary["gauge_reading"]
+        meshes[control] = data["mesh"]
+    assert meshes["force"]["held_elements"] and meshes["force"]["held_elements"] == meshes["displacement"]["held_elements"]
+    assert meshes["force"]["gauge_elements"] and meshes["force"]["gauge_elements"] == meshes["displacement"]["gauge_elements"]
+
+
 def test_a_failure_inside_the_stand_off_is_marked_and_said_apart():
     """ADR-0108: a first failure of the whole model that sits inside the stand-off without touching a gripped node is `near_tab`; the
     verdict carries the mark and the sentence says why it is not the answer."""
