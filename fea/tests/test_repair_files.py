@@ -49,8 +49,7 @@ def block(text: str, opens: str) -> list[str]:
 
 def ansys_table(model, results) -> str:
     """What the Ansys file writes: the element's number, then the columns of ANSYS_COLUMNS, in mm, N and MPa. Mechanical APDL
-    keeps an element table as 32-bit numbers and writes them out to fifteen figures ("0.375531406402588E+02", seen in a run
-    of 2026-11-20), so the stand-in rounds each value to a 32-bit number first."""
+    keeps an element table as 32-bit numbers and writes them out to fifteen figures ("0.375531406402588E+02"), so the stand-in rounds each value to a 32-bit number first."""
     stress, strain = results.stress / MPA, results.strain
     width = np.full(len(stress), model.far.strain_width)
     columns = [stress[:, 0], stress[:, 2], stress[:, 1], stress[:, 3], strain[:, 0], strain[:, 1], width, strain[:, 2]]
@@ -59,7 +58,7 @@ def ansys_table(model, results) -> str:
 
 
 def abaqus_dat(model, results) -> str:
-    """What Abaqus prints for the file, in its own wording (read from a .dat of Abaqus 2025, 2026-11-20: the set's name on a
+    """What Abaqus prints for the file, in its own wording (the set's name on a
     line of its own, the columns PT and FOOT-, the tag OR of an element with an orientation) and its four figures: a table of
     S and a table of E at the four integration points of every element, here each point given the element's mean."""
     stress, strain = results.stress / MPA, results.strain
