@@ -49,9 +49,9 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import tempfile
 import time
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,7 +65,7 @@ from anisotropy_engine.repair import (
 from anisotropy_engine.units import UNIT_SYSTEMS
 
 from .calculix import CalculixError, parse_dat, run_calculix
-from .repair_shape import MM, SliceMesh, slice_mesh
+from .repair_shape import MM, REFUSED, SliceMesh, read_repair_file, slice_mesh
 from .wing_shape import ShapeError
 
 MPA = 1e6
@@ -78,6 +78,7 @@ EQUILIBRIUM_TOLERANCE = 1e-4  # of the load: how far the forces at a station may
 FAR_FIELD_TOLERANCE = 0.01  # of the far-field strain: how far the strain midway to the panel's end may be from it
 MATCH_TOLERANCE = 1e-6  # of the largest stress: how far CalculiX's stress may be from the engine's stiffness times CalculiX's strain
 REPORT = "repair-solve.json"
+STOPPED = 3  # the exit status when the solver could not solve the deck; a repair that is refused ends with repair_shape.REFUSED
 
 
 class SliceModelError(ValueError):
@@ -659,11 +660,13 @@ def headline(report: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     """`python -m anisotropy_fea.repair_model <repair.toml> [--out DIR] [--criterion NAME] [--size mm] [--fine mm]`: solve the
     slice of a repair file and print the answer in the file's units; with --out, keep the deck, CalculiX's files and
-    repair-solve.json there."""
+    repair-solve.json there, the report with the solve in one line as its `headline`. Ends with status 2 and "refused: ..."
+    when the repair cannot be read, modelled or passes a check of the solve, and with status 3 and the cause on stderr when
+    the solver could not solve the deck."""
     import argparse
 
     parser = argparse.ArgumentParser(prog="python -m anisotropy_fea.repair_model", description="Solve a stepped patch repair's slice in CalculiX (ADR-0132).")
-    parser.add_argument("repair", type=Path, help="the repair, a TOML file (engine/examples/example-patch-repair.toml)")
+    parser.add_argument("repair", type=Path, help="the repair, a TOML file (engine/examples/example-patch-repair.toml) or the same table as .json")
     parser.add_argument("--out", type=Path, help="folder for the deck, CalculiX's files and repair-solve.json")
     parser.add_argument("--criterion", default="max_stress", choices=CHECKED_CRITERIA, help="how the plies are checked (default max_stress)")
     parser.add_argument("--size", type=float, help="the longest element along the slice, mm")
@@ -672,20 +675,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--threads", type=int, default=1)
     args = parser.parse_args(argv)
     try:
-        case = tomllib.loads(args.repair.read_text(encoding="utf-8"))
-        repair, load = repair_from_dict({key: value for key, value in case.items() if key not in ("expected", "solve")})  # a validation case reads too
+        case = read_repair_file(args.repair)  # a repair file, the same table as .json (a page's), or a validation case
+        repair, load = repair_from_dict(case)
         if load is None:
             raise SliceModelError("The file states no load ([applied] load), so the slice is not solved")
         started = time.monotonic()
-        answer = solve_slice(repair, load, criterion=args.criterion, workdir=args.out, threads=args.threads, cut_faces=args.cut_faces,
-                             element_size_m=None if args.size is None else args.size * MM, fine_m=None if args.fine is None else args.fine * MM)
+        model = build_slice_model(repair, load, cut_faces=args.cut_faces, element_size_m=None if args.size is None else args.size * MM,
+                                  fine_m=None if args.fine is None else args.fine * MM)
+        try:
+            results = run_slice_model(model, args.out, threads=args.threads)
+        except SliceModelError as error:  # the solver, not the repair: its words go to stderr, and the status says which it was
+            print(f"stopped: {(str(error).splitlines() or [type(error).__name__])[0]}", file=sys.stderr)
+            return STOPPED
+        answer = slice_answer(model, results, args.criterion)
         report = slice_report(answer, case["units"])
-    except (SliceModelError, RepairError, tomllib.TOMLDecodeError, OSError) as error:
+    except (SliceModelError, RepairError, ShapeError, OSError) as error:
         print(f"refused: {(str(error).splitlines() or [type(error).__name__])[0]}")
-        return 2
+        return REFUSED
     u, model, bond = report["units"], report["model"], report["bond"]
     length, stress, force = u["length"], u["stress"], u["force"]
-    print(case.get("title", args.repair.stem))
+    print(case.get("title") or args.repair.stem)
     print(f"{model['solver']}: {model['elements']} elements ({model['element']}), {model['equations']} equations, {time.monotonic() - started:.1f} s; "
           f"elements {model['fine_size']:.3g} to {model['element_size']:.3g} {length} long")
     if not repair.external:
@@ -716,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
     if report["first"] is not None:
         print(f"\nFirst, {FIRST_WORDS[report['first']['what']]}, at {report['first']['load']:.4g} {force}")
     if args.out:
-        (args.out / REPORT).write_text(json.dumps(report, indent=1), encoding="utf-8")
+        (args.out / REPORT).write_text(json.dumps(report | {"headline": headline(report)}, indent=1), encoding="utf-8")
         print(f"\n{args.out / REPORT}")
     return 0
 

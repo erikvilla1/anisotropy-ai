@@ -27,6 +27,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
+from anisotropy_engine.repair import repair_from_dict, repair_report, repair_views, solve_needs
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
@@ -47,7 +48,8 @@ from .theory import find as find_theory, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, runner_command, studio_command, wing_check_command, wing_shape_command)
+                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
+                          wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
@@ -62,7 +64,7 @@ from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponModelReceipt, ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelProgram, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
-    WingRequest, WingShapeAnswer,
+    WingRequest, WingShapeAnswer, RepairAnswer, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -1823,6 +1825,143 @@ def wing_check(job_id: uuid.UUID, request: Request) -> WingCheckOutput:
     """A wing's check as it stands: its state and stage, and once done its report (ADR-0119)."""
     jobs = _coupon_jobs(request)
     return _wing_check_output(jobs, _wing_check(request, jobs, job_id))
+
+
+REPAIRS = "/v1/repairs/analyze"
+REPAIR_SOLVE = "/v1/repairs/solve"
+REPAIR_SHAPE = "/v1/repairs/shape"
+REPAIR_SOLVE_TIMEOUT_S = 120.0  # CalculiX solves the example's slice in about 3 s; a cold start of the fea environment takes a few more
+REPAIR_REFUSED, REPAIR_STOPPED = 2, 3  # anisotropy_fea.repair_shape.REFUSED and repair_model.STOPPED: the repair was refused; the solver failed
+REPAIR_REPORT = "repair-solve.json"  # anisotropy_fea.repair_model.REPORT, in the folder the solve is given
+# What the page shows when the solve or the shape fails for a reason that is not the repair's (ADR-0091 amendment 2): the cause goes to the log.
+SLICE_NOT_NOW = "The slice could not be solved right now. Try again in a minute; if it keeps failing, contact us."
+UNSOLVABLE_REPAIR = "These values do not give a finite, solvable repair. Check the values and their units."
+
+
+def _repair_read(request: Request, actor: str, problem: RepairRequest):
+    """The repair a request states, by the engine's own reading: the table, the repair and its load; 422 in the engine's words."""
+    try:
+        data = tomllib.loads(problem.toml) if problem.toml is not None else problem.repair
+        repair, load = repair_from_dict(data)
+    except (ValueError, TypeError, KeyError) as exc:
+        detail = str(exc) or exc.__class__.__name__
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    return data, repair, load
+
+
+def _repair_tool(request: Request, actor: str, problem: RepairRequest, command: list[str], folder: Path, what: str, timeout_s: float) -> subprocess.CompletedProcess:
+    """One of the fea package's repair tools run to its end in a process of its own (ADR-0051, ADR-0135); 504 when it outlasts its time."""
+    try:
+        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+    except subprocess.TimeoutExpired as exc:
+        run_id = _record(request, actor, problem, error=f"{what} took longer than the time allowed")
+        raise HTTPException(status_code=504, detail=f"{what[0].upper()}{what[1:]} took too long", headers=_run_header(run_id)) from exc
+
+
+@app.post(REPAIRS, response_model=RepairAnswer)
+def analyze_repair_endpoint(problem: RepairRequest, actor: Actor, request: Request, response: Response) -> RepairAnswer:
+    """A stepped patch repair worked by hand (ADR-0130, ADR-0131) for the repair's page (ADR-0135): the description read by the engine's
+    own rules, what it works out to in the file's units (sizes, the slice's rectangles, the lap and, with a load, its answer), the
+    hand calculation's curve along the bond for the page to draw, and what a solve of the slice still needs. Recorded with its actor
+    (ADR-0026): the description and the answer's headline numbers, not the drawings. Answers in milliseconds, so the page asks again
+    on every change."""
+    data, repair, load = _repair_read(request, actor, problem)
+    try:
+        report = repair_report(repair, data["units"], load)
+        views = repair_views(repair, data["units"], load)
+        if not (_finite(report) and _finite(views)):
+            raise FloatingPointError("Non-finite result")
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+        detail = (str(exc) or exc.__class__.__name__) if not isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) \
+            else UNSOLVABLE_REPAIR
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id)) from exc
+    needs = solve_needs(repair, load)
+    answer = report["lap"].get("answer") or {}
+    run_id = _record(request, actor, problem, response={"kind": report["kind"], "units": report["units"], "sizes": report["sizes"], "load": report["lap"].get("load"),
+                                                        "peak_shear": answer.get("peak_shear"), "elastic_limit_load": answer.get("elastic_limit_load"),
+                                                        "solve_needs": [need["path"] for need in needs]})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), repair=data, report=report,
+                        views=views, needs=needs)
+
+
+@app.post(REPAIR_SOLVE, response_model=RepairSolveAnswer)
+def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Request, response: Response) -> RepairSolveAnswer:
+    """A repair's slice solved in CalculiX (ADR-0132) from the repair's page (ADR-0135): the engine reads the description first, so a
+    repair the page could not work is refused in the same words, and one that lacks what a solve needs is refused with the list; then
+    the fea package's `repair_model` builds the slice, solves it and reads it back in a process of its own, with ADR-0132's mesh and
+    its checks. A solve the tool refuses (the forces do not add up, the panel is too short for the far field) is refused in its
+    words; a solver that fails is said so without them. Recorded with its actor: the description and the solve's headline numbers."""
+    data, repair, load = _repair_read(request, actor, problem)
+    needs = solve_needs(repair, load)
+    if needs:
+        detail = "The solve of the slice needs: " + "; ".join(need["words"] for need in needs) + "."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
+    command = repair_model_command()
+    if command is None:
+        raise HTTPException(status_code=503, detail="The solver is not installed here")
+    with tempfile.TemporaryDirectory(prefix="repair-solve-") as folder:
+        stated, out = Path(folder) / "repair.json", Path(folder) / "model"
+        stated.write_text(json.dumps(data), encoding="utf-8")
+        done = _repair_tool(request, actor, problem, [*command, str(stated), "--out", str(out), "--cut-faces", problem.cut_faces], Path(folder),
+                            "the solve of the slice", REPAIR_SOLVE_TIMEOUT_S)
+        refusal = next((line.strip()[len("refused:"):].strip() for line in reversed(done.stdout.splitlines()) if line.strip().startswith("refused:")), "")
+        if done.returncode == REPAIR_REFUSED and refusal:
+            run_id = _record(request, actor, problem, error=refusal)
+            raise HTTPException(status_code=422, detail=refusal, headers=_run_header(run_id))
+        report_path = out / REPAIR_REPORT
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8")) if done.returncode == 0 else None
+        except (OSError, ValueError):
+            report = None
+        if not isinstance(report, dict) or not isinstance(report.get("headline"), str) or not _finite(report):
+            cause = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
+            print(f"the repair's solve stopped with status {done.returncode}: {cause}", flush=True)  # the tool's own words stay in the log
+            run_id = _record(request, actor, problem, error=f"the solve stopped with status {done.returncode}")
+            raise HTTPException(status_code=503, detail=SLICE_NOT_NOW, headers=_run_header(run_id))
+    headline = report.pop("headline")
+    run_id = _record(request, actor, problem, response={"headline": headline, "model": report.get("model"), "checks": report.get("checks"),
+                                                        "peak_shear": report.get("bond", {}).get("peak_shear"), "peak_peel": report.get("bond", {}).get("peak_peel"),
+                                                        "first": report.get("first")})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairSolveAnswer(run_id=None if run_id is None else str(run_id), headline=headline, report=report)
+
+
+@app.post(REPAIR_SHAPE, response_model=RepairShapeAnswer)
+def repair_shape_endpoint(problem: RepairRequest, actor: Actor, request: Request, response: Response) -> RepairShapeAnswer:
+    """A repair's solids for a CAD program (ADR-0131), from the repair page's Download STEP (ADR-0135): the engine reads the description
+    first, then the fea package's `repair_shape` builds every ply and the adhesive as a named solid in Gmsh's OpenCASCADE, in a process
+    of its own, and writes the STEP file and the table of the solids. Recorded with its actor: the description and a summary, never
+    the file."""
+    data, _, _ = _repair_read(request, actor, problem)
+    command = repair_shape_command()
+    if command is None:
+        raise HTTPException(status_code=503, detail="The shape builder is not installed here")
+    with tempfile.TemporaryDirectory(prefix="repair-shape-") as folder:
+        stated, step_path, parts_path = Path(folder) / "repair.json", Path(folder) / "repair.step", Path(folder) / "parts.json"
+        stated.write_text(json.dumps(data), encoding="utf-8")
+        done = _repair_tool(request, actor, problem, [*command, str(stated), "--step", str(step_path), "--parts", str(parts_path)], Path(folder),
+                            "the shape", WING_SHAPE_TIMEOUT_S)
+        reason = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
+        if done.returncode == REPAIR_REFUSED and reason:
+            run_id = _record(request, actor, problem, error=reason)
+            raise HTTPException(status_code=422, detail=reason, headers=_run_header(run_id))
+        if done.returncode != 0 or not step_path.exists() or not parts_path.exists():
+            print(f"the repair's shape stopped with status {done.returncode}: {reason}", flush=True)  # the tool's own words stay in the log
+            run_id = _record(request, actor, problem, error=f"the shape builder stopped with status {done.returncode}")
+            raise HTTPException(status_code=503, detail="The shape could not be built", headers=_run_header(run_id))
+        step = step_path.read_text(encoding="ascii", errors="replace")
+        parts = json.loads(parts_path.read_text(encoding="utf-8"))
+    run_id = _record(request, actor, problem, response={"title": parts.get("title"), "parts": len(parts.get("parts", [])), "volumes": parts.get("volumes"),
+                                                        "step_bytes": len(step)})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairShapeAnswer(run_id=None if run_id is None else str(run_id), step=step, parts=parts)
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

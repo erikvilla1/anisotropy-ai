@@ -80,7 +80,7 @@ test("an old address carries the title and description of the page it goes to", 
 });
 
 test("the app's addresses get the workspace's header, and only the pages without a toolbar link back to the projects", () => {
-  for (const path of ["/workspace", "/workspace/fea", "/workspace/cad", "/workspace/laminate", "/workspace/wing", "/workspace/fea/view", "/chat", "/chat/view", "/studio", "/studio/view"])
+  for (const path of ["/workspace", "/workspace/fea", "/workspace/cad", "/workspace/laminate", "/workspace/wing", "/workspace/repair", "/workspace/repair/report", "/workspace/fea/view", "/chat", "/chat/view", "/studio", "/studio/view"])
     assert.ok(isAppPath(path), path);
   for (const path of ["/", "/about", "/library", "/services/finite-element-modeling", "/_not-found", "/chatroom", "/studios"])
     assert.ok(!isAppPath(path), path);
@@ -90,8 +90,8 @@ test("the app's addresses get the workspace's header, and only the pages without
   for (const path of ["/workspace/x", "/workspace/fea/x", "/workspace/cad/x"]) assert.ok(!isAppPath(path), path);
   assert.ok(isAppPath("/studio/view/") && isAppPath("/chat/"), "a trailing slash");
   assert.deepEqual([...MOVED_ADDRESSES].sort(), Object.keys(MOVED_PAGES).sort(), "the shell's old addresses are the Worker's");
-  for (const path of ["/workspace/fea/view", "/workspace/fea/view/"]) assert.ok(headerLinksToProjects(path), path);
-  for (const path of ["/workspace", "/workspace/", "/workspace/fea", "/workspace/laminate", "/workspace/cad", "/workspace/wing", "/chat", "/about"]) assert.ok(!headerLinksToProjects(path), path);
+  for (const path of ["/workspace/fea/view", "/workspace/fea/view/", "/workspace/repair/report"]) assert.ok(headerLinksToProjects(path), path);
+  for (const path of ["/workspace", "/workspace/", "/workspace/fea", "/workspace/laminate", "/workspace/cad", "/workspace/wing", "/workspace/repair", "/chat", "/about"]) assert.ok(!headerLinksToProjects(path), path);
 });
 
 test("↗ marks only a link that opens a new tab and says so, in the shell, the library's property table and a job's files", () => {

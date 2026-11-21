@@ -1,0 +1,35 @@
+title = "Example patch bonded on top"
+source = "An example made for tests and documents, not a repair of ours or of anyone's, and not a design. Every size is a round value chosen for the example; the ply material comes from the library, and the adhesive's values are round numbers of our own, not a product's. So is nu23, the ply's Poisson's ratio across its fibres, which the library record does not hold: a round value for the example, not a measured property."
+units = "mm-MPa"
+kind = "external"
+
+[parent]
+library = "im7-8552"
+layup = [45, 0, -45, 90, 90, -45, 0, 45]
+nu23 = 0.45
+
+[damage]
+diameter = 25
+
+[steps]
+count = 3
+length = 12.5
+plies = 2
+
+[patch]
+layup = [0, 45, -45, 0, 0, 90]
+overlap = 15
+shape = "round"
+
+[adhesive]
+shear_modulus = 1000
+thickness = 0.1
+shear_strength = 30
+poisson = 0.35
+
+[panel]
+length = 300
+width = 200
+
+[applied]
+load = 100
