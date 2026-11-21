@@ -1579,6 +1579,7 @@ class RepairSweepAnswer(Contract):
     flat_from: dict[str, Any] | None
     most: dict[str, Any] | None
     words: list[str]
+    cautions: list[str]
     check: dict[str, Any] | None = None
 
 

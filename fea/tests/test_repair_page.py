@@ -102,6 +102,24 @@ def test_the_solved_slices_the_pages_tests_draw_are_what_the_solver_gives(name):
     assert kept["headline"] == headline(report)
 
 
+@needs_ccx
+def test_the_check_of_the_sweeps_pick_the_pages_tests_draw_is_what_the_solver_gives():
+    """The chat's tests draw the solved slice of a sweep's pick (ADR-0136): the pick of the kept sweep, solved today, says the same."""
+    from anisotropy_engine.repair import pick_check
+
+    found = json.loads((FIXTURES / "example-sweep.json").read_text(encoding="utf-8"))
+    kept = json.loads((FIXTURES / "example-sweep-check.json").read_text(encoding="utf-8"))
+    report = slice_report(solve_slice(*repair_from_dict(found["picked"])), found["picked"]["units"])
+    check = pick_check(found["target"], report)
+    assert (kept["state"], kept["holds"], kept["first"]["what"]) == (check["state"], check["holds"], check["first"]["what"])
+    assert kept["first"]["load"] == pytest.approx(check["first"]["load"], rel=1e-5)
+    assert kept["elastic_limit_load"] == pytest.approx(check["elastic_limit_load"], rel=1e-5)
+    for key in ("peak_shear", "peak_peel"):
+        assert kept[key]["value"] == pytest.approx(check[key]["value"], rel=1e-5) and kept[key]["part"] == check[key]["part"]
+    assert kept["first_ply"]["name"] == check["first_ply"]["name"]
+    assert kept["words"] == check["words"] and kept["headline"] == headline(report)
+
+
 def test_the_solids_table_is_written_beside_the_step_file(tmp_path):
     pytest.importorskip("gmsh", reason="Gmsh is not installed here (uv sync --extra mesh)")
     step, parts = tmp_path / "repair.step", tmp_path / "parts.json"

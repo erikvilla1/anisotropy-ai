@@ -2,6 +2,7 @@
 
 import { answerWords, needsWords, NOT_THE_STRENGTH, peakPlace, shown, unitText, type RepairReport } from "@/lib/repair";
 import { showPanel } from "./panels/step-panel";
+import { RepairChat } from "./repair-chat";
 import { useRepair } from "./repair-context";
 
 /** Why the adhesive's shear stress peaks where it does, and what usually lowers it: general words, no number, and not a design for
@@ -27,7 +28,7 @@ function Peak({ report }: { report: RepairReport }) {
 }
 
 /** The right column of the repair's page (ADR-0135): the answer in words, what the numbers are and are not, and what a solve still
- * needs. It words the engine's report and computes nothing. The repair has no chat yet: the page says so, and where to change things. */
+ * needs, with the repair's chat under them (ADR-0136). It words the engine's report and computes nothing. */
 export function RepairAssistant() {
   const { answer, problem, solve, solveStale } = useRepair();
   return (
@@ -50,7 +51,7 @@ export function RepairAssistant() {
           {answer.report.lap.answer?.elastic_limit_load !== undefined ? <p className="studio-hint" data-testid="repair-not-strength">{NOT_THE_STRENGTH} Neither answer is a failure load.</p> : null}
         </>
       ) : <p className="studio-muted">The repair&apos;s answer appears here once it is worked.</p>}
-      <p className="studio-hint" data-testid="repair-no-chat">This page has no chat yet. Change the repair in the model tree on the left; every change is worked at once.</p>
+      <RepairChat />
     </div>
   );
 }

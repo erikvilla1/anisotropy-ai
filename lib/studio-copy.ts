@@ -42,6 +42,8 @@ export const FAILED_WORDS: Record<string, string> = {
   "the repair calculation": "The repair could not be worked",
   "the solve of the slice": "The slice could not be solved",
   "the repair's shape": "The repair's solids could not be built",
+  "the preview of the repair's change": "The change could not be previewed",
+  "the sweep": "The sweep could not be run",
   "the preview of the change": "The change could not be previewed",
   "the reference pages": "Our reference pages could not be searched",
   "the proposals": "The message could not be read",

@@ -384,6 +384,25 @@ def test_a_change_and_a_sweep_are_recorded_by_their_words_and_the_pick_never_eve
     assert recording.get(f"/v1/runs/{refused.headers['X-Anisotropy-Run-Id']}").json()["status"] == "rejected"
 
 
+def test_the_chats_tests_answers_are_what_the_script_writes_and_what_the_api_answers():
+    spec = importlib.util.spec_from_file_location("repair_choices", ROOT / "scripts" / "repair-choices.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    hint = "run: uv run --project fea python scripts/repair-choices.py --solve"
+    for name, change in module.CHANGES.items():
+        kept = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+        assert close(kept, json.loads(json.dumps(module.change(name)))), hint
+        sent = client.post(CHANGES, json={"repair": example(), "change": change}).json()
+        assert close({key: sent[key] for key in kept if key != "run_id"}, {key: kept[key] for key in kept if key != "run_id"}), "the browser test's preview is the API's"
+    kept = json.loads((FIXTURES / "example-sweep.json").read_text(encoding="utf-8"))
+    assert close(kept, json.loads(json.dumps(module.sweep()))), hint
+    sent = client.post(SWEEPS, json={"repair": example(), "sweep": module.SWEEP, "confirm": False}).json()
+    assert sent["check"] is None and close({key: sent[key] for key in kept if key != "run_id"}, {key: kept[key] for key in kept if key != "run_id"}), \
+        "the browser test's sweep is the API's"
+    checked = json.loads((FIXTURES / "example-sweep-check.json").read_text(encoding="utf-8"))
+    assert checked["state"] == "solved" and checked["holds"] is True and kept["rows"][kept["pick"]]["value"] == 4.0
+
+
 @pytest.mark.skipif(not FEA_VENV.is_dir() or shutil.which("ccx") is None, reason="the fea environment or CalculiX (ccx) is not installed here")
 def test_the_examples_pick_is_solved_by_the_fea_package_and_held_by_its_slice():
     answer = client.post(SWEEPS, json={"toml": EXAMPLE.read_text(encoding="utf-8"), "sweep": {"quantity": "step_length", "start": 3, "end": 25, "load": 230}})

@@ -3,6 +3,7 @@
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
 import type { RepairAnswer, RepairDescription, RepairShape, RepairSolve } from "./repair";
+import type { RepairChange, RepairChangePreview, RepairSweep, RepairSweepAnswer } from "./repair-chat";
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
@@ -711,6 +712,27 @@ export async function previewWingChange(apiBaseUrl: string, wing: WingDescriptio
   return payload as unknown as WingChangePreview;
 }
 
+/** A change previewed on the repair as it stands (ADR-0136): the engine makes it on a copy and works both by hand, and nothing is kept.
+ * A change the repair cannot take is refused in the engine's words. */
+export async function previewRepairChange(apiBaseUrl: string, repair: RepairDescription, change: RepairChange, signal?: AbortSignal): Promise<RepairChangePreview> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/changes`, { method: "POST", headers, body: JSON.stringify({ repair, change }), signal }, "the preview of the repair's change");
+  if (!isObject(payload) || typeof payload.words !== "string" || !isObject(payload.repair) || !isObject(payload.before) || !isObject(payload.after)
+    || !isObject(payload.units)) throw unreadable("the preview of the repair's change: not a preview");
+  return payload as unknown as RepairChangePreview;
+}
+
+/** One quantity of the repair swept (ADR-0136): the engine works the repair by hand at every value and, with a load named, picks the
+ * smallest repair whose adhesive is still elastic at it; the API then solves that pick's slice, a few seconds, waited for. A sweep
+ * the repair cannot take is refused in the engine's words; a pick whose slice cannot be solved comes back unchecked, and says so. */
+export async function sweepRepair(apiBaseUrl: string, repair: RepairDescription, sweep: RepairSweep, cutFaces: "open" | "bonded" = "open",
+  signal?: AbortSignal): Promise<RepairSweepAnswer> {
+  const body = JSON.stringify({ repair, sweep, cut_faces: cutFaces });
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/sweeps`, { method: "POST", headers, body, signal }, "the sweep");
+  if (!isObject(payload) || !Array.isArray(payload.rows) || !Array.isArray(payload.words) || !Array.isArray(payload.cautions) || !isObject(payload.quantity)
+    || !isObject(payload.units) || (payload.check !== null && !(isObject(payload.check) && Array.isArray(payload.check.words)))) throw unreadable("the sweep: not a sweep's answer");
+  return payload as unknown as RepairSweepAnswer;
+}
+
 /** A section of our pages as the search hands it: its id, the page, its title and its text. */
 export type ReferenceSection = { id: string; document: string; title: string; text: string };
 
@@ -718,6 +740,16 @@ export type ReferenceSection = { id: string; document: string; title: string; te
  * pages and ranked, no model and no number. */
 export async function wingReferences(apiBaseUrl: string, question: string, signal?: AbortSignal): Promise<ReferenceSection[]> {
   const body = JSON.stringify({ question: question.slice(0, 2000), about: "wing", limit: 2 });
+  const payload = await call(`${base(apiBaseUrl)}/v1/workspace/theory-sections`, { method: "POST", headers, body, signal }, "the reference pages");
+  if (!isObject(payload) || !Array.isArray(payload.sections)) throw unreadable("the reference pages: not a list of sections");
+  return payload.sections.filter((s): s is ReferenceSection => isObject(s) && typeof s.id === "string" && typeof s.title === "string" && typeof s.text === "string"
+    && typeof s.document === "string");
+}
+
+/** The sections of the repair's theory and the page "Bonded repairs" a question's words find, best first (ADR-0136): words cut from
+ * our own pages and ranked, no model and no number. */
+export async function repairReferences(apiBaseUrl: string, question: string, signal?: AbortSignal): Promise<ReferenceSection[]> {
+  const body = JSON.stringify({ question: question.slice(0, 2000), about: "repair", limit: 3 });
   const payload = await call(`${base(apiBaseUrl)}/v1/workspace/theory-sections`, { method: "POST", headers, body, signal }, "the reference pages");
   if (!isObject(payload) || !Array.isArray(payload.sections)) throw unreadable("the reference pages: not a list of sections");
   return payload.sections.filter((s): s is ReferenceSection => isObject(s) && typeof s.id === "string" && typeof s.title === "string" && typeof s.text === "string"

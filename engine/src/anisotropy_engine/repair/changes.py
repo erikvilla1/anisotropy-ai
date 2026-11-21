@@ -40,11 +40,12 @@ COUNT_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7
 class RepairChange(BaseModel):
     """One change. `set`: `quantity` to `value`, in `unit` (as the engineer wrote it) or the file's own when none is given.
     `add_steps`, `remove_steps`: `count` steps, with the `angles` of a new step's plies where the patch's plies are listed.
-    `set_steps`: the number of steps is `count`. `regroup`: the same plies in steps of `count` plies each."""
+    `set_steps`: the number of steps is `count`. `regroup`: the same plies in steps of `count` plies each. `regroup_steps`: the
+    same plies in `count` steps."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
-    action: Literal["set", "add_steps", "remove_steps", "set_steps", "regroup"]
+    action: Literal["set", "add_steps", "remove_steps", "set_steps", "regroup", "regroup_steps"]
     quantity: Quantity | None = None
     value: float | None = None
     unit: str | None = Field(default=None, max_length=20)
@@ -63,7 +64,7 @@ class RepairChange(BaseModel):
                 raise ValueError("A change of steps takes a count, and no quantity, value or unit")
             if self.count is None:
                 raise ValueError("A change of steps needs a count")
-            if self.angles is not None and self.action in ("remove_steps", "regroup"):
+            if self.angles is not None and self.action in ("remove_steps", "regroup", "regroup_steps"):
                 raise ValueError("Only new steps take angles")
         for angle in self.angles or ():
             if not -90 <= angle <= 180:
@@ -72,11 +73,13 @@ class RepairChange(BaseModel):
 
 
 def shown(value: float) -> str:
-    """A number as a sentence prints it: four significant figures, no exponent, as the repair's page does."""
+    """A number as a sentence prints it, as the repair's page does (`shown` of lib/wing.ts): four significant figures, thousands
+    apart by a comma, no exponent."""
     if value == 0 or not math.isfinite(value):
         return "0" if value == 0 else str(value)
+    value = float(f"{value:.4g}")
     digits = max(0, 3 - math.floor(math.log10(abs(value))))
-    text = f"{round(value, digits):.{digits}f}"
+    text = f"{value:,.{digits}f}"
     return (text.rstrip("0").rstrip(".") if "." in text else text).replace("-", "−")
 
 
@@ -107,7 +110,10 @@ def in_file_units(data: dict, value: float, unit: str | None, kind: str) -> floa
     try:
         return tidy(to_si(value, unit, kind) / _system(data)[kind][0])
     except ValueError as error:
-        raise RepairError(f"The unit as written: {error}") from error
+        words = str(error)
+        if kind == "N":  # units.py names the kind by its key: say what it is
+            words = words.replace("is not a N unit", "is not a unit of load per unit width").replace("for N;", "for a load per unit width;")
+        raise RepairError(f"The unit as written: {words}") from error
 
 
 def _steps(data: dict) -> tuple[int, int]:
@@ -151,14 +157,16 @@ def change_repair(data: dict, change: RepairChange) -> dict:
         return changed
     steps, per = _steps(data)
     listed = _listed(data)
-    if change.action == "regroup":
+    if change.action in ("regroup", "regroup_steps"):
         total = steps * per
+        divide = ", ".join(str(n) for n in range(1, total + 1) if total % n == 0)
         if total % change.count:
-            raise RepairError(f"{total} plies cannot be grouped in steps of {change.count}: steps of "
-                              f"{', '.join(str(n) for n in range(1, total + 1) if total % n == 0)} divide them")
-        changed["steps"]["count"] = total // change.count
-        if change.count != 1 or "plies" in changed["steps"]:
-            changed["steps"]["plies"] = change.count
+            raise RepairError(f"{total} plies cannot be grouped in steps of {change.count}: steps of {divide} divide them" if change.action == "regroup" else
+                              f"{total} plies cannot be cut in {change.count} equal steps: {divide} steps divide them")
+        each = change.count if change.action == "regroup" else total // change.count
+        changed["steps"]["count"] = total // each
+        if each != 1 or "plies" in changed["steps"]:
+            changed["steps"]["plies"] = each
         return changed
     target = change.count if change.action == "set_steps" else steps + change.count if change.action == "add_steps" else steps - change.count
     if target < 1:
@@ -217,7 +225,7 @@ def change_words(data: dict, changed: dict, change: RepairChange, after: dict) -
     external = data.get("kind", "flush") == "external"
     plies = lambda n: f"{count_words(n)} {'ply' if n == 1 else 'plies'}"  # noqa: E731
     stepped = lambda n: f"{count_words(n)} {'step' if n == 1 else 'steps'}"  # noqa: E731
-    if change.action == "regroup":
+    if change.action in ("regroup", "regroup_steps"):
         return (f"The same {plies(steps * per)} in {stepped(steps)} of {plies(per)} each, in place of {stepped(before_steps)} of {plies(before_per)}.")
     start = f"{stepped(steps)[0].upper()}{stepped(steps)[1:]} in place of {count_words(before_steps)}"
     if external:

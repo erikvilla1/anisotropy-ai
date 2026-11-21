@@ -198,9 +198,13 @@ class StepLap:
     @property
     def peak_shear(self) -> tuple[float, int, str]:
         """The largest shear stress in size (Pa, signed), the step it is in (from 0) and the end of that step ("start" or
-        "end"). Within a step the shear stress is a sum of cosh and sinh, so its size is largest at an end."""
+        "end"). Within a step the shear stress is a sum of cosh and sinh, so its size is largest at an end. The shear stress is
+        continuous along the lap, so the end of one step and the start of the next are one place with one value, alike to the
+        last bits: the place is named by the first of the ends that reach the largest value within one part in 10^9, so that
+        two repairs alike but for a small change name it the same way."""
         ends = self.shear_at_ends
-        k, e = np.unravel_index(np.argmax(np.abs(ends)), ends.shape)
+        sizes = np.abs(ends)
+        k, e = np.argwhere(sizes >= sizes.max() * (1 - 1e-9))[0]
         return float(ends[k, e]), int(k), ("start", "end")[e]
 
     def adherend_stresses(self) -> np.ndarray:

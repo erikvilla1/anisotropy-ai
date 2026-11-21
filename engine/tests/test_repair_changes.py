@@ -315,7 +315,7 @@ def test_where_the_limit_load_goes_flat_on_rows_written_out_here():
 
 def test_numbers_in_a_sentence_have_four_figures_and_no_exponent():
     assert [shown(value) for value in (238.53884, 12.5766, 0.12, 74.0, 12345.6, 0.000123456, -3.14159, 0)] == \
-        ["238.5", "12.58", "0.12", "74", "12346", "0.0001235", "−3.142", "0"]
+        ["238.5", "12.58", "0.12", "74", "12,350", "0.0001235", "−3.142", "0"]
     assert math.isclose(float(shown(1 / 3)), 1 / 3, rel_tol=1e-3)
 
 
@@ -350,3 +350,47 @@ def test_what_the_hand_calculation_does_not_hold_can_come_first_in_the_slice():
     assert none["holds"] is None and none["first_ply"] is None and "not checked" in none["words"][-1]
     for words in (peel["words"], ply["words"], none["words"]):
         assert not re.search(r"strength of the repair|repair's strength|carr|margin|design", " ".join(words))
+
+
+def test_the_same_plies_cut_in_a_number_of_steps_and_what_a_sweep_says_it_is_not():
+    two = change_repair(EXAMPLE, RepairChange(action="regroup_steps", count=2))
+    assert two == change_repair(EXAMPLE, RepairChange(action="regroup", count=2)) and two["steps"]["count"] == 2 and two["steps"]["plies"] == 2
+    assert change_repair(EXTERNAL, RepairChange(action="regroup_steps", count=3))["steps"] == {"count": 3, "length": 12.5, "plies": 2}
+    assert preview_change(EXAMPLE, RepairChange(action="regroup_steps", count=1))["words"] == "The same four plies in one step of four plies each, in place of four steps of one ply."
+    with pytest.raises(RepairError, match="4 plies cannot be cut in 3 equal steps: 1, 2, 4 steps divide them"):
+        change_repair(EXAMPLE, RepairChange(action="regroup_steps", count=3))
+    with pytest.raises(ValidationError):
+        RepairChange(action="regroup_steps", count=2, angles=(0,))
+    not_a_strength = "Not the repair's strength: the adhesive yields before it fails, and the hand calculation has no peel stress."
+    step_rule = "A short step that keeps the adhesive elastic in this model is not a rule for choosing a step length."
+    assert sweep_repair(EXAMPLE, RepairSweep(quantity="step_length", load=230))["cautions"] == [not_a_strength, step_rule]
+    assert sweep_repair(EXAMPLE, RepairSweep(quantity="bondline", load=230))["cautions"] == [not_a_strength]
+    assert sweep_repair(EXAMPLE, RepairSweep(quantity="steps"))["cautions"] == [not_a_strength]
+    no_strength = copy.deepcopy(EXAMPLE)
+    no_strength["adhesive"].pop("shear_strength")
+    assert sweep_repair(no_strength, RepairSweep(quantity="step_length"))["cautions"] == [], "with no limit load there is nothing to mistake for a strength"
+
+
+def test_a_unit_of_the_wrong_kind_is_refused_in_words_that_name_the_kind():
+    with pytest.raises(RepairError, match="mm is not a unit of load per unit width; one of N/m, N/mm"):
+        change_repair(EXAMPLE, RepairChange(action="set", quantity="load", value=5, unit="mm"))
+    with pytest.raises(RepairError, match="unknown unit 'tons' for a load per unit width; one of"):
+        change_repair(EXAMPLE, RepairChange(action="set", quantity="load", value=5, unit="tons"))
+    with pytest.raises(RepairError, match="unknown unit 'ft' for length; one of m, cm, mm, in"):
+        change_repair(EXAMPLE, RepairChange(action="set", quantity="step_length", value=1, unit="ft"))
+
+
+def test_a_number_in_a_sentence_is_printed_as_the_page_prints_it():
+    # lib/wing.ts `shown`: four significant figures, thousands apart by a comma; the page and the engine's sentences then agree
+    assert [shown(v) for v in (1657.4, 12345.6, 3089.0, 238.539, 0.1, 12.7, -4.11249, 1234567.0)] == \
+        ["1,657", "12,350", "3,089", "238.5", "0.1", "12.7", "−4.112", "1,235,000"]
+
+
+def test_the_place_of_the_largest_shear_is_named_one_way_over_a_sweep():
+    # the peak sits where two ledges meet: the inner end of one is the outer end of the next, and a row must not name it now one way, now the other
+    for quantity in ("step_length", "cover_overlap", "bondline"):
+        rows = [row for row in sweep_repair(EXAMPLE, RepairSweep(quantity=quantity))["rows"] if row["refused"] is None]
+        places = {(row["peak_shear"]["name"], row["peak_shear"]["end"]) for row in rows if row["value"] >= 6 or quantity != "step_length"}
+        assert places == {("Ledge of step 1", "end")}, (quantity, places)
+    before, after = (preview_change(EXAMPLE, RepairChange(action="set", quantity="step_length", value=0.5, unit="in"))[key]["peak_shear"] for key in ("before", "after"))
+    assert (before["name"], before["end"]) == (after["name"], after["end"]) == ("Ledge of step 1", "end")

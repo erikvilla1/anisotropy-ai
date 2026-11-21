@@ -34,6 +34,9 @@ SWEPT_VALUES = ("step_length", "bondline", "cover_overlap", "patch_overlap")
 ROUND = (1.0, 2.0, 2.5, 5.0)
 FIRST = {"adhesive": "the adhesive reaches its elastic limit in shear", "peel": "the bondline's peel stress reaches the peel strength",
          "ply": "a ply reaches a strength"}  # what comes first in a solved slice, in the words of anisotropy_fea.repair_model.FIRST_WORDS
+# What stands beside every sweep that gives a limit load (ADR-0130, ADR-0136): it is where the adhesive starts to yield, by a model with no peel stress
+NOT_A_STRENGTH = "Not the repair's strength: the adhesive yields before it fails, and the hand calculation has no peel stress."
+NOT_A_STEP_RULE = "A short step that keeps the adhesive elastic in this model is not a rule for choosing a step length."
 PICKED = {"step_length": "a step length", "bondline": "a bondline", "cover_overlap": "a cover overlap", "patch_overlap": "a patch overlap"}
 
 
@@ -125,7 +128,7 @@ def _flat_from(rows: list[dict]) -> dict | None:
 
 def sweep_repair(data: dict, sweep: RepairSweep) -> dict:
     """The repair worked by hand at every value of one quantity: the rows, the pick when a load is named, where the limit
-    load goes flat, and the answer in sentences, all in the file's units. The repair given is never changed."""
+    load goes flat, and the answer in sentences with what it is not (`cautions`), all in the file's units. The repair given is never changed."""
     from .repair_file import repair_from_dict, repair_report
 
     system = _system(data)
@@ -213,9 +216,13 @@ def sweep_repair(data: dict, sweep: RepairSweep) -> dict:
     if flat is not None:
         words.append(f"From {shown(flat['value'])} {unit} up the limit load stays within 1 % of {shown(flat['elastic_limit_load'])} {force}: "
                      f"{'over this whole range' if flat['every_row'] else 'past it'}, {name} no longer changes it.")
+    cautions = [NOT_A_STRENGTH] if any(row.get("elastic_limit_load") is not None for row in worked) else []
+    if sweep.quantity == "step_length" and (pick is not None or flat is not None):
+        cautions.append(NOT_A_STEP_RULE)
     return {"sweep": sweep.model_dump(), "quantity": {"name": sweep.quantity, "words": name, "unit": unit}, "units": base["units"],
             "load": base["lap"]["load"], "target": target, "rows": rows, "pick": pick, "picked": None if pick is None else files[pick],
-            "flat_from": flat, "most": None if most is None else {"value": most["value"], "elastic_limit_load": most["elastic_limit_load"]}, "words": words}
+            "flat_from": flat, "most": None if most is None else {"value": most["value"], "elastic_limit_load": most["elastic_limit_load"]}, "words": words,
+            "cautions": cautions}
 
 
 def pick_check(target: float, solved: dict) -> dict:
