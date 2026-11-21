@@ -222,6 +222,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toHaveAttribute("data-source", "package"); // the legend's ends are the package's
   const written = fixture("fields").ranges.failure_index.tsai_hill.nodal as [number, number];
   await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 12 bands`);
+  await expect(page.getByTestId("legend")).toContainText("grey: clamped in the grips"); // the tabs under the jaws, out of the ends (ADR-0063 amendment 4)
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   // the validation table (ADR-0066): laminate theory beside Anisotropy, one row per ply in the fibre axes; the peaks apart, per ply, collapsed

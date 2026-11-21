@@ -57,13 +57,46 @@ def test_the_averages_are_the_means_over_the_elements_sharing_a_node(solved, dat
     mesh = solution.mesh
     corners = mesh.connectivity[:, :4]
     averages = np.asarray(data["nodal"]["averages"]["strain"], dtype=float)
-    node = int(corners[0, 2])  # a corner shared by several elements
+    held = set(data["mesh"]["held_elements"])
+    middle = data["summary"]["gauge_centre"]["element"]
+    node = int(corners[middle, 2])  # a corner in the gauge, shared by four free elements
     sharing = [e for e in range(mesh.element_count) if node in corners[e]]
-    assert len(sharing) == 4 and np.allclose(averages[node], solution.strain[sharing].mean(axis=0), rtol=1e-8)
-    assert "display averages" in data["nodal"]["averages_note"]
+    assert len(sharing) == 4 and not held & set(sharing)
+    assert np.allclose(averages[node], solution.strain[sharing].mean(axis=0), rtol=1e-8)
+    assert "display averages" in data["nodal"]["averages_note"] and "held_elements" in data["nodal"]["averages_note"]
     one = nodal_averages(np.array([[0, 1, 2, 3]]), 5, np.array([[1.0, 2.0]]))
     assert one[0].tolist() == [1.0, 2.0] and np.isnan(one[4]).all()  # a node no element touches
     assert rounded(one)[4] == [None, None] and rounded(np.array([1.23456789012345])) == [1.23456789]
+    two = nodal_averages(np.array([[0, 1, 2, 3], [1, 4, 5, 2]]), 6, np.array([0.0, 6.0]), np.array([True, False]))
+    assert two[1] == 6.0 and np.isnan(two[0]) and two[4] == 6.0  # a skipped element counts at no node
+
+
+def test_an_element_clamped_in_a_grip_is_left_out_of_the_averages_and_the_ends(solved, data):
+    """ADR-0063 amendment 4: a tab clamped by its grip moves as one body, so its zero stress is the clamp's. Its elements are named
+    (`mesh.held_elements`), every node of the tab line takes the mean of the gauge's elements alone, so the step from the clamp to the
+    gauge is not drawn as a ramp, and the legend's ends of a stress are the free part's; the displacement keeps every node."""
+    _, solution = solved
+    mesh = solution.mesh
+    corners = mesh.connectivity[:, :4]
+    held = data["mesh"]["held_elements"]
+    tabs = set(data["mesh"]["element_sets"]["Tab-Bottom"]) | set(data["mesh"]["element_sets"]["Tab-Top"])
+    assert held and set(held) <= tabs  # every clamped element is in a tab; the row along the tab line is free
+    line = data["mesh"]["node_sets"]["Tab-Bottom-Line"] if "Tab-Bottom-Line" in data["mesh"]["node_sets"] else None
+    index = np.asarray(data["element"]["failure"]["tsai_hill"]["element_index"], dtype=float)
+    average = np.asarray(data["nodal"]["averages"]["failure_index"]["tsai_hill"], dtype=float)
+    on_line = [i for i in range(mesh.node_count) if any(i in corners[e] for e in held) and any(i in corners[e] for e in range(mesh.element_count) if e not in held)]
+    assert on_line and (line is None or set(line) <= set(on_line))
+    for node in on_line:
+        free = [e for e in range(mesh.element_count) if node in corners[e] and e not in held]
+        assert average[node] == pytest.approx(index[free].mean(), rel=1e-8)  # the gauge's elements alone
+    inside = [i for i in range(mesh.node_count) if all(e in held for e in range(mesh.element_count) if i in corners[e]) and i in corners]
+    assert inside and all(np.isnan(average[i]) for i in inside)  # a node only clamped elements touch: no average
+    free = np.ones(mesh.element_count, dtype=bool)
+    free[held] = False
+    assert data["ranges"]["failure_index"]["tsai_hill"]["element"] == [index[free].min(), index[free].max()]
+    assert data["ranges"]["failure_index"]["tsai_hill"]["element"][0] > 0.5  # the clamp's zero is not the legend's low end
+    magnitude = np.asarray(data["nodal"]["magnitude"], dtype=float)
+    assert data["ranges"]["u_mag"]["nodal"] == [magnitude.min(), magnitude.max()]  # the grips' travel is a result: every node
 
 
 def test_the_summary_names_the_extremes(solved, data):
@@ -96,23 +129,25 @@ def test_the_ranges_are_the_ends_of_the_arrays_as_written(data):
     so the legend's ends are written here and the browser derives none."""
     ranges = data["ranges"]
     assert "legend" in data["ranges_note"]
-    strain = np.asarray(data["element"]["strain"], dtype=float)
+    free = np.ones(data["mesh"]["element_count"], dtype=bool)
+    free[data["mesh"]["held_elements"]] = False  # an element clamped inside a grip is out of every end but the displacement's (ADR-0063 amendment 4)
+    strain = np.asarray(data["element"]["strain"], dtype=float)[free]
     assert ranges["eps_y"]["element"] == [strain[:, 1].min(), strain[:, 1].max()]
     averages = np.asarray(data["nodal"]["averages"]["strain"], dtype=float)
     assert ranges["eps_y"]["nodal"] == [np.nanmin(averages[:, 1]), np.nanmax(averages[:, 1])]
     magnitude = np.asarray(data["nodal"]["magnitude"], dtype=float)
     assert ranges["u_mag"]["nodal"] == [magnitude.min(), magnitude.max()]
     assert "u_z" not in ranges and "M_y" not in ranges and "theta_x" not in ranges  # a membrane solve
-    stress = np.asarray(data["element"]["ply"]["stress_12"], dtype=float)  # (elements, plies, 3)
+    stress = np.asarray(data["element"]["ply"]["stress_12"], dtype=float)[free]  # (elements, plies, 3)
     assert len(ranges["S11"]["element"]) == 8 and ranges["S22"]["element"][2] == [stress[:, 2, 1].min(), stress[:, 2, 1].max()]
     stress_averages = np.asarray(data["nodal"]["averages"]["ply_stress_12"], dtype=float)
     assert ranges["S12"]["nodal"][5] == [np.nanmin(stress_averages[:, 5, 2]), np.nanmax(stress_averages[:, 5, 2])]
-    mises = np.asarray(data["element"]["ply"]["mises"], dtype=float)
+    mises = np.asarray(data["element"]["ply"]["mises"], dtype=float)[free]
     assert ranges["mises"]["element"][0] == [mises[:, 0].min(), mises[:, 0].max()]
-    index = np.asarray(data["element"]["failure"]["tsai_hill"]["element_index"], dtype=float)
+    index = np.asarray(data["element"]["failure"]["tsai_hill"]["element_index"], dtype=float)[free]
     assert ranges["failure_index"]["tsai_hill"]["element"] == [index.min(), index.max()]
     assert ranges["failure_index"]["tsai_hill"]["element"][1] == pytest.approx(data["summary"]["fpf"]["tsai_hill"]["index"])
-    per_ply = np.asarray(data["element"]["failure"]["tsai_hill"]["index"], dtype=float)  # (elements, plies)
+    per_ply = np.asarray(data["element"]["failure"]["tsai_hill"]["index"], dtype=float)[free]  # (elements, plies)
     assert ranges["failure_index_ply"]["tsai_hill"]["element"][3] == [per_ply[:, 3].min(), per_ply[:, 3].max()]
     assert span(np.array([np.nan, 2.0, -1.0])) == [-1.0, 2.0] and span(np.array([np.nan])) == [None, None]
     assert per_ply_spans(np.array([[[1.0, 2.0], [3.0, 4.0]]])) == [[[1.0, 1.0], [2.0, 2.0]], [[3.0, 3.0], [4.0, 4.0]]]  # one element, two plies, two faces

@@ -47,7 +47,14 @@ test("the range of the chosen field is the package's, for what is shown (ADR-006
   assert.deepEqual(averaged.range, at(fields.ranges, "eps_y", "nodal"));
   const stress = valuesFor(fields, { id: "S22", ply: 3, criterion: "tsai_hill", averaged: false });
   assert.deepEqual(stress.range, at(fields.ranges, "S22", "element", 2));
-  assert.equal(stress.range![0], Math.min(...(stress.values as number[])));
+  // the clamped tabs are drawn as the grips and are out of the ends: the low end is the free part's (ADR-0063 amendment 4)
+  const held = new Set(fields.mesh.held_elements);
+  assert.ok(held.size > 0);
+  assert.deepEqual(stress.held, fields.mesh.held_elements);
+  assert.equal(stress.range![0], Math.min(...(stress.values as number[]).filter((_, e) => !held.has(e))));
+  assert.ok(index.range![0] > 0.5); // the clamp's zero is not the legend's low end
+  assert.deepEqual(valuesFor(fields, { id: "u_mag", ply: 1, criterion: "", averaged: true }).held, []); // the grips' travel is drawn at every node
+  assert.deepEqual(valuesFor({ ...fields, mesh: { ...fields.mesh, held_elements: undefined } }, { id: "S22", ply: 3, criterion: "", averaged: false }).held, []); // a result solved before
   const top = valuesFor(bending, { id: "S11", ply: 2, face: 1, criterion: "tsai_hill", averaged: false });
   assert.deepEqual(top.range, at(bending.ranges, "S11", "element", 1, 1)); // ply 2, the top face
   assert.equal(top.range![1], Math.max(...(top.values as number[])));

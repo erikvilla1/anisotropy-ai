@@ -28,7 +28,7 @@ export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = 
   /** the lighting is on: the shading changes the colours, which the legend says (ADR-0063 amendment 1) */ lit?: boolean;
   /** the results card's form (ADR-0134 amendment 1): a title and what it is read at, the bar and its two ends; the whole sentence stays
    * for a screen reader */ card?: boolean;
-  /** what else the card's legend says beside what the field is read at: a thickness drawn larger than it is */ note?: string }) {
+  /** what else the legend says beside what the field is read at: the grey of the clamped tabs, a thickness drawn larger than it is */ note?: string }) {
   const sentence = (
     <><strong>{label}</strong>{unit && unit !== "-" ? ` (${unit})` : ""} · {by === "element" ? "element values" : "nodal averages"} · {printed(scale.ends[0])} to {printed(scale.ends[1])}{unit && unit !== "-" ? ` ${unit}` : ""}
       {bands ? ` · ${bands} bands` : ""}{scale.kind === "diverging" ? " · grey is zero" : ""}{lit ? " · lit: the shading changes the colours" : ""}</>
@@ -36,12 +36,14 @@ export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = 
   if (card) {
     const head = legendHead(label, unit);
     const end = (v: number) => (head.share ? `${(100 * v).toFixed(1)} %` : printed(v));
-    const sub = [head.sub, note].filter(Boolean).join(" · ");
+    const sub = head.sub;
     return (
       <div className="studio-legend cv-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
         <div className="cv-legend-head" aria-hidden="true"><span className="cv-legend-title">{head.title}</span><span className="cv-legend-sub" title={sub}>{sub}</span></div>
         <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />
         <div className="cv-legend-ends" aria-hidden="true"><span>{end(scale.ends[0])}</span><span>{end(scale.ends[1])}</span></div>
+        {/* its own line, so the grey of the clamped tabs is never cut off with the field's name (ADR-0063 amendment 4) */}
+        {note ? <div className="cv-legend-note" aria-hidden="true" title={note}>{note}</div> : null}
         <p className="sr-only">{sentence}{note ? ` · ${note}` : ""}</p>
       </div>
     );
@@ -54,7 +56,7 @@ export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = 
       <div className="studio-legend-ticks" aria-hidden="true">{ticks.map((t, i) => (
         <span key={i} style={{ "--at": `${(100 * i) / Math.max(ticks.length - 1, 1)}%` } as CSSProperties}>{printed(t)}</span>
       ))}</div>
-      <p>{sentence}</p>
+      <p>{sentence}{note ? ` · ${note}` : ""}</p>
     </div>
   );
 }
@@ -708,7 +710,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);
   const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range, palette), [values, palette]);
-  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values,
+  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, held: values.held,
     scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours, lit } }), [values, colorScale, contours, lit]);
   // every boundary condition and load drawn and listed in words, as before the run (ADR-0110; audit fea-run-16)
   const inputs = useMemo(() => (preview ? sceneInputs(preview, fields.mesh) : { held: [], loads: [], about: [] }), [preview, fields.mesh]);
@@ -763,8 +765,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face, criterion: criterion ?? c.criterion }));
   }, [place?.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const thickNote = thick ? `thickness ×${THICKNESS_SHOWN}` : "";
-  const legend = <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} lit={lit} card={canvas !== null} note={thickNote} />;
+  // grey under the jaws: the clamp's zero, not a result, and out of the legend's ends (ADR-0063 amendment 4)
+  const legendNote = [values.held.length ? "grey: clamped in the grips" : "", thick ? `thickness ×${THICKNESS_SHOWN}` : ""].filter(Boolean).join(" · ");
+  const legend = <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} lit={lit} card={canvas !== null} note={legendNote} />;
   const head = legendHead(values.label, values.unit);
   // the field, and the ply, face and criterion it is read at: always in sight
   const primary = (

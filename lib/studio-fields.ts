@@ -17,7 +17,9 @@ export type FieldOption = {
 export type FieldChoice = { id: string; ply: number; face?: number; criterion: string; averaged: boolean }; // face: 0 bottom, 1 top, when the package wrote faces
 export type FieldValues = { values: (number | null)[]; by: "node" | "element"; label: string; unit: string; signed: boolean;
   /** The ends the package wrote for what is shown, or null for a job solved before the package wrote ranges. */
-  range: [number, number] | null };
+  range: [number, number] | null;
+  /** The elements clamped inside a grip, drawn as the grip and not by value: every field but the displacement (ADR-0063 amendment 4). */
+  held: number[] };
 
 const STRESS = ["S11", "S22", "S12"] as const;
 
@@ -107,7 +109,10 @@ export const DEFAULT_CHOICE = (fields: Fields): FieldChoice => ({
 /** The values of the chosen field: per node when averaged (or nodal by nature), else per element; with the range the package wrote for them. */
 export function valuesFor(fields: Fields, choice: FieldChoice): FieldValues {
   const picked = pickValues(fields, choice);
-  return { ...picked, range: rangeFor(fields, choice, picked.by) };
+  const option = fieldOptions(fields).find((o) => o.id === choice.id) ?? fieldOptions(fields)[0];
+  // the grips' travel is a result at every node; a strain or a stress inside a clamped tab is the clamp's (ADR-0063 amendment 4)
+  const held = option.nodalOnly ? [] : fields.mesh.held_elements ?? [];
+  return { ...picked, range: rangeFor(fields, choice, picked.by), held };
 }
 
 /** The ends the package wrote for the chosen field as shown: element values or display averages, the chosen ply and face, the chosen
@@ -128,7 +133,7 @@ export function rangeFor(fields: Fields, choice: FieldChoice, by: "node" | "elem
   return Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "number" && typeof entry[1] === "number" ? [entry[0], entry[1]] : null;
 }
 
-function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "range"> {
+function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "range" | "held"> {
   const option = fieldOptions(fields).find((o) => o.id === choice.id) ?? fieldOptions(fields)[0];
   const k = Math.min(Math.max(choice.ply, 1), fields.mesh.plies) - 1;
   const face = Math.min(Math.max(choice.face ?? 0, 0), 1);
@@ -137,8 +142,8 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
   const plyWord = option.perPly ? ` (ply ${k + 1}, ${fields.mesh.angles[k]}°${faceWord})` : "";
   const critWord = option.perCriterion ? `, ${CRITERION_NAMES[criterion] ?? criterion.replace("_", " ")}` : "";
   const label = `${option.label}${plyWord}${critWord}`;
-  const nodal = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
-  const element = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "element", label, unit: option.unit, signed: option.signed });
+  const nodal = (values: (number | null)[]): Omit<FieldValues, "range" | "held"> => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
+  const element = (values: (number | null)[]): Omit<FieldValues, "range" | "held"> => ({ values, by: "element", label, unit: option.unit, signed: option.signed });
   const n = fields.nodal, e = fields.element;
   const column = (rows: (number | null)[][] | undefined, i: number): (number | null)[] => (rows ?? []).map((row) => row[i]);
   switch (option.id) {

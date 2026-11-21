@@ -100,11 +100,17 @@ export function vertexColors(mesh: PlateMesh, by: "node" | "element", colors: nu
 }
 
 /** One float per vertex from one value per node (smooth) or per element (flat), for the results material (ADR-0063); a value the
- * package did not write is `missing`, a float below every real value. */
-export function fieldAttribute(mesh: PlateMesh, by: "node" | "element", values: (number | null)[], missing: number): Float32Array {
+ * package did not write is `missing`, a float below every real value. Every vertex of an element in `held` (clamped inside a grip) is
+ * `grip`, so the whole element is drawn as the grip and no value of the clamp's is blended into its neighbours (ADR-0063 amendment 4). */
+export function fieldAttribute(mesh: PlateMesh, by: "node" | "element", values: (number | null)[], missing: number,
+  held: readonly number[] = [], grip = missing): Float32Array {
   const source = by === "node" ? mesh.vertexNode : mesh.vertexElement;
+  const clamped = new Set(held);
   const out = new Float32Array(source.length);
-  source.forEach((index, i) => { const v = values[index]; out[i] = v === null || v === undefined || !Number.isFinite(v) ? missing : v; });
+  source.forEach((index, i) => {
+    if (clamped.size && clamped.has(mesh.vertexElement[i])) { out[i] = grip; return; }
+    const v = values[index]; out[i] = v === null || v === undefined || !Number.isFinite(v) ? missing : v;
+  });
   return out;
 }
 
@@ -176,6 +182,22 @@ export function setBox(nodes: number[][], indices: number[]): { min: Vec2; max: 
   if (!indices.length) return null;
   const { min, max } = bounds(indices.map((i) => nodes[i]));
   return { min, max };
+}
+
+/** A support drawn as a grip (ADR-0063 amendment 4): a region that covers an area and holds it across the coupon or along it and out
+ * of its plane is a tab clamped between jaws, so the model draws the jaws, not a symbol per held direction. Returns the region's box,
+ * the model's long axis and which end of the box faces away from the model's middle (where a fixed grip's hatching and a moving grip's
+ * arrows go), or null for any other support (an edge, a point, a face held out of plane only). */
+export function gripOf(nodes: number[][], indices: number[], dofs: readonly number[] | undefined, model: { min: Vec2; size: Vec2 }):
+  { box: { min: Vec2; max: Vec2 }; axis: 0 | 1; outer: -1 | 1 } | null {
+  const box = setBox(nodes, indices);
+  if (!box || !dofs?.includes(3) || !(dofs.includes(1) || dofs.includes(2))) return null;
+  const span = [box.max[0] - box.min[0], box.max[1] - box.min[1]];
+  const long = Math.max(span[0], span[1]);
+  if (long === 0 || Math.min(span[0], span[1]) <= 0.02 * long) return null; // a line, not an area
+  const axis: 0 | 1 = model.size[1] >= model.size[0] ? 1 : 0;
+  const middle = model.min[axis] + model.size[axis] / 2;
+  return { box, axis, outer: (box.min[axis] + box.max[axis]) / 2 < middle ? -1 : 1 };
 }
 
 /** One value per node from one value per element: the mean over the elements sharing the node, for a smooth display only. The fea
