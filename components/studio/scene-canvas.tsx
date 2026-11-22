@@ -4,14 +4,17 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { bounds, deformedHeights, deformedPositions, elementEdges, elementLoop, fieldAttribute, meanHeight, plateMesh, sampleNodes, setBox } from "@/lib/studio-geometry";
+import { bounds, deformedHeights, deformedPositions, elementEdges, elementLoop, fieldAttribute, gripOf, meanHeight, plateMesh, sampleNodes, setBox } from "@/lib/studio-geometry";
 import { HELD, LOADED, overlayColors, type Palette } from "@/lib/studio-colors";
-import { applyScale, fieldMaterial, NO_VALUE, type FieldScale } from "./field-material";
+import { applyScale, fieldMaterial, IN_GRIP, NO_VALUE, type FieldScale } from "./field-material";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
+import { FitCamera } from "./fit-camera";
+import { Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
 
 /** A field on the plate (ADR-0063): the package's values, one per node (smooth) or per element (flat), and the scale that colours them. */
-export type SceneField = { by: "node" | "element"; values: (number | null)[]; scale: FieldScale };
+export type SceneField = { by: "node" | "element"; values: (number | null)[]; scale: FieldScale;
+  /** the elements clamped inside a grip, drawn in the grip's grey, not by value (ADR-0063 amendment 4) */ held?: readonly number[] };
 /** A region drawn on the model: its nodes, its line in the list under the model, and, for a boundary condition, the directions it holds
  * (1 to 3 the moves along x, y, z, 4 to 6 the turns about them), each marked by a symbol (ADR-0110). */
 export type SceneMarker = { nodes: number[]; label: string; dofs?: number[] };
@@ -40,6 +43,8 @@ export type SceneProps = {
 };
 
 const LIFT = 1e-3; // frames sit this fraction of the plate's size above the top face so they are not hidden by it
+const SYMBOL_INSET = 0.25; // supports and loads over an area sit this share in from its edges, off the line where the field changes
+const EDGE_OPACITY = 0.42; // the mesh lines over a field: black at this opacity, the mockup's, so a colour reads through them (ADR-0063 amendment 3)
 
 const AXES: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 const UP = new THREE.Vector3(0, 1, 0); // a cone's own axis, tip at +height/2
@@ -67,7 +72,7 @@ function Cone({ tip, toward, height, color, back = 0, opacity = 1 }: { tip: numb
 /** A boundary condition's symbols at a few of its nodes (ADR-0110): a cone pointing at the node for each held move, a double cone on the
  * far side for each held turn. A move along z is drawn from above, so it is seen from the default view; the in-plane ones lie flat. */
 function HeldSymbols({ xy, nodes, dofs, z, height, opacity = 1 }: { xy: number[][]; nodes: number[]; dofs: number[]; z: number; height: number; opacity?: number }) {
-  const at = sampleNodes(xy, nodes, 2, 4);
+  const at = sampleNodes(xy, nodes, 2, 4, SYMBOL_INSET);
   return (
     <group>
       {at.flatMap((n) => dofs.map((dof) => {
@@ -90,12 +95,84 @@ function HeldSymbols({ xy, nodes, dofs, z, height, opacity = 1 }: { xy: number[]
  * grip's travel or force. An arrow along -z arrives onto the plate from above; any other leaves its node in the load's direction. */
 function LoadArrows({ xy, nodes, direction, z, length, color = LOADED }: { xy: number[][]; nodes: number[]; direction: string; z: number; length: number; color?: string }) {
   const v = along(direction);
-  const at = sampleNodes(xy, nodes, 3, 5);
+  const at = sampleNodes(xy, nodes, 3, 5, SYMBOL_INSET);
   return (
     <group>
       {at.map((n) => {
         const origin = v[2] < 0 ? [xy[n][0], xy[n][1], z + length] : [xy[n][0], xy[n][1], z];
         return <arrowHelper key={n} args={[new THREE.Vector3(...v), new THREE.Vector3(...origin), length, color, 0.3 * length, 0.18 * length]} />;
+      })}
+    </group>
+  );
+}
+
+type Grip = NonNullable<ReturnType<typeof gripOf>>;
+
+/** The twelve edges of a box from its two corners, as pairs of points for a segmented line. */
+function boxEdges(a: number[], b: number[]): [number, number, number][] {
+  const c = (i: number, j: number, k: number): [number, number, number] => [i ? b[0] : a[0], j ? b[1] : a[1], k ? b[2] : a[2]];
+  const out: [number, number, number][] = [];
+  for (const [p, q] of [[[0, 0, 0], [1, 0, 0]], [[0, 1, 0], [1, 1, 0]], [[0, 0, 1], [1, 0, 1]], [[0, 1, 1], [1, 1, 1]],
+    [[0, 0, 0], [0, 1, 0]], [[1, 0, 0], [1, 1, 0]], [[0, 0, 1], [0, 1, 1]], [[1, 0, 1], [1, 1, 1]],
+    [[0, 0, 0], [0, 0, 1]], [[1, 0, 0], [1, 0, 1]], [[0, 1, 0], [0, 1, 1]], [[1, 1, 0], [1, 1, 1]]] as const) {
+    out.push(c(p[0], p[1], p[2]), c(q[0], q[1], q[2]));
+  }
+  return out;
+}
+
+/** A grip as an engineer draws one (ADR-0063 amendment 4): two jaws, clear enough to see the tab between them, clamping it from above and
+ * below. A fixed grip is hatched at its outer end, the ground symbol; a moving grip is drawn in the load's colour and its arrows are the
+ * load's. The jaws take the place of a cone per held direction, which over a clamped tab read as a cluster, not as a grip. */
+function Jaws({ grip, z, thickness, size, color, fixed, bold }: { grip: Grip; z: number; thickness: number; size: number; color: string; fixed: boolean; bold: boolean }) {
+  const m = 0.008 * size, jaw = Math.max(1.2 * thickness, 0.012 * size);
+  const lo = [grip.box.min[0] - m, grip.box.min[1] - m], hi = [grip.box.max[0] + m, grip.box.max[1] + m];
+  const slabs: [number, number][] = [[z + thickness / 2, z + thickness / 2 + jaw], [z - thickness / 2 - jaw, z - thickness / 2]];
+  const across = grip.axis === 1 ? 0 : 1;
+  const end = grip.outer > 0 ? hi[grip.axis] : lo[grip.axis];
+  const hatch: [number, number, number][] = [];
+  if (fixed) {
+    // the ground: a line across the outer end of the top jaw and short strokes slanting away from the part
+    const zTop = z + thickness / 2 + jaw, at = (u: number, v: number): [number, number, number] => (grip.axis === 1 ? [u, v, zTop] : [v, u, zTop]);
+    const reach = 0.022 * size;
+    hatch.push(at(lo[across], end), at(hi[across], end));
+    const strokes = 7;
+    for (let k = 0; k < strokes; k++) {
+      const u = lo[across] + ((k + 0.5) / strokes) * (hi[across] - lo[across]);
+      hatch.push(at(u, end), at(u - 0.6 * reach, end + grip.outer * reach));
+    }
+  }
+  return (
+    <group>
+      {slabs.map(([z0, z1], i) => (
+        <group key={i}>
+          <mesh position={[(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (z0 + z1) / 2]} renderOrder={2}>
+            <boxGeometry args={[hi[0] - lo[0], hi[1] - lo[1], z1 - z0]} />
+            <meshBasicMaterial color={color} transparent opacity={0.14} depthWrite={false} />
+          </mesh>
+          <Line segments points={boxEdges([lo[0], lo[1], z0], [hi[0], hi[1], z1])} color={color} lineWidth={bold ? 3 : 1.5} transparent opacity={0.9} />
+        </group>
+      ))}
+      {hatch.length ? <Line segments points={hatch} color={color} lineWidth={bold ? 3 : 2} /> : null}
+    </group>
+  );
+}
+
+/** A moving grip's load: three arrows across its outer end, in the direction it is moved or pulled. */
+function GripArrows({ grip, direction, z, thickness, size, color = LOADED }: { grip: Grip; direction: string; z: number; thickness: number; size: number; color?: string }) {
+  const v = new THREE.Vector3(...along(direction));
+  const m = 0.008 * size, length = 0.075 * size;
+  const height = z + thickness / 2 + Math.max(1.2 * thickness, 0.012 * size); // on the top jaw, so the jaw does not hide them
+  const across = grip.axis === 1 ? 0 : 1;
+  const lo = grip.box.min[across], hi = grip.box.max[across];
+  const end = grip.outer > 0 ? grip.box.max[grip.axis] + m : grip.box.min[grip.axis] - m;
+  // an arrow along the long axis leaves the outer end; any other leaves the middle of the grip
+  const start = Math.abs(v.getComponent(grip.axis)) > 0.5 ? (v.getComponent(grip.axis) * grip.outer > 0 ? end : end - grip.outer * length) : (grip.box.min[grip.axis] + grip.box.max[grip.axis]) / 2;
+  return (
+    <group>
+      {[0.2, 0.5, 0.8].map((f) => {
+        const u = lo + f * (hi - lo);
+        const origin = grip.axis === 1 ? new THREE.Vector3(u, start, height) : new THREE.Vector3(start, u, height);
+        return <arrowHelper key={f} args={[v, origin, length, color, 0.3 * length, 0.16 * length]} />;
       })}
     </group>
   );
@@ -126,7 +203,7 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, edgeCol
   useEffect(() => () => material.dispose(), [material]);
   useEffect(() => {
     if (!field) return;
-    geometry.setAttribute("value", new THREE.BufferAttribute(fieldAttribute(plate, field.by, field.values, NO_VALUE), 1));
+    geometry.setAttribute("value", new THREE.BufferAttribute(fieldAttribute(plate, field.by, field.values, NO_VALUE, field.held, IN_GRIP), 1));
     applyScale(material, field.scale);
     invalidate();
   }, [geometry, plate, material, field, invalidate]);
@@ -146,26 +223,10 @@ function Plate({ nodes, quads, thickness, field, xy, heights, wireframe, edgeCol
       }}>
         {field ? <primitive object={material} attach="material" /> : <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />}
       </mesh>
-      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={edgeColor} /></lineSegments> : null}
+      {/* the mesh lines see-through, as the mockup draws them: the colours read through them (ADR-0063 amendment 3) */}
+      {wireframe ? <lineSegments geometry={edges}><lineBasicMaterial color={edgeColor} transparent opacity={EDGE_OPACITY} depthWrite={false} /></lineSegments> : null}
     </group>
   );
-}
-
-/** Puts the camera at its home view, or straight above the model, each time `at` changes: the view buttons and a model of a new size
- * (ADR-0111 amendment 2). OrbitControls is the scene's default controls, so its target moves with the camera. */
-function CameraView({ at, view, centre, size }: { at: string; view: "home" | "top"; centre: readonly [number, number]; size: number }) {
-  const { camera, controls, invalidate } = useThree();
-  useEffect(() => {
-    const [x, y] = centre;
-    if (view === "top") camera.position.set(x, y, 2.6 * size);
-    else camera.position.set(x + 0.9 * size, y - 1.1 * size, 0.9 * size);
-    camera.up.set(0, 0, 1);
-    camera.lookAt(x, y, 0);
-    const orbit = controls as unknown as { target: THREE.Vector3; update(): void } | null;
-    if (orbit) { orbit.target.set(x, y, 0); orbit.update(); }
-    invalidate();
-  }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
-  return null;
 }
 
 /** A spacing of 1, 2 or 5 times a power of ten, about a twentieth of the model: the floor grid's cell. */
@@ -216,6 +277,7 @@ export function SceneCanvas(props: SceneProps) {
   const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
     highlight = null, picked = null, wireframe = true, onPick, emphasis = null, palette = "classic" } = props;
   const triad = useRef<SVGSVGElement>(null);
+  const canvas = useCanvasSlots(); // in the FEA workspace's layout the model is framed clear of the panels, its tools in the View menu (ADR-0134 amendment 1)
   const overlay = overlayColors(field ? palette : "green"); // before a run the part is grey: the outlines of before
   const [focus, setFocus] = useState<string | null>(null); // the line of the list clicked: its region is drawn bolder
   const [hidden, setHidden] = useState<Layer[]>([]); // the layers switched off over the model
@@ -236,6 +298,21 @@ export function SceneCanvas(props: SceneProps) {
   const mode = field ? "results" : "presentation";
   // a model of another size or place is framed again; a finer mesh of the same plate is not
   const placed = [extent.min[0], extent.min[1], extent.size[0], extent.size[1]].map((v) => v.toPrecision(6)).join(",");
+  // the box the camera frames: the plate, with room for the supports' cones and the loads' arrows around and above it
+  const highest = useMemo(() => (heights ?? []).reduce((high, h) => (h > high ? h : high), 0), [heights]);
+  const pad = 0.035 * size;
+  const long = extent.size[1] >= extent.size[0] ? 1 : 0, reach = 0.09 * size; // a grip's arrows and hatching stand past the part's ends
+  const padOf = (axis: number) => (axis === long && held.some((m) => gripOf(nodes, m.nodes, m.dofs, extent)) ? reach : pad);
+  const boxMin = [extent.min[0] - padOf(0), extent.min[1] - padOf(1), -thickness / 2 + lowest] as const;
+  const boxMax = [extent.min[0] + extent.size[0] + padOf(0), extent.min[1] + extent.size[1] + padOf(1), thickness / 2 + highest + 0.04 * size] as const;
+  // a clamped tab is drawn as its grip; a load on the same nodes is that grip moving (ADR-0063 amendment 4)
+  const nodesKey = (nodes: number[]) => [...nodes].sort((a, b) => a - b).join(",");
+  const grips = useMemo(() => held.map((marker) => gripOf(xy, marker.nodes, marker.dofs, extent)), [held, xy, extent]);
+  const gripFor = (nodes: number[]): Grip | null => {
+    const key = nodesKey(nodes);
+    const i = held.findIndex((marker) => nodesKey(marker.nodes) === key);
+    return i >= 0 ? grips[i] : null;
+  };
   const shows = (layer: Layer) => !hidden.includes(layer);
   const toggle = (layer: Layer) => setHidden((h) => (h.includes(layer) ? h.filter((l) => l !== layer) : [...h, layer]));
   if (webgl === false) return <WebGLMissing />;
@@ -245,26 +322,47 @@ export function SceneCanvas(props: SceneProps) {
       <div className="studio-canvas" data-testid="studio-scene" data-mode={mode} data-bands={field?.scale.bands ?? ""} data-emphasis={emphasis ?? ""}
         data-palette={field ? palette : ""} data-lit={field ? String(Boolean(field.scale.lit)) : ""}
         data-shown={(["mesh", "conditions", "loads"] as Layer[]).filter(shows).join(" ")} data-view={view.view}>
-      {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden */}
-      <div className="studio-view-tools" role="toolbar" aria-label="View">
-        <button type="button" onClick={() => setView((v) => ({ view: "home", n: v.n + 1 }))} data-testid="view-fit" title="Back to the whole model">Fit</button>
-        <button type="button" onClick={() => setView((v) => ({ view: "top", n: v.n + 1 }))} data-testid="view-top" title="Straight above the model">Top</button>
-        <span className="studio-view-sep" aria-hidden="true" />
-        {(["mesh", "conditions", "loads"] as Layer[]).map((layer) => (
-          <button key={layer} type="button" aria-pressed={shows(layer)} onClick={() => toggle(layer)} data-testid={`show-${layer}`}
-            title={`${shows(layer) ? "Hide" : "Show"} ${LAYER_WORDS[layer].toLowerCase()}`}>{LAYER_WORDS[layer]}</button>
-        ))}
-      </div>
+      {/* the view's own buttons (ADR-0111 amendment 2): back to the whole model, straight above it, and each layer shown or hidden; in the FEA
+          workspace's layout they are in the card's View menu, with the supports and loads applied (ADR-0134 amendment 1) */}
+      <Slot name="look" here>
+        <div className="studio-view-tools" role="toolbar" aria-label="View">
+          {canvas ? <span>Look from</span> : null}
+          <span className="cv-seg">
+            <button type="button" aria-pressed={canvas ? view.view === "home" : undefined} onClick={() => setView((v) => ({ view: "home", n: v.n + 1 }))} data-testid="view-fit"
+              title="Back to the whole model">{canvas ? "Whole model" : "Fit"}</button>
+            <button type="button" aria-pressed={canvas ? view.view === "top" : undefined} onClick={() => setView((v) => ({ view: "top", n: v.n + 1 }))} data-testid="view-top"
+              title="Straight above the model">Top</button>
+          </span>
+          <span className="studio-view-sep" aria-hidden="true" />
+          {canvas ? <span>Show</span> : null}
+          <span className="cv-seg">
+            {(["mesh", "conditions", "loads"] as Layer[]).map((layer) => (
+              <button key={layer} type="button" aria-pressed={shows(layer)} onClick={() => toggle(layer)} data-testid={`show-${layer}`}
+                title={`${shows(layer) ? "Hide" : "Show"} ${LAYER_WORDS[layer].toLowerCase()}`}>{LAYER_WORDS[layer]}</button>
+            ))}
+          </span>
+        </div>
+        {canvas ? <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} /> : null}
+      </Slot>
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }}
         camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}
         onPointerMissed={() => onPick?.(null)}>
-        <color attach="background" args={["#0d0d0d"]} />
+        {/* in the workspace's layout the page's own ground shows through, lighter behind the model (ADR-0134 amendment 1) */}
+        {canvas ? null : <color attach="background" args={["#0d0d0d"]} />}
         {field ? null : <PresentationLighting size={size} centre={centre} floor={-thickness / 2 - 0.004 * size} />}
         <Floor centre={centre} size={size} z={floor} />
         <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe && shows("mesh")} edgeColor={overlay.edges} onPick={onPick} />
         {(shows("conditions") ? held : []).map((marker, i) => {
           const box = setBox(xy, marker.nodes);
           if (!box) return null;
+          const grip = grips[i];
+          if (grip) {
+            const key = nodesKey(marker.nodes);
+            const moving = allLoads.some((load) => nodesKey(load.nodes) === key);
+            const fixed = [1, 2, 3].every((d) => marker.dofs?.includes(d));
+            return <Jaws key={`held-${i}`} grip={grip} z={meanHeight(heights, marker.nodes)} thickness={thickness} size={size} color={moving ? LOADED : HELD}
+              fixed={fixed && !moving} bold={focus === `held-${i}` || emphasis === "conditions"} />;
+          }
           const z = top + meanHeight(heights, marker.nodes);
           return (
             <group key={`held-${i}`}>
@@ -277,6 +375,8 @@ export function SceneCanvas(props: SceneProps) {
           const box = setBox(xy, load.nodes);
           if (!box) return null;
           const z = top + meanHeight(heights, load.nodes);
+          const grip = gripFor(load.nodes);
+          if (grip) return <GripArrows key={`load-${i}`} grip={grip} direction={load.direction} z={meanHeight(heights, load.nodes)} thickness={thickness} size={size} />;
           return (
             <group key={`load-${i}`}>
               {/* a pressure's arrows cover its face, so its frame, which would hide the edges' own, is drawn only when its line is clicked */}
@@ -315,7 +415,7 @@ export function SceneCanvas(props: SceneProps) {
           <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color={overlay.picked} lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
-        <CameraView at={`${placed}|${view.view}|${view.n}`} view={view.view} centre={centre} size={size} />
+        <FitCamera at={`${placed}|${view.view}|${view.n}`} view={view.view} min={boxMin} max={boxMax} free={canvas?.free ?? null} />
         <TriadSync svg={triad} />
       </Canvas>
       {/* the axes as seen, in the view's lower left corner (ADR-0063 amendment 1) */}
@@ -328,7 +428,7 @@ export function SceneCanvas(props: SceneProps) {
         ))}
       </svg>
       </div>
-      <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} />
+      {canvas ? null : <AppliedList held={held} loads={allLoads} proposed={proposed} about={about} critical={highlight !== null} criticalColor={overlay.critical} focus={focus} onFocus={setFocus} />}
     </div>
   );
 }

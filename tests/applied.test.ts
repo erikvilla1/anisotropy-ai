@@ -57,9 +57,11 @@ test("a boundary condition's symbols and a load's arrows sit at a few nodes spre
   const all = grid.map((_, k) => k);
   assert.deepEqual(sampleNodes(grid, all, 2, 4), [0, 4, 20, 24]); // an area: its corners
   assert.deepEqual(sampleNodes(grid, all, 3, 5), [0, 2, 4, 10, 12, 14, 20, 22, 24]);
+  assert.deepEqual(sampleNodes(grid, all, 2, 4, 0.25), [6, 8, 16, 18]); // kept in from the edges, off the line where the field changes
   const bottom = [0, 1, 2, 3, 4];
   assert.deepEqual(sampleNodes(grid, bottom, 3, 5), [0, 1, 2, 3, 4]); // a line: end to end
   assert.deepEqual(sampleNodes(grid, bottom, 3, 3), [0, 2, 4]);
+  assert.deepEqual(sampleNodes(grid, bottom, 3, 3, 0.25), [0, 2, 4]); // a line still runs end to end
   assert.deepEqual(sampleNodes(grid, [7], 3, 5), [7]);
   assert.deepEqual(sampleNodes(grid, [], 3, 5), []);
 });

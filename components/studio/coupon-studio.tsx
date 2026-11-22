@@ -7,7 +7,7 @@ import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, typ
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { revealPanel } from "@/components/workspace/panels/step-panel";
-import { Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
+import { Slot, useCanvasSlots, ViewMenu } from "@/components/workspace/canvas-slots";
 import { JobProgress } from "./job-progress";
 import { ModelDownloadMenu } from "./model-download";
 import { useProject } from "./project-context";
@@ -37,7 +37,7 @@ export function PreviewScene({ preview, onPick, picked, proposed, emphasis = nul
       {canvas ? null : heading}
       <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loads={loads} proposed={proposed ?? null}
         about={about} onPick={onPick} picked={picked ?? null} emphasis={emphasis} />
-      {canvas ? <Slot name="view"><div className="cv-model-words" data-testid="preview-card">{heading}{words}</div></Slot> : words}
+      {canvas ? <Slot name="view"><div className="cv-model-words" data-testid="preview-card">{heading}{words}<ViewMenu summary="The model as set up" /></div></Slot> : words}
     </div>
   );
 }

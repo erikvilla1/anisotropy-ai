@@ -1,208 +1,382 @@
-/* The FEA workspace in layout D (ADR-0134): an icon rail and the model tree's flyout on the left, the model across the window, the chat
-   full height on the right, and a results card under the model. One screen under the 56 px workspace header; it does not scroll. */
+/* The FEA workspace in layout D (ADR-0134 and its amendment 1): the model across the whole window, with no header; the logo, the icon rail,
+   the model tree's flyout, the results card under the model and the chat full height on the right float over it as panels. The sizes
+   follow the mockup the founder chose (c1-chat-forward.html#chat-right). The page does not scroll. */
 .ws-app.cv-app { padding: 0; max-width: none; }
 .cv-shell {
-  --cv-rail: 52px;
-  --cv-tree: 340px;
-  --cv-chat: clamp(384px, 28vw, 420px);
-  --cv-ground: #0d0d0d;
-  display: grid;
-  grid-template-columns: var(--cv-rail) auto minmax(0, 1fr) var(--cv-chat);
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: "icons tree stage chat" "icons tree card chat";
-  height: calc(100dvh - 56px);
-  min-height: 480px;
-  border-top: 1px solid var(--line);
-  background: var(--cv-ground);
+  --cv-gap: 20px;
+  --cv-chat: clamp(360px, 26vw, 420px);
+  --cv-ground: #08090b;
+  --cv-panel: rgba(15, 16, 19, 0.84);
+  --cv-panel-solid: #111215;
+  --cv-panel-tree: rgba(17, 18, 22, 0.9);
+  --cv-hair: rgba(255, 255, 255, 0.08);
+  --cv-soft: rgba(255, 255, 255, 0.05);
+  --cv-soft-2: rgba(255, 255, 255, 0.09);
+  --cv-faint: #7a7c82;
+  --cv-load: #ffa13d;
+  --cv-on: #f4f4f4;
+  --cv-on-ink: #0b0c0e;
+  --cv-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  /* where the floating panels leave the model's middle: right of the rail (or the tree), left of the chat */
+  --cv-l: 82px;
+  --cv-r: calc(var(--cv-chat) + 2 * var(--cv-gap));
+  position: relative;
+  height: 100dvh;
+  min-height: 520px;
   overflow: hidden;
+  background: var(--cv-ground);
+  font-size: 14px;
+  line-height: 1.45;
 }
-.cv-shell[data-assistant=closed] { grid-template-columns: var(--cv-rail) auto minmax(0, 1fr) 0; }
+.cv-shell[data-tree=open] { --cv-l: 430px; }
+.cv-shell[data-assistant=closed] { --cv-r: 64px; }
+@media (min-width: 1700px) { .cv-shell { --cv-gap: 24px; } }
+@media (max-width: 1340px) { .cv-shell { --cv-gap: 16px; } }
+
+/* The logo, over the model's top left corner: the way back to the projects */
+.cv-shell .cv-brand { --brand-h: 19px; position: absolute; left: 22px; top: 20px; z-index: 8; color: var(--text); }
+.cv-shell .cv-brand .brand-name { font-size: 15px; letter-spacing: 0.02em; }
 
 /* The icon rail: the tree's own button, then one per tab, a dot on a tab the check marks */
-.cv-icons { grid-area: icons; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; border-right: 1px solid var(--line); background: var(--bg); overflow-y: auto; scrollbar-width: none; z-index: 3; }
-.cv-icon { position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
-.cv-icon:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
-.cv-icon:focus-visible { outline: 1px solid var(--text); outline-offset: 1px; }
-.cv-icon[aria-pressed="true"], .cv-icon-tree[aria-expanded="true"] { color: var(--text); background: rgba(255, 255, 255, 0.08); border-color: var(--line); }
-.cv-icon[data-state=missing]::after, .cv-icon[data-state=fail]::after, .cv-icon[data-state=warn]::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: #e7a07a; }
-.cv-icon[data-state=warn]::after { background: #e7c77a; }
-.cv-icon[data-state=pass]::after { content: ""; position: absolute; bottom: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.cv-icons-sep { flex: none; width: 22px; height: 1px; background: var(--line); margin: 4px 0; }
+.cv-icons { position: absolute; left: 14px; top: 62px; z-index: 7; display: flex; flex-direction: column; align-items: center; gap: 1px; max-height: calc(100% - 136px);
+  padding: 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.028); overflow-y: auto; scrollbar-width: none; }
+.cv-icon { position: relative; flex: none; width: 36px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: #8b8e94; cursor: pointer;
+  transition: color 0.15s, background 0.15s; }
+.cv-icon:hover { color: var(--text); background: var(--cv-soft); }
+.cv-icon:focus-visible, .cv-home:focus-visible, .cv-brand:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.5); outline-offset: 2px; }
+.cv-icon[aria-pressed="true"], .cv-icon-tree[aria-expanded="true"] { color: var(--text); background: var(--cv-soft-2); }
+.cv-icon[data-state=missing]::after, .cv-icon[data-state=fail]::after, .cv-icon[data-state=warn]::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--cv-load); box-shadow: 0 0 0 2px var(--cv-ground); }
+.cv-icon[data-state=fail]::after { background: #f08a6c; }
+.cv-icons-sep { flex: none; width: 18px; height: 1px; background: var(--cv-hair); margin: 5px 0; }
+.cv-home { position: absolute; left: 20px; bottom: 20px; z-index: 7; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--cv-soft); color: var(--muted); }
+.cv-home:hover { color: var(--text); background: var(--cv-soft-2); }
 
-/* The model tree's flyout, beside the rail; the model gives it the room */
-.cv-shell .cv-tree { grid-area: tree; position: relative; top: auto; width: var(--cv-tree); max-height: none; min-height: 0; overflow-y: auto; padding: 0 12px 18px; border-right: 1px solid var(--line); background: var(--bg); z-index: 2; }
+/* The model tree: a floating card beside the rail, over the model; the model moves right to stay clear of it */
+.cv-shell .cv-tree { position: absolute; left: 66px; top: 62px; z-index: 8; width: 344px; max-height: calc(100% - 82px); min-height: 0; overflow-y: auto; padding: 0 10px 12px;
+  border: 1px solid var(--cv-hair); border-radius: 16px; background: var(--cv-panel-tree); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
 .cv-tree[hidden] { display: none; }
-.cv-shell .cv-tree .ws-panel { scroll-margin-top: 46px; }
-.cv-tree-top { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; margin-bottom: 2px; background: var(--bg); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.cv-tree-top { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; margin: 0 -10px 4px; padding: 12px 12px 8px 18px;
+  background: var(--cv-panel-solid); border-radius: 16px 16px 0 0; font-size: 14px; font-weight: 600; color: var(--text); }
+.cv-shell .cv-tree .ws-panel { scroll-margin-top: 48px; }
+.cv-tree .ws-rail-panels, .cv-tree .ws-tree { gap: 2px; }
+.cv-tree .ws-panel { border: 0; border-radius: 10px; background: transparent; }
+.cv-tree .ws-panel[open] { background: rgba(255, 255, 255, 0.03); }
+.cv-tree .ws-panel > summary { gap: 10px; padding: 8px 10px; border-radius: 10px; font-family: var(--font); font-size: 13.5px; font-weight: 500; }
+.cv-tree .ws-panel > summary:hover { background: var(--cv-soft); }
+.cv-tree .ws-panel > summary::before { color: var(--cv-faint); }
+.cv-tree .ws-panel-step { color: var(--cv-faint); font-size: 12px; }
+.cv-tree .ws-panel-note { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); }
+/* a panel's state is a dot, as on the rail: the words stay for a screen reader */
+.cv-tree .ws-panel > summary .studio-badge { flex: none; position: relative; width: 8px; height: 8px; margin-left: 4px; padding: 0; overflow: hidden; border: 0; border-radius: 50%;
+  color: transparent; font-size: 0; background: var(--cv-faint); }
+.cv-tree .ws-panel-note + .studio-badge { margin-left: 4px; }
+.cv-tree .ws-panel > summary .ws-panel-title + .studio-badge { margin-left: auto; }
+.cv-tree .ws-panel > summary .studio-badge-pass { background: #7fbf8a; }
+.cv-tree .ws-panel > summary .studio-badge-warn { background: #e7c77a; }
+.cv-tree .ws-panel > summary .studio-badge-missing, .cv-tree .ws-panel > summary .studio-badge-fail { background: var(--cv-load); }
+.cv-tree .ws-panel-body { padding: 2px 12px 12px 30px; font-size: 12.5px; }
+.cv-tree .ws-panel-body .studio-muted, .cv-tree .ws-panel-body .studio-hint { font-size: 12px; color: var(--cv-faint); }
+.cv-tree .ws-panel-changed { box-shadow: inset 0 0 0 1px var(--cv-load); }
 
-/* The model, across the window: every scene fills it, and what was under the scene stands over it */
-.cv-stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--cv-ground); }
+/* The model, across the whole window: every scene fills it; a soft light behind the middle and a vignette at the edges */
+.cv-stage { position: absolute; inset: 0; z-index: 0; min-width: 0; min-height: 0; overflow: hidden;
+  background: radial-gradient(ellipse 70% 60% at 46% 42%, #15171b 0%, #0c0d10 55%, var(--cv-ground) 100%); }
+.cv-stage::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse 85% 80% at 46% 44%, transparent 55%, rgba(0, 0, 0, 0.42) 100%); }
 .cv-stage > .studio-output, .cv-stage .studio-results, .cv-stage .studio-scene-block, .cv-stage .studio-scene-wrap,
 .cv-stage .studio-panel[data-testid=preview], .cv-stage .studio-panel[data-testid=sketch] { display: block; height: 100%; min-height: 0; }
 .cv-stage .studio-results, .cv-stage .studio-scene-wrap { position: relative; }
 .cv-stage .studio-panel[data-testid=preview], .cv-stage .studio-panel[data-testid=sketch] { padding: 0; border: 0; border-radius: 0; background: transparent; }
-.cv-stage .studio-canvas { height: 100%; border: 0; border-radius: 0; background: var(--cv-ground); }
-.cv-stage .studio-scene-loading, .cv-stage .studio-webgl-missing { height: 100%; border: 0; border-radius: 0; }
-.cv-stage .studio-applied { position: absolute; top: 10px; left: 12px; z-index: 2; display: grid; gap: 6px; max-width: min(340px, 40%); font-size: 11.5px; max-height: calc(100% - 120px); overflow-y: auto;
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(13, 13, 13, 0.82); backdrop-filter: blur(6px); }
-.cv-stage .studio-applied-about { flex-basis: auto; }
-.cv-stage .studio-view-tools { top: 10px; right: 10px; }
-.cv-stage .studio-live-banner { position: absolute; left: 50%; bottom: 12px; z-index: 3; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); margin: 0;
-  border-radius: 999px; background: rgba(20, 20, 20, 0.9); backdrop-filter: blur(6px); }
-.cv-stage .studio-empty, .cv-stage .ws-start-stage { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; padding: 24px; text-align: center; border: 0; background: transparent; color: var(--muted); }
-.cv-stage > .studio-output > .studio-alert { position: absolute; top: 10px; left: 50%; z-index: 3; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); margin: 0; }
+.cv-stage .studio-canvas { height: 100%; border: 0; border-radius: 0; background: transparent; }
+.cv-stage .studio-scene-loading, .cv-stage .studio-webgl-missing { height: 100%; border: 0; border-radius: 0; background: transparent; }
+.cv-stage .studio-triad { left: calc(var(--free-l, 96px) - 10px); bottom: calc(var(--free-b, 220px) - 6px); z-index: 2; }
+.cv-stage .studio-live-banner { position: absolute; left: var(--free-l, 96px); right: var(--free-r, 440px); bottom: calc(var(--free-b, 220px) - 8px); z-index: 3; width: max-content;
+  max-width: calc(100% - var(--free-l, 96px) - var(--free-r, 440px)); margin: 0 auto; padding: 7px 14px; border: 1px solid var(--cv-hair); border-radius: 999px;
+  background: rgba(20, 21, 25, 0.9); backdrop-filter: blur(10px); font-size: 12.5px; }
+.cv-stage .studio-empty, .cv-stage .ws-start-stage { position: absolute; inset: var(--free-t, 64px) var(--free-r, 440px) var(--free-b, 220px) var(--free-l, 96px); display: grid; place-content: center;
+  justify-items: center; gap: 6px; padding: 24px; text-align: center; border: 0; background: transparent; color: var(--muted); }
+.cv-stage > .studio-output > .studio-alert { position: absolute; top: 20px; left: var(--free-l, 96px); right: var(--free-r, 440px); z-index: 3; width: max-content; max-width: 640px; margin: 0 auto; }
+.cv-stage .studio-scene-key { position: absolute; left: var(--free-l, 96px); right: var(--free-r, 440px); bottom: calc(var(--free-b, 220px) - 2px); z-index: 2; justify-content: center; margin: 0; }
 .cv-stage .chat-spec { display: none; }
 
-/* Over the model: a clicked element's readout beside the click, a plate's picked regions */
-.cv-over { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+/* Over the model, in the part of it left clear: a clicked element's readout beside the click, a plate's picked regions */
+.cv-over { position: absolute; top: 0; left: var(--free-l, 96px); right: var(--free-r, 440px); bottom: var(--free-b, 220px); z-index: 4; pointer-events: none; }
 .cv-over > * { pointer-events: auto; }
-.cv-readout { position: absolute; width: min(360px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; margin: 0; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
-.cv-readout h3 { display: flex; align-items: center; gap: 8px; }
+.cv-readout { position: absolute; width: min(340px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; margin: 0; border: 1px solid var(--cv-hair); border-radius: 12px;
+  background: rgba(12, 13, 16, 0.92); backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); font-size: 12.5px; }
+.cv-readout h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .cv-readout-close { margin-left: auto; }
 .cv-readout dl > div { grid-template-columns: minmax(0, 130px) minmax(0, 1fr); }
-.cv-over .studio-picked { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(20, 20, 20, 0.92); }
+.cv-over .studio-picked { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 8px 12px; border: 1px solid var(--cv-hair); border-radius: 10px;
+  background: rgba(20, 21, 25, 0.92); }
 
-/* The details, opened from the card over the model: the full answer, its tables, the summary, the explanation, the files */
-.cv-details { position: absolute; left: 50%; bottom: 10px; z-index: 5; transform: translateX(-50%); width: min(980px, calc(100% - 24px)); max-height: calc(100% - 20px); overflow-y: auto;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--bg); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); scrollbar-width: thin; scrollbar-color: #424242 transparent; }
+/* The details, opened from the card: over the model, just above the card */
+.cv-details { position: absolute; left: var(--cv-l); right: var(--cv-r); bottom: calc(var(--free-b, 220px) - 6px); top: 62px; z-index: 9; max-width: 980px; height: max-content;
+  max-height: calc(100% - 62px - var(--free-b, 220px) + 6px); margin: auto auto 0; overflow-y: auto; border: 1px solid var(--cv-hair); border-radius: 16px; background: var(--cv-panel-solid);
+  box-shadow: var(--cv-shadow); scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
 .cv-details[hidden] { display: none; }
-.cv-details-top { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg);
-  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.cv-details-body { display: grid; gap: 14px; padding: 14px 16px 16px; }
+.cv-details-top { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--cv-hair);
+  background: var(--cv-panel-solid); font-size: 14px; font-weight: 600; color: var(--text); }
+.cv-details-body { display: grid; gap: 14px; padding: 14px 18px 18px; font-size: 13px; }
 .cv-details-body > * { min-width: 0; }
 
-/* The results card under the model: the project, the legend and the view, the answer; two columns when it is narrow */
-.cv-card { grid-area: card; position: relative; z-index: 6; min-width: 0; padding: 0 12px 12px; container-type: inline-size; container-name: card; }
-.cv-card-grid { display: flex; max-width: 980px; margin: 0 auto; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.35); }
-.cv-col { min-width: 0; padding: 12px 14px; }
-.cv-col + .cv-col { border-left: 1px solid var(--line); }
-.cv-project { flex: 0.85 1 0; display: grid; align-content: start; gap: 8px; }
-.cv-view { flex: 1.15 1 0; }
-.cv-answer { flex: 1 1 0; }
+/* The results card, floating under the model between the rail and the chat: the project, the legend and the view, the answer */
+.cv-card { position: absolute; left: var(--cv-l); right: var(--cv-r); bottom: var(--cv-gap); z-index: 6; max-width: 980px; margin: 0 auto; min-width: 0; container-type: inline-size; container-name: card; }
+.cv-card:has(.cv-view:empty):has(.cv-answer:empty) { max-width: 520px; }
+.cv-card-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); column-gap: 30px; align-items: start;
+  padding: 18px 22px; border: 1px solid var(--cv-hair); border-radius: 18px; background: var(--cv-panel); backdrop-filter: blur(24px) saturate(1.15); -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  box-shadow: var(--cv-shadow); scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+.cv-card-grid:has(> .cv-answer:empty) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+.cv-card-grid:has(> .cv-view:empty):has(> .cv-answer:empty) { grid-template-columns: minmax(0, 1fr); }
+.cv-col { min-width: 0; }
 .cv-slot:empty { display: none; }
 @container card (max-width: 780px) {
-  .cv-card-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); grid-template-areas: "project view" "project answer"; }
-  .cv-project { grid-area: project; }
-  .cv-view { grid-area: view; }
-  .cv-answer { grid-area: answer; border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
-  .cv-card-grid:has(> .cv-view:empty) { grid-template-areas: "project answer" "project answer"; }
-  .cv-card-grid:has(> .cv-view:empty):has(> .cv-answer:empty) { display: block; }
+  .cv-card-grid, .cv-card-grid:has(> .cv-answer:empty) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); row-gap: 14px; }
+  .cv-project { grid-column: 1; grid-row: 1; }
+  .cv-view { grid-column: 1; grid-row: 2; }
+  .cv-answer { grid-column: 2; grid-row: 1 / span 2; }
+  .cv-card-grid:has(> .cv-answer:empty) > .cv-view { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+/* The project: its name, its kind, its four stages; the run's steps while it runs; the files */
+.cv-project { display: grid; align-content: start; gap: 10px; }
 .cv-project-head { display: grid; gap: 2px; min-width: 0; }
+.cv-eyebrow-plain { margin: 0; font-size: 12px; color: var(--cv-faint); }
 .cv-shell .cv-title { flex: none; display: block; min-width: 0; }
-.cv-shell .cv-title input { width: 100%; min-width: 0; font-size: 15px; padding: 2px 2px; text-overflow: ellipsis; }
-.cv-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.cv-kind .chat-link { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.cv-shell .cv-title input { width: 100%; min-width: 0; margin: 0 0 0 -4px; padding: 1px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text);
+  font-family: var(--font); font-size: 18px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.25; text-overflow: ellipsis; }
+.cv-shell .cv-title input:hover { border-color: var(--cv-hair); }
+.cv-shell .cv-title input:focus { outline: none; border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.04); }
+.cv-shell .cv-title input::placeholder { color: var(--text); opacity: 1; }
+.cv-kind { margin: 0; font-size: 13px; color: var(--muted); }
+.cv-stages { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text); }
+.cv-stages li { display: inline-flex; align-items: center; gap: 6px; }
+.cv-stage-mark { flex: none; width: 15px; height: 15px; display: grid; place-items: center; border-radius: 50%; background: var(--cv-on); color: var(--cv-on-ink); }
+.cv-stages li[data-state=todo] { color: var(--muted); }
+.cv-stages li[data-state=todo] .cv-stage-mark { background: transparent; box-shadow: inset 0 0 0 1.5px #4a4c52; }
+.cv-stages li[data-state=now] .cv-stage-mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--cv-load); }
 .cv-status { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .cv-project .studio-run { margin: 0; padding: 0; border: 0; background: transparent; }
 .cv-project .studio-run h3 { font-size: 13px; margin: 0; }
-.cv-project .studio-stepper { margin: 10px 0 6px; }
-.cv-project .studio-run[data-state=done] .studio-stepper { display: none; } /* once done, the badge and the time say it; the steps were seen while it ran */
-.cv-project .studio-step-label { font-size: 10px; }
+.cv-project .studio-stepper { margin: 8px 0 4px; }
+/* once done, the stages above say it: the run's own lines go (its record keeps them) */
+.cv-project .studio-run[data-state=done] { display: none; }
+.cv-project .studio-step-label { font-size: 10.5px; }
 .cv-project .studio-run p { font-size: 12px; margin: 4px 0 0; }
-.cv-project .studio-viewer-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 12px; }
+.cv-project .studio-viewer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12.5px; }
+.cv-project .studio-viewer-row > span:empty { display: none; }
 .cv-project .studio-viewer-link { margin: 0; }
+.cv-project .studio-viewer-link a, .cv-project .studio-model-button { color: var(--muted); }
+.cv-project .studio-model-button { padding: 4px 9px; border: 0; border-radius: 8px; background: var(--cv-soft); font-size: 12px; }
+.cv-project .studio-model-button:hover { color: var(--text); background: var(--cv-soft-2); }
 .cv-card .studio-model-menu { top: auto; bottom: calc(100% + 6px); } /* the card is the window's foot: the menu opens upward, over the model */
-.cv-view .studio-legend p { margin: 0; line-height: 1.4; }
-/* every band boundary keeps its label (ADR-0063): at its place under the bar, the odd ones a row lower, so nine fit a column */
-.cv-view .studio-legend-ticks { position: relative; display: block; height: 26px; font-size: 10px; }
-.cv-view .studio-legend-ticks > span { position: absolute; top: 0; left: var(--at); transform: translateX(-50%); white-space: nowrap; }
-.cv-view .studio-legend-ticks > span:nth-child(even) { top: 13px; }
-.cv-view .studio-legend-ticks > span:first-child { transform: none; }
-.cv-view .studio-legend-ticks > span:last-child { left: auto; right: 0; transform: none; }
-.cv-controls { gap: 8px 12px; margin-top: 10px; align-items: end; }
-.cv-controls select { max-width: 210px; }
-.cv-view .studio-pick-hint { margin-top: 8px; font-size: 12px; }
-.cv-model-words h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 6px; font-size: 14px; }
-.cv-model-words p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; }
 
-/* View: how the field is drawn, opened over the model from the card */
-.cv-view-menu { position: relative; }
-.cv-view-menu > summary { list-style: none; cursor: pointer; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--text); }
+/* The legend: its title and what it is read at, the bar, its two ends; the whole sentence stays for a screen reader */
+.cv-legend { display: grid; gap: 0; min-width: 0; }
+.cv-legend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.cv-legend-title { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.cv-legend-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); text-align: right; }
+.cv-view .studio-legend { display: grid; }
+.cv-view .studio-legend .studio-legend-bar { order: 1; height: 10px; margin-top: 9px; border-radius: 3px; }
+.cv-legend-ends { order: 2; display: flex; justify-content: space-between; margin-top: 7px; font: 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cv-legend-note { order: 2; margin-top: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--muted); }
+.cv-view .studio-legend .studio-legend-ticks, .cv-view .studio-legend > p { order: 3; }
+
+/* View: one row under the legend that opens upward, over the model: what is shown, how it is drawn, how the model is looked at */
+.cv-view-menu { position: relative; margin-top: 12px; }
+.cv-view-menu > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 11px; background: rgba(255, 255, 255, 0.035); cursor: pointer; font-size: 12.5px; }
+.cv-view-menu > summary:hover { background: rgba(255, 255, 255, 0.06); }
 .cv-view-menu > summary::-webkit-details-marker { display: none; }
-.cv-view-menu > summary::after { content: " ▴"; content: " ▴" / ""; color: var(--muted); }
-.cv-view-menu[open] > summary { border-color: var(--muted); }
-.cv-view-menu-body { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 10; display: grid; gap: 10px; width: max-content; min-width: 220px; max-width: min(320px, 80vw);
-  padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
-.cv-view-menu-body label { display: flex; flex-direction: column; gap: 4px; }
+.cv-view-menu > summary::after { content: ""; flex: none; width: 7px; height: 7px; margin: -3px 2px 0 auto; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform 0.15s; }
+.cv-view-menu[open] > summary::after { margin-top: 3px; transform: rotate(225deg); }
+.cv-view-k { flex: none; color: var(--muted); }
+.cv-view-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-view-menu-body { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 10; display: grid; gap: 10px; width: max(100%, 300px); max-width: min(380px, 80vw); max-height: min(70vh, 560px); overflow-y: auto;
+  padding: 14px; border: 1px solid var(--cv-hair); border-radius: 14px; background: var(--cv-panel-solid); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55); font-size: 12.5px; scrollbar-width: thin; }
+.cv-view-menu-body label { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--muted); }
+.cv-view-menu-body label:has(> input[type=checkbox]) { display: flex; gap: 8px; color: var(--text); }
+.cv-view-menu-body select { width: 100%; min-width: 0; }
+/* every choice in the card and its View menu drawn alike: dark, rounded, the browser's own arrow */
+.cv-shell .cv-card select, .cv-shell .cv-card input[type=number] { color-scheme: dark; max-width: 100%; padding: 6px 8px; border: 1px solid #34363b; border-radius: 8px; background: #121316; color: var(--text);
+  font: inherit; font-size: 12.5px; }
+.cv-shell .cv-card select:focus-visible, .cv-shell .cv-card input[type=number]:focus-visible { outline: none; border-color: #8a8d94; }
+.cv-view-menu-body .studio-scale { width: 64px; margin-left: auto; }
+.cv-view-menu-body .cv-view-hint { margin: -4px 0 0 24px; font-size: 11.5px; color: var(--cv-faint); }
+.cv-view-sep { height: 1px; margin: 2px 0; background: var(--cv-hair); }
+/* the scene's part of the menu: look from, what is drawn on the model, and the supports and loads applied */
+.cv-look { display: grid; gap: 10px; }
+.cv-look:empty { display: none; }
+.cv-look .studio-view-tools { position: static; display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 8px; padding: 0; border: 0; background: transparent; }
+.cv-look .studio-view-tools > span:not(.studio-view-sep) { padding-top: 4px; color: var(--muted); }
+.cv-look .cv-seg { display: flex; flex-wrap: wrap; gap: 2px; }
+.cv-look .studio-view-tools button { padding: 4px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.cv-look .studio-view-tools button:hover { color: var(--text); background: var(--cv-soft); }
+.cv-look .studio-view-tools button[aria-pressed="true"] { color: var(--text); background: var(--cv-soft-2); }
+.cv-look .studio-view-tools button[aria-pressed="false"] { text-decoration: none; }
+.cv-look .studio-view-tools > .cv-seg { display: flex; }
+.cv-look .studio-view-sep { display: none; }
+.cv-look .studio-applied { position: static; display: grid; gap: 6px; max-width: none; max-height: none; margin: 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--cv-hair); border-radius: 0;
+  background: transparent; backdrop-filter: none; font-size: 12px; }
+.cv-view .studio-pick-hint { display: none; }
 
-/* The answer in its short form */
-.cv-answer-short { display: grid; gap: 4px; }
-.cv-eyebrow { margin: 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.cv-verdict { margin: 0; font-size: 16px; line-height: 1.3; }
+/* The preview's and the sketch's words, in the card's middle column */
+.cv-model-words h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin: 0 0 6px; font-size: 13px; font-weight: 500; }
+.cv-model-words h3 .studio-badge { border: 0; padding: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 400; }
+.cv-model-words p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/* The answer in its short form: one bold sentence, one plain line, its labels, then where and the details */
+.cv-answer-short { display: grid; gap: 6px; }
+.cv-verdict { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.38; letter-spacing: -0.01em; }
 .cv-answer-short[data-fails="true"] .cv-verdict { color: #f6bba9; }
-.cv-answer-short[data-fails="false"] .cv-verdict { color: var(--accent); }
-.cv-answer-line { margin: 0; font-size: 12.5px; line-height: 1.45; }
-.cv-answer-note { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
-.cv-answer-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
+.cv-answer-line { margin: 0; font-size: 13px; line-height: 1.5; color: #cfcfcf; }
+.cv-answer-labels { margin: 0; font-size: 12px; color: var(--cv-faint); }
+.cv-answer-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.cv-answer-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 2px; }
+.cv-answer-actions .studio-text-button { color: var(--muted); font-size: 12.5px; }
+.cv-answer-actions .studio-text-button:hover { color: var(--text); }
 
-/* The wing (ADR-0134): its three drawings across the model's area, the case, the check and the legends in the card, its answer beside them */
-.cv-stage .wing-canvas { display: block; height: 100%; overflow-y: auto; padding: 14px 18px 18px; container-type: inline-size; container-name: wingstage; scrollbar-width: thin; scrollbar-color: #424242 transparent; }
-.cv-stage .wing-waiting { position: absolute; inset: 0; display: grid; place-content: center; padding: 24px; border: 0; border-radius: 0; background: transparent; text-align: center; }
-.wing-canvas-views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 22px; max-width: 1100px; margin: 0 auto; padding: 0; border: 0; background: transparent; }
+/* The wing (ADR-0134): its drawings in the part of the window left clear, the case, the check and the legends in the card, its answer beside them */
+/* the drawings scroll inside the clear part only, so nothing shows through the card or the chat */
+.cv-stage .wing-canvas { position: absolute; inset: var(--free-t, 64px) var(--free-r, 440px) var(--free-b, 220px) var(--free-l, 96px); display: block; overflow-y: auto; padding: 0 6px 24px 0;
+  container-type: size; container-name: wingstage; scrollbar-width: thin; scrollbar-color: #3a3a3a transparent;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
+.cv-stage .wing-waiting { position: absolute; inset: var(--free-t, 64px) var(--free-r, 440px) var(--free-b, 220px) var(--free-l, 96px); display: grid; place-content: center; padding: 24px;
+  border: 0; border-radius: 0; background: transparent; text-align: center; }
+.wing-canvas-views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 22px; max-width: 1100px; margin: 0 auto; padding: 0 0 12px; border: 0; background: transparent; }
 .wing-figure { margin: 0; min-width: 0; }
 .wing-figure-planform { grid-column: 1 / -1; }
-.wing-figure-planform .wing-svg { max-height: 44vh; }
-.wing-canvas .wing-figure h3 { margin: 0 0 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.wing-figure-planform .wing-svg { max-height: 44cqh; }
+.wing-canvas .wing-figure h3 { margin: 0 0 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
 .wing-canvas .wing-figure .wing-toolbar { margin-bottom: 4px; }
 .wing-canvas .wing-figure .wing-toolbar h3 { margin: 0 auto 0 0; }
 .wing-canvas .wing-toggle button { font-size: 12px; padding: 3px 8px; }
-.wing-canvas .wing-figure .wing-legend { margin: 4px 0 0; font-size: 11px; gap: 2px 10px; }
+.wing-canvas .wing-figure .wing-legend { margin: 4px 0 0; font-size: 11.5px; gap: 2px 10px; }
 .wing-canvas-empty { position: absolute; inset: 0; display: grid; place-content: center; padding: 24px; text-align: center; }
 @container wingstage (max-width: 620px) { .wing-canvas-views { grid-template-columns: minmax(0, 1fr); } }
 .wing-card-views .wing-toolbar { gap: 6px 8px; }
-.wing-card-views .wing-toolbar label { font-size: 12px; color: var(--muted); }
+.wing-card-views .wing-toolbar label { font-size: 12.5px; color: var(--muted); }
 .wing-card-views .wing-toolbar select { max-width: 100%; flex: 1 1 160px; }
-.wing-card-views .wing-legend { font-size: 11.5px; gap: 3px 8px; margin-top: 8px; }
-.cv-answer .wing-answer { padding: 0; border: 0; border-radius: 0; background: transparent; display: grid; gap: 4px; }
-.cv-answer .wing-answer h2 { margin: 0; font-size: 16px; line-height: 1.3; }
-.cv-answer .wing-answer p { margin: 0; font-size: 12.5px; line-height: 1.45; }
+.wing-card-views .wing-legend { font-size: 12px; gap: 3px 8px; margin-top: 8px; }
+.cv-answer .wing-answer { padding: 0; border: 0; border-radius: 0; background: transparent; display: grid; gap: 6px; }
+.cv-answer .wing-answer h2 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.38; }
+.cv-answer .wing-answer p { margin: 0; font-size: 13px; line-height: 1.5; color: #cfcfcf; }
 .cv-details-body .wing-fe, .cv-details-body .studio-panel { margin: 0; }
-/* The wing's assistant fills the chat column as the coupon's chat does: its words scroll, its composer stays at the column's foot */
-.cv-shell .cv-chat .wing-assistant { flex: 1; min-height: 0; margin: 0; padding: 14px 16px 12px; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #424242 transparent; }
-.cv-shell .cv-chat .wing-assistant > h3 { padding-right: 40px; }
-/* the chat's box gives way so its composer is the column's own child: it sticks at the foot however long the words above it run */
+/* The wing's assistant fills the chat panel as the coupon's chat does: its words scroll, its composer stays at the panel's foot */
+.cv-shell .cv-chat .wing-assistant { flex: 1; min-height: 0; margin: 0; padding: 18px 22px 14px; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column;
+  overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+.cv-shell .cv-chat .wing-assistant > h3 { padding-right: 40px; font-size: 13.5px; font-weight: 600; }
+/* the chat's box gives way so its composer is the panel's own child: it sticks at the foot however long the words above it run */
 .cv-shell .cv-chat .wing-chat { display: contents; }
-.cv-shell .cv-chat .wing-chat-scroll { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--line); }
-.cv-shell .cv-chat .wing-chat .chat-studio-composer { flex: none; margin-top: auto; position: sticky; bottom: 12px; z-index: 1; background: var(--panel); box-shadow: 0 12px 0 0 var(--panel), 0 -14px 14px -4px var(--panel); }
+.cv-shell .cv-chat .wing-chat-scroll { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--cv-hair); }
+.cv-shell .cv-chat .wing-chat .chat-studio-composer { flex: none; margin: auto 0 0; position: sticky; bottom: 0; z-index: 1; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 -14px 14px -4px var(--cv-panel-solid); }
 
-/* The chat, full height on the right; its fold button over its own top bar */
-.cv-shell .cv-chat { grid-area: chat; position: relative; top: auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--panel); }
-.cv-shell .cv-chat .chat-pane { position: static; flex: 1; height: auto; min-height: 0; max-height: none; border: 0; border-radius: 0; }
-.cv-chat .chat-pane-top { padding-right: 48px; }
-.cv-chat-fold { position: absolute; top: 7px; right: 8px; z-index: 2; }
-.cv-chat-show { position: fixed; right: 0; top: 50%; z-index: 30; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; padding: 14px 8px; writing-mode: vertical-rl;
-  border: 1px solid var(--line); border-right: 0; border-radius: 10px 0 0 10px; background: var(--panel); color: var(--text); font-size: 12px; cursor: pointer; }
+/* The assistant: a floating panel full height on the right */
+.cv-shell .cv-chat { position: absolute; top: var(--cv-gap); right: var(--cv-gap); bottom: var(--cv-gap); z-index: 7; width: var(--cv-chat); min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  overflow: hidden; border: 1px solid var(--cv-hair); border-radius: 18px; background: var(--cv-panel); backdrop-filter: blur(24px) saturate(1.15); -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  box-shadow: var(--cv-shadow); }
+.cv-chat-fold { position: absolute; top: 14px; right: 14px; z-index: 2; color: var(--cv-faint); }
+.cv-chat-show { position: absolute; right: 0; top: 50%; z-index: 30; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; padding: 14px 8px; writing-mode: vertical-rl;
+  border: 1px solid var(--cv-hair); border-right: 0; border-radius: 12px 0 0 12px; background: var(--cv-panel-solid); color: var(--text); font-size: 12.5px; cursor: pointer; }
 .cv-chat-show svg { transform: rotate(90deg); }
+.cv-shell .cv-chat .chat-pane { position: static; flex: 1; height: auto; min-height: 0; max-height: none; border: 0; border-radius: 0; background: transparent; }
+.cv-chat .chat-pane-top { padding: 18px 52px 8px 22px; border: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.cv-chat .chat-pane-top .status-dot { display: none; }
+.cv-chat .chat-pane-top > span { flex-wrap: nowrap; white-space: nowrap; min-width: 0; }
+/* the kind of work is the card's line under the project's name: here it stays for a screen reader */
+.cv-chat .chat-pane-top .chat-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); padding: 0; border: 0; }
+.cv-chat .chat-pane-top .chat-link { font-size: 12px; font-weight: 400; }
+.cv-chat .chat-pane-top .icon-button, .cv-chat .chat-pane-top .chat-link { color: var(--cv-faint); }
+.cv-chat .chat-scroll { padding: 12px 22px 14px; gap: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 18px), transparent); }
+.cv-chat .chat-user { max-width: 86%; padding: 7px 12px; border: 0; border-radius: 14px 14px 4px 14px; background: var(--cv-soft-2); font-size: 13.5px; color: var(--text); }
+.cv-chat .chat-assistant { display: block; }
+.cv-chat .message-avatar { display: none; }
+.cv-chat .chat-assistant h4 { margin: 0 0 4px; font-family: var(--font); font-size: 15px; font-weight: 600; line-height: 1.42; letter-spacing: -0.005em; }
+.cv-chat .chat-assistant p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: #cfcfcf; }
+.cv-chat .chat-assistant .chat-note, .cv-chat .chat-note { font-size: 12.5px; color: var(--muted); }
+.cv-chat .chat-chips { gap: 6px; margin: 12px 0 0; }
+.cv-chat .chat-chips button { padding: 6px 11px; border: 0; border-radius: 999px; background: transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13); color: var(--text); font-size: 12.5px; }
+.cv-chat .chat-chips button:hover { background: var(--cv-soft); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24); }
+.cv-chat .chat-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.cv-chat .chat-primary { padding: 7px 14px; border: 0; border-radius: 9px; background: var(--cv-on); color: var(--cv-on-ink); font-size: 13px; font-weight: 500; }
+.cv-chat .chat-primary:hover { background: #ffffff; }
+.cv-chat .chat-secondary { padding: 7px 14px; border: 0; border-radius: 9px; background: transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); color: var(--text); font-size: 13px; }
+.cv-chat .chat-secondary:hover { background: var(--cv-soft); }
+/* a run's results in the chat: three lines, not three boxes */
+.cv-chat .chat-stats { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 6px 0 4px; }
+.cv-chat .chat-stats > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 0; border: 0; background: transparent; }
+.cv-chat .chat-stats span { font-size: 12.5px; color: var(--muted); }
+.cv-chat .chat-stats strong { grid-column: 2; grid-row: 1; font-family: var(--font); font-size: 13.5px; font-weight: 600; text-align: right; }
+.cv-chat .chat-stats small { grid-column: 1 / -1; font-size: 11.5px; color: var(--cv-faint); }
+/* the composer: a pill at the panel's foot */
+.cv-chat .chat-studio-composer { flex: none; display: flex; align-items: flex-end; gap: 10px; margin: 4px 16px 16px; padding: 7px 7px 7px 14px; min-height: 52px; border: 0; border-radius: 15px;
+  background: rgba(255, 255, 255, 0.065); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.cv-chat .chat-studio-composer:focus-within { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34); }
+.cv-chat .chat-studio-composer textarea { flex: 1; min-width: 0; min-height: 38px; max-height: 140px; padding: 9px 0 7px; resize: none; field-sizing: content; font-size: 14px; line-height: 1.45; color: var(--text); }
+.cv-chat .chat-studio-composer textarea::placeholder { color: #8d9096; }
+.cv-chat .composer-footer { flex: none; margin: 0; }
+.cv-chat .composer-footer .chat-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cv-chat .send-button { width: 38px; height: 38px; border-radius: 11px; background: var(--cv-on); color: var(--cv-on-ink); }
+.cv-chat .send-button:disabled { opacity: 0.35; }
 
-/* The sheet holds the card and the chat; on a wide window it is not a box of its own, so the grid places them */
+/* The sheet holds the card and the chat; on a wide window it is not a box of its own, so each floats where it is placed */
 .cv-sheet { display: contents; }
 .cv-sheet-tabs { display: none; }
+
+/* Short windows (a laptop's browser): a tighter rhythm, so the model keeps most of the height */
+@media (max-height: 820px) and (min-width: 900px) {
+  .cv-shell .cv-brand { top: 16px; }
+  .cv-icons { top: 54px; }
+  .cv-shell .cv-tree { top: 54px; max-height: calc(100% - 70px); }
+  .cv-card-grid { padding: 13px 20px; }
+  .cv-eyebrow-plain { display: none; }
+  .cv-shell .cv-title input { font-size: 16px; }
+  .cv-project { gap: 7px; }
+  .cv-view .studio-legend .studio-legend-bar { margin-top: 7px; }
+  .cv-view-menu { margin-top: 8px; }
+  .cv-view-menu > summary { padding: 7px 12px; }
+  .cv-verdict { font-size: 14px; }
+  .cv-answer-short { gap: 4px; }
+  .cv-chat .chat-pane-top { padding-top: 14px; }
+  .cv-chat .chat-studio-composer { margin-bottom: 12px; }
+}
 
 /* Narrow windows: the model takes the screen; the card and the chat are one sheet at its foot, the chat while a project is set up and
    the card from the first results, switched by two buttons; the tree opens over the page from its button */
 @media (max-width: 899px) {
   .cv-shell, .cv-shell[data-assistant=closed] {
-    grid-template-columns: 44px minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
-    grid-template-areas: "icons stage" "sheet sheet";
+    grid-template-areas: "stage" "sheet";
     min-height: 420px;
   }
-  .cv-icons { --cv-rail: 44px; }
-  .cv-shell .cv-tree { position: fixed; top: 56px; bottom: 0; left: 44px; right: 0; z-index: 40; width: auto; }
-  .cv-sheet { grid-area: sheet; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--line); background: var(--bg); z-index: 6; }
+  .cv-shell .cv-brand { --brand-h: 16px; left: 16px; top: 16px; }
+  .cv-shell .cv-brand .brand-name { font-size: 13px; }
+  /* on a phone the rail is one button at the top right that opens the tree, as in the mockup; the tree's own tabs are inside it */
+  .cv-icons { left: auto; right: 12px; top: 10px; max-height: none; padding: 0; border: 0; background: transparent; z-index: 41; }
+  .cv-icons > .cv-icon:not(.cv-icon-tree), .cv-icons-sep { display: none; }
+  .cv-icons > .cv-icon-tree { width: 40px; height: 40px; border: 1px solid var(--cv-hair); border-radius: 11px; background: rgba(20, 21, 25, 0.85); }
+  .cv-home { display: none; }
+  .cv-stage { position: relative; inset: auto; grid-area: stage; }
+  .cv-shell .cv-tree { position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 40; width: auto; max-height: none; border-radius: 0; border-width: 0; background: var(--cv-panel-solid); }
+  .cv-tree-top { min-height: 60px; border-radius: 0; }
+  .cv-tree-top > .icon-button { display: none; } /* the button at the top right closes it, over the tree */
+  .cv-sheet { grid-area: sheet; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--cv-hair); border-radius: 18px 18px 0 0; background: var(--cv-panel-solid); z-index: 6; }
   .cv-sheet[data-sheet=card] { max-height: 48dvh; }
   .cv-sheet[data-sheet=chat] { height: 62dvh; }
   .cv-sheet[data-sheet=card] > .cv-chat, .cv-sheet[data-sheet=card] > .cv-chat-show, .cv-sheet[data-sheet=chat] > .cv-card { display: none; }
-  .cv-sheet-tabs { display: flex; gap: 6px; padding: 6px 8px 0; }
-  .cv-sheet-tabs button { flex: 1; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
-  .cv-sheet-tabs button[aria-pressed="true"] { color: var(--text); background: rgba(255, 255, 255, 0.07); border-color: var(--muted); }
-  .cv-sheet > .cv-card { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; }
-  .cv-sheet > .cv-card .cv-card-grid { display: block; box-shadow: none; }
-  .cv-sheet > .cv-card .cv-col + .cv-col { border-left: 0; border-top: 1px solid var(--line); }
-  .cv-shell .cv-sheet > .cv-chat { flex: 1 1 auto; min-height: 0; border-left: 0; }
+  .cv-sheet-tabs { display: flex; gap: 6px; padding: 8px 10px 0; }
+  .cv-sheet-tabs button { flex: 1; padding: 7px 10px; border: 0; border-radius: 9px; background: var(--cv-soft); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .cv-sheet-tabs button[aria-pressed="true"] { color: var(--text); background: var(--cv-soft-2); }
+  .cv-sheet > .cv-card { position: static; flex: 1 1 auto; min-height: 0; max-width: none; margin: 0; overflow-y: auto; padding: 8px; }
+  .cv-sheet > .cv-card .cv-card-grid { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 16px; max-height: none; padding: 12px 8px; border: 0; background: transparent; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .cv-sheet > .cv-card .cv-col { grid-column: 1; grid-row: auto; }
+  .cv-shell .cv-sheet > .cv-chat { position: static; flex: 1 1 auto; width: auto; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .cv-chat-fold, .cv-chat-show { display: none; }
-  .cv-stage .studio-applied { top: auto; bottom: 10px; max-width: calc(100% - 24px); max-height: 34%; font-size: 11px; }
-  .cv-stage .studio-view-tools { left: 10px; justify-content: flex-end; }
-  .cv-details { bottom: 6px; max-height: calc(100% - 12px); }
+  .cv-details { position: absolute; left: 6px; right: 6px; top: 6px; bottom: 6px; max-height: none; height: auto; margin: 0; }
+  .cv-chat .chat-studio-composer { margin: 4px 10px 10px; }
+  .cv-view-menu-body { width: min(340px, calc(100vw - 32px)); }
 }

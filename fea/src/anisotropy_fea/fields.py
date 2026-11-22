@@ -7,7 +7,10 @@ axes, the ply von Mises stress, and per criterion every ply's strength ratio R a
 and the rotations at the nodes, the curvature, the moments and the transverse shear forces per element, and keeps both faces of every ply
 (`mesh.faces` names them; a membrane solve has one value per ply and `faces` is null). The browser draws them and computes nothing.
 Smooth contours need one value per node, so the mean over the elements that share a node is written here too, under `nodal.averages`,
-and labelled a display average: the element values are the result. `ranges` holds the smallest and largest value of every field the
+and labelled a display average: the element values are the result. An element clamped inside a grip (every corner held by it,
+`mesh.held_elements`) moves as one body, so its zero strain and stress are the clamp's, not a result: it is left out of the averages
+and of the ranges of every field derived from the strain, so a tab line keeps its step instead of a ramp the model does not have, and a
+node only such elements touch has no average (ADR-0063 amendment 4). `ranges` holds the smallest and largest value of every field the
 viewer can show, element values and display averages apart, per ply and face where the field is per ply, so the legend's ends are
 written here and the browser derives none (ADR-0063).
 
@@ -75,10 +78,14 @@ def per_ply_spans(values: np.ndarray) -> list:
     return [span(values[:, k]) for k in range(values.shape[1])]
 
 
-def nodal_averages(connectivity: np.ndarray, node_count: int, element_values: np.ndarray) -> np.ndarray:
-    """The mean over the elements that share each corner node, for display; NaN at a node no element touches."""
+def nodal_averages(connectivity: np.ndarray, node_count: int, element_values: np.ndarray, skip: np.ndarray | None = None) -> np.ndarray:
+    """The mean over the elements that share each corner node, for display; NaN at a node no element touches. `skip` marks elements
+    left out (those clamped inside a grip): a node only they touch is NaN too."""
     values = np.asarray(element_values, dtype=float)
     corners = np.asarray(connectivity)[:, :4]
+    if skip is not None and np.any(skip):
+        keep = ~np.asarray(skip, dtype=bool)
+        values, corners = values[keep], corners[keep]
     totals = np.zeros((node_count, *values.shape[1:]))
     counts = np.zeros(node_count)
     for k in range(4):
@@ -173,7 +180,7 @@ def gauge_reading(deck: Deck, solution: Solution) -> dict[str, Any] | None:
     if not keys:
         return None
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return None
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
@@ -209,11 +216,27 @@ def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
     without grips (a plate, a bending coupon)."""
     mesh = solution.mesh
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return set()
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
     return {e for e in range(mesh.element_count) if gripped & set(mesh.connectivity[e, :4].tolist())}
+
+
+def held_in_grips(deck: Deck, solution: Solution) -> np.ndarray:
+    """A flag per element: every corner is held by a grip, so the element moves as one body and its strain and stress are zero by the
+    clamp, not by the solve (ADR-0063 amendment 4). The row along a tab line has free corners and is not flagged. All false for a deck
+    without grips (a plate, a bending coupon)."""
+    mesh = solution.mesh
+    flags = np.zeros(mesh.element_count, dtype=bool)
+    try:
+        bottom, top = gripped_groups(deck, solution, loaded=True)
+    except KernelError:
+        return flags
+    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
+    for e in range(mesh.element_count):
+        flags[e] = set(mesh.connectivity[e, :4].tolist()) <= gripped
+    return flags
 
 
 def classical_laminate_check(solution: Solution, applied: dict[str, Any], reaction_si: float, angles: np.ndarray, units: str,
@@ -405,6 +428,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     corners = mesh.connectivity[:, :4]
     centroids = mesh.xy[corners].mean(axis=1)
     magnitude = np.linalg.norm(displacement, axis=1)
+    held = held_in_grips(deck, solution)  # clamped inside a grip: out of the averages and of the ranges of the strain's fields
+    free = ~held if np.any(~held) else np.ones(ne, dtype=bool)
 
     failure: dict[str, Any] = {}
     failure_average: dict[str, Any] = {}
@@ -428,10 +453,10 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
             entry["worst_face"] = [FACES[int(np.argmin(ratio[e, k]))] for e, k in enumerate(worst)]
         failure[criterion] = entry
         element_index = index.reshape(ne, -1).max(axis=1)
-        index_average = nodal_averages(corners, n, element_index)
+        index_average = nodal_averages(corners, n, element_index, held)
         failure_average[criterion] = rounded(index_average)
-        failure_ranges[criterion] = {"element": span(element_index), "nodal": span(index_average)}
-        failure_ply_ranges[criterion] = {"element": per_ply_spans(index.max(axis=2) if shell else index)}  # the worse face of each ply
+        failure_ranges[criterion] = {"element": span(element_index[free]), "nodal": span(index_average)}
+        failure_ply_ranges[criterion] = {"element": per_ply_spans((index.max(axis=2) if shell else index)[free])}  # the worse face of each ply
 
     # the summary: where the extremes are
     applied = applied_loading(deck, solution)
@@ -539,10 +564,10 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                                 [node_name(k) for k in mesh.node_keys])
 
     section_force_out, stress_12_out, mises_out, displacement_out = per_length(section_force), stress(stress_12), stress(mises), length(displacement)
-    strain_average = nodal_averages(corners, n, strain)
-    section_force_average = nodal_averages(corners, n, section_force_out)
-    stress_12_average = nodal_averages(corners, n, stress_12_out)
-    mises_average = nodal_averages(corners, n, mises_out)
+    strain_average = nodal_averages(corners, n, strain, held)
+    section_force_average = nodal_averages(corners, n, section_force_out, held)
+    stress_12_average = nodal_averages(corners, n, stress_12_out, held)
+    mises_average = nodal_averages(corners, n, mises_out, held)
     averages: dict[str, Any] = {
         "strain": rounded(strain_average), "section_force": rounded(section_force_average),
         "ply_stress_12": rounded(stress_12_average), "ply_mises": rounded(mises_average),
@@ -557,8 +582,9 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     nodal: dict[str, Any] = {"displacement": rounded(displacement_out), "magnitude": rounded(length(magnitude)), "reaction": rounded(reaction)}
 
     # the ends of every field the viewer can show, as written above: the element values and the display averages apart (ADR-0063)
+    # an element clamped inside a grip is left out of the element values' ends too, as it is out of the averages (ADR-0063 amendment 4)
     def both(element_values: np.ndarray, average_values: np.ndarray) -> dict[str, list]:
-        return {"element": span(element_values), "nodal": span(average_values)}
+        return {"element": span(element_values[free]), "nodal": span(average_values)}
 
     ranges: dict[str, Any] = {"u_mag": {"nodal": span(length(magnitude))}}
     for i, name in enumerate(("u_x", "u_y", "u_z")[:translations]):
@@ -568,10 +594,10 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     for i, name in enumerate(("N_x", "N_y", "N_xy")):
         ranges[name] = both(section_force_out[:, i], section_force_average[:, i])
     for i, name in enumerate(STRESS_NAMES):
-        ranges[name] = {"element": per_ply_spans(stress_12_out[..., i]), "nodal": per_ply_spans(stress_12_average[..., i])}
-    ranges["mises"] = {"element": per_ply_spans(mises_out), "nodal": per_ply_spans(mises_average)}
+        ranges[name] = {"element": per_ply_spans(stress_12_out[free][..., i]), "nodal": per_ply_spans(stress_12_average[..., i])}
+    ranges["mises"] = {"element": per_ply_spans(mises_out[free]), "nodal": per_ply_spans(mises_average)}
     for name, values in invariants.items():
-        ranges[name] = {"element": per_ply_spans(stress(values))}
+        ranges[name] = {"element": per_ply_spans(stress(values)[free])}
     ranges["failure_index"] = failure_ranges
     ranges["failure_index_ply"] = failure_ply_ranges
 
@@ -580,9 +606,9 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         moment = _finite("moment", solution.moment)
         shear_force = _finite("shear force", solution.shear_force)
         curvature_out, shear_force_out = curvature_units(curvature), per_length(shear_force)
-        curvature_average = nodal_averages(corners, n, curvature_out)
-        moment_average = nodal_averages(corners, n, moment)
-        shear_force_average = nodal_averages(corners, n, shear_force_out)
+        curvature_average = nodal_averages(corners, n, curvature_out, held)
+        moment_average = nodal_averages(corners, n, moment, held)
+        shear_force_average = nodal_averages(corners, n, shear_force_out, held)
         element.update({"curvature": rounded(curvature_out), "moment": rounded(moment), "shear_force": rounded(shear_force_out),
                         "shear_strain": rounded(_finite("shear strain", solution.shear_strain))})
         nodal["rotation"] = rounded(rotation)
@@ -597,7 +623,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         for i, name in enumerate(("Q_x", "Q_y")):
             ranges[name] = both(shear_force_out[:, i], shear_force_average[:, i])
     nodal["averages"] = averages
-    nodal["averages_note"] = "display averages: the mean over the elements sharing each node, for smooth contours; the element values are the result"
+    nodal["averages_note"] = ("display averages: the mean over the elements sharing each node, for smooth contours, leaving out the elements "
+                              "clamped inside a grip (mesh.held_elements); the element values are the result")
 
     data: dict[str, Any] = {
         "units": units, "labels": {**lab, "strain": "-", "ratio": "-"},
@@ -608,13 +635,14 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                  "node_sets": {name: [mesh.node(key) for key in keys] for name, keys in deck.nsets.items()},
                  "element_sets": {name: [mesh.element(key) for key in keys] for name, keys in deck.elsets.items()},
                  "gauge_elements": list(reading["elements"]) if reading else None,  # where the gauge section is read (ADR-0108)
+                 "held_elements": np.flatnonzero(held).tolist(),  # clamped inside a grip: drawn as the grip, not by value (ADR-0063 amendment 4)
                  "node_count": n, "element_count": ne, "plies": int(plies), "angles": angles.tolist(), "faces": list(FACES) if shell else None,
                  "translations": translations},
         "nodal": nodal,
         "element": element,
         "ranges": ranges,
         "ranges_note": "the smallest and largest value of each field as written here, element values and display averages apart, per ply and face "
-                       "where the field is per ply: the legend's ends",
+                       "where the field is per ply, the elements clamped inside a grip left out of every field but the displacement: the legend's ends",
         "summary": summary,
     }
     if quality is not None:

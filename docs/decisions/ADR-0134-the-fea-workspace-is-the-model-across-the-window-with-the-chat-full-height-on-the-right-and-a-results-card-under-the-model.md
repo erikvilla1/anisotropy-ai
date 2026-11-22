@@ -1,8 +1,8 @@
 # ADR-0134: The FEA workspace is the model across the window, with the chat full height on the right and a results card under the model
 
-- Status: Proposed
+- Status: Proposed; the frame rebuilt to the mockup: no site header, the model under floating panels and framed in the part they leave clear, the field and the view tools in one View menu, amendment 1
 - Date: 2026-11-21
-- Decided by: Founder, 2026-11-20 and 2026-11-21 (on agent-made mockups of the workspace: "less clustered, more minimal"; "give me more canvas looking setups, also is there a way to make the FEA look more like FEA, like how the images look like"; "showcase card looking good but the AI chat is kind of hidden"; "or maybe chat on the right and the other card middle underneath"; then layout D, "Chat right", picked on a card, and, on the build plan, "laminate and cad after, and yes continue") | Drafted by: Claude Code
+- Decided by: Founder, 2026-11-20 and 2026-11-21 (on agent-made mockups of the workspace: "less clustered, more minimal"; "give me more canvas looking setups, also is there a way to make the FEA look more like FEA, like how the images look like"; "showcase card looking good but the AI chat is kind of hidden"; "or maybe chat on the right and the other card middle underneath"; then layout D, "Chat right", picked on a card, and, on the build plan, "laminate and cad after, and yes continue"); Founder, 2026-11-21 (on the live page: "it doesn't look like how we planned it"; then, on a card, "Go with the recommendations", amendment 1) | Drafted by: Claude Code
 - Related: [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (the three columns, which stay for Laminate and CAD, amendment 3), [ADR-0111](ADR-0111-the-fea-workspace-sets-a-model-up-in-a-model-tree-on-the-left-in-the-words-of-any-finite-element-program-and-the-chat-changes-the-same-tabs.md) (the model tree, now a flyout, amendment 3), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the FEA look, amendment 1), [ADR-0098](ADR-0098-the-home-pages-demo-shows-an-example-wing-whole-apart-analysed-and-whole-again-from-one-recorded-solve-of-the-mesh-it-draws.md) (the rainbow, amendment 12), [ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) (short answers), [ADR-0124](ADR-0124-the-workspace-has-three-sections-fea-cad-and-laminate-fea-opens-blank-and-the-chat-sets-it-up-for-the-work-asked-for.md) (the FEA section); `components/workspace/canvas-shell.tsx`, `components/workspace/canvas-slots.tsx`, `components/workspace/fea-workspace.tsx`, `components/workspace/wing-workspace.tsx`, `components/studio/results-view.tsx`, `app/workspace/canvas.css`
 - Area: website
 
@@ -60,3 +60,51 @@ The founder's choice on the mockups: the gallery of the three rounds (`/mnt/proj
 - The founder or a first user cannot find a result or a setting that the three columns showed, or asks for the columns back.
 - At 1280 by 720 with the tree open the model is too small to pick an element on (an element of the 5 mm coupon mesh smaller than about 6 px).
 - The chat on the right is folded away in most sessions, which would say it takes room it does not earn.
+
+## Amendment 1, 2026-11-21 (the frame rebuilt to match the mockup; decided by the founder)
+
+**Context.** The first build kept the panels' own content and chrome and placed them in the new layout: the site's workspace header above it, bordered columns, type of 10 to 12 px, a crowded card, the field and ply choices and the loads list over the model, the view buttons at its top right, a tree with help text in each row, and a small model framed for the whole window. It was checked by eye, not against the mockup. On 2026-11-21 the founder looked at the live page and wrote that it "doesn't look like how we planned it". A plan compared the mockup and the live page region by region (https://claude.ai/artifact/S4tPFkM7J9Nery2cjtaP1a, ten regions, four choices). On a card he chose "Go with the recommendations" for all four: the legend reads "Strength used" in percent, results are lit by default with exact colours one tap away (ADR-0063 amendment 2), the plate is drawn at its true thickness with a "Thickness ×2.4" choice (the same amendment), and the site header leaves the workspace pages.
+
+**Options.**
+1. *Tune the first build's spacing and type.* Rejected: the gap was in the structure (a header bar, fixed columns, the model's frame), not in the sizes.
+2. *Rebuild the frame region by region against the mockup, keeping every panel, name and test id the product and its specs use.* Chosen.
+3. *Copy the mockup's HTML.* Rejected: the mockup is a drawing of two records; the product's panels, tree and chat are React components with their own state and tests.
+
+**Decision.**
+- **No header bar.** `/workspace/fea` and `/workspace/wing` draw no site header (`isCanvasPath` in `lib/site-nav.ts`). The logo floats at the top left and is the way back to all projects; a house button at the rail's foot goes back to the website.
+- **The model fills the window.** The model's area is the whole window under the floating rail, tree, card and chat. The shell measures the part they leave clear and gives it to the page (`free` in `canvas-slots.tsx`, and the CSS variables `--free-l`, `--free-r`, `--free-t`, `--free-b`).
+- **Framing.** The camera is framed in that clear part (`components/studio/fit-camera.tsx`), as the mockup frames it. The projection's centre moves to the clear part's centre, so a turn or a zoom still turns about the model. The box's eight corners are projected from the mockup's direction, the view is recentred on them, and the distance is scaled until the model fills 92 % of the clear part's tighter side. The camera frames again when the view buttons are used, when a model of another size arrives, and when the clear part changes while the engineer has not turned or zoomed the view. The sketch before a check is framed the same way.
+- **The ground.** A dark radial ground with a vignette; the scene draws no background of its own in the shell.
+- **The card.** It has three columns:
+  - the project: its name, its kind, and its four stages (Set up, Mesh, Solve, Results) with check marks;
+  - the legend: a title ("Strength used" for the failure index, else the field and its unit), what it is read at, the bar and its two ends; under it, one View row with what is shown;
+  - the answer in short: the verdict with the strength used and the ply, one line on the load and the reaction, one line of labels, then Show where and Details.
+- **The View menu.** It opens upward and holds the field, the ply or face, the criterion, the values, the contours, the colours, the deformation, the mesh lines, the lighting, the thickness, the view buttons (Whole model, Top), what is drawn on the model, and the list of supports and loads applied. The same menu holds the scene's part before a run.
+- **The chat.** A floating panel with rounded corners: bubbles for the engineer's words, pill-shaped suggestions and a pill-shaped box to type in. The header is one line.
+- **The wing.** Its drawings scroll inside the clear part only, so nothing shows through the card or the chat.
+- **Phones.** Below 900 px there is no rail. One button at the top right opens the tree over the page, as in the mockup.
+
+**As built (2026-11-21).**
+- **Where.**
+  - `components/workspace/canvas-shell.tsx`: the floating brand, the home button, the stages, and the measuring of the clear part.
+  - `components/workspace/canvas-slots.tsx`: `FreeArea`, the `look` place and `ViewMenu`.
+  - `components/studio/fit-camera.tsx`: the framing.
+  - `components/studio/scene-canvas.tsx` and `sketch-canvas.tsx`: the framing used, and the view tools in the View menu.
+  - `components/studio/results-view.tsx`: the card's legend, `legendHead`, the short answer and the View menu.
+  - `components/workspace/fea-workspace.tsx`: the stages.
+  - `components/site-shell.tsx` and `lib/site-nav.ts`: no header.
+  - `app/workspace/canvas.css`: rewritten.
+- **Differences from the mockup.**
+  - The rail's foot is a button back to the website, not an account menu: the product has none.
+  - The supports and loads applied are listed in the View menu, not in the tree.
+  - A short window (under 820 px) tightens the card's rhythm instead of folding the card.
+  - The phone keeps its two tabs (Results, Assistant) in the sheet instead of the mockup's ask bar under the card.
+  - The legend's ends are those of the values shown. With nodal averages, the default, the top end (96.3 % on the example) is below the element's 96.9 % in the answer. The mockup drew 98.7 %.
+  - The wing's area shows the hand calculation's drawings (planform, margins, root section), as the product computes them, not the mockup's 3D wing.
+- **Checked.**
+  - Screenshots of the built page beside the mockup at 1440 by 900, 1568 by 717 and 390 by 844, and of the wing at 1440 by 900, in `/mnt/project-files/workspace-design/build/compare/v2-*.png`.
+  - The clear part measured after a run with the tree closed: 936 by 564 px at 1440 by 900, 1030 by 438 px at 1568 by 717, and 794 by 409 px at 1280 by 720.
+  - The browser specs that used the moved controls open the View menu first (`tests/browser/studio.spec.ts`). Run in a local browser, these passed: the changed studio scenarios (5), `workspace.spec.ts`, `wing.spec.ts`, `import.spec.ts` and `abaqus-card.spec.ts` (31), and `shell.spec.ts` with `phone.spec.ts` (20, 1 skipped). The full suite runs on the pull request.
+
+**Evidence.** The founder's words and his choice above. The plan with its region table. The screenshots and measurements under As built. Still no evidence that engineers find their way faster than in the three columns.
+

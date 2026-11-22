@@ -33,6 +33,21 @@ async function openView(page: Page) {
   const menu = page.getByTestId("view-menu");
   if ((await menu.getAttribute("open")) === null) await menu.locator("summary").click();
 }
+/** The middle of the part of the window the floating panels leave clear, where the model is framed (ADR-0134 amendment 1); the canvas's
+ * own middle where the page has no canvas shell. */
+async function modelMiddle(page: Page): Promise<{ x: number; y: number }> {
+  const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+  const free = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>("[data-testid=workspace-shell]");
+    if (!shell) return null;
+    const style = getComputedStyle(shell);
+    const side = ["--free-l", "--free-r", "--free-t", "--free-b"].map((name) => parseFloat(style.getPropertyValue(name)));
+    return side.every(Number.isFinite) ? side : null;
+  });
+  if (!free) return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const [l, r, t, b] = free;
+  return { x: box.x + (l + box.width - r) / 2, y: box.y + (t + box.height - b) / 2 };
+}
 /** The details over the model, open: the full answer, its tables, the summary, the explanation and the files (ADR-0134). */
 async function openDetails(page: Page) {
   const toggle = page.getByTestId("details-toggle");
@@ -203,10 +218,11 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   expect((calls as { fieldsReads?: number }).fieldsReads).toBeGreaterThanOrEqual(2); // the first read of the fields failed and the page read them again
   await expect(page.getByTestId("legend")).toContainText("Failure index 1/R, worst ply");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
-  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "8");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "12");
   await expect(page.getByTestId("legend")).toHaveAttribute("data-source", "package"); // the legend's ends are the package's
   const written = fixture("fields").ranges.failure_index.tsai_hill.nodal as [number, number];
-  await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 8 bands`);
+  await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 12 bands`);
+  await expect(page.getByTestId("legend")).toContainText("grey: clamped in the grips"); // the tabs under the jaws, out of the ends (ADR-0063 amendment 4)
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   // the validation table (ADR-0066): laminate theory beside Anisotropy, one row per ply in the fibre axes; the peaks apart, per ply, collapsed
@@ -254,10 +270,10 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveAttribute("href", /\/files\/reference_results\?name=/); // by a neutral name
   await expect(page.getByTestId("downloads")).toHaveCount(0); // not twice: the centre leaves the files to the left column
   await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await openView(page); // the field and the ply are chosen in the View menu (ADR-0134 amendment 1)
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
   await page.getByLabel("Ply", { exact: true }).selectOption("3");
   await expect(page.getByTestId("legend")).toContainText("Ply stress σ₂ (ply 3, -45°)");
-  await openView(page);
   await page.getByLabel("Shown as", { exact: true }).selectOption("element");
   await expect(page.getByTestId("legend")).toContainText("element values");
   await expect(page.getByTestId("studio-scene").locator("canvas")).toHaveAttribute("data-kept", "yes"); // the field switch uploads values; the mesh and the canvas stay
@@ -266,7 +282,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByLabel("Contours", { exact: true }).selectOption("0");
   await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
-  await page.getByLabel("Contours", { exact: true }).selectOption("8");
+  await page.getByLabel("Contours", { exact: true }).selectOption("12");
   await openDetails(page); // a press outside the View menu puts it away
   await expect(page.getByTestId("view-menu")).not.toHaveAttribute("open", "");
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
@@ -279,6 +295,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("Tresca");
   await expect(probe).toContainText("S13 and S23 are not modelled (membrane state)");
   await expect(probe.getByTestId("probe-csv")).toHaveAttribute("download", /^probe-element-\d+\.csv$/);
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("tresca");
   await expect(page.getByLabel("Shown as", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -308,9 +325,10 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   expect(sent.span).toBe(48);
   expect(sent.tab_length).toBeUndefined(); // the hidden rows are not sent
   expect(sent.grips).toBeUndefined();
-  await expect(page.getByTestId("preview")).toContainText("Left support: held along z"); // the sets in words (audit fea-run-16)
-  await expect(page.getByTestId("preview")).toContainText("Left pin: held along x, y");
-  await expect(page.getByTestId("preview")).not.toContainText("Pin-Left");
+  const applied = page.getByTestId("applied"); // the list of what is applied is in the View menu (ADR-0134 amendment 1)
+  await expect(applied).toContainText("Left support: held along z"); // the sets in words (audit fea-run-16)
+  await expect(applied).toContainText("Left pin: held along x, y");
+  await expect(applied).not.toContainText("Pin-Left");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed twice on CI runners that ran every test of this file at half speed
@@ -320,6 +338,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
   await expect(page.getByTestId("answer")).toHaveAttribute("data-basis", "whole"); // no gauge section: the whole model answers (ADR-0085)
   await expect(page.getByTestId("answer-table")).toContainText("bottom face");
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (mm)");
   await page.getByLabel("Field", { exact: true }).selectOption("S11");
@@ -358,12 +377,13 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   expect(sent.loads).toEqual([{ region: "Face", pressure: -0.01 }]);
   expect(sent.control).toBeUndefined();
   expect(sent.grips).toBeUndefined();
-  await expect(page.getByTestId("preview")).toContainText("pressure");
+  await expect(page.getByTestId("applied")).toContainText("pressure"); // in the View menu's list of what is applied (ADR-0134 amendment 1)
   await expect(page.getByTestId("preview-card")).toContainText("Click an element to hold or load");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed on a CI runner that ran every test of this file at half speed (10.2 min for the suite), as for the bending coupon above
   await expect(page.getByTestId("summary-reaction")).toContainText("holding the plate down");
+  await openView(page);
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (mm)");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -617,13 +637,15 @@ test.describe("the model tree", () => {
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Ply shown", { exact: true }).selectOption("2");
     await expect(viewer.getByLabel("Ply", { exact: true })).toHaveValue("2");
+    await openView(page); // the viewer's own controls are in the View menu under the legend (ADR-0134 amendment 1)
     await viewer.getByLabel("Field", { exact: true }).selectOption("u_mag");
     await expect(tree.locator("button[data-field=u_mag]")).toHaveAttribute("aria-pressed", "true");
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "false");
     await tree.locator("button[data-field=S11]").click();
     await page.screenshot({ path: ".local/website/screenshots/model-tree-after-run.png" });
-    // the model's own view buttons: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
+    // the model's own view buttons, in the View menu: a layer hidden and shown, straight above and back (ADR-0111 amendment 2)
     await expect(scene).toHaveAttribute("data-shown", "mesh conditions loads");
+    await openView(page);
     await page.getByTestId("show-conditions").click();
     await expect(scene).toHaveAttribute("data-shown", "mesh loads");
     await expect(page.getByTestId("show-conditions")).toHaveAttribute("aria-pressed", "false");
@@ -707,8 +729,8 @@ test.describe("the model tree", () => {
     // clicked on the model: the face is loaded from the click, and the Loads tab opens with its row to fill in
     await expect(page.getByTestId("preview")).toBeVisible();
     await expect(async () => { // the scene takes a click once it has drawn the new model
-      const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      const middle = await modelMiddle(page); // the model is framed in the part the panels leave clear, not the canvas's middle
+      await page.mouse.click(middle.x, middle.y);
       await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
     }).toPass({ timeout: 20_000 });
     await page.screenshot({ path: ".local/website/screenshots/model-tree-plate-click.png" });
@@ -1731,8 +1753,8 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   // an element clicked on the model is “here”: the page says which regions that is, and sends them with the next message
   await expect(page.getByTestId("chat-here")).toHaveCount(0);
   await expect(async () => { // the scene takes a click once it has drawn the new model: on a slow machine the first one can come too early
-    const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const middle = await modelMiddle(page); // the model is framed in the part the panels leave clear, not the canvas's middle
+    await page.mouse.click(middle.x, middle.y);
     await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId("chat-here")).toContainText("Face");
@@ -1800,12 +1822,13 @@ test("a plate with nothing held shows its shape, and the first hold is the edge 
   await expect(page.getByTestId("preview-shape")).toContainText("Nothing is held or loaded yet");
   expect(lives.at(-1)!.values.supports ?? []).toEqual([]);
   await expect(page.getByTestId("plate-words")).toHaveCount(0);
-  // an element on an edge is clicked: the canvas is walked up from its centre, towards the plate's far edges, until the page names an edge
+  // an element on an edge is clicked: the canvas is walked up from the model's middle, towards the plate's far edges, until the page names an edge
   const canvas = page.getByTestId("studio-scene").locator("canvas");
   let clicked = "";
   for (let step = 0; step < 60 && !clicked; step += 1) {
     const box = (await canvas.boundingBox())!; // read at every click: the line under the model moves the page
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - step * box.height / 130);
+    const middle = await modelMiddle(page);
+    await page.mouse.click(middle.x, middle.y - step * box.height / 130);
     await page.waitForTimeout(60);
     const picked = page.getByTestId("picked-regions");
     clicked = ((await picked.count()) ? await picked.innerText() : "").match(/Edge-(Bottom|Top|Left|Right)/)?.[0] ?? "";
@@ -1845,13 +1868,15 @@ test("what is applied is drawn and listed under the model before and after a run
   await say("what is a BC?");
   await expect(page.getByTestId("chat-term").last()).toHaveAttribute("data-term", "boundary-condition");
   await expect(page.getByTestId("chat-term").last()).toContainText("Holds part of the model still");
-  // under the model: each boundary condition with what it holds, the load, and the model they act on
+  // in the View menu: each boundary condition with what it holds, the load, and the model they act on (ADR-0134 amendment 1)
   const applied = page.getByTestId("applied");
   await expect(applied.getByTestId("applied-conditions")).toContainText("Bottom grip: fixed (encastre)");
   await expect(applied.getByTestId("applied-conditions")).toContainText("Top grip: free to move along the coupon only");
   await expect(applied.getByTestId("applied-loads")).toContainText("Top grip: pulled 1 mm along the coupon");
   await expect(applied.getByTestId("applied-about")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the canvas's clipped box
+  await openView(page);
+  await applied.scrollIntoViewIfNeeded();
+  await expect(applied).toBeInViewport({ ratio: 0.5 }); // not hidden by the menu's own scroll
   const bottom = applied.getByRole("button", { name: "Bottom grip: fixed (encastre)" });
   await bottom.click();
   await expect(bottom).toHaveAttribute("aria-pressed", "true"); // its set is framed on the model

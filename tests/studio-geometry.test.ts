@@ -1,10 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import {
-  boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, nodeMeans, plateMesh, quadsToTriangles,
-  fieldAttribute, meanHeight, setBox, suggestedScale, vertexColors,
-} from "../lib/studio-geometry";
+import { boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, fieldAttribute, gripOf, meanHeight, nodeMeans, plateMesh, quadsToTriangles, setBox, suggestedScale, vertexColors } from "../lib/studio-geometry";
 
 const preview = JSON.parse(readFileSync("tests/fixtures/studio/preview.json", "utf8"));
 const fieldsFile = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8"));
@@ -81,8 +78,11 @@ test("where a set sits", () => {
 test("node means agree with the package's display averages", () => {
   const means = nodeMeans(square.quads, 6, [1, 3]);
   assert.deepEqual(means, [1, 2, 2, 1, 3, 3]);
-  const epsY = fieldsFile.element.strain.map((row: number[]) => row[1]);
-  const ours = nodeMeans(fieldsFile.mesh.quads, fieldsFile.mesh.node_count, epsY);
+  // the package leaves the elements clamped inside a grip out of its averages (ADR-0063 amendment 4)
+  const held = new Set<number>(fieldsFile.mesh.held_elements);
+  const free = (_: unknown, e: number) => !held.has(e);
+  const epsY = fieldsFile.element.strain.map((row: number[]) => row[1]).filter(free);
+  const ours = nodeMeans(fieldsFile.mesh.quads.filter(free), fieldsFile.mesh.node_count, epsY);
   const theirs = fieldsFile.nodal.averages.strain.map((row: (number | null)[]) => row[1]);
   for (let i = 0; i < ours.length; i++) {
     if (ours[i] === null) assert.equal(theirs[i], null);
@@ -112,4 +112,22 @@ test("one float per vertex for the results material, smooth by node or flat by e
   assert.deepEqual([...smooth.slice(0, 4)], [1, 2, -9, 4]);
   const flat = fieldAttribute(unit, "element", [7], -9);
   assert.ok(flat.every((v) => v === 7));
+});
+
+test("a clamped tab is drawn as its grip and in the grip's grey, a held edge as before (ADR-0063 amendment 4)", () => {
+  // a strip 10 wide and 100 long, nodes every 5 along x and every 10 along y; the bottom 20 is a tab
+  const nodes = Array.from({ length: 33 }, (_, k) => [5 * (k % 3), 10 * Math.floor(k / 3)]);
+  const model = { min: [0, 0], size: [10, 100] };
+  const tab = nodes.map((_, k) => k).filter((k) => nodes[k][1] <= 20);
+  const edge = nodes.map((_, k) => k).filter((k) => nodes[k][0] === 0);
+  const top = nodes.map((_, k) => k).filter((k) => nodes[k][1] >= 80);
+  assert.deepEqual(gripOf(nodes, tab, [1, 2, 3, 4, 5, 6], model), { box: { min: [0, 0], max: [10, 20] }, axis: 1, outer: -1 });
+  assert.equal(gripOf(nodes, top, [1, 3, 4, 5, 6], model)?.outer, 1); // the moving grip, at the far end
+  assert.equal(gripOf(nodes, tab, [3], model), null); // held out of plane only: a support, not a grip
+  assert.equal(gripOf(nodes, edge, [1, 2, 3], model), null); // an edge: a line, not a clamped area
+  const quads = [[0, 1, 4, 3], [1, 2, 5, 4], [3, 4, 7, 6]];
+  const mesh = plateMesh(nodes, quads, 1);
+  const values = fieldAttribute(mesh, "node", nodes.map((_, k) => k), -1, [0], -3);
+  mesh.vertexElement.forEach((e, i) => assert.equal(values[i], e === 0 ? -3 : mesh.vertexNode[i]));
+  assert.deepEqual([...fieldAttribute(mesh, "element", [7, 8, 9], -1)].slice(0, 4), [7, 7, 7, 7]); // nothing held: as before
 });

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Menu, X } from "lucide-react";
-import { headerLinksToProjects, isAppPath, primaryNav, shownSocialLinks, siteNav } from "@/lib/site-nav";
+import { headerLinksToProjects, isAppPath, isCanvasPath, primaryNav, shownSocialLinks, siteNav } from "@/lib/site-nav";
 import { AT_TOP, headerAfterFocus, headerAfterLock, headerAfterScroll, type HeaderMemory, type HeaderPage } from "@/components/header-scroll";
 import { ServicesMenu } from "@/components/services-menu";
 
@@ -149,6 +149,8 @@ export function SiteHeader() {
     };
   }, [open]);
 
+  // the pages in layout D draw none: the model takes the window, under the canvas shell's floating logo (ADR-0134 amendment 1)
+  if (isCanvasPath(pathname)) return null;
   if (app)
     return (
       <header className="site-header chat-site-header">

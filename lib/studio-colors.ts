@@ -30,7 +30,7 @@ export const isPalette = (value: string): value is Palette => PALETTES.some(([p]
 export function overlayColors(palette: Palette): { critical: string; picked: string; edges: string; criticalWord: string } {
   return palette === "green"
     ? { critical: CRITICAL, picked: "#efefef", edges: "#555555", criticalWord: "red" }
-    : { critical: "#ffffff", picked: "#0a0a0a", edges: "#1c1c1c", criticalWord: "white" };
+    : { critical: "#ffffff", picked: "#0a0a0a", edges: "#000000", criticalWord: "white" };
 }
 export const CRITICAL = "#e66767"; // the status colour for the critical element's outline, with its label beside it
 export const HELD = "#9085e9"; // a held set's frame
@@ -95,7 +95,7 @@ export function colorsOf(scale: Scale, values: (number | null)[]): number[] {
   return out;
 }
 
-/** Legend ticks from min to max, inclusive: one per band boundary when the contours are banded, so every isoline is labelled. */
+/** Legend ticks from min to max, inclusive: evenly spaced, so with banded contours each tick falls on a band boundary. */
 export function legendTicks(scale: Pick<Scale, "min" | "max">, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => scale.min + (scale.max - scale.min) * i / (count - 1));
 }

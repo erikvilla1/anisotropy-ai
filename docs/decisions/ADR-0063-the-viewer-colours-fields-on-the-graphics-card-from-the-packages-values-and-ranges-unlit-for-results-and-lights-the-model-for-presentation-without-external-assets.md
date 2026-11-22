@@ -1,6 +1,6 @@
 # ADR-0063: The viewer colours fields on the graphics card from the package's values and ranges, unlit for results, and lights the model for presentation without external assets
 
-- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1
+- Status: Proposed; a rainbow by default for every field with Spectrum and Green as choices, a white critical outline, a floor grid, axes and a Lighting switch, results unlit by default, amendment 1; results lit by default with a key light that moves with the view, Lighting off for the exact colours, and a Thickness ×2.4 choice, amendment 2; twelve bands by default, no line between bands, and the mesh lines see-through, amendment 3; a tab clamped in its grip drawn grey under jaws, out of the averages and the legend's ends, amendment 4
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-06 ("what do you think about this, is this good to add? A 'presentation' lighting mode", drei's Environment, ContactShadows, a clearcoat MeshPhysicalMaterial; "Colour the stresses on the graphics card"; "A small shader could take the raw values and draw smooth or banded contours with crisp isolines"; "Results mode should stay mostly unlit so the shading never skews the colours"; then "lets do it no mistakes" for this part) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (part 4); `fea/src/anisotropy_fea/fields.py`, `components/studio/field-material.ts`, `components/studio/scene-lighting.tsx`, `components/studio/scene-canvas.tsx`, `lib/studio-colors.ts`, `lib/studio-fields.ts`; risk R-20
@@ -72,3 +72,81 @@ Easier: a colour on the plate is the legend's colour for that value; the legend'
 - **Unchanged.** The package writes the ranges, the legend's ends are its ends, the contours default to 8 bands with an isoline at each boundary, and the presentation mode before a run.
 
 **Evidence.** The founder's words above. Scale tests in `tests/studio-colors.test.ts`. Screenshots are named in the As built of [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md). No evidence yet that the rainbow is read correctly by an engineer with red-green colour blindness; Spectrum, Green and the legend's numbers are the way around it.
+
+## Amendment 2, 2026-11-21 (results lit by default, the exact colours one tap away, and a Thickness ×2.4 choice; decided by the founder)
+
+**Context.**
+- Amendment 1 kept results unlit by default. Its light was a weak one from the viewer's side, and the lit and unlit pictures of the built page hardly differed (`/mnt/project-files/workspace-design/build/lit/`).
+- The mockup the founder chose ([ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md)) draws results lit, with a key light, a fill and a little shine. It also draws the plate 2.4 times as thick as it is.
+- On 2026-11-21 he said the live page "doesn't look like how we planned it". A plan offered four choices on a card (https://claude.ai/artifact/S4tPFkM7J9Nery2cjtaP1a). Two of them were:
+  - lit by default with the mockup's light, with exact colours one tap away;
+  - the true thickness by default, with a choice that draws it 2.4 times as thick and says so on screen.
+- He chose "Go with the recommendations".
+
+**Options.**
+1. *Unlit by default, as amendment 1.* Rejected by the founder: the model reads flat.
+2. *Lit by default with the mockup's light, and Lighting off for the exact colours.* Chosen.
+3. *The mockup's 2.4 times thickness by default.* Rejected: a drawing that is not to scale by default misleads. It is a choice instead.
+
+**Decision.**
+- **Lit by default.** Results are lit when the page opens, with lights fixed to the camera, so every view is lit alike:
+  - a key light up and to the left of the camera;
+  - a weaker fill from the right;
+  - a small highlight.
+- **How much it shades.** A face turned to the viewer keeps about its colour. A side turned away falls to about half of it.
+- **Lighting off.** View, Lighting, off, draws every colour exactly as the legend's. The menu says so under the switch ("Off: every colour is exactly the legend's."), and the legend's full sentence for a screen reader says the shading changes the colours while it is on.
+- **Thickness ×2.4.** A choice in View, off by default. It draws the plate's thickness 2.4 times as large. While it is on, the legend's line says "thickness ×2.4", and the menu says it draws the plate thicker than it is.
+- **Unchanged.** The package's values and ranges, the legend's ends, the bands and the isolines, and the presentation mode before a run.
+
+**As built (2026-11-21).** `components/studio/field-material.ts` (the lit branch of the fragment shader), `components/studio/results-view.tsx` (`lit` true by default, `thick` and `THICKNESS_SHOWN`, the hints in the View menu, the note on the legend). The switches are not remembered between visits.
+
+**Evidence.** The founder's choice above. Screenshots of the lit default beside the mockup in `/mnt/project-files/workspace-design/build/compare/v2-*.png`. No evidence yet that an engineer misreads a lit colour; Lighting off is the way to read a value by colour alone.
+
+## Amendment 3, 2026-11-21 (twelve bands, no line between bands, see-through mesh lines; asked for by the founder)
+
+**Context.**
+- After the rebuild of [ADR-0134](ADR-0134-the-fea-workspace-is-the-model-across-the-window-with-the-chat-full-height-on-the-right-and-a-results-card-under-the-model.md) amendment 1, the founder compared the built coupon with the mockup and wrote: "black lines show FEA, not good for engineers to look at not intuitive, wheras on the mockup clearly we can see the stress on the bottom grip, and throughout the entire module which is what i want".
+- Three things made the lines black. The mesh lines were opaque near-black (`#1c1c1c`). Every band boundary had an isoline, and where the field is steep, at the tab line, eight isolines sat a few pixels apart and read as one black band. Eight bands also put most of the gauge in one or two colours.
+- The mockup (`/mnt/project-files/workspace-design/canvas/fea3d.js`) draws twelve bands with no line between them, and its mesh lines black at 42 % opacity.
+
+**Options.**
+1. *Keep the isolines, thinner.* Rejected: at the tab line the field changes by most of the scale in a few elements, so any line per boundary stacks.
+2. *Twelve bands, no isolines, the mesh lines see-through, as the mockup.* Chosen.
+3. *The smooth ramp by default.* Rejected: a band can be read against the legend; a smooth colour cannot be read as closely. Smooth stays a choice.
+
+**Decision.**
+- The contours default to twelve bands. The choices are smooth, 5, 8, 10 and 12.
+- Bands are flat colours with no line between them. The isoline uniform and its code are gone from `field-material.ts`.
+- Mesh lines over a rainbow are black at 42 % opacity and do not write depth, so the colour reads through them. On the green ramp they stay grey (`#555555`) at the same opacity. Mesh lines stay a layer in View.
+- The symbols of a support or a load over an area (a grip) sit a quarter of the area in from its edges, so they no longer cover the tab line, where the field changes most (`sampleNodes`' `inset`). A support or load along a line still runs end to end.
+- The legend's ticks (the form outside the workspace) label every band boundary up to ten bands, and every other one above that.
+- **Unchanged.** The package's values and ranges, the legend's ends, the lighting of amendment 2.
+
+**As built (2026-11-21).** `components/studio/field-material.ts`, `components/studio/results-view.tsx` (`CONTOURS`, `DEFAULT_CONTOURS`, the tick count), `components/studio/scene-canvas.tsx` (`EDGE_OPACITY`, `SYMBOL_INSET`), `lib/studio-colors.ts` (`overlayColors`), `lib/studio-geometry.ts` (`sampleNodes`).
+
+**Evidence.** The founder's words above. The side-by-side pictures in `/mnt/project-files/workspace-design/build/compare/v3-*.png`, with a close-up of the bottom grip. The mockup's orange patches near the grip come from its own colour lookup, which puts the last band edge at about 94 % where its legend draws it at 90.5 %; the gauge there is 92 to 96 % used, so bands that follow the legend draw it all in the top band. No evidence yet that twelve bands read better than eight to an engineer beyond the founder's own reading.
+
+## Amendment 4, 2026-11-21 (a clamped tab is drawn as the grip, not by value; asked for by the founder)
+
+**Context.**
+- The founder asked whether the colours are true: "is the stress true... can't have anything looking wrong needs to be true, also the boundary conditions don't look good and intuitive for an engineer looks wonky as well".
+- An independent check (classical laminate theory written apart from the engine, IM7/8552 from the NCAMP record, F12 at 5 % strain) gives the gauge centre's ply stresses to four digits: ply 4 (90°) σ₂ 59.15 MPa and Tsai-Hill 0.9495, the same as element 122 of `tests/fixtures/studio/fields.json`. The reaction by hand from the nominal strain (1 mm over the 138 mm gauge) is 16,128 N against 16,222 N; the 0.6 % is the grips stopping the narrowing near the tabs.
+- Two things on the model were not true. Each tab is clamped whole (every node of it held, or moved, by the grip), so its elements move as one body and their zero strain and stress are the clamp's, not a result; they were drawn as "0 % used". And the display averages at the nodes of a tab line took the mean of a clamped element (0) and a gauge element (about 0.95), so a ramp from 0 to 95 % was drawn over one element row on each side, where the model has a step, and the peak at the tab corners (98.7 % as element values) was averaged away.
+- The supports were drawn as a cone per held direction at four points of each region; the bottom grip is held in all six directions, so 24 cones stood over the tab line.
+
+**Options.**
+1. *Keep the clamp's zeros and the averages across the tab line.* Rejected: a ramp the model does not have.
+2. *Leave the clamped elements out of the averages and the ends, draw them in a grey that says "clamped in the grips", and draw each clamped region as its grip.* Chosen. It is what Abaqus does by default with its averaging threshold of 75 %: a node where the elements differ that much is not averaged.
+3. *Show element values by default.* Rejected for now: flat squares read worse, and the averaging across the clamp would still be wrong in the smooth view.
+
+**Decision.**
+- The fea package names the elements clamped inside a grip, every corner held by it: `mesh.held_elements` (`fields.held_in_grips`). The row along a tab line has free corners and is not one of them.
+- The display averages leave them out (`nodal_averages(..., skip)`). A node of a tab line takes the mean of the gauge's elements alone; a node only clamped elements touch has no average.
+- The ends the package writes (`ranges`) leave them out of every field but the displacement, so the legend's low end is the free part's. On the example coupon Strength used reads 89.3 % to 98.7 %, and the gauge shows its spread instead of one colour.
+- The viewer draws every vertex of a clamped element in the grip's grey (`IN_GRIP`, `GRIP_GRAY` in `field-material.ts`), for every field but the displacement, and the legend says "grey: clamped in the grips" on its own line.
+- A support that covers an area and holds it in its plane and out of it is drawn as a grip (`gripOf`): two clear jaws above and below the tab. A fixed grip is hatched at its outer end, the ground symbol. A grip that is also moved is drawn in the load's colour, and its load is three arrows from its outer end. A held edge, a point or a face held out of plane only keeps the cones of ADR-0110.
+- A result solved before this has no `held_elements` and is drawn as before.
+
+**As built (2026-11-21).** `fea/src/anisotropy_fea/fields.py` (`held_in_grips`, `nodal_averages`' `skip`, the ranges, the notes), `fea/tests/test_fields.py`; `lib/studio-api.ts`, `lib/studio-fields.ts` (`FieldValues.held`), `lib/studio-geometry.ts` (`fieldAttribute`'s `held`, `gripOf`), `components/studio/field-material.ts`, `components/studio/scene-canvas.tsx` (`Jaws`, `GripArrows`), `components/studio/results-view.tsx` (the legend's note). The averages, ranges and `held_elements` of `tests/fixtures/studio/fields.json` were rewritten from `tools/studio_tool.py live` on its `values.json`; every other part of the file is as it was.
+
+**Evidence.** The hand check above (`/mnt/project-files/workspace-design/build/compare/v4-check.md`). The package tests `test_an_element_clamped_in_a_grip_is_left_out_of_the_averages_and_the_ends` and the updated averages and ranges tests; the page's tests in `tests/studio-fields.test.ts` and `tests/studio-geometry.test.ts`. The pictures `/mnt/project-files/workspace-design/build/compare/v4-*.png`. No evidence yet from an engineer other than the founder on the jaws.

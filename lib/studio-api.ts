@@ -92,7 +92,10 @@ export type Fields = {
     element_sets: Record<string, number[]>; node_count: number; element_count: number; plies: number; angles: number[];
     faces?: string[] | null; translations?: number;
     /** The elements the gauge section is read at (ADR-0108), null for a model without one; absent on a result solved before it. */
-    gauge_elements?: number[] | null };
+    gauge_elements?: number[] | null;
+    /** The elements clamped inside a grip (ADR-0063 amendment 4): their strain and stress are the clamp's, drawn as the grip, not by value;
+     * absent on a result solved before it. */
+    held_elements?: number[] };
   nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][]; rotation?: number[][]; moment_reaction?: number[][];
     averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
       failure_index: Record<string, (number | null)[]>; curvature?: (number | null)[][]; moment?: (number | null)[][]; shear_force?: (number | null)[][] };

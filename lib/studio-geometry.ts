@@ -100,11 +100,17 @@ export function vertexColors(mesh: PlateMesh, by: "node" | "element", colors: nu
 }
 
 /** One float per vertex from one value per node (smooth) or per element (flat), for the results material (ADR-0063); a value the
- * package did not write is `missing`, a float below every real value. */
-export function fieldAttribute(mesh: PlateMesh, by: "node" | "element", values: (number | null)[], missing: number): Float32Array {
+ * package did not write is `missing`, a float below every real value. Every vertex of an element in `held` (clamped inside a grip) is
+ * `grip`, so the whole element is drawn as the grip and no value of the clamp's is blended into its neighbours (ADR-0063 amendment 4). */
+export function fieldAttribute(mesh: PlateMesh, by: "node" | "element", values: (number | null)[], missing: number,
+  held: readonly number[] = [], grip = missing): Float32Array {
   const source = by === "node" ? mesh.vertexNode : mesh.vertexElement;
+  const clamped = new Set(held);
   const out = new Float32Array(source.length);
-  source.forEach((index, i) => { const v = values[index]; out[i] = v === null || v === undefined || !Number.isFinite(v) ? missing : v; });
+  source.forEach((index, i) => {
+    if (clamped.size && clamped.has(mesh.vertexElement[i])) { out[i] = grip; return; }
+    const v = values[index]; out[i] = v === null || v === undefined || !Number.isFinite(v) ? missing : v;
+  });
   return out;
 }
 
@@ -178,6 +184,22 @@ export function setBox(nodes: number[][], indices: number[]): { min: Vec2; max: 
   return { min, max };
 }
 
+/** A support drawn as a grip (ADR-0063 amendment 4): a region that covers an area and holds it across the coupon or along it and out
+ * of its plane is a tab clamped between jaws, so the model draws the jaws, not a symbol per held direction. Returns the region's box,
+ * the model's long axis and which end of the box faces away from the model's middle (where a fixed grip's hatching and a moving grip's
+ * arrows go), or null for any other support (an edge, a point, a face held out of plane only). */
+export function gripOf(nodes: number[][], indices: number[], dofs: readonly number[] | undefined, model: { min: Vec2; size: Vec2 }):
+  { box: { min: Vec2; max: Vec2 }; axis: 0 | 1; outer: -1 | 1 } | null {
+  const box = setBox(nodes, indices);
+  if (!box || !dofs?.includes(3) || !(dofs.includes(1) || dofs.includes(2))) return null;
+  const span = [box.max[0] - box.min[0], box.max[1] - box.min[1]];
+  const long = Math.max(span[0], span[1]);
+  if (long === 0 || Math.min(span[0], span[1]) <= 0.02 * long) return null; // a line, not an area
+  const axis: 0 | 1 = model.size[1] >= model.size[0] ? 1 : 0;
+  const middle = model.min[axis] + model.size[axis] / 2;
+  return { box, axis, outer: (box.min[axis] + box.max[axis]) / 2 < middle ? -1 : 1 };
+}
+
 /** One value per node from one value per element: the mean over the elements sharing the node, for a smooth display only. The fea
  * package writes these averages for every field it reports; this helper exists for the checks of the page's own drawing code. */
 export function nodeMeans(quads: number[][], nodeCount: number, elementValues: number[]): (number | null)[] {
@@ -188,8 +210,10 @@ export function nodeMeans(quads: number[][], nodeCount: number, elementValues: n
 
 /** A few nodes of a set, spread over it, where the model draws a boundary condition's symbols or a load's arrows (ADR-0110): along a
  * line (an edge, or a set whose box is thin) up to `perLine` nodes from end to end, over an area a `perSide` by `perSide` grid. Each
- * grid point takes the set's nearest node, once; the result is in grid order. An empty set gives none. */
-export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, perLine = 5): number[] {
+ * grid point takes the set's nearest node, once; the result is in grid order. An empty set gives none. `inset` keeps an area's grid
+ * that share of the box in from its edges, so the symbols sit on a grip's face and leave its edge, where the field changes, in view
+ * (ADR-0063 amendment 3); a line still runs end to end. */
+export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, perLine = 5, inset = 0): number[] {
   const box = setBox(nodes, indices);
   if (!box) return [];
   const span = [box.max[0] - box.min[0], box.max[1] - box.min[1]];
@@ -206,7 +230,8 @@ export function sampleNodes(nodes: number[][], indices: number[], perSide = 3, p
       targets.push(t);
     }
   } else {
-    for (let j = 0; j < perSide; j += 1) for (let i = 0; i < perSide; i += 1) targets.push([box.min[0] + at(i, perSide) * span[0], box.min[1] + at(j, perSide) * span[1]]);
+    const inside = (k: number) => inset + (1 - 2 * inset) * at(k, perSide);
+    for (let j = 0; j < perSide; j += 1) for (let i = 0; i < perSide; i += 1) targets.push([box.min[0] + inside(i) * span[0], box.min[1] + inside(j) * span[1]]);
   }
   const picked: number[] = [];
   for (const [tx, ty] of targets) {

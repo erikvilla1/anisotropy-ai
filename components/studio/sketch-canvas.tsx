@@ -6,6 +6,8 @@ import { Edges, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { Sketch } from "@/lib/studio-sketch";
 import { HELD, LOADED } from "@/lib/studio-colors";
+import { useCanvasSlots } from "@/components/workspace/canvas-slots";
+import { FitCamera } from "./fit-camera";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
 
@@ -68,19 +70,21 @@ function DogboneSlab({ outline, thickness }: { outline: [number, number][]; thic
  * support and nose lines of a bending coupon and a plate's drawn boxes. Not meshed: the package's preview replaces it after the check. */
 export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   const [webgl, setWebgl] = useState<boolean | null>(null);
+  const canvas = useCanvasSlots(); // in the canvas shell the sketch is framed in the part of the window left clear, as the model is (ADR-0134 amendment 1)
   useEffect(() => { setWebgl(webglAvailable()); }, []);
   const { width: w, length: l, thickness: t } = sketch;
   const size = Math.max(w, l, 1);
   const top = t / 2 + LIFT * size;
   const centre = [w / 2, l / 2] as const;
   const across = sketch.dogbone?.narrowWidth ?? w; // the knife edges sit within the narrow section of a dog-bone
+  const below = t / 2 + (sketch.tabThickness ?? 0) + LIFT * size, above = below + (sketch.noses.length ? 0.18 * size : 0);
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
     <div className="studio-scene-wrap">
     <div className="studio-canvas" data-testid="sketch-scene" data-mode="presentation">
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
-        <color attach="background" args={["#0d0d0d"]} />
+        {canvas ? null : <color attach="background" args={["#0d0d0d"]} />}
         <PresentationLighting size={size} centre={centre} floor={-t / 2 - 0.004 * size} />
         {sketch.dogbone !== null ? <DogboneSlab outline={sketch.dogbone.outline} thickness={t} /> : (
           <mesh position={[centre[0], centre[1], 0]}>
@@ -117,6 +121,7 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
         ))}
         {sketch.boxes.map((box, i) => <Line key={`b${i}`} points={frame(box.x0, box.y0, box.x1, box.y1, top)} color={BOX_COLOR} lineWidth={2} />)}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
+        {canvas ? <FitCamera at={`${w}x${l}x${t}`} view="home" min={[0, 0, -below]} max={[w, l, above]} free={canvas.free} /> : null}
       </Canvas>
     </div>
       <p className="studio-scene-key">

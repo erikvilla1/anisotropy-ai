@@ -4,17 +4,23 @@ import { hexToRgb } from "@/lib/studio-colors";
 /**
  * The results material (ADR-0063): the graphics card colours every fragment from one float per vertex, the package's value there,
  * and the scale's ends and ramp. Unlit, so no light skews a colour: a colour on the plate is the legend's colour for that value.
- * Bands cut the ramp into equal steps of the legend, with an isoline drawn one pixel wide at every step boundary (`fwidth`, so the
- * line is as wide on a zoomed-out plate as on a zoomed-in one); 0 bands is the smooth ramp. A missing value is the named grey.
+ * Bands cut the ramp into equal steps of the legend, each step one flat colour and no line between them (ADR-0063 amendment 3: a
+ * dark line at every step stacked into a black band where the field is steep, at the tab line, and hid the stress there); 0 bands
+ * is the smooth ramp. A missing value is the named grey; an element clamped inside a grip is the grip's lighter grey (ADR-0063 amendment 4).
  * The side faces are darkened a little so the thickness reads; the top and bottom faces are the pure colour. The ramp has up to nine
- * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on, a light
- * from the viewer's side shades every face from 0.6 to 1 of its colour: a picture of the part, no longer one colour per value.
+ * stops and says how many, so the five of the Classic rainbow are drawn as they are (ADR-0063 amendment 1). With Lighting on (the default
+ * since ADR-0063 amendment 2, the look of the mockup the founder chose) a key light up and to the left of the camera, moving with it, a
+ * weaker fill from the right and a little shine shade every face: a face turned to the viewer keeps about its colour, a side turned away
+ * falls to half of it, so the part reads as a solid. Lighting off is the exact colours: a colour on the plate is the legend's.
  */
 
 /** The float written where the package wrote no value (a node no element touches): any real value is above it. */
 export const NO_VALUE = -1e30;
 export const MISSING_GRAY = "#3a3f3b";
-const ISOLINE = "#0c0e0d"; // the background's colour, so a line reads as a cut through the ramp
+/** The float written at every corner of an element clamped inside a grip, below NO_VALUE, and the grip's grey it is drawn in: its zero
+ * strain and stress are the clamp's, not a result (ADR-0063 amendment 4). */
+export const IN_GRIP = -3e30;
+export const GRIP_GRAY = "#6d7277";
 const STOP_COUNT = 9; // the most stops a ramp may have; `uCount` says how many it has
 
 const vertexShader = /* glsl */ `
@@ -36,9 +42,8 @@ const fragmentShader = /* glsl */ `
   uniform float uCount;
   uniform float uLit;
   uniform float uBands;
-  uniform float uIsoline;
   uniform vec3 uMissing;
-  uniform vec3 uIsoColor;
+  uniform vec3 uGrip;
   varying float vValue;
   varying vec3 vNormal;
   varying vec3 vViewNormal;
@@ -56,12 +61,21 @@ const fragmentShader = /* glsl */ `
   void main() {
     float flatFace = step(0.5, abs(vNormal.z));
     float shade = mix(0.78, 1.0, flatFace);
+    float shine = 0.0;
     if (uLit > 0.5) {
+      // in the camera's frame: x right, y up, z toward the viewer; the lights ride with the camera, so every view is lit alike
       vec3 n = normalize(gl_FrontFacing ? vViewNormal : -vViewNormal);
-      shade = 0.6 + 0.4 * max(dot(n, normalize(vec3(0.35, 0.5, 1.0))), 0.0);
+      vec3 key = normalize(vec3(-0.42, 0.62, 0.72));
+      vec3 fill = normalize(vec3(0.7, -0.25, 0.65));
+      shade = 0.55 + 0.5 * max(dot(n, key), 0.0) + 0.12 * max(dot(n, fill), 0.0);
+      shine = 0.08 * pow(max(dot(n, normalize(key + vec3(0.0, 0.0, 1.0))), 0.0), 38.0);
+    }
+    if (vValue < -2.0e30) {
+      gl_FragColor = vec4(uGrip * shade + shine, 1.0);
+      return;
     }
     if (vValue < -1.0e29) {
-      gl_FragColor = vec4(uMissing * shade, 1.0);
+      gl_FragColor = vec4(uMissing * shade + shine, 1.0);
       return;
     }
     float t = clamp((vValue - uMin) / max(uMax - uMin, 1.0e-30), 0.0, 1.0);
@@ -70,18 +84,10 @@ const fragmentShader = /* glsl */ `
       float f = t * uBands;
       float band = min(floor(f), uBands - 1.0);
       color = rampAt((band + 0.5) / uBands);
-      float toBoundary = min(fract(f), 1.0 - fract(f));
-      float pixel = max(fwidth(f), 1.0e-7);
-      float halfWidth = 0.5 * uIsoline * pixel;
-      float line = 1.0 - smoothstep(halfWidth, halfWidth + pixel, toBoundary);
-      // No line at the scale's two ends. The 1e-3 of a band keeps a face whose value sits exactly at an end (a gripped tab at the
-      // largest displacement) from catching rounding noise as a speckle of line pixels.
-      if (f < halfWidth + pixel + 1.0e-3 || f > uBands - halfWidth - pixel - 1.0e-3) line = 0.0;
-      color = mix(color, uIsoColor, line * flatFace);
     } else {
       color = rampAt(t);
     }
-    gl_FragColor = vec4(color * shade, 1.0);
+    gl_FragColor = vec4(color * shade + shine, 1.0);
   }`;
 
 export type FieldScale = { min: number; max: number; stops: string[]; bands: number; /** a light from the viewer's side (ADR-0063 amendment 1) */ lit?: boolean };
@@ -93,9 +99,9 @@ export function fieldMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader, fragmentShader, side: THREE.DoubleSide,
     uniforms: {
-      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uIsoline: { value: 1.2 }, uCount: { value: 7 }, uLit: { value: 0 },
+      uMin: { value: 0 }, uMax: { value: 1 }, uBands: { value: 0 }, uCount: { value: 7 }, uLit: { value: 0 },
       uStops: { value: Array.from({ length: STOP_COUNT }, () => new THREE.Vector3(0.5, 0.5, 0.5)) },
-      uMissing: { value: vec(MISSING_GRAY) }, uIsoColor: { value: vec(ISOLINE) },
+      uMissing: { value: vec(MISSING_GRAY) }, uGrip: { value: vec(GRIP_GRAY) },
     },
   });
 }

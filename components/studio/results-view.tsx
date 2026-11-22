@@ -17,26 +17,65 @@ import type { SceneField } from "./scene-canvas";
 import { proposedInputs, sceneInputs } from "./scene-inputs";
 import type { ProposedInputs } from "./project-context";
 import { remember, remembered } from "./local";
-import { DetailsToggle, Slot, useCanvasSlots } from "@/components/workspace/canvas-slots";
+import { DetailsToggle, Slot, useCanvasSlots, ViewMenu } from "@/components/workspace/canvas-slots";
 
-/** The contour choices: the smooth ramp, or bands with an isoline at every band boundary, each boundary a labelled tick (ADR-0063). */
-export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"]];
-export const DEFAULT_CONTOURS = 8;
+/** The contour choices: the smooth ramp, or bands of one flat colour each with no line between them (ADR-0063). Twelve by default, as
+ * the mockup the founder chose draws them, so the stress through the gauge and at the grips reads in steps (ADR-0063 amendment 3). */
+export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"], [12, "12 bands"]];
+export const DEFAULT_CONTOURS = 12;
 
-export function Legend({ scale, label, unit, by, bands = 0, lit = false }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number;
-  /** the lighting is on: the shading changes the colours, which the legend says (ADR-0063 amendment 1) */ lit?: boolean }) {
-  const ticks = legendTicks(scale, bands ? bands + 1 : 5);
+export function Legend({ scale, label, unit, by, bands = 0, lit = false, card = false, note = "" }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number;
+  /** the lighting is on: the shading changes the colours, which the legend says (ADR-0063 amendment 1) */ lit?: boolean;
+  /** the results card's form (ADR-0134 amendment 1): a title and what it is read at, the bar and its two ends; the whole sentence stays
+   * for a screen reader */ card?: boolean;
+  /** what else the legend says beside what the field is read at: the grey of the clamped tabs, a thickness drawn larger than it is */ note?: string }) {
+  const sentence = (
+    <><strong>{label}</strong>{unit && unit !== "-" ? ` (${unit})` : ""} · {by === "element" ? "element values" : "nodal averages"} · {printed(scale.ends[0])} to {printed(scale.ends[1])}{unit && unit !== "-" ? ` ${unit}` : ""}
+      {bands ? ` · ${bands} bands` : ""}{scale.kind === "diverging" ? " · grey is zero" : ""}{lit ? " · lit: the shading changes the colours" : ""}</>
+  );
+  if (card) {
+    const head = legendHead(label, unit);
+    const end = (v: number) => (head.share ? `${(100 * v).toFixed(1)} %` : printed(v));
+    const sub = head.sub;
+    return (
+      <div className="studio-legend cv-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
+        <div className="cv-legend-head" aria-hidden="true"><span className="cv-legend-title">{head.title}</span><span className="cv-legend-sub" title={sub}>{sub}</span></div>
+        <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />
+        <div className="cv-legend-ends" aria-hidden="true"><span>{end(scale.ends[0])}</span><span>{end(scale.ends[1])}</span></div>
+        {/* its own line, so the grey of the clamped tabs is never cut off with the field's name (ADR-0063 amendment 4) */}
+        {note ? <div className="cv-legend-note" aria-hidden="true" title={note}>{note}</div> : null}
+        <p className="sr-only">{sentence}{note ? ` · ${note}` : ""}</p>
+      </div>
+    );
+  }
+  // a tick at every band boundary up to ten bands; more than that labels every other one, so the numbers keep apart
+  const ticks = legendTicks(scale, !bands ? 5 : bands > 10 && bands % 2 === 0 ? bands / 2 + 1 : bands + 1);
   return (
     <div className="studio-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
       <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />
       <div className="studio-legend-ticks" aria-hidden="true">{ticks.map((t, i) => (
-        // where the tick stands along the bar, for the card's legend, which sets every boundary's label at its place in two rows (ADR-0134)
         <span key={i} style={{ "--at": `${(100 * i) / Math.max(ticks.length - 1, 1)}%` } as CSSProperties}>{printed(t)}</span>
       ))}</div>
-      <p><strong>{label}</strong>{unit && unit !== "-" ? ` (${unit})` : ""} · {by === "element" ? "element values" : "nodal averages"} · {printed(scale.ends[0])} to {printed(scale.ends[1])}{unit && unit !== "-" ? ` ${unit}` : ""}
-        {bands ? ` · ${bands} bands` : ""}{scale.kind === "diverging" ? " · grey is zero" : ""}{lit ? " · lit: the shading changes the colours" : ""}</p>
+      <p>{sentence}{note ? ` · ${note}` : ""}</p>
     </div>
   );
+}
+
+/** The card legend's title and what it is read at, from the field's label: its first part, then the rest (the ply, the criterion). The
+ * failure index 1/R is read as the share of the strength used (ADR-0134 amendment 1): its ends are the package's index in percent. */
+export function legendHead(label: string, unit: string): { title: string; sub: string; share: boolean } {
+  const parts: string[] = [];
+  let depth = 0, from = 0;
+  for (let i = 0; i < label.length; i++) {
+    const c = label[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === "," && depth === 0) { parts.push(label.slice(from, i).trim()); from = i + 1; }
+  }
+  parts.push(label.slice(from).trim());
+  const share = /^Failure index 1\/R\b/.test(parts[0]);
+  const title = share ? "Strength used" : `${parts[0]}${unit && unit !== "-" ? ` (${unit})` : ""}`;
+  return { title, sub: parts.slice(1).filter(Boolean).join(" · "), share };
 }
 
 const xyz = (p: number[] | undefined) => (p && p.length === 3 ? ` (${p.map((v) => printed(v)).join(", ")})` : "");
@@ -563,8 +602,9 @@ function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fiel
   );
 }
 
-/** The answer in its short form, in the results card's third column (ADR-0134, ADR-0099): the verdict as its heading, one line of labels,
- * where it is reached earlier apart, and Details for the full answer and its tables. Every number is the package's (ADR-0051). */
+/** The answer in its short form, in the results card's third column (ADR-0134 and its amendment 1, ADR-0099): one bold sentence with the
+ * share of the strength used and the ply, one plain line with the loading, its labels, where it is reached earlier apart, then Show where
+ * and Details. Every number is the package's (ADR-0051): the share used is its failure index in percent. */
 function AnswerShort({ fields, onShow, details, onDetails }: {
   fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void; details: boolean; onDetails: (open: boolean) => void;
 }) {
@@ -575,19 +615,26 @@ function AnswerShort({ fields, onShow, details, onDetails }: {
   if (!a || !stat) {
     return (
       <div className="cv-answer-short" data-testid="answer-short">
-        <p className="cv-eyebrow">Result</p>
         <h3 className="cv-verdict">Reaction {printed(Math.abs(s.reaction.value))} {lab.force}</h3>
-        <p className="cv-answer-line">Largest displacement {printed(s.max_displacement.value)} {lab.length} · no failure criterion chosen</p>
+        <p className="cv-answer-line">Largest displacement {printed(s.max_displacement.value)} {lab.length}.</p>
+        <p className="cv-answer-labels">No failure criterion chosen</p>
         <div className="cv-answer-actions">{more}</div>
       </div>
     );
   }
   const e = a.earliest;
+  const control = a.control ? a.control[0].toUpperCase() + a.control.slice(1) : "Applied";
+  const line = a.appliedNow
+    ? `${control} ${printed(a.appliedNow.applied)} ${a.appliedUnit}: it carries ${printed(Math.abs(a.appliedNow.reaction))} ${a.forceUnit}`
+      + (e.reaction !== null ? `; the first ply would ${e.fails ? "have failed" : "fail"} at about ${printed(Math.abs(e.reaction))} ${a.forceUnit}.` : ".")
+    : `Every load scaled together; R is the factor on them.`;
   return (
     <div className="cv-answer-short" data-testid="answer-short" data-fails={e.fails}>
-      <p className="cv-eyebrow">First-ply failure · {a.basisWords}</p>
-      <h3 className="cv-verdict" data-testid="answer-short-verdict">{stat.verdict} at the applied loading</h3>
-      <p className="cv-answer-line"><strong>R {stat.factor}</strong> · ply {e.ply} ({e.angle}°){e.face ? `, ${e.face} face` : ""} · {modeWords(e.mode)} · {e.name}</p>
+      <h3 className="cv-verdict" data-testid="answer-short-verdict">
+        {stat.verdict}: {(100 * e.index).toFixed(1)} % of its strength used, in ply {e.ply} ({e.angle}°){e.face ? `, ${e.face} face` : ""}.
+      </h3>
+      <p className="cv-answer-line">{line}</p>
+      <p className="cv-answer-labels">R {stat.factor} · {e.name} · {modeWords(e.mode)} · {a.basisWords}</p>
       {stat.outside ? <p className="cv-answer-note">{stat.outside}</p> : null}
       <div className="cv-answer-actions">
         <button type="button" className="studio-text-button" onClick={() => onShow(e.element, e.ply, e.criterion, e.face)}>Show where</button>
@@ -630,20 +677,10 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const [wireframe, setWireframe] = useState(true);
   const [contours, setContours] = useState(DEFAULT_CONTOURS);
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
-  const [lit, setLit] = useState(false); // results unlit unless asked (ADR-0063 and its amendment 1)
+  const [lit, setLit] = useState(true); // results lit, as the founder's chosen look; off, every colour is the legend's exactly (ADR-0063 amendment 2)
+  const [thick, setThick] = useState(false); // the plate drawn thicker than it is, said on screen (ADR-0063 amendment 2)
   const [picked, setPicked] = useState<number | null>(null);
   const [readoutAt, setReadoutAt] = useState<ReadoutAt>(null);
-  // the View menu is a popover over the model: a press anywhere else or Esc puts it away, before Esc closes anything else
-  const viewMenu = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const away = (event: PointerEvent) => { const menu = viewMenu.current; if (menu?.open && !menu.contains(event.target as Node)) menu.open = false; };
-    const key = (event: KeyboardEvent) => {
-      const menu = viewMenu.current;
-      if (event.key === "Escape" && menu?.open) { menu.open = false; event.preventDefault(); menu.querySelector("summary")?.focus(); }
-    };
-    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
-  }, []);
   const pointer = useRef<{ x: number; y: number; t: number } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(() => criticalElement(fields));
   const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
@@ -673,7 +710,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);
   const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range, palette), [values, palette]);
-  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values,
+  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, held: values.held,
     scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours, lit } }), [values, colorScale, contours, lit]);
   // every boundary condition and load drawn and listed in words, as before the run (ADR-0110; audit fea-run-16)
   const inputs = useMemo(() => (preview ? sceneInputs(preview, fields.mesh) : { held: [], loads: [], about: [] }), [preview, fields.mesh]);
@@ -728,7 +765,10 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     setChoice((c) => ({ ...c, id: id ?? c.id, ply: place.ply ?? c.ply, face: faceIndex ?? c.face, criterion: criterion ?? c.criterion }));
   }, [place?.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const legend = <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} lit={lit} />;
+  // grey under the jaws: the clamp's zero, not a result, and out of the legend's ends (ADR-0063 amendment 4)
+  const legendNote = [values.held.length ? "grey: clamped in the grips" : "", thick ? `thickness ×${THICKNESS_SHOWN}` : ""].filter(Boolean).join(" · ");
+  const legend = <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} lit={lit} card={canvas !== null} note={legendNote} />;
+  const head = legendHead(values.label, values.unit);
   // the field, and the ply, face and criterion it is read at: always in sight
   const primary = (
     <>
@@ -787,6 +827,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
         <input type="number" value={scale} min={0} step="any" onChange={(e) => setScale(Number(e.target.value) || 0)} aria-label="Deformation scale" className="studio-scale" /></label>
       <label><input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} /> Mesh edges</label>
       <label><input type="checkbox" checked={lit} onChange={(e) => setLit(e.target.checked)} data-testid="lighting" /> Lighting</label>
+      <p className="studio-muted cv-view-hint">Off: every colour is exactly the legend&apos;s.</p>
+      <label><input type="checkbox" checked={thick} onChange={(e) => setThick(e.target.checked)} data-testid="thickness-shown" /> Thickness ×{THICKNESS_SHOWN}</label>
+      <p className="studio-muted cv-view-hint">Draws the plate thicker than it is, to read its sides.</p>
     </>
   );
   const hint = <p className="studio-muted studio-pick-hint">Click an element to read its values. The critical element is outlined in {overlay.criticalWord}.</p>;
@@ -819,7 +862,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
         </p>
       ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating…</p> : null}
       <div className="studio-scene-block" onPointerDown={(e) => { pointer.current = { x: e.clientX, y: e.clientY, t: Date.now() }; }}>
-        <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
+        <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={(preview?.geometry.thickness ?? 1) * (thick ? THICKNESS_SHOWN : 1)} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={inputs.held} loads={inputs.loads} about={inputs.about} proposed={pending}
           highlight={highlight} picked={picked} emphasis={emphasis} palette={palette}
           wireframe={wireframe} onPick={canvas ? pickOnModel : (element) => pick(element)} />
@@ -829,14 +872,14 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
         <>
           <Slot name="view">
             {legend}
-            <div className="studio-controls cv-controls" data-testid="field-controls">
-              {primary}
-              <details className="cv-view-menu" data-testid="view-menu" ref={viewMenu}>
-                <summary>View</summary>
-                <div className="cv-view-menu-body">{drawing}</div>
-              </details>
-            </div>
-            {hint}
+            {/* one View menu under the legend (ADR-0134 amendment 1): the field and what it is read at, how it is drawn, and the scene's
+                own part, how the model is looked at and what is drawn on it */}
+            <ViewMenu summary={[head.title, head.sub].filter(Boolean).join(" · ")}>
+              <div className="studio-controls cv-controls" data-testid="field-controls">{primary}</div>
+              <div className="cv-view-sep" aria-hidden="true" />
+              {drawing}
+              {hint}
+            </ViewMenu>
           </Slot>
           <Slot name="answer">
             <AnswerShort fields={fields} onShow={show} details={canvas.details} onDetails={canvas.setDetails} />
@@ -860,3 +903,5 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
 }
 
 const PALETTE_KEY = "anisotropy.studio.colours";
+/** How much thicker the plate is drawn when asked: the mockup's (ADR-0063 amendment 2). */
+const THICKNESS_SHOWN = 2.4;

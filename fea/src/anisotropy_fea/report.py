@@ -276,8 +276,11 @@ def compliance_length(ys: np.ndarray, widths: np.ndarray) -> float:
     return float(np.sum(dy * ratio))
 
 
-def gripped_groups(deck: Deck, solution: MembraneSolution) -> tuple[dict[int, float], dict[int, float]]:
-    """Mesh node index -> prescribed dof-2 value, for the bottom and the top gripped group."""
+def gripped_groups(deck: Deck, solution: MembraneSolution, loaded: bool = False) -> tuple[dict[int, float], dict[int, float]]:
+    """Mesh node index -> prescribed dof-2 value, for the bottom and the top gripped group. With `loaded`, a grip driven by a force along
+    y through a coupling joins too, its value NaN since nothing is prescribed there: a coupling moves its nodes as one body whether its
+    reference node is held or pushed, which is what the gauge reading and the drawing of the clamped tabs need (ADR-0108 amendment 1).
+    The pull, the reaction and the hand check read the prescribed groups only."""
     held: dict[int, float] = {}
     mesh = solution.mesh
     for boundary in all_boundaries(deck):
@@ -285,11 +288,17 @@ def gripped_groups(deck: Deck, solution: MembraneSolution) -> tuple[dict[int, fl
             continue
         for key in resolve_nodes(deck, boundary.target, boundary.line):
             held[mesh.node(key)] = boundary.value
+    pushed = {mesh.node(key) for step in deck.steps for load in step.cloads if load.dof == 2 and load.value != 0.0
+              for key in resolve_nodes(deck, load.target, load.line)} if loaded else set()
     for coupling in deck.couplings:
         reference = mesh.node(reference_node(deck, coupling))
         if reference in held:
             for key in coupled_nodes(deck, coupling):
                 held[mesh.node(key)] = held[reference]
+        elif reference in pushed:
+            held[reference] = math.nan
+            for key in coupled_nodes(deck, coupling):
+                held[mesh.node(key)] = math.nan
     if not any(mesh.node_keys[i][0] is not None for i in held):
         raise KernelError("no instance node has its dof 2 prescribed, so there are no gripped groups")
     y = mesh.xy[:, 1]
@@ -312,7 +321,7 @@ def fpf_place(deck: Deck, solution: MembraneSolution, field: FailureField, units
     ratios = ply_ratio_per_ply(field.ratio[e])  # the smaller face of each ply in a shell state
     tied = [k + 1 for k, r in enumerate(ratios) if r <= ratios.min() * (1 + 1e-9)]
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
     except KernelError:
         return bending_place(deck, solution, e, units), False, tied
     gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
@@ -541,7 +550,7 @@ def model_facts(deck: Deck, solution: MembraneSolution) -> ModelFacts:
     grid = (int(cols_x.size - 1), int(rows_y.size - 1)) if is_grid else None
 
     try:
-        bottom, top = gripped_groups(deck, solution)
+        bottom, top = gripped_groups(deck, solution, loaded=True)
         on_coupon = lambda group: [i for i in group if mesh.node_keys[i][0] is not None]  # noqa: E731
         inner = [float(xy[on_coupon(bottom), 1].max()), float(xy[on_coupon(top), 1].min())]
     except KernelError:
