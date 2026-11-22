@@ -415,7 +415,7 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
     case "limit": {
       if (!answer || lap.load === undefined) return noLoad();
       if (answer.elastic_limit_load === undefined) {
-        return said("none", "No limit load: the adhesive states no shear strength", ["State it on the Adhesive step: the stress at the adhesive's elastic limit."], {}, "repair-adhesive");
+        return said("none", "No elastic limit load: the adhesive states no shear strength", ["State it on the Adhesive step: the stress at the adhesive's elastic limit."], {}, "repair-adhesive");
       }
       return said("result", `${shown(answer.elastic_limit_load)} ${force} by hand`, [
         `The load at which the adhesive reaches its elastic limit in shear, ${peakPlace(report)}.`,
@@ -426,7 +426,7 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
     case "elastic": {
       if (!answer || lap.load === undefined) return noLoad();
       const limit = answer.elastic_limit_load;
-      if (limit === undefined) return said("none", "No limit load: the adhesive states no shear strength", ["State it on the Adhesive step: the stress at the adhesive's elastic limit."], {}, "repair-adhesive");
+      if (limit === undefined) return said("none", "No elastic limit load: the adhesive states no shear strength", ["State it on the Adhesive step: the stress at the adhesive's elastic limit."], {}, "repair-adhesive");
       const reaches = `It reaches its elastic limit in shear at ${shown(limit)} ${force}, ${peakPlace(report)}.`;
       if (ask.load?.unit && ask.load.unit !== u.force) {
         return said("result", `The adhesive reaches its elastic limit at ${shown(limit)} ${force} by hand`, [`Give the load in ${force} to compare it: the page converts no number.`, NOT_THE_STRENGTH], { elastic_limit_load: limit }, "repair-solve");
@@ -476,7 +476,7 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
       if (!answer || lap.load === undefined) return said("verdict", "This page gives no strength or verdict", ["It gives the adhesive's largest shear stress and the load at its elastic limit, once a load is stated."], {}, "repair-loads");
       const limit = answer.elastic_limit_load;
       const lines: string[] = [];
-      if (limit === undefined) lines.push(`By hand, the largest bondline shear is ${shown(Math.abs(answer.peak_shear.value))} ${stress} under ${shown(lap.load)} ${force}. The adhesive states no shear strength, so no limit load is given.`);
+      if (limit === undefined) lines.push(`By hand, the largest bondline shear is ${shown(Math.abs(answer.peak_shear.value))} ${stress} under ${shown(lap.load)} ${force}. The adhesive states no shear strength, so no elastic limit load is given.`);
       else {
         const sameUnit = ask.load && (!ask.load.unit || ask.load.unit === u.force);
         lines.push(sameUnit
@@ -557,16 +557,17 @@ export type RepairSweepAnswer = {
   run_id: string | null; engine_version: string; sweep: Record<string, unknown>; quantity: { name: SweepQuantity; words: string; unit: string };
   units: RepairReport["units"]; load: number; target: number | null; rows: SweepRow[]; pick: number | null; picked: RepairDescription | null;
   flat_from: { value: number; elastic_limit_load: number; every_row: boolean } | null; most: { value: number; elastic_limit_load: number } | null;
-  words: string[]; cautions: string[]; check: SweepCheck | null;
+  words: string[]; answer: string[]; cautions: string[]; check: SweepCheck | null;
 };
 
 /** A row of the preview's table: a quantity as it is and as changed; `better` says which way it moved (null: unchanged or no way). */
 export type PreviewRow = { label: string; before: string; after: string; better: boolean | null };
 
-const placeOf = (peak: RepairSummary["peak_shear"]): string => (peak ? `${peak.end === "start" ? "Outer" : "Inner"} end of ${inSentence(peak.name)}` : "–");
+const placeOf = (peak: RepairSummary["peak_shear"]): string => (peak ? `${peak.end === "start" ? "outer" : "inner"} end of ${inSentence(peak.name)}` : "–");
 
 function moved(before: number | null | undefined, after: number | null | undefined, good: 1 | -1): boolean | null {
-  if (before === null || before === undefined || after === null || after === undefined || Math.abs(after - before) <= 1e-9 * Math.max(1, Math.abs(before))) return null;
+  // a value that prints the same before and after has not moved, as far as the page says: no mark on two equal numbers
+  if (before === null || before === undefined || after === null || after === undefined || shown(before) === shown(after)) return null;
   return (after - before) * good > 0;
 }
 
@@ -582,21 +583,32 @@ export function previewRows(p: RepairChangePreview): PreviewRow[] {
   ];
   if (a.load !== null || b.load !== null) rows.push({ label: `Load (${unitText(u.force)})`, before: shown(a.load), after: shown(b.load), better: null });
   if (a.peak_shear || b.peak_shear) {
-    rows.push({ label: `Largest bondline shear (${unitText(u.stress)})`, before: shown(a.peak_shear?.value), after: shown(b.peak_shear?.value), better: moved(a.peak_shear?.value, b.peak_shear?.value, -1) });
-    rows.push({ label: "Where", before: placeOf(a.peak_shear), after: placeOf(b.peak_shear), better: null });
+    rows.push({ label: `Largest shear (${unitText(u.stress)})`, before: shown(a.peak_shear?.value), after: shown(b.peak_shear?.value), better: moved(a.peak_shear?.value, b.peak_shear?.value, -1) });
   }
   if (a.elastic_limit_load !== null || b.elastic_limit_load !== null) {
-    rows.push({ label: `Load at the adhesive's elastic limit (${unitText(u.force)})`, before: shown(a.elastic_limit_load), after: shown(b.elastic_limit_load), better: moved(a.elastic_limit_load, b.elastic_limit_load, 1) });
+    rows.push({ label: `Elastic limit load (${unitText(u.force)})`, before: shown(a.elastic_limit_load), after: shown(b.elastic_limit_load), better: moved(a.elastic_limit_load, b.elastic_limit_load, 1) });
   }
   return rows;
 }
+
+/** Where the largest shear is, as it is and as changed, in a sentence under the preview's table: a place is words, not a number, and
+ * two of them side by side are wider than the chat. */
+export function previewPlace(p: RepairChangePreview): string | null {
+  const a = p.before.peak_shear, b = p.after.peak_shear;
+  if (!b) return null;
+  if (!a) return `The largest shear is at the ${placeOf(b)}.`;
+  return placeOf(a) === placeOf(b) ? `The largest shear stays at the ${placeOf(b)}.` : `The largest shear moves from the ${placeOf(a)} to the ${placeOf(b)}.`;
+}
+
+/** A swept quantity as a column's head and an answer's first words. */
+const SWEPT: Record<SweepQuantity, string> = { step_length: "Step length", bondline: "Bondline thickness", cover_overlap: "Cover overlap", patch_overlap: "Patch overlap", steps: "Steps" };
 
 /** A sweep's table as the page lists it: a row for every value, with the pick and the repair as it stands marked. */
 export type SweepTable = { head: string[]; rows: { cells: string[]; refused: string | null; pick: boolean; current: boolean; elastic: boolean | null }[] };
 
 export function sweepTable(a: RepairSweepAnswer): SweepTable {
   const u = a.units, steps = a.quantity.name === "steps";
-  const head = [steps ? "Steps" : `${capital(a.quantity.words.replace(/^the /, ""))} (${unitText(a.quantity.unit)})`, `Repair width (${unitText(u.length)})`,
+  const head = [steps ? "Steps" : `${SWEPT[a.quantity.name]} (${unitText(a.quantity.unit)})`, `Width (${unitText(u.length)})`,
     `Largest shear (${unitText(u.stress)})`, `Elastic limit load (${unitText(u.force)})`];
   if (a.target !== null) head.push(`Elastic at ${shown(a.target)} ${unitText(u.force)}`);
   const rows = a.rows.map((row, i) => {
@@ -615,6 +627,6 @@ export function sweepHeading(a: RepairSweepAnswer): string {
   if (a.pick === null) return `None of these stays elastic at ${shown(a.target)} ${force}`;
   const row = a.rows[a.pick];
   const value = a.quantity.name === "steps" ? `${numbered(row.steps ?? row.value, "step", "steps")} of ${numbered(row.plies_per_step ?? 1, "ply", "plies")}`
-    : `${capital(a.quantity.words.replace(/^the /, ""))} ${shown(row.value)} ${unitText(a.quantity.unit)}`;
+    : `${SWEPT[a.quantity.name]} ${shown(row.value)} ${unitText(a.quantity.unit)}`;
   return `${value}: still elastic at ${shown(a.target)} ${force}`;
 }

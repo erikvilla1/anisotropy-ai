@@ -77,7 +77,7 @@ test("the hand calculation's answer in the page's short form: the largest shear 
   assert.match(described.detail, /State a load per unit width/);
   // an adhesive that states no shear strength gets no limit load
   const { elastic_limit_load: _limit, ...noLimit } = ANSWER.report.lap.answer!;
-  assert.match(answerWords({ ...ANSWER.report, lap: { ...ANSWER.report.lap, answer: noLimit } }).detail, /states no shear strength, so no limit load is given\.$/);
+  assert.match(answerWords({ ...ANSWER.report, lap: { ...ANSWER.report.lap, answer: noLimit } }).detail, /states no shear strength, so no elastic limit load is given\.$/);
 });
 
 test("the engine's names read inside a sentence, and a headline closes as one", () => {

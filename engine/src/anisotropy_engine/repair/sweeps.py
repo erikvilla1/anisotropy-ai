@@ -138,7 +138,7 @@ def sweep_repair(data: dict, sweep: RepairSweep) -> dict:
         raise RepairError("A sweep needs a load per unit width that is not zero, stated on the Panel and load step: the bondline is worked under it")
     target = None if sweep.load is None else in_file_units(data, sweep.load, sweep.load_unit, "N")
     if target is not None and repair.adhesive.shear_strength_pa is None:
-        raise RepairError("A sweep to a load needs the adhesive's shear strength, stated on the Adhesive step: without it no limit load is worked")
+        raise RepairError("A sweep to a load needs the adhesive's shear strength, stated on the Adhesive step: without it no elastic limit load is worked")
     force, length = system["N"][1], system["length"][1]
     rows, files = [], []
     if sweep.quantity == "steps":
@@ -199,30 +199,34 @@ def sweep_repair(data: dict, sweep: RepairSweep) -> dict:
     if refused:
         first = next(row for row in rows if row["refused"] is not None)
         words.append(f"{refused} of them could not be worked. At {shown(first['value'])}{' ' + unit if unit else ' steps'}: {first['refused']}.")
+    answer: list[str] = []  # the sweep's answer in a sentence or two: what the page says first, the rest of `words` under it
     if target is not None:
         if pick is not None:
             row = rows[pick]
             same_size = all(math.isclose(other["repair_diameter"], row["repair_diameter"], rel_tol=1e-9) for other in worked)
             limit = f"Its adhesive reaches its elastic limit at {shown(row['elastic_limit_load'])} {force}."
             if same_size:  # the quantity does not change the repair's size: the pick is the nearest to the repair as it stands
-                words.append(f"The nearest of these to the repair as it stands whose adhesive is still elastic at {shown(target)} {force}: {value_words(row)}. {limit}")
+                answer.append(f"The nearest of these to the repair as it stands whose adhesive is still elastic at {shown(target)} {force}: {value_words(row)}. {limit}")
             else:
-                words.append(f"The smallest of these whose adhesive is still elastic at {shown(target)} {force}: {value_words(row)}, the repair "
-                             f"{shown(row['repair_diameter'])} {length} across. {limit}")
+                answer.append(f"The smallest of these whose adhesive is still elastic at {shown(target)} {force}: {value_words(row)}, the repair "
+                              f"{shown(row['repair_diameter'])} {length} across. {limit}")
             if sweep.quantity != "steps" and row is worked[0] and not same_size:
-                words.append("It is the first value of the range: a smaller one was not tried.")
+                answer.append("It is the first value of the range: a smaller one was not tried.")
         elif most is not None:
-            words.append(f"None of these keeps the adhesive elastic at {shown(target)} {force}. The most is {shown(most['elastic_limit_load'])} {force}, with {value_words(most)}.")
+            answer.append(f"None of these keeps the adhesive elastic at {shown(target)} {force}. The most is {shown(most['elastic_limit_load'])} {force}, with {value_words(most)}.")
+        words.extend(answer)
     if flat is not None:
-        words.append(f"From {shown(flat['value'])} {unit} up the limit load stays within 1 % of {shown(flat['elastic_limit_load'])} {force}: "
+        words.append(f"From {shown(flat['value'])} {unit} up the elastic limit load stays within 1 % of {shown(flat['elastic_limit_load'])} {force}: "
                      f"{'over this whole range' if flat['every_row'] else 'past it'}, {name} no longer changes it.")
+        if target is None:  # with no load named, where the curve goes flat is the sweep's answer
+            answer.append(words[-1])
     cautions = [NOT_A_STRENGTH] if any(row.get("elastic_limit_load") is not None for row in worked) else []
     if sweep.quantity == "step_length" and (pick is not None or flat is not None):
         cautions.append(NOT_A_STEP_RULE)
     return {"sweep": sweep.model_dump(), "quantity": {"name": sweep.quantity, "words": name, "unit": unit}, "units": base["units"],
             "load": base["lap"]["load"], "target": target, "rows": rows, "pick": pick, "picked": None if pick is None else files[pick],
             "flat_from": flat, "most": None if most is None else {"value": most["value"], "elastic_limit_load": most["elastic_limit_load"]}, "words": words,
-            "cautions": cautions}
+            "answer": answer, "cautions": cautions}
 
 
 def pick_check(target: float, solved: dict) -> dict:

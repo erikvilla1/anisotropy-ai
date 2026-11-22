@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  changeLine, previewRows, readRepairAsk, repairAnswer, REPAIR_EXAMPLES, REPAIR_ROUTES, sweepHeading, sweepLine, sweepTable,
+  changeLine, previewPlace, previewRows, readRepairAsk, repairAnswer, REPAIR_EXAMPLES, REPAIR_ROUTES, sweepHeading, sweepLine, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSweepAnswer,
 } from "../lib/repair-chat";
 import { EXAMPLE_REPAIR, EXTERNAL_REPAIR, NOT_THE_STRENGTH, type RepairAnswer, type RepairSolve } from "../lib/repair";
@@ -252,10 +252,17 @@ test("a preview's table sets the repair as it is beside the repair as changed, i
     { label: "Steps", before: "4 of 1 ply", after: "4 of 1 ply", better: null },
     { label: "Repair width (mm)", before: "125", after: "126.2", better: null },
     { label: "Load (N/mm)", before: "100", after: "100", better: null },
-    { label: "Largest bondline shear (MPa)", before: "12.58", after: "12.58", better: true },
-    { label: "Where", before: "Inner end of the ledge of step 1", after: "Inner end of the ledge of step 1", better: null },
-    { label: "Load at the adhesive's elastic limit (N/mm)", before: "238.5", after: "238.5", better: true },
+    { label: "Largest shear (MPa)", before: "12.58", after: "12.58", better: null },
+    { label: "Elastic limit load (N/mm)", before: "238.5", after: "238.5", better: null },
   ]);
+  // where the largest shear is stands under the table in a sentence: stays, or moves from one place to another
+  assert.equal(previewPlace(PREVIEW), "The largest shear stays at the inner end of the ledge of step 1.");
+  assert.equal(previewPlace({ ...PREVIEW, after: { ...PREVIEW.after, peak_shear: { ...PREVIEW.after.peak_shear!, name: "Ledge of step 2", end: "start" } } }),
+    "The largest shear moves from the inner end of the ledge of step 1 to the outer end of the ledge of step 2.");
+  assert.equal(previewPlace({ ...PREVIEW, after: { ...PREVIEW.after, peak_shear: null } }), null);
+  // a change that moves a number is marked the better or the worse way: a thicker bondline lowers the shear
+  assert.deepEqual(previewRows({ ...PREVIEW, after: { ...PREVIEW.after, peak_shear: { ...PREVIEW.after.peak_shear!, value: 10.27 }, elastic_limit_load: 292.1 } }).filter((r) => r.better !== null)
+    .map((r) => [r.after, r.better]), [["10.27", true], ["292.1", true]]);
   assert.equal(STEP.words, "Five steps in place of four: the cut goes five plies deep, and three plies of the laminate's eight are left under the patch; the patch takes the angles of the plies removed.");
   const rows = previewRows(STEP);
   assert.deepEqual(rows.slice(0, 2), [{ label: "Steps", before: "4 of 1 ply", after: "5 of 1 ply", better: null }, { label: "Repair width (mm)", before: "125", after: "150", better: null }]);
@@ -265,7 +272,7 @@ test("a preview's table sets the repair as it is beside the repair as changed, i
 test("a sweep's heading is its pick, its table marks the pick and the repair as it stands, and its words are the engine's", () => {
   assert.equal(sweepHeading(SWEEP), "Step length 4 mm: still elastic at 230 N/mm");
   const table = sweepTable(SWEEP);
-  assert.deepEqual(table.head, ["Step length (mm)", "Repair width (mm)", "Largest shear (MPa)", "Elastic limit load (N/mm)", "Elastic at 230 N/mm"]);
+  assert.deepEqual(table.head, ["Step length (mm)", "Width (mm)", "Largest shear (MPa)", "Elastic limit load (N/mm)", "Elastic at 230 N/mm"]);
   assert.equal(table.rows.length, 24);
   assert.deepEqual(table.rows[0], { cells: ["3", "68", "13.15", "228.1", "No"], refused: null, pick: false, current: false, elastic: false });
   assert.deepEqual(table.rows[1], { cells: ["4", "74", "12.85", "233.5", "Yes"], refused: null, pick: true, current: false, elastic: true });

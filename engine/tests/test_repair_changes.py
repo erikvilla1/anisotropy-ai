@@ -219,7 +219,9 @@ def test_the_examples_limit_load_goes_flat_in_the_step_length():
     assert shown(limit(edited(EXAMPLE, "adhesive", "thickness", 0.15))) == "292.1"
     sweep = sweep_repair(EXAMPLE, RepairSweep(quantity="step_length"))
     assert sweep["flat_from"]["value"] == 6.0 and not sweep["flat_from"]["every_row"]
-    assert sweep["words"][-1] == "From 6 mm up the limit load stays within 1 % of 238.6 N/mm: past it, the step length no longer changes it."
+    assert sweep["words"][-1] == "From 6 mm up the elastic limit load stays within 1 % of 238.6 N/mm: past it, the step length no longer changes it."
+    assert sweep["answer"] == sweep["words"][-1:], "with no load named, where the curve goes flat is the sweep's answer"
+    assert sweep_repair(EXAMPLE, RepairSweep(quantity="bondline"))["answer"] == []
     assert sweep_repair(EXTERNAL, RepairSweep(quantity="step_length"))["flat_from"] == {"value": 3.0, "elastic_limit_load": pytest.approx(142.2197, abs=1e-3), "every_row": True}
     assert sweep_repair(EXAMPLE, RepairSweep(quantity="bondline"))["flat_from"] is None  # still rising at the end of its range
 
@@ -235,12 +237,15 @@ def test_the_pick_is_the_smallest_repair_whose_adhesive_is_still_elastic():
     assert ("The smallest of these whose adhesive is still elastic at 230 N/mm: a step length of 4 mm, the repair 74 mm across. "
             "Its adhesive reaches its elastic limit at 233.5 N/mm.") in sweep["words"]
     assert "1 of them could not be worked. At 25 mm: The repair is 0.2 m across" in sweep["words"][1]
+    # the answer is the pick's sentence alone; the basis, the value not worked and the flat stretch stay in the words under it
+    assert sweep["answer"] == [sweep["words"][2]] and sweep["answer"][0].startswith("The smallest of these") and len(sweep["words"]) == 4
 
 
 def test_a_load_nothing_reaches_names_the_most_and_no_pick():
     sweep = sweep_repair(EXAMPLE, RepairSweep(quantity="step_length", load=300))
     assert sweep["pick"] is None and sweep["picked"] is None and not any(row["elastic"] for row in sweep["rows"])
     assert sweep["words"][2].startswith("None of these keeps the adhesive elastic at 300 N/mm. The most is 238.6 N/mm")
+    assert sweep["answer"] == [sweep["words"][2]]
     assert sweep["most"]["elastic_limit_load"] == max(row["elastic_limit_load"] for row in sweep["rows"] if row["refused"] is None)
 
 
@@ -253,6 +258,7 @@ def test_a_load_in_its_own_unit_and_a_range_in_its_own():
 def test_a_pick_at_the_start_of_the_range_says_a_smaller_value_was_not_tried():
     sweep = sweep_repair(EXTERNAL, RepairSweep(quantity="step_length", load=140))
     assert sweep["pick"] == 0 and "It is the first value of the range: a smaller one was not tried." in sweep["words"]
+    assert len(sweep["answer"]) == 2 and sweep["answer"][1] == "It is the first value of the range: a smaller one was not tried."
     assert "over this whole range, the step length no longer changes it" in sweep["words"][-1]
 
 

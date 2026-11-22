@@ -80,7 +80,7 @@ export const COVER_FIELDS: readonly RepairField[] = [
 export const ADHESIVE_FIELDS: readonly RepairField[] = [
   { path: "adhesive.shear_modulus", label: "Shear modulus", unit: "stress" },
   { path: "adhesive.thickness", label: "Bondline thickness", unit: "length" },
-  { path: "adhesive.shear_strength", label: "Shear strength", unit: "stress", optional: true, hint: "The stress at the adhesive's elastic limit. Without it no limit load is given." },
+  { path: "adhesive.shear_strength", label: "Shear strength", unit: "stress", optional: true, hint: "The stress at the adhesive's elastic limit. Without it no elastic limit load is given." },
   { path: "adhesive.poisson", label: "Poisson's ratio", optional: true, hint: "For the solve of the slice." },
   { path: "adhesive.peel_strength", label: "Peel strength", unit: "stress", optional: true, hint: "For the solve of the slice: with it the peel stress is judged, without it only reported." },
 ];
@@ -313,7 +313,7 @@ export function answerWords(report: RepairReport): { headline: string; detail: s
   }
   const stress = unitText(u.stress), force = unitText(u.force);
   const limit = answer.elastic_limit_load === undefined
-    ? "The adhesive states no shear strength, so no limit load is given."
+    ? "The adhesive states no shear strength, so no elastic limit load is given."
     : `The adhesive reaches its elastic limit in shear at ${shown(answer.elastic_limit_load)} ${force}. ${NOT_THE_STRENGTH}`;
   return {
     headline: `Largest bondline shear ${shown(Math.abs(answer.peak_shear.value))} ${stress} under ${shown(lap.load)} ${force}`,
@@ -347,7 +347,7 @@ export function sliceWords(report: SliceReport): { shear: string; peel: string; 
     shear: `Largest shear ${shown(Math.abs(bond.peak_shear.value))} ${stress}, ${where(bond.peak_shear)}; by hand ${shown(report.hand.peak_shear)} ${stress}.`,
     peel: `Largest peel ${shown(bond.peak_peel.value)} ${stress}, ${where(bond.peak_peel)}`
       + (report.peel_limit_load !== null ? `; it reaches the peel strength at ${shown(report.peel_limit_load)} ${force}.` : "; not judged: the adhesive states no peel strength."),
-    limit: report.elastic_limit_load === null ? "The adhesive states no shear strength, so no limit load is given."
+    limit: report.elastic_limit_load === null ? "The adhesive states no shear strength, so no elastic limit load is given."
       : `The adhesive reaches its elastic limit in shear at ${shown(report.elastic_limit_load)} ${force}; by hand ${shown(report.hand.elastic_limit_load)} ${force}. ${NOT_THE_STRENGTH}`,
     ply: report.first_ply === null ? "No ply is checked: the materials state no strengths."
       : `First ply by ${CRITERION_WORDS[report.criterion] ?? report.criterion}: ${inSentence(report.first_ply.name)}, ${report.first_ply.mode ?? ""}, at ${shown(report.first_ply.load)} ${force}`

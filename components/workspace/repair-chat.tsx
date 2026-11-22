@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUp, MessagesSquare } from "lucide-react";
 import { previewRepairChange, repairReferences, StudioError, sweepRepair, type ReferenceSection } from "@/lib/studio-api";
 import {
-  previewRows, readRepairAsk, repairAnswer, sweepHeading, sweepTable,
+  previewPlace, previewRows, readRepairAsk, repairAnswer, sweepHeading, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSaid, type RepairSweepAnswer,
 } from "@/lib/repair-chat";
 import { kindOf, NOT_THE_STRENGTH, sameRepair, sliceWords, type RepairDescription } from "@/lib/repair";
@@ -43,6 +43,12 @@ export function RepairChat() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const next = useRef(1);
+  // a message just sent is brought to the top of the column, so its answer is read from its first line as it arrives
+  const newest = useRef<HTMLDivElement>(null);
+  const asked = entries.filter((e) => e.role === "user").length;
+  const arrived = entries.filter((e) => e.role === "assistant" && !e.waiting).length; // an answer that came after its message grows the column
+  useEffect(() => { if (asked) newest.current?.scrollIntoView({ block: "start", behavior: "auto" }); }, [asked, arrived]);
+  const lastAsked = [...entries].reverse().find((e) => e.role === "user")?.id;
   const update = (id: number, change: Partial<Said>) => setEntries((list) => list.map((e) => (e.id === id && e.role === "assistant" ? { ...e, ...change } : e)));
   const offline = "The analysis service is not set up on this page.";
 
@@ -101,7 +107,7 @@ export function RepairChat() {
       {entries.length ? (
         <div className="wing-chat-scroll" aria-live="polite" aria-relevant="additions">
           {entries.map((e) => e.role === "user"
-            ? <div className="chat-user" key={e.id}>{e.text}</div>
+            ? <div className="chat-user" key={e.id} ref={e.id === lastAsked ? newest : undefined}>{e.text}</div>
             : (
               <div className="chat-assistant" key={e.id} data-testid="repair-chat-answer" data-kind={e.said.kind}>
                 <span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
@@ -222,6 +228,7 @@ function Preview({ preview, outcome, stale, current, onApply, onDismiss, onUndo 
           ))}</tbody>
         </table>
       </div>
+      {previewPlace(preview) ? <p data-testid="repair-preview-place">{previewPlace(preview)}</p> : null}
       {preview.after.elastic_limit_load !== null ? <p className="chat-note">{NOT_THE_STRENGTH}</p> : null}
       <Outcome outcome={outcome} stale={stale} current={current} onApply={onApply} onDismiss={onDismiss} onUndo={onUndo} />
     </div>
@@ -230,16 +237,17 @@ function Preview({ preview, outcome, stale, current, onApply, onDismiss, onUndo 
 
 function Sweep({ sweep, outcome, stale, current, onApply, onDismiss, onUndo }: { sweep: RepairSweepAnswer } & Worked) {
   const table = sweepTable(sweep);
-  const [basis, ...words] = sweep.words;
+  // the answer first, in a sentence or two; what was swept, what could not be worked and the rest are folded under it with the table
+  const rest = sweep.words.filter((line) => !sweep.answer.includes(line));
   return (
     <div data-testid="repair-sweep">
       <h4 data-testid="repair-sweep-heading">{sweepHeading(sweep)}</h4>
-      {words.map((line) => <p key={line} data-testid="repair-sweep-words">{line}</p>)}
+      {sweep.answer.map((line) => <p key={line} data-testid="repair-sweep-words">{line}</p>)}
       {sweep.check ? <p data-testid="repair-sweep-check" data-holds={sweep.check.holds === null ? "unchecked" : String(sweep.check.holds)}>{sweep.check.words.join(" ")}</p> : null}
       {sweep.cautions.map((line) => <p key={line} className="chat-note" data-testid="repair-sweep-caution">{line}</p>)}
-      <details className="chat-details">
+      <details className="chat-details" open={sweep.answer.length === 0 ? true : undefined}>
         <summary>Details: the {table.rows.length} values</summary>
-        <p className="chat-note">{basis}</p>
+        {rest.map((line) => <p key={line} className="chat-note" data-testid="repair-sweep-rest">{line}</p>)}
         <div className="studio-table-scroll">
           <table className="studio-table studio-table-num studio-table-compact" data-testid="repair-sweep-table">
             <thead><tr>{table.head.map((h, i) => <th key={h} scope="col" className={i ? "studio-num-head" : undefined}>{h}</th>)}</tr></thead>

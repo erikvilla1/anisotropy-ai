@@ -1563,7 +1563,8 @@ class RepairSweepRequest(RepairRequest):
 class RepairSweepAnswer(Contract):
     """A sweep's answer (ADR-0136), as `sweep_repair` gives it in the file's units: a row for every value (the repair's width, the
     largest shear and where, the load at the adhesive's elastic limit, or the refusal of that value), the pick's row index and its
-    repair file when a load was named, from which value the limit load no longer changes, and the answer in sentences. `check` is
+    repair file when a load was named, from which value the limit load no longer changes, the sweep in sentences (`words`) and the one or two of them that are its answer
+    (`answer`: the pick, or that there is none, or with no load named where the curve goes flat). `check` is
     what a solved slice of the pick says (`pick_check`), or why it was not solved; null with no pick or with `confirm` false."""
 
     run_id: str | None = None
@@ -1579,6 +1580,7 @@ class RepairSweepAnswer(Contract):
     flat_from: dict[str, Any] | None
     most: dict[str, Any] | None
     words: list[str]
+    answer: list[str]
     cautions: list[str]
     check: dict[str, Any] | None = None
 

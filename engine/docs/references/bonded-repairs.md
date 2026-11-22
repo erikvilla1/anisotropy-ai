@@ -22,7 +22,7 @@ Sources: Laminate theory, stepped lap bond. Volkersen, O. (1938), Luftfahrtforsc
 
 <!-- also: step length, longer step, long step, overlap length, longer overlap, how long should a step be, plateau, flat, levels off, no longer changes, stops mattering, short step, minimum step length -->
 
-A step moves its load near its two ends, over the length described above. Once a step is several of those lengths long, its middle carries almost no shear, and the two ends no longer feel each other. Making the step longer then only makes the quiet middle longer: the stresses at the ends stay as they were, and so does the load at which the adhesive reaches its elastic limit. A sweep of the step length shows it as a curve that rises and goes flat, and the page says from which value on it stays within one percent.
+A step moves its load near its two ends, over a short length set by the adhesive and the two stacks it joins. Once a step is several of those lengths long, its middle carries almost no shear, and the two ends no longer feel each other. Making the step longer then only makes the quiet middle longer: the stresses at the ends stay as they were, and so does the load at which the adhesive reaches its elastic limit. A sweep of the step length shows it as a curve that rises and goes flat, and the page says from which value on it stays within one percent.
 
 A shorter step than that does raise the peak, because the two ends overlap and the middle is still loaded.
 
