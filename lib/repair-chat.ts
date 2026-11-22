@@ -582,7 +582,7 @@ export type SweepRow = {
   peak_shear?: { value: number; name: string; end: "start" | "end" } | null; elastic_limit_load?: number | null; elastic: boolean | null;
 };
 /** What a solved slice says of a sweep's pick (`pick_check` of the engine's `repair/sweeps.py`), or why it was not solved. */
-export type SweepCheck = { state: "solved" | "needs" | "refused" | "failed"; holds: boolean | null; words: string[] };
+export type SweepCheck = { state: "solved" | "needs" | "refused" | "failed"; holds: boolean | null; close?: boolean; words: string[] };
 /** A sweep's answer (`POST /v1/repairs/sweeps`): the engine's rows, pick and sentences, and the pick's check. */
 export type RepairSweepAnswer = {
   run_id: string | null; engine_version: string; sweep: Record<string, unknown>; quantity: { name: SweepQuantity; words: string; unit: string };
@@ -659,5 +659,8 @@ export function sweepHeading(a: RepairSweepAnswer): string {
   const row = a.rows[a.pick];
   const value = a.quantity.name === "steps" ? `${numbered(row.steps ?? row.value, "step", "steps")} of ${numbered(row.plies_per_step ?? 1, "ply", "plies")}`
     : `${SWEPT[a.quantity.name]} ${shown(row.value)} ${unitText(a.quantity.unit)}`;
+  // The pick is the hand calculation's. Where its solved slice does not hold it, or is too close to say, the heading says so.
+  if (a.check?.holds === false) return `${value} by hand; the slice says no`;
+  if (a.check?.close) return `${value} by hand; too close in the slice`;
   return `${value}: still elastic at ${shown(a.target)} ${force}`;
 }

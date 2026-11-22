@@ -336,6 +336,11 @@ def test_a_slice_that_does_not_hold_the_pick_says_so(fake_tools):
     check = answer.json()["check"]
     assert answer.json()["pick"] is not None and check["state"] == "solved" and check["holds"] is False
     assert check["words"][-1] == "That is below the 280 N/mm named: the slice does not hold the pick."
+    # a first limit within 2 % of the load named is neither held nor not: a finer mesh may move it that far (ADR-0132)
+    near = client.post(SWEEPS, json={"repair": example(adhesive__shear_strength=40.0), "sweep": {"quantity": "bondline", "load": 262}}).json()["check"]
+    assert near["state"] == "solved" and near["holds"] is None and near["close"] is True
+    assert near["words"][-1] == ("That is within 2 % of the 262 N/mm named, as far as a finer mesh may move a slice's number: "
+                                 "too close to say whether the slice holds the pick.")
 
 
 def test_a_pick_whose_slice_cannot_be_solved_leaves_the_sweep_whole_and_says_it_is_not_checked(fake_tools, monkeypatch, capsys):

@@ -418,6 +418,17 @@ test("a sweep names the smallest repair whose adhesive stays elastic at the load
   expect(sweeps[1].sweep).toEqual({ quantity: "step_length", load: 230, load_unit: "N/mm" });
   await expect(unchecked.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "unchecked");
   await expect(unchecked.getByTestId("repair-sweep-check")).toHaveText("The pick's slice could not be solved right now, so the pick is not checked by a solved slice.");
+  // a pick its solved slice does not hold, or is too close to say, is headed as the hand calculation's and no more
+  const NEAR = "That is within 2 % of the 230 N/mm named, as far as a finer mesh may move a slice's number: too close to say whether the slice holds the pick.";
+  chat.sweep = () => ({ status: 200, body: { ...SWEEP, check: { state: "solved", holds: null, close: true, words: [NEAR] } } });
+  const near = await ask(page, "sweep the step length 3 to 25 mm at 230 N/mm");
+  await expect(near.getByTestId("repair-sweep-heading")).toHaveText("Step length 4 mm by hand; too close in the slice");
+  await expect(near.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "close");
+  await expect(near.getByTestId("repair-sweep-check")).toHaveText(NEAR);
+  chat.sweep = () => ({ status: 200, body: { ...SWEEP, check: { state: "solved", holds: false, close: false, words: ["That is below the 230 N/mm named: the slice does not hold the pick."] } } });
+  const below = await ask(page, "sweep the step length 3 to 25 mm at 230 N/mm");
+  await expect(below.getByTestId("repair-sweep-heading")).toHaveText("Step length 4 mm by hand; the slice says no");
+  await expect(below.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "false");
   chat.sweep = () => ({ status: 422, body: { detail: "The repair states no load per unit width, so no value can be picked for a load" } });
   const refused = await ask(page, "sweep the bondline for 230 N/mm");
   await expect(refused.getByTestId("repair-chat-problem")).toHaveText("The sweep: The repair states no load per unit width, so no value can be picked for a load");

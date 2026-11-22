@@ -311,6 +311,10 @@ test("a sweep's heading is its pick, its table marks the pick and the repair as 
     "A short step that keeps the adhesive elastic in this model is not a rule for choosing a step length."]);
   assert.ok(SWEEP.check?.holds === true && SWEEP.check.words[2] === "That is at or above the 230 N/mm named: the slice holds the pick.");
   assert.deepEqual(bannedIn([...SWEEP.words, ...SWEEP.cautions, ...(SWEEP.check?.words ?? []), sweepHeading(SWEEP), ...table.head].join("\n")), []);
+  // the pick is the hand calculation's: where its solved slice does not hold it, or is too close to say, the heading says so
+  assert.equal(sweepHeading({ ...SWEEP, check: { state: "solved", holds: false, close: false, words: [] } }), "Step length 4 mm by hand; the slice says no");
+  assert.equal(sweepHeading({ ...SWEEP, check: { state: "solved", holds: null, close: true, words: [] } }), "Step length 4 mm by hand; too close in the slice");
+  assert.equal(sweepHeading({ ...SWEEP, check: { state: "failed", holds: null, words: [] } }), "Step length 4 mm: still elastic at 230 N/mm");
   assert.equal(sweepHeading({ ...SWEEP, pick: null, picked: null, target: 300 }), "None of these stays elastic at 300 N/mm");
   assert.equal(sweepHeading({ ...SWEEP, pick: null, picked: null, target: null }), "23 values of the step length worked by hand");
   const steps = { ...SWEEP, quantity: { name: "steps" as const, words: "the number of steps", unit: "" }, pick: 0, rows: [{ ...SWEEP.rows[1], value: 2, steps: 2, plies_per_step: 2 }] };

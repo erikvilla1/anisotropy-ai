@@ -341,9 +341,19 @@ def test_a_pick_is_held_by_its_slice_when_what_comes_first_there_is_at_or_above_
     assert held["words"] == ["The pick solved as a slice under 100 N/mm: largest bondline shear 11.5 MPa, largest peel stress 4.112 MPa.",
                              "As the load grows, the adhesive reaches its elastic limit in shear first, at 260.8 N/mm.",
                              "That is at or above the 230 N/mm named: the slice holds the pick."]
-    assert pick_check(260.8, solved_slice())["holds"] is True, "at the load itself the adhesive is still elastic"
-    below = pick_check(261.0, solved_slice())
-    assert below["holds"] is False and below["words"][-1] == "That is below the 261 N/mm named: the slice does not hold the pick."
+    assert held["close"] is False
+    below = pick_check(270.0, solved_slice())
+    assert below["holds"] is False and below["close"] is False and below["words"][-1] == "That is below the 270 N/mm named: the slice does not hold the pick."
+
+
+def test_a_first_limit_within_what_a_finer_mesh_may_move_it_is_neither_held_nor_not():
+    # ADR-0132's own mark: a finer mesh moves a slice's largest stresses by 2 % at most. 260.8 is within 2 % of 256 to 266.
+    for target in (256.0, 260.8, 261.0, 266.0):
+        near = pick_check(target, solved_slice())
+        assert near["holds"] is None and near["close"] is True and near["state"] == "solved", target
+        assert near["words"][-1] == (f"That is within 2 % of the {target:g} N/mm named, as far as a finer mesh may move a slice's number: "
+                                     "too close to say whether the slice holds the pick."), target
+    assert pick_check(255.0, solved_slice())["holds"] is True and pick_check(267.0, solved_slice())["holds"] is False
 
 
 def test_what_the_hand_calculation_does_not_hold_can_come_first_in_the_slice():

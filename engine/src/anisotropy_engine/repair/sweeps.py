@@ -30,6 +30,7 @@ from .description import RepairError
 INCREMENTS = 24  # a range is cut in at most this many round increments
 FLAT_WITHIN = 0.01  # the limit load "no longer changes" where it stays within this fraction of its value at the end of the range
 FLAT_SHARE = 0.25  # and only when that stretch is at least this share of the range worked
+MESH_MARK = 0.02  # a solved slice's largest stresses may move this fraction with a finer mesh (ADR-0132's own mark); a pick this close to the load is not called
 SWEPT_VALUES = ("step_length", "bondline", "cover_overlap", "patch_overlap")
 ROUND = (1.0, 2.0, 2.5, 5.0)
 FIRST = {"adhesive": "the adhesive reaches its elastic limit in shear", "peel": "the bondline's peel stress reaches the peel strength",
@@ -234,10 +235,12 @@ def pick_check(target: float, solved: dict) -> dict:
     as `anisotropy_fea.repair_model` writes it; `target` is the load named, in the same units. The slice holds what the hand
     calculation does not, the peel stress and every ply's stresses, so what reaches its limit first there may not be the
     adhesive's shear: the pick is held when that first limit is at or above the load named. No number is worked here beyond
-    that comparison."""
+    that comparison. A first limit within `MESH_MARK` of the load named is neither held nor not: a finer mesh may move the slice's
+    largest stresses by that much (ADR-0132), so the comparison would be the mesh's."""
     force, stress = solved["units"]["force"], solved["units"]["stress"]
     bond, first = solved["bond"], solved.get("first")
-    holds = None if first is None else first["load"] >= target
+    close = first is not None and abs(first["load"] - target) <= MESH_MARK * target
+    holds = None if first is None or close else first["load"] >= target
     words = [f"The pick solved as a slice under {shown(solved['load'])} {force}: largest bondline shear {shown(abs(bond['peak_shear']['value']))} {stress}, "
              f"largest peel stress {shown(bond['peak_peel']['value'])} {stress}."]
     if first is None:
@@ -247,9 +250,11 @@ def pick_check(target: float, solved: dict) -> dict:
         if first["what"] == "ply" and solved.get("first_ply"):
             came += f" ({solved['first_ply']['name']})"
         words.append(f"As the load grows, {came} first, at {shown(first['load'])} {force}.")
-        words.append(f"That is at or above the {shown(target)} {force} named: the slice holds the pick." if holds else
+        words.append(f"That is within {MESH_MARK * 100:g} % of the {shown(target)} {force} named, as far as a finer mesh may move a slice's number: "
+                     "too close to say whether the slice holds the pick." if close else
+                     f"That is at or above the {shown(target)} {force} named: the slice holds the pick." if holds else
                      f"That is below the {shown(target)} {force} named: the slice does not hold the pick.")
-    return {"state": "solved", "holds": holds, "first": first, "elastic_limit_load": solved.get("elastic_limit_load"), "peel_limit_load": solved.get("peel_limit_load"),
+    return {"state": "solved", "holds": holds, "close": close, "first": first, "elastic_limit_load": solved.get("elastic_limit_load"), "peel_limit_load": solved.get("peel_limit_load"),
             "peak_shear": bond["peak_shear"], "peak_peel": bond["peak_peel"],
             "first_ply": None if not solved.get("first_ply") else {"name": solved["first_ply"]["name"], "load": solved["first_ply"]["load"]},
             "words": words}

@@ -316,7 +316,7 @@
 .repair-chat .studio-table th, .repair-chat .studio-table td { padding: 5px 4px; }
 .repair-chat .studio-table thead th { white-space: normal; vertical-align: bottom; }
 .repair-chat .studio-table .studio-text-cell { white-space: normal; text-align: left; }
-.repair-chat [data-holds="false"] { color: #e6a667; }
+.repair-chat [data-holds="false"], .repair-chat [data-holds="close"] { color: #e6a667; }
 .wing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; align-items: start; }
 .wing-swatch-line { width: 16px; height: 0; border-top: 2px dashed #9085e9; border-radius: 0; vertical-align: 3px; }
 .wing-swatch-ring { border: 2px solid #f2f2f2; border-radius: 50%; background: transparent; }

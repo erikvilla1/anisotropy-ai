@@ -2016,7 +2016,7 @@ def sweep_repair_endpoint(problem: RepairSweepRequest, actor: Actor, request: Re
     pick = None if found["pick"] is None else found["rows"][found["pick"]]
     run_id = _record(request, actor, problem, response={"sweep": found["sweep"], "words": found["words"], "rows": len(found["rows"]), "pick": pick,
                                                         "target": found["target"], "flat_from": found["flat_from"],
-                                                        "check": None if check is None else {key: check.get(key) for key in ("state", "holds", "first", "words")}})
+                                                        "check": None if check is None else {key: check.get(key) for key in ("state", "holds", "close", "first", "words")}})
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairSweepAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), check=check, **found)

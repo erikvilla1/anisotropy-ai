@@ -638,7 +638,7 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
                  if row.get(key) is not None} for row in found.get("rows") or []]
         pick = found.get("pick")
         check = found.get("check")
-        return said(four({"answer": found.get("answer"), "check": check and {key: check.get(key) for key in ("state", "holds", "words", "needs") if check.get(key) is not None},
+        return said(four({"answer": found.get("answer"), "check": check and {key: check.get(key) for key in ("state", "holds", "close", "words", "needs") if check.get(key) is not None},
                           "cautions": found.get("cautions"), "swept": found.get("words"), "quantity": found.get("quantity"), "units": found.get("units"),
                           "load_stated": found.get("load"), "load_named": found.get("target"), "pick": None if pick is None else rows[pick], "rows": rows,
                           "applied": False,

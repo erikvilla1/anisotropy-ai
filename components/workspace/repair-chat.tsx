@@ -245,7 +245,7 @@ function Sweep({ sweep, outcome, stale, current, onApply, onDismiss, onUndo }: {
     <div data-testid="repair-sweep">
       <h4 data-testid="repair-sweep-heading">{sweepHeading(sweep)}</h4>
       {sweep.answer.map((line) => <p key={line} data-testid="repair-sweep-words">{line}</p>)}
-      {sweep.check ? <p data-testid="repair-sweep-check" data-holds={sweep.check.holds === null ? "unchecked" : String(sweep.check.holds)}>{sweep.check.words.join(" ")}</p> : null}
+      {sweep.check ? <p data-testid="repair-sweep-check" data-holds={sweep.check.close ? "close" : sweep.check.holds === null ? "unchecked" : String(sweep.check.holds)}>{sweep.check.words.join(" ")}</p> : null}
       {sweep.cautions.map((line) => <p key={line} className="chat-note" data-testid="repair-sweep-caution">{line}</p>)}
       <details className="chat-details" open={sweep.answer.length === 0 ? true : undefined}>
         <summary>Details: the {table.rows.length} values</summary>
