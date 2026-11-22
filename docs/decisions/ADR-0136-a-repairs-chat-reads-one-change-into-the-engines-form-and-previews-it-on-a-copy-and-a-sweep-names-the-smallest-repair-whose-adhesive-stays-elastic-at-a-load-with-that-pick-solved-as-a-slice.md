@@ -63,6 +63,38 @@ Where the chat's explanations come from:
 
 **Questions.** `tests/assistant-questions/repair.json` holds the repair's questions (ADR-0121). The real-model "Assistant check" of the bank is run on the founder's word, since it spends his key.
 
+## As built (2026-11-21)
+
+Built as decided, with these additions and differences.
+
+**Engine.** `engine/src/anisotropy_engine/repair/changes.py` (`RepairChange`, `change_repair`, `preview_change`, `summary`, `change_words`, `shown`) and `sweeps.py` (`RepairSweep`, `sweep_repair`, `pick_check`).
+- A sixth action, `regroup_steps`: the same plies cut in `count` steps ("cut the same plies in 2 steps"), beside `regroup` (steps of `count` plies each).
+- `shown` prints a number as the page does (four significant figures), so the engine's sentences and the page's tables read alike.
+- A value's unit is the one written or the file's own; a unit of another kind ("set the step length to 5 MPa") is refused in words.
+- `sweep_repair` also returns `answer`, the one or two sentences of `words` that answer the sweep (the pick, that there is none, or with no load named where the curve goes flat), and `cautions`. The swept quantities are the step length, the bondline's thickness, the cover plies' overlap, the patch's overlap and the number of steps the same plies are grouped in.
+- `pick_check(target, solved)` words what the pick's solved slice says. What reaches its limit first in the slice may be the peel stress or a ply, which the hand calculation does not hold. A first limit within 2 % of the load named (`MESH_MARK`, the mark of ADR-0132 for what a finer mesh may move) is called too close to say: `holds` is null and `close` is true.
+- `StepLap.peak_shear` names the place of the largest shear by the first of the ends that reach it within one part in 10^9. The end of one step and the start of the next are one place, and before this two repairs alike but for a small change could name it differently.
+- The shorthand for the load at which the adhesive reaches its elastic limit is "elastic limit load" everywhere a person reads it, never "limit load" alone, which in aircraft work means a design load.
+
+**API.** `POST /v1/repairs/changes` and `POST /v1/repairs/sweeps` (`api/src/anisotropy_api/main.py`, `schemas.py`: `RepairChangeRequest`, `RepairChangeAnswer`, `RepairSweepRequest`, `RepairSweepAnswer`). The theory search takes `about: "repair"` and then searches the repair's own theory sections and one new page, `engine/docs/references/bonded-repairs.md`, eleven sections in our own words with their sources named, of the subject "repair-references" that no other search finds (`theory.repair_sections`).
+
+**The page.** `lib/repair-chat.ts`, `components/workspace/repair-chat.tsx`, styles in `app/workspace/workspace.css`. Beyond the decision:
+- A fragment takes its question, its sweep or its change from the message before it: "and at 250?" after "is the adhesive still elastic at 200 N/mm", "now 0.2 mm" after "set the bondline to 0.15 mm".
+- A sweep's answer is its `answer` sentences, the check and the cautions; the rest of its sentences and the table are folded under "Details". Where the pick's slice does not hold it, or is too close to say, the heading says so ("by hand; the slice says no", "by hand; too close in the slice").
+- A change the chat does not make (the layups, the materials, the kind of repair) is said to be made in the model tree.
+- Every heading is 60 characters at most.
+
+**Outside assistants.** `mcp-server/src/anisotropy_mcp/server.py`: the five tools, and rules 16 to 20 of the instructions sent to the client's model (numbers only from the repair's tools; no strength, failure load, margin or verdict; one change at a time with the unit as written; a sweep's `answer`, `check` and `cautions` as written; why and how from the reference sections). The two examples are named `example` and `example-external`; a repair file's text is taken as well.
+
+**Left as it is.** The engine reader's refusals of a swept value speak in metres inside a sweep in millimetres ("The repair is 0.2 m across…"): the reader's words from ADR-0131, not changed here. "Increase the overlap length to 15 mm" on a flush repair is read as the cover plies' overlap, and the preview says so. One question of the bank is a marked gap: a shear stress asked at a named place is answered with the largest and its place.
+
+**Checks.**
+- `cd engine && uv run pytest -q tests/test_repair_changes.py`: 36 passed. `cd api && uv run pytest -q tests/test_repairs_api.py tests/test_theory.py`: 25 and 13 passed. `cd mcp-server && uv run pytest -q tests/test_server.py`: 23 passed. `npx tsx --test tests/repair-chat.test.ts`: 16 passed. `npx playwright test --config playwright.studio.config.ts repair.spec.ts`: 13 passed.
+- The answers the page's tests draw are the engine's and the solver's: `scripts/repair-choices.py --solve` writes `tests/fixtures/repair/example-change.json`, `example-step-change.json`, `example-sweep.json` and `example-sweep-check.json`, and `api/tests/test_repairs_api.py` and `fea/tests/test_repair_page.py` hold them to the API and the solver.
+- The bank, `tests/assistant-questions/repair.json`: 41 questions, 8 of them answered by a tool, 6 by a reference section, 1 marked gap. Check 1 passes on the page's, the API's and the MCP server's side. The real-model check has not been run.
+- The example: by hand the largest shear is 12.58 MPa under 100 N/mm and the adhesive reaches its elastic limit at 238.5 N/mm. A sweep of the step length from 3 to 25 mm at 230 N/mm picks 4 mm (the repair 74 mm across, 233.5 N/mm by hand), and from 6 mm up the elastic limit load stays within 1 % of 238.6 N/mm. A sweep of the number of steps gives 144.1, 178.9 and 238.5 N/mm for 1, 2 and 4 steps.
+- The pick's slice at 4, 8, 16 and 32 elements to the bondline's thickness beside every edge: the largest shear 11.65, 11.72, 11.71, 11.73 MPa; the largest peel stress 4.154, 4.117, 4.104, 4.107 MPa; the adhesive's elastic limit at 257.6, 256.0, 256.2, 255.8 N/mm. The pick of a bondline sweep at 260 N/mm (0.12 mm, 261.3 N/mm by hand): 10.21, 10.26, 10.26, 10.28 MPa; 3.693, 3.692, 3.660, 3.661 MPa; 293.7, 292.5, 292.3, 291.8 N/mm. From the default (8) to 32 the shear moves by 0.2 % and the peel stress by 0.9 % at most, and the check's answer is the same on every mesh. The study's script was not kept.
+
 ## Why (evidence)
 
 - Fact 2 above: `engine/tests/test_repair_changes.py::test_the_examples_limit_load_goes_flat_in_the_step_length` holds the example's numbers.
