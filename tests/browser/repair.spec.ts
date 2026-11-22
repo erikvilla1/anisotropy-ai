@@ -7,6 +7,15 @@ import { bannedIn } from "../../lib/studio-copy";
  * page sends is recorded, so each test can say what was asked. */
 const read = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf-8"));
 const ANSWER = read("example-answer"), EXTERNAL = read("external-answer"), SOLVE = read("example-solve");
+// the chat's (ADR-0136): the engine's previews of two changes, its sweep of the step length to a load, and what the solved slice of
+// that sweep's pick says of it, as the API puts the two together
+const STEP_CHANGE = read("example-step-change"), LENGTH_CHANGE = read("example-change"), SWEEP = { ...read("example-sweep"), check: read("example-sweep-check") };
+/** One section of our page "Bonded repairs", cut from the page itself as the API's search cuts it. */
+function section(title: string) {
+  const page = readFileSync("engine/docs/references/bonded-repairs.md", "utf-8");
+  const text = page.split(/^## /m).find((part) => part.startsWith(`${title}\n`))!.slice(title.length).replace(/<!--[\s\S]*?-->/g, "").trim();
+  return { id: `repairs:${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, document: "Bonded repairs", title, text };
+}
 const SHAPE = { run_id: null, step: "ISO-10303-21;\nEND-ISO-10303-21;\n", parts: { title: "Example stepped patch repair", units: { length: "mm", volume: "mm^3" },
   parts: [{ name: "Laminate ply 1 (45°)", kind: "parent", angle: 45, volume: 10972.8 }, { name: "Patch ply 1 (90°)", kind: "patch", angle: 90, volume: 89.77 },
     { name: "Adhesive on the floor", kind: "adhesive", angle: null, volume: 49.09 }], volumes: { parent: 85089, patch: 2678.8, cover: 2244.3, adhesive: 1241.5 } } };
@@ -15,6 +24,13 @@ type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?:
 type Reply = { status: number; body: unknown };
 const solves: Sent[] = []; // what "Solve the slice" sent, in the test that runs
 const shapes: Sent[] = []; // what Download STEP sent
+type Asked = Sent & { change?: Record<string, unknown>; sweep?: Record<string, unknown>; question?: string; about?: string };
+const changes: Asked[] = []; // what the chat sent for a preview
+const sweeps: Asked[] = []; // what the chat sent for a sweep
+const searched: Asked[] = []; // what the chat asked of the reference pages
+/** What the chat's three addresses answer in a test: by default the engine's preview of the change read, the sweep with its pick held,
+ * and the section on where the shear stress peaks. */
+const chat: { change(body: Asked): Reply; sweep(body: Asked): Reply; sections: unknown[] } = { change: () => ({ status: 404, body: {} }), sweep: () => ({ status: 404, body: {} }), sections: [] };
 
 /** Plays the three addresses of a repair. `answer` says what the hand calculation answers to a body; by default the engine's answer to
  * whichever example's kind the body states. */
@@ -23,6 +39,12 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
   const sent: Sent[] = [];
   solves.length = 0;
   shapes.length = 0;
+  changes.length = 0;
+  sweeps.length = 0;
+  searched.length = 0;
+  chat.change = (body) => ({ status: 200, body: body.change?.action === "add_steps" ? STEP_CHANGE : LENGTH_CHANGE });
+  chat.sweep = () => ({ status: 200, body: SWEEP });
+  chat.sections = [section("Why the shear stress peaks at the ends of a step"), section("Why more steps lower the peak")];
   await page.route(/\/v1\/.*/, (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -31,6 +53,9 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
     if (path.endsWith("/v1/repairs/analyze")) { sent.push(body); return reply(answer(body)); }
     if (path.endsWith("/v1/repairs/solve")) { solves.push(body); return reply(solve(body)); }
     if (path.endsWith("/v1/repairs/shape")) { shapes.push(body); return reply({ status: 200, body: SHAPE }); }
+    if (path.endsWith("/v1/repairs/changes")) { changes.push(body); return reply(chat.change(body)); }
+    if (path.endsWith("/v1/repairs/sweeps")) { sweeps.push(body); return reply(chat.sweep(body)); }
+    if (path.endsWith("/v1/workspace/theory-sections")) { searched.push(body); return reply({ status: 200, body: { run_id: null, sections: chat.sections } }); }
     return reply({ status: 404, body: { detail: "not in this scenario" } });
   });
   return sent;
@@ -61,10 +86,12 @@ test("a patch repair is picked at the FEA start, opens on the example and shows 
   await expect(chart.locator("polyline[data-series=shear]")).toHaveCount(0);
   await expect(page.getByTestId("repair-bond-chart-key")).toContainText("Shear by hand");
   await expect(page.getByTestId("repair-slice-short")).toHaveText("The slice is not solved yet: it adds the peel stress and each ply's stresses.");
-  // the assistant's column says what the numbers are, and that the page has no chat yet
+  // the assistant's column says what the numbers are, and holds the chat under it (ADR-0136)
   await expect(page.getByTestId("repair-explain")).toContainText("12.58 MPa by hand, at the inner end of the ledge of step 1.");
   await expect(page.getByTestId("repair-not-strength")).toContainText("Neither answer is a failure load.");
-  await expect(page.getByTestId("repair-no-chat")).toBeVisible();
+  await expect(page.getByTestId("repair-no-chat")).toHaveCount(0);
+  await expect(page.getByLabel("Message the repair assistant")).toBeVisible();
+  await expect(page.getByTestId("repair-chat")).toContainText("Nothing changes until you tap Apply");
   // the details hold the hand calculation's table, the peak's row marked, and what the analysis is not
   await page.getByTestId("details-toggle").click();
   await expect(page.getByTestId("repair-lap").locator("tbody tr")).toHaveCount(5);
@@ -280,6 +307,177 @@ test("the report lays the repair out for paper: what is stated, the slice, the h
   await expect(page.getByRole("heading", { level: 2 })).toHaveCount(5);
   await page.getByTestId("repair-report-back").click();
   await expect(page).toHaveURL(/\/workspace\/repair\/?$/);
+});
+
+/** Sends one message in the repair's chat and gives its answer: the last one in the chat. */
+async function ask(page: Page, message: string) {
+  const box = page.getByLabel("Message the repair assistant");
+  const answers = page.getByTestId("repair-chat-answer");
+  const before = await answers.count();
+  await box.fill(message);
+  await box.press("Enter");
+  await expect(answers).toHaveCount(before + 1);
+  return answers.last();
+}
+
+test("“add a step” and “make each step 0.5 in” are previewed by the engine on a copy, applied by a tap and undone (ADR-0136)", async ({ page }) => {
+  const sent = await playRepairs(page);
+  await page.goto("/workspace/repair");
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  const worked = sent.length;
+  const added = await ask(page, "Add a step");
+  await expect(added).toHaveAttribute("data-kind", "preview");
+  await expect(added.getByTestId("repair-preview-words")).toHaveText(STEP_CHANGE.words);
+  // the page sent the repair as it stands and the change as it read it; every number of the preview is the engine's
+  expect(changes).toHaveLength(1);
+  expect(changes[0].repair).toEqual(ANSWER.repair);
+  expect(changes[0].change).toEqual({ action: "add_steps", count: 1 });
+  const table = added.getByTestId("repair-preview-table");
+  await expect(table.locator("tbody tr").nth(0)).toHaveText("Steps4 of 1 ply5 of 1 ply");
+  await expect(table.locator("tbody tr").nth(1)).toHaveText("Repair width (mm)125150");
+  await expect(table.locator("tbody tr")).toHaveCount(5); // steps, width, load, largest shear, elastic limit load
+  await expect(added.getByTestId("repair-preview-place")).toHaveText("The largest shear stays at the inner end of the ledge of step 1.");
+  await expect(added.getByRole("heading")).toHaveText("Preview: not applied yet");
+  expect(await table.evaluate((el) => el.scrollWidth <= el.parentElement!.clientWidth + 1)).toBe(true); // the table fits the chat's column
+  // nothing has changed yet: the repair is still the example, and it was not worked again
+  await expect(page.getByTestId("repair-steps-count")).toHaveValue("4");
+  expect(sent.length).toBe(worked);
+  await added.getByTestId("repair-apply").click();
+  await expect(added.getByTestId("repair-applied")).toContainText("Applied: the repair is worked again.");
+  await expect(page.getByTestId("repair-steps-count")).toHaveValue("5");
+  await expect.poll(() => sent.at(-1)?.repair).toEqual(STEP_CHANGE.repair); // the changed repair is worked by hand like any other
+  await added.getByTestId("repair-undo").click();
+  await expect(added.getByTestId("repair-undone")).toHaveText("Undone: the repair is as it was.");
+  await expect(page.getByTestId("repair-steps-count")).toHaveValue("4");
+  // the plan's other change, with its unit: the engine converts it, the page does not
+  const longer = await ask(page, "make each step 0.5 in");
+  await expect(longer.getByTestId("repair-preview-words")).toHaveText("The step length goes from 12.5 mm to 12.7 mm (0.5 in as written).");
+  expect(changes[1].change).toEqual({ action: "set", quantity: "step_length", value: 0.5, unit: "in" });
+  await longer.getByTestId("repair-apply").click();
+  await expect(page.getByTestId("repair-steps-length")).toHaveValue("12.7");
+  const undone = await ask(page, "undo");
+  await expect(undone.getByTestId("repair-chat-heading")).toHaveText("Undone");
+  await expect(undone).toContainText("The repair is as it was before “make each step 0.5 in”.");
+  await expect(page.getByTestId("repair-steps-length")).toHaveValue("12.5");
+  // a change the engine refuses is said in its words and changes nothing; a change with no value asks for one and sends nothing
+  chat.change = () => ({ status: 422, body: { detail: "9 steps of 1 plies remove 9 plies, and the laminate has 8" } });
+  const refused = await ask(page, "make it 9 steps");
+  await expect(refused.getByTestId("repair-chat-problem")).toHaveText("The preview of the repair's change: 9 steps of 1 plies remove 9 plies, and the laminate has 8");
+  await expect(refused.getByTestId("repair-apply")).toHaveCount(0);
+  const vague = await ask(page, "thicker bondline");
+  await expect(vague).toContainText("To what value?");
+  expect(changes).toHaveLength(3);
+});
+
+test("a sweep names the smallest repair whose adhesive stays elastic at the load, held to its solved slice, and never calls it a strength (ADR-0136)", async ({ page }) => {
+  await playRepairs(page);
+  await page.goto("/workspace/repair");
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  const swept = await ask(page, "sweep the step length from 3 to 25 mm for the smallest repair that stays elastic at 230 N/mm");
+  await expect(swept).toHaveAttribute("data-kind", "sweep");
+  await expect(swept.getByTestId("repair-sweep-heading")).toHaveText("Step length 4 mm: still elastic at 230 N/mm");
+  expect(sweeps[0].repair).toEqual(ANSWER.repair);
+  expect(sweeps[0].sweep).toEqual({ quantity: "step_length", start: 3, end: 25, unit: "mm", load: 230, load_unit: "N/mm" });
+  expect(sweeps[0].cut_faces).toBe("open");
+  // the answer is one sentence; what was swept, the value not worked and the flat stretch are folded under it with the table
+  await expect(swept.getByTestId("repair-sweep-words"))
+    .toHaveText(["The smallest of these whose adhesive is still elastic at 230 N/mm: a step length of 4 mm, the repair 74 mm across. Its adhesive reaches its elastic limit at 233.5 N/mm."]);
+  // the pick solved as a slice: what the solver says of it, and whether the slice holds it
+  const check = swept.getByTestId("repair-sweep-check");
+  await expect(check).toHaveAttribute("data-holds", "true");
+  await expect(check).toHaveText("The pick solved as a slice under 100 N/mm: largest bondline shear 11.72 MPa, largest peel stress 4.117 MPa. As the load grows, the adhesive reaches its elastic limit in shear first, at 256 N/mm. That is at or above the 230 N/mm named: the slice holds the pick.");
+  await expect(swept.getByTestId("repair-sweep-caution")).toHaveText([
+    "Not the repair's strength: the adhesive yields before it fails, and the hand calculation has no peel stress.",
+    "A short step that keeps the adhesive elastic in this model is not a rule for choosing a step length.",
+  ]);
+  // every value is in the details, the pick and the repair as it stands marked, a value the engine could not work said so
+  await swept.locator("details.chat-details > summary").click();
+  const rows = swept.getByTestId("repair-sweep-table").locator("tbody tr");
+  await expect(rows).toHaveCount(SWEEP.rows.length);
+  await expect(rows.nth(0)).toHaveText("36813.15228.1No");
+  await expect(swept.locator("tr[data-pick=true]")).toHaveText("4 (pick)7412.85233.5Yes");
+  await expect(swept.locator("tr[data-current=true] th")).toHaveText("12.5 (as it is)");
+  await expect(rows.last()).toContainText("Not worked: The repair is 0.2 m across");
+  await expect(swept.getByTestId("repair-sweep-rest")).toHaveText([
+    "The step length from 3 mm to 25 mm, 24 values, each worked by hand under 100 N/mm.",
+    "1 of them could not be worked. At 25 mm: The repair is 0.2 m across, so the panel must be longer and wider than that (it is 0.3 m by 0.2 m).",
+    "From 6 mm up the elastic limit load stays within 1 % of 238.6 N/mm: past it, the step length no longer changes it.",
+  ]);
+  const words = await swept.innerText();
+  expect(words).not.toMatch(/\bstrong\b|\bsafe\b|\bmargin\b|\bdesign\b|\bcarries\b|restores?\b/i);
+  expect(words.match(/strength/gi)).toHaveLength(1); // only in "Not the repair's strength"
+  expect(bannedIn(words)).toEqual([]);
+  // the pick is applied like any change, and undone
+  await swept.getByTestId("repair-apply").click();
+  await expect(page.getByTestId("repair-steps-length")).toHaveValue("4");
+  await swept.getByTestId("repair-undo").click();
+  await expect(page.getByTestId("repair-steps-length")).toHaveValue("12.5");
+  // a pick whose slice could not be solved says it is not checked; a pick the slice does not hold says so
+  chat.sweep = () => ({ status: 200, body: { ...SWEEP, check: { state: "failed", holds: null, words: ["The pick's slice could not be solved right now, so the pick is not checked by a solved slice."] } } });
+  const unchecked = await ask(page, "smallest repair that stays elastic at 230 N/mm");
+  expect(sweeps[1].sweep).toEqual({ quantity: "step_length", load: 230, load_unit: "N/mm" });
+  await expect(unchecked.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "unchecked");
+  await expect(unchecked.getByTestId("repair-sweep-check")).toHaveText("The pick's slice could not be solved right now, so the pick is not checked by a solved slice.");
+  // a pick its solved slice does not hold, or is too close to say, is headed as the hand calculation's and no more
+  const NEAR = "That is within 2 % of the 230 N/mm named, as far as a finer mesh may move a slice's number: too close to say whether the slice holds the pick.";
+  chat.sweep = () => ({ status: 200, body: { ...SWEEP, check: { state: "solved", holds: null, close: true, words: [NEAR] } } });
+  const near = await ask(page, "sweep the step length 3 to 25 mm at 230 N/mm");
+  await expect(near.getByTestId("repair-sweep-heading")).toHaveText("Step length 4 mm by hand; too close in the slice");
+  await expect(near.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "close");
+  await expect(near.getByTestId("repair-sweep-check")).toHaveText(NEAR);
+  chat.sweep = () => ({ status: 200, body: { ...SWEEP, check: { state: "solved", holds: false, close: false, words: ["That is below the 230 N/mm named: the slice does not hold the pick."] } } });
+  const below = await ask(page, "sweep the step length 3 to 25 mm at 230 N/mm");
+  await expect(below.getByTestId("repair-sweep-heading")).toHaveText("Step length 4 mm by hand; the slice says no");
+  await expect(below.getByTestId("repair-sweep-check")).toHaveAttribute("data-holds", "false");
+  chat.sweep = () => ({ status: 422, body: { detail: "The repair states no load per unit width, so no value can be picked for a load" } });
+  const refused = await ask(page, "sweep the bondline for 230 N/mm");
+  await expect(refused.getByTestId("repair-chat-problem")).toHaveText("The sweep: The repair states no load per unit width, so no value can be picked for a load");
+});
+
+test("the chat answers a question from the page's own results, gives no verdict, takes why from our pages and says what it cannot read (ADR-0136)", async ({ page }) => {
+  await playRepairs(page);
+  await page.goto("/workspace/repair");
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  const shear = await ask(page, "whta is the peak sheer?");
+  await expect(shear.getByTestId("repair-chat-heading")).toHaveText("12.58 MPa by hand, at the inner end of the ledge of step 1");
+  await expect(shear).toContainText("The largest shear stress in the adhesive under 100 N/mm.");
+  const verdict = await ask(page, "is it strong enough?");
+  await expect(verdict).toHaveAttribute("data-kind", "verdict");
+  await expect(verdict.getByTestId("repair-chat-heading")).toHaveText("This page gives no strength or verdict");
+  await expect(verdict).toContainText("By hand, the adhesive reaches its elastic limit in shear at 238.5 N/mm; the load stated is 100 N/mm.");
+  // a yes or no by hand, and a fragment after it that takes its question from the message before
+  const elastic = await ask(page, "is the adhesive still elastic at 200 N/mm?");
+  await expect(elastic.getByTestId("repair-chat-heading")).toHaveText("Yes, by hand: still elastic at 200 N/mm");
+  const next = await ask(page, "and at 250?");
+  await expect(next.getByTestId("repair-chat-heading")).toHaveText("No, by hand: past its elastic limit at 250 N/mm");
+  await expect(next).toContainText("The adhesive reaches its elastic limit in shear at 238.5 N/mm, at the inner end of the ledge of step 1.");
+  // what only the solved slice holds is offered, solved from the chat, and then answered from it
+  const peel = await ask(page, "what is the peel stress?");
+  await expect(peel.getByTestId("repair-chat-heading")).toHaveText("The hand calculation has no peel stress");
+  await peel.getByTestId("repair-chat-solve").click();
+  await expect(page.getByTestId("repair-slice-short")).toContainText("Solved slice:");
+  expect(solves).toHaveLength(1);
+  const solved = await ask(page, "what is the peel stress?");
+  await expect(solved.getByTestId("repair-chat-heading")).toHaveText("4.112 MPa in the solved slice");
+  await expect(solved).toContainText("62.45 mm from the middle (the adhesive under the cover plies)");
+  const first = await ask(page, "which ply fails first");
+  await expect(first.getByTestId("repair-chat-heading")).toHaveText("Laminate ply 6 (−45°) at 466.1 N/mm");
+  // a question of why is answered from our own page, beside the repair's own number, and no model is asked
+  const why = await ask(page, "why does the shear stress peak at the ends of a step?");
+  await expect(why).toHaveAttribute("data-kind", "reference");
+  await expect(why.getByTestId("repair-chat-heading")).toHaveText("Why the shear stress peaks at the ends of a step");
+  await expect(why).toContainText("The adhesive moves load from the laminate into the patch.");
+  await expect(why).toContainText("Here: 12.58 MPa by hand, at the inner end of the ledge of step 1.");
+  await expect(why.locator("details.chat-details > summary")).toHaveText("From our pages: Bonded repairs, Why the shear stress peaks at the ends of a step");
+  expect(searched.at(-1)).toMatchObject({ question: "why does the shear stress peak at the ends of a step?", about: "repair" });
+  chat.sections = [];
+  const none = await ask(page, "why is the sky blue?");
+  await expect(none.getByTestId("repair-chat-heading")).toHaveText("Our pages do not cover that yet");
+  const unread = await ask(page, "make it lighter");
+  await expect(unread.getByTestId("repair-chat-heading")).toHaveText("Not a message I can read yet");
+  await expect(unread).toContainText("“add a step”");
+  expect(changes).toHaveLength(0);
+  expect(bannedIn(await page.getByTestId("repair-chat").innerText())).toEqual([]);
 });
 
 test("the repair's page names no tool, no machinery and no record, with every panel open, the slice solved and the solids built (ADR-0091)", async ({ page }) => {

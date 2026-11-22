@@ -139,7 +139,7 @@ if mode == "slow":
 if "--out" in sys.argv:
     from pathlib import Path
     out = Path(sys.argv[sys.argv.index("--out") + 1]); out.mkdir(parents=True)
-    report = {"headline": "Under 100 N/mm: largest bondline shear 11.5 MPa", "units": {"length": "mm", "stress": "MPa", "force": "N/mm"},
+    report = {"headline": "Under 100 N/mm: largest bondline shear 11.5 MPa", "units": {"length": "mm", "stress": "MPa", "force": "N/mm"}, "load": 100.0,
               "model": {"cut_faces": sys.argv[sys.argv.index("--cut-faces") + 1], "elements": 6344}, "checks": {"equilibrium": 1e-7, "far_field": 4e-7},
               "bond": {"peak_shear": {"value": -11.5, "r": 37.3, "part": "Adhesive on the ledge of step 2"}, "peak_peel": {"value": 4.1, "r": 62.4, "part": "x"}},
               "first": {"what": "adhesive", "load": 260.8}}
@@ -263,3 +263,158 @@ def test_the_examples_solids_are_built_by_the_fea_package():
     body = answer.json()
     assert body["step"].startswith("ISO-10303-21;") and "Laminate ply 1 (45 deg)" in body["step"]
     assert body["parts"]["title"] == "Example stepped patch repair" and body["parts"]["volumes"]["patch"] > 0
+
+
+# ---- a change previewed and a quantity swept (ADR-0136): the engine's answers passed on, the pick held to a solved slice
+
+CHANGES, SWEEPS = "/v1/repairs/changes", "/v1/repairs/sweeps"
+
+
+def test_a_change_is_previewed_on_a_copy_and_is_the_engines():
+    from anisotropy_engine.repair import RepairChange, preview_change
+    change = {"action": "set", "quantity": "step_length", "value": 0.5, "unit": "in"}
+    answer = client.post(CHANGES, json={"repair": example(), "change": change})
+    assert answer.status_code == 200, answer.text
+    body, direct = answer.json(), preview_change(example(), RepairChange(**change))
+    assert body["words"] == direct["words"] == "The step length goes from 12.5 mm to 12.7 mm (0.5 in as written)."
+    assert body["repair"] == direct["repair"] and body["repair"]["steps"]["length"] == 12.7
+    assert close(body["before"], direct["before"]) and close(body["after"], direct["after"]) and body["units"] == direct["units"]
+    assert body["before"]["repair_diameter"] == pytest.approx(125.0) and body["after"]["repair_diameter"] == pytest.approx(126.2)
+    again = client.post(ENDPOINT, json={"repair": body["repair"]}).json()["report"]["lap"]["answer"]
+    assert body["after"]["elastic_limit_load"] == pytest.approx(again["elastic_limit_load"]), "the preview is the hand calculation of the changed file"
+    steps = client.post(CHANGES, json={"toml": EXAMPLE.read_text(encoding="utf-8"), "change": {"action": "add_steps", "count": 1}})
+    assert steps.status_code == 200 and steps.json()["after"]["steps"] == steps.json()["before"]["steps"] + 1
+
+
+def test_a_change_the_repair_cannot_take_and_a_change_that_is_none_are_refused_in_words():
+    refused = client.post(CHANGES, json={"repair": example(), "change": {"action": "set", "quantity": "patch_overlap", "value": 20}})
+    assert refused.status_code == 422 and "flush" in refused.json()["detail"], refused.text
+    thick = client.post(CHANGES, json={"repair": example(), "change": {"action": "set", "quantity": "bondline", "value": 0.2}})
+    assert thick.status_code == 422 and thick.json()["detail"].startswith("The bondline"), thick.text
+    unit = client.post(CHANGES, json={"repair": example(), "change": {"action": "set", "quantity": "step_length", "value": 5, "unit": "psi"}})
+    assert unit.status_code == 422 and "psi is not a length unit" in unit.json()["detail"]
+    assert client.post(CHANGES, json={"repair": example(), "change": {"action": "set", "quantity": "step_length"}}).status_code == 422
+    assert client.post(CHANGES, json={"repair": example(), "change": {"action": "paint", "count": 1}}).status_code == 422
+    assert client.post(CHANGES, json={"repair": example()}).status_code == 422, "a change is asked for"
+
+
+def test_a_sweep_without_a_load_is_the_engines_table_and_solves_nothing(monkeypatch):
+    import anisotropy_api.main as main_module
+    from anisotropy_engine.repair import RepairSweep, sweep_repair
+    monkeypatch.setattr(main_module, "repair_model_command", lambda: pytest.fail("no pick, so no slice is solved"))
+    sweep = {"quantity": "step_length", "start": 3, "end": 25}
+    answer = client.post(SWEEPS, json={"repair": example(), "sweep": sweep})
+    assert answer.status_code == 200, answer.text
+    body, direct = answer.json(), sweep_repair(example(), RepairSweep(**sweep))
+    assert body["words"] == direct["words"] and body["pick"] is None and body["picked"] is None and body["check"] is None and body["target"] is None
+    assert close(body["rows"], direct["rows"]) and len(body["rows"]) == 24 and body["flat_from"]["value"] == 6.0
+    assert body["rows"][-1]["refused"].startswith("The repair is"), "a value the panel cannot hold is a row, in the engine's words"
+
+
+def test_a_sweep_to_a_load_picks_the_smallest_and_holds_it_to_a_solved_slice(fake_tools):
+    answer = client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "step_length", "start": 3, "end": 25, "load": 230}})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    pick = body["rows"][body["pick"]]
+    assert pick["value"] == 4.0 and pick["elastic"] is True and body["picked"]["steps"]["length"] == 4.0 and body["target"] == 230.0
+    assert [row["elastic"] for row in body["rows"][:2]] == [False, True] and body["rows"][-1]["elastic"] is None
+    check = body["check"]
+    assert check["state"] == "solved" and check["holds"] is True and check["first"] == {"what": "adhesive", "load": 260.8}
+    assert check["headline"] == "Under 100 N/mm: largest bondline shear 11.5 MPa" and check["peak_peel"]["value"] == 4.1
+    assert check["words"][-1] == "That is at or above the 230 N/mm named: the slice holds the pick."
+    assert not any(word in " ".join(body["words"] + check["words"]).lower() for word in ("strength of the repair", "margin", "carries", "design"))
+    unchecked = client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "step_length", "start": 3, "end": 25, "load": 230}, "confirm": False})
+    assert unchecked.json()["pick"] == body["pick"] and unchecked.json()["check"] is None
+    none = client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "step_length", "load": 300}})
+    assert none.status_code == 200 and none.json()["pick"] is None and none.json()["check"] is None and none.json()["words"][-2].startswith("None of these keeps")
+
+
+def test_a_slice_that_does_not_hold_the_pick_says_so(fake_tools):
+    # the stand-in's slice reaches its first limit at 260.8 N/mm whatever the repair: a sweep to more than that, over the bondline, is not held
+    answer = client.post(SWEEPS, json={"repair": example(adhesive__shear_strength=40.0), "sweep": {"quantity": "bondline", "load": 280}})
+    assert answer.status_code == 200, answer.text
+    check = answer.json()["check"]
+    assert answer.json()["pick"] is not None and check["state"] == "solved" and check["holds"] is False
+    assert check["words"][-1] == "That is below the 280 N/mm named: the slice does not hold the pick."
+    # a first limit within 2 % of the load named is neither held nor not: a finer mesh may move it that far (ADR-0132)
+    near = client.post(SWEEPS, json={"repair": example(adhesive__shear_strength=40.0), "sweep": {"quantity": "bondline", "load": 262}}).json()["check"]
+    assert near["state"] == "solved" and near["holds"] is None and near["close"] is True
+    assert near["words"][-1] == ("That is within 2 % of the 262 N/mm named, as far as a finer mesh may move a slice's number: "
+                                 "too close to say whether the slice holds the pick.")
+
+
+def test_a_pick_whose_slice_cannot_be_solved_leaves_the_sweep_whole_and_says_it_is_not_checked(fake_tools, monkeypatch, capsys):
+    from anisotropy_api.main import PICK_NOT_CHECKED
+    sweep = {"quantity": "step_length", "start": 3, "end": 25, "load": 230}
+    whole = client.post(SWEEPS, json={"repair": example(), "sweep": sweep, "confirm": False}).json()
+    for mode in ("stop", "crash", "empty", "nan"):
+        body = client.post(SWEEPS, json={"repair": example() | {"title": mode}, "sweep": sweep}).json()
+        assert body["check"] == {"state": "failed", "holds": None, "words": [PICK_NOT_CHECKED]}, mode
+        assert body["rows"] == whole["rows"] and body["pick"] == whole["pick"] and body["words"] == whole["words"], mode
+    assert "ccx at /secret/path" in capsys.readouterr().out, "the cause is in the log"
+    refused = client.post(SWEEPS, json={"repair": example() | {"title": "refuse"}, "sweep": sweep}).json()["check"]
+    assert refused["state"] == "refused" and refused["words"][0].startswith("The pick's slice was not solved: The forces along the load do not add up")
+    monkeypatch.setattr(fake_tools, "REPAIR_SOLVE_TIMEOUT_S", 0.5)
+    assert client.post(SWEEPS, json={"repair": example() | {"title": "slow"}, "sweep": sweep}).json()["check"]["state"] == "failed"
+    monkeypatch.setattr(fake_tools, "repair_model_command", lambda: None)
+    assert client.post(SWEEPS, json={"repair": example(), "sweep": sweep}).json()["check"]["state"] == "failed"
+    needs = client.post(SWEEPS, json={"repair": example(adhesive__poisson=None), "sweep": sweep}).json()["check"]
+    assert needs["state"] == "needs" and needs["words"][0].startswith("The pick is not checked by a solved slice, which needs: the adhesive's Poisson's ratio")
+
+
+def test_a_sweep_the_engine_refuses_is_refused_in_its_words():
+    unloaded = example()
+    unloaded.pop("applied")
+    no_load = client.post(SWEEPS, json={"repair": unloaded, "sweep": {"quantity": "step_length"}})
+    assert no_load.status_code == 422 and no_load.json()["detail"].startswith("A sweep needs a load per unit width")
+    no_strength = client.post(SWEEPS, json={"repair": example(adhesive__shear_strength=None), "sweep": {"quantity": "step_length", "load": 200}})
+    assert no_strength.status_code == 422 and no_strength.json()["detail"].startswith("A sweep to a load needs the adhesive's shear strength")
+    flush = client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "patch_overlap"}})
+    assert flush.status_code == 422 and "a flush patch fills its cut" in flush.json()["detail"]
+    assert client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "step_length", "start": 5}}).status_code == 422
+    assert client.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "colour"}}).status_code == 422
+
+
+@needs_test_database
+def test_a_change_and_a_sweep_are_recorded_by_their_words_and_the_pick_never_every_row(recording, fake_tools):
+    previewed = recording.post(CHANGES, json={"repair": example(), "change": {"action": "set", "quantity": "bondline", "value": 0.15}})
+    run = recording.get(f"/v1/runs/{previewed.json()['run_id']}").json()
+    assert run["endpoint"] == CHANGES and run["status"] == "solved" and run["response"]["words"] == previewed.json()["words"]
+    assert set(run["response"]) == {"change", "words", "before", "after"}
+    swept = recording.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "step_length", "start": 3, "end": 25, "load": 230}})
+    run = recording.get(f"/v1/runs/{swept.json()['run_id']}").json()
+    assert run["endpoint"] == SWEEPS and run["response"]["rows"] == 24 and run["response"]["pick"]["value"] == 4.0
+    assert run["response"]["check"]["holds"] is True and run["response"]["words"] == swept.json()["words"]
+    refused = recording.post(SWEEPS, json={"repair": example(), "sweep": {"quantity": "patch_overlap"}})
+    assert recording.get(f"/v1/runs/{refused.headers['X-Anisotropy-Run-Id']}").json()["status"] == "rejected"
+
+
+def test_the_chats_tests_answers_are_what_the_script_writes_and_what_the_api_answers():
+    spec = importlib.util.spec_from_file_location("repair_choices", ROOT / "scripts" / "repair-choices.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    hint = "run: uv run --project fea python scripts/repair-choices.py --solve"
+    for name, change in module.CHANGES.items():
+        kept = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+        assert close(kept, json.loads(json.dumps(module.change(name)))), hint
+        sent = client.post(CHANGES, json={"repair": example(), "change": change}).json()
+        assert close({key: sent[key] for key in kept if key != "run_id"}, {key: kept[key] for key in kept if key != "run_id"}), "the browser test's preview is the API's"
+    kept = json.loads((FIXTURES / "example-sweep.json").read_text(encoding="utf-8"))
+    assert close(kept, json.loads(json.dumps(module.sweep()))), hint
+    sent = client.post(SWEEPS, json={"repair": example(), "sweep": module.SWEEP, "confirm": False}).json()
+    assert sent["check"] is None and close({key: sent[key] for key in kept if key != "run_id"}, {key: kept[key] for key in kept if key != "run_id"}), \
+        "the browser test's sweep is the API's"
+    checked = json.loads((FIXTURES / "example-sweep-check.json").read_text(encoding="utf-8"))
+    assert checked["state"] == "solved" and checked["holds"] is True and kept["rows"][kept["pick"]]["value"] == 4.0
+
+
+@pytest.mark.skipif(not FEA_VENV.is_dir() or shutil.which("ccx") is None, reason="the fea environment or CalculiX (ccx) is not installed here")
+def test_the_examples_pick_is_solved_by_the_fea_package_and_held_by_its_slice():
+    answer = client.post(SWEEPS, json={"toml": EXAMPLE.read_text(encoding="utf-8"), "sweep": {"quantity": "step_length", "start": 3, "end": 25, "load": 230}})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    check = body["check"]
+    assert body["rows"][body["pick"]]["value"] == 4.0 and check["state"] == "solved" and check["first"]["what"] == "adhesive"
+    assert check["holds"] is (check["first"]["load"] >= 230.0) and check["elastic_limit_load"] == pytest.approx(check["first"]["load"])
+    solved = client.post(SOLVE, json={"repair": body["picked"]}).json()["report"]
+    assert check["peak_shear"]["value"] == pytest.approx(solved["bond"]["peak_shear"]["value"], rel=1e-9), "the check is the pick's own solve"

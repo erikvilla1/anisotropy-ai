@@ -1,0 +1,759 @@
+{
+ "feature": "repair",
+ "title": "Changing and sweeping a bonded patch repair",
+ "records": [
+  "ADR-0130",
+  "ADR-0131",
+  "ADR-0132",
+  "ADR-0135",
+  "ADR-0136"
+ ],
+ "watches": [
+  "lib/repair-chat.ts",
+  "components/workspace/repair-chat.tsx",
+  "engine/src/anisotropy_engine/repair/changes.py",
+  "engine/src/anisotropy_engine/repair/sweeps.py",
+  "engine/docs/references/bonded-repairs.md",
+  "mcp-server/src/anisotropy_mcp/server.py"
+ ],
+ "questions": [
+  {
+   "ask": "Add a step",
+   "kind": "change",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "add_steps",
+     "count": 1
+    },
+    "says": [
+     "1 step added."
+    ]
+   },
+   "mcp": {
+    "tool": "preview_repair_change",
+    "context": "repair",
+    "args": {
+     "repair": "example",
+     "action": "add_steps",
+     "count": 1
+    },
+    "says": [
+     "Five steps in place of four",
+     "\"applied\":false"
+    ]
+   },
+   "live": {
+    "judge": "Calls the preview with one step added; reports the engine's sentence (five steps in place of four, the cut five plies deep, three plies left) and the numbers before and after as the tool gave them; says nothing is applied until the engineer applies it; never calls the load at the adhesive's elastic limit a strength"
+   },
+   "source": "the plan for slice 5, 2026-11-20"
+  },
+  {
+   "ask": "make each step 0.5 in",
+   "kind": "change",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "set",
+     "quantity": "step_length",
+     "value": 0.5,
+     "unit": "in"
+    },
+    "says": [
+     "The step length set to 0.5 in."
+    ]
+   },
+   "mcp": {
+    "tool": "preview_repair_change",
+    "context": "repair",
+    "args": {
+     "repair": "example",
+     "action": "set",
+     "quantity": "step_length",
+     "value": 0.5,
+     "unit": "in"
+    },
+    "says": [
+     "The step length goes from 12.5 mm to 12.7 mm (0.5 in as written)."
+    ]
+   },
+   "live": {
+    "judge": "Passes 0.5 with the unit in, as written, and converts nothing itself; reports that the step length goes from 12.5 mm to 12.7 mm and the numbers before and after as the tool gave them; says nothing is applied"
+   },
+   "source": "the plan for slice 5, 2026-11-20"
+  },
+  {
+   "ask": "ad a step",
+   "kind": "change",
+   "style": "typo",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "add_steps",
+     "count": 1
+    }
+   }
+  },
+  {
+   "ask": "what if I add two steps of 0/90?",
+   "kind": "change",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "add_steps",
+     "count": 2,
+     "angles": [
+      0,
+      90
+     ]
+    }
+   }
+  },
+  {
+   "ask": "3 steps",
+   "kind": "change",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "set_steps",
+     "count": 3
+    }
+   }
+  },
+  {
+   "ask": "set the load to 800 lb/in",
+   "kind": "change",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "set",
+     "quantity": "load",
+     "value": 800,
+     "unit": "lb/in"
+    }
+   }
+  },
+  {
+   "ask": "thicker bondline",
+   "kind": "change",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "ask",
+    "says": [
+     "To what value?",
+     "does not work one out"
+    ]
+   }
+  },
+  {
+   "ask": "now 0.2 mm",
+   "kind": "change",
+   "style": "fragment",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "set",
+     "quantity": "bondline",
+     "value": 0.2,
+     "unit": "mm"
+    }
+   },
+   "after": [
+    "set the bondline to 0.15 mm"
+   ]
+  },
+  {
+   "ask": "change the patch to 0/90",
+   "kind": "change",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "refused",
+    "heading": "Not a change the chat makes",
+    "says": [
+     "changed in the model tree on the left"
+    ]
+   }
+  },
+  {
+   "ask": "make it lighter",
+   "kind": "change",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-unread",
+   "answer": {
+    "kind": "redirect",
+    "heading": "Not a message I can read yet",
+    "says": [
+     "“add a step”"
+    ]
+   }
+  },
+  {
+   "ask": "smallest repair that stays elastic at 230 N/mm",
+   "kind": "command",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "step_length",
+     "load": 230,
+     "load_unit": "N/mm"
+    },
+    "says": [
+     "No quantity was named, so the step length is swept"
+    ],
+    "never": [
+     "strong enough for",
+     "margin",
+     "safe",
+     "carries the load",
+     "restores"
+    ]
+   },
+   "source": "the plan for slice 5, 2026-11-20, as the founder's card choice of 2026-11-21 words it"
+  },
+  {
+   "ask": "sweep the step length from 3 to 25 mm for the smallest repair that stays elastic at 230 N/mm",
+   "kind": "command",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "step_length",
+     "start": 3,
+     "end": 25,
+     "unit": "mm",
+     "load": 230,
+     "load_unit": "N/mm"
+    },
+    "never": [
+     "strong enough for",
+     "margin",
+     "safe",
+     "carries the load",
+     "restores"
+    ]
+   },
+   "mcp": {
+    "tool": "sweep_repair",
+    "context": "repair",
+    "args": {
+     "repair": "example",
+     "quantity": "step_length",
+     "start": 3,
+     "end": 25,
+     "unit": "mm",
+     "load": 230,
+     "load_unit": "N/mm"
+    },
+    "says": [
+     "a step length of 4 mm, the repair 74 mm across",
+     "the slice holds the pick",
+     "Not the repair's strength",
+     "not a rule for choosing a step length"
+    ]
+   },
+   "live": {
+    "judge": "Gives the pick as the tool worded it (a step length of 4 mm, the repair 74 mm across, its adhesive reaching its elastic limit at 233.5 N/mm), then what the solved slice of the pick says (the adhesive's elastic limit first, at 256 N/mm, at or above the 230 N/mm named), then both cautions; never calls the pick a design, a recommendation, a minimum step length or a strength, and never says the repair carries or is good for 230 N/mm"
+   }
+  },
+  {
+   "ask": "what bondline keeps it elastic at 260 N/mm",
+   "kind": "command",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "bondline",
+     "load": 260,
+     "load_unit": "N/mm"
+    },
+    "never": [
+     "strong enough for",
+     "margin",
+     "safe",
+     "carries the load",
+     "restores"
+    ]
+   }
+  },
+  {
+   "ask": "and at 250?",
+   "kind": "command",
+   "style": "fragment",
+   "page": "repair",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "bondline",
+     "load": 250
+    }
+   },
+   "after": [
+    "what bondline keeps it elastic at 260 N/mm"
+   ]
+  },
+  {
+   "ask": "sweep the number of steps",
+   "kind": "command",
+   "style": "terse",
+   "page": "repair-external",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "steps"
+    }
+   }
+  },
+  {
+   "ask": "optimize the repair",
+   "kind": "command",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-sweep",
+   "answer": {
+    "kind": "ask",
+    "says": [
+     "Smallest for what load?"
+    ]
+   }
+  },
+  {
+   "ask": "whta is the peak sheer?",
+   "kind": "value",
+   "style": "typo",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "12.58 MPa by hand, at the inner end of the ledge of step 1",
+    "says": [
+     "under 100 N/mm"
+    ]
+   },
+   "mcp": {
+    "tool": "repair_results",
+    "context": "repair",
+    "args": {
+     "repair": "example"
+    },
+    "says": [
+     "\"largest_bondline_shear\":{\"value\":12.58,\"at\":\"Ledge of step 1\",\"end\":\"inner end\"}"
+    ]
+   },
+   "live": {
+    "judge": "Leads with 12.58 MPa, the largest shear stress in the adhesive by the hand calculation, at the inner end of the ledge of step 1, under 100 N/mm; adds nothing that was not asked beyond a short basis"
+   }
+  },
+  {
+   "ask": "what is the elastic limit load",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "238.5 N/mm by hand",
+    "says": [
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "how wide is the repair?",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "125 mm across"
+   },
+   "mcp": {
+    "tool": "read_repair",
+    "context": "repair",
+    "args": {
+     "repair": "example"
+    },
+    "says": [
+     "\"repair_diameter\":125.0",
+     "\"plies_removed\":4"
+    ]
+   },
+   "live": {
+    "judge": "Says the repair is 125 mm across, from a tool's result; may add that four plies are cut and four are left under the patch"
+   }
+  },
+  {
+   "ask": "what is the bondline thickness",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "Bondline thickness: 0.1 mm",
+    "says": [
+     "As the repair states it."
+    ]
+   }
+  },
+  {
+   "ask": "what is the peel stress?",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "none",
+    "heading": "The hand calculation has no peel stress",
+    "says": [
+     "Solve the slice to get it"
+    ]
+   }
+  },
+  {
+   "ask": "what is the peel stress?",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair-solved",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "4.112 MPa in the solved slice",
+    "says": [
+     "62.45 mm from the middle",
+     "the adhesive under the cover plies"
+    ]
+   },
+   "mcp": {
+    "tool": "repair_results",
+    "context": "repair",
+    "args": {
+     "repair": "example",
+     "solve": true
+    },
+    "says": [
+     "\"largest_peel_stress\":{\"value\":4.112,\"r\":62.45,\"part\":\"Adhesive under the cover plies\"}"
+    ]
+   },
+   "live": {
+    "judge": "Asks for the solved slice and leads with 4.112 MPa, the largest peel stress, in the adhesive under the cover plies, 62.45 mm from the middle; says the adhesive states no peel strength so it is not judged; names no solver program"
+   }
+  },
+  {
+   "ask": "which ply fails first",
+   "kind": "which",
+   "style": "plain",
+   "page": "repair-solved",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "Laminate ply 6 (−45°) at 466.1 N/mm",
+    "says": [
+     "transverse tension"
+    ]
+   }
+  },
+  {
+   "ask": "what fails first",
+   "kind": "which",
+   "style": "terse",
+   "page": "repair-solved",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The adhesive's elastic limit in shear, at 260.8 N/mm",
+    "says": [
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "how much load does the patch carry",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair-external",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The patch carries 100 of the 100 N/mm at the hole",
+    "says": [
+     "the laminate ends, so the patch carries all of it"
+    ]
+   }
+  },
+  {
+   "ask": "what is the shear at the hole",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "says": [
+     "floor"
+    ]
+   },
+   "gap": "1: a shear stress asked at a named place is answered with the largest and its place, not with the value at the place named"
+  },
+  {
+   "ask": "is the adhesive still elastic at 200 N/mm?",
+   "kind": "yes-no",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "opens": "Yes",
+    "says": [
+     "238.5 N/mm",
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "is it strong enough?",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict",
+    "says": [
+     "238.5 N/mm",
+     "Neither is a failure load"
+    ],
+    "never": [
+     "Yes",
+     "No,"
+    ]
+   },
+   "mcp": {
+    "tool": "repair_results",
+    "context": "repair",
+    "args": {
+     "repair": "example"
+    },
+    "says": [
+     "not the repair's strength"
+    ]
+   },
+   "live": {
+    "judge": "Says in one line that these tools give no strength or verdict; then gives the largest shear stress in the adhesive (12.58 MPa) and the load at which the adhesive reaches its elastic limit (238.5 N/mm) against the 100 N/mm stated; never says the repair is or is not strong enough, safe or adequate, and states no margin"
+   }
+  },
+  {
+   "ask": "can it carry 300 N/mm?",
+   "kind": "yes-no",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict",
+    "says": [
+     "past its elastic limit at 300 N/mm",
+     "238.5 N/mm"
+    ]
+   }
+  },
+  {
+   "ask": "is the scarf long enough?",
+   "kind": "yes-no",
+   "style": "jargon",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict"
+   }
+  },
+  {
+   "ask": "what is the margin of safety",
+   "kind": "value",
+   "style": "jargon",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict",
+    "says": [
+     "Neither is a failure load"
+    ]
+   }
+  },
+  {
+   "ask": "why does the shear stress peak at the ends of a step?",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference",
+    "says": [
+     "Here: 12.58 MPa by hand, at the inner end of the ledge of step 1."
+    ]
+   },
+   "sections": [
+    "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step"
+   ],
+   "mcp": {
+    "tool": "search_repair_references",
+    "args": {
+     "question": "why does the shear stress peak at the ends of a step?"
+    },
+    "says": [
+     "\"id\":\"repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step\""
+    ]
+   },
+   "live": {
+    "judge": "Explains from the section named (the adhesive shears by the difference of the two stacks' stretch, largest where a ply ends) and names the section; takes no number from the section"
+   }
+  },
+  {
+   "ask": "what is peel stress?",
+   "kind": "what-is",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:peel-stress"
+   ]
+  },
+  {
+   "ask": "why does a longer step stop helping",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:why-a-longer-step-stops-helping"
+   ]
+  },
+  {
+   "ask": "what does the pick mean?",
+   "kind": "what-is",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:what-a-sweep-and-its-pick-mean"
+   ]
+  },
+  {
+   "ask": "why do the two answers differ",
+   "kind": "why",
+   "style": "loose",
+   "page": "repair-solved",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:the-hand-calculation-and-the-solved-slice"
+   ]
+  },
+  {
+   "ask": "why isn't the elastic limit the strength?",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference",
+    "says": [
+     "238.5 N/mm"
+    ]
+   },
+   "sections": [
+    "repairs:the-load-at-the-adhesive-s-elastic-limit-is-not-the-strength"
+   ]
+  },
+  {
+   "ask": "solve the slice",
+   "kind": "command",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "solve",
+    "heading": "Solving the slice"
+   }
+  },
+  {
+   "ask": "undo",
+   "kind": "command",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "undo"
+   }
+  },
+  {
+   "ask": "open the report",
+   "kind": "command",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "said",
+    "says": [
+     "Report and shape"
+    ]
+   }
+  },
+  {
+   "ask": "what's the weather in San Diego?",
+   "kind": "off-topic",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   }
+  }
+ ]
+}

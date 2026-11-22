@@ -25,6 +25,7 @@ import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../
 import { ASKED_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
 import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
+import { readRepairAsk, repairAnswer, REPAIR_ROUTES, type RepairAsk, type RepairHeld } from "../../lib/repair-chat";
 import type { WingDescription, WingReport } from "../../lib/wing";
 
 export const FOLDER = "tests/assistant-questions";
@@ -35,11 +36,12 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps"] as const;
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps", "repair", "repair-solved", "repair-external"] as const;
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
  * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
- * `lib/wing-chat.ts`, ADR-0128). */
-export const ALL_ROUTES = [...ROUTES, ...START_ROUTES, ...WING_ROUTES] as const;
+ * `lib/wing-chat.ts`, ADR-0128), then the repair's chat (pages "repair", "repair-solved" with its slice solved and "repair-external",
+ * `readRepairAsk` in `lib/repair-chat.ts`, ADR-0136). */
+export const ALL_ROUTES = [...ROUTES, ...START_ROUTES, ...WING_ROUTES, ...REPAIR_ROUTES] as const;
 export type AnyRoute = (typeof ALL_ROUTES)[number];
 
 export type Kind = (typeof KINDS)[number];
@@ -73,8 +75,11 @@ export type Expected = {
   element?: string;
   /** A failure answer that confirms the engineer's own statement of it ("Yes"). */
   confirmed?: boolean;
-  /** The change of plies a wing's message is read into (ADR-0128), as the engine's form takes it. */
+  /** The change of plies a wing's message is read into (ADR-0128), or the change a repair's message is (ADR-0136), as the engine's
+   * form takes it. */
   change?: Record<string, unknown>;
+  /** The sweep a repair's message is read into (ADR-0136), as the engine's form takes it. */
+  sweep?: Record<string, unknown>;
 };
 
 /** What a real model should read the question as (the real-model run, `scripts/assistant-live.py`). */
@@ -119,8 +124,9 @@ export type Question = {
      * real-model run; `says` (the tool's words) when absent. */
     said?: string[];
     /** What the client's conversation holds before the question, in the real-model run: the coupon stated ("setup"), or stated and solved
-     * ("solved", the default for a tool that reads a result), or the wing named ("wing": Anisotropy's example wing, ADR-0128). */
-    context?: "setup" | "solved" | "wing" };
+     * ("solved", the default for a tool that reads a result), the wing named ("wing": Anisotropy's example wing, ADR-0128) or the
+     * repair named ("repair": Anisotropy's example of a flush stepped repair, ADR-0136). */
+    context?: "setup" | "solved" | "wing" | "repair" };
   live?: Live;
   /** A known gap: the answer does not yet hold what is expected, by the skill's criterion. The bank fails when the gap closes, so the
    * mark comes off with the fix. A gap that opens "search:" is the theory search's (the API's test), "mcp:" the MCP server's; any other
@@ -155,6 +161,16 @@ const imported = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studi
 const WING_ANSWERS: Record<string, { report: WingReport; wing: WingDescription }> = {
   wing: JSON.parse(readFileSync("tests/fixtures/wing/example-answer.json", "utf8")),
   "wing-caps": JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf8")),
+};
+/** The repair's page (ADR-0136): the engine's answer to the flush example, the same with its slice solved, and the example of a patch
+ * bonded on top, as the page holds them when a message is answered. */
+const repairFile = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf8"));
+const repairHeld = (answer: string, solve?: string): RepairHeld => {
+  const found = repairFile(answer);
+  return { repair: found.repair, report: found.report, slice: solve ? repairFile(solve).report : null, sliceStale: false, needs: found.needs };
+};
+const REPAIR_HELD: Record<string, RepairHeld> = {
+  repair: repairHeld("example-answer"), "repair-solved": repairHeld("example-answer", "example-solve"), "repair-external": repairHeld("external-answer"),
 };
 const RESULTS = { fields: studio("fields.json") as Fields, facts: !!studio("explanation.json").facts, explanation: studio("explanation.json") };
 const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported("explanation.json").facts, explanation: imported("explanation.json") };
@@ -314,10 +330,18 @@ export function startAnswer(routed: StartRoute): Said {
 
 /** A talk: the earlier messages, then the question, each routed and answered on the same scene; the chat's own memory of the last
  * question and the element last spoken of is kept as the component keeps it (`thread` and `about` in coupon-chat.tsx). */
-export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } {
+export function talk(question: Question, modelReads: boolean): { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk | RepairAsk } {
   const s = scene(question, modelReads);
-  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk } | null = null;
+  let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk | RepairAsk } | null = null;
+  let asked: RepairAsk | undefined; // what the repair's chat read the message before as: a fragment leans on it (repair-chat.tsx)
   for (const text of [...(question.after ?? []), question.ask]) {
+    if (question.page in REPAIR_HELD) { // the repair's chat reads by its own patterns; no model reads there (ADR-0136)
+      const held = REPAIR_HELD[question.page];
+      const routed: RepairAsk = readRepairAsk(text, held.report?.kind ?? "flush", asked);
+      asked = routed;
+      last = { route: routed.route, said: repairAnswer(routed, held), routed };
+      continue;
+    }
     if (question.page === "wing" || question.page === "wing-caps") { // the wing's chat reads by its own patterns; no model reads there yet (ADR-0128)
       const routed = readWingAsk(text);
       const shown = WING_ANSWERS[question.page];
@@ -363,6 +387,7 @@ function expected(e: Expected, answer: Said): string[] {
   if (e.plies !== undefined && JSON.stringify(data.plies) !== JSON.stringify(e.plies)) out.push(`plies ${JSON.stringify(data.plies)}, expected ${JSON.stringify(e.plies)}`);
   if (e.columns !== undefined && JSON.stringify(data.columns) !== JSON.stringify(e.columns)) out.push(`quantities ${JSON.stringify(data.columns)}, expected ${JSON.stringify(e.columns)}`);
   if (e.change !== undefined && JSON.stringify(data.change) !== JSON.stringify(e.change)) out.push(`change ${JSON.stringify(data.change)}, expected ${JSON.stringify(e.change)}`);
+  if (e.sweep !== undefined && JSON.stringify(data.sweep) !== JSON.stringify(e.sweep)) out.push(`sweep ${JSON.stringify(data.sweep)}, expected ${JSON.stringify(e.sweep)}`);
   if (e.rows !== undefined) {
     const rows = (data.rows ?? {}) as Record<string, string>;
     for (const [key, value] of Object.entries(e.rows)) if (rows[key] !== value) out.push(`row ${key} = ${rows[key] ?? "unset"}, expected ${value}`);

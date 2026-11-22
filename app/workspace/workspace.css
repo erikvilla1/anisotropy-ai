@@ -308,6 +308,15 @@
 .wing-chat .chat-assistant h4 { margin-top: 2px; }
 .wing-chat td[data-better="true"] { color: #8fd18f; }
 .wing-chat td[data-better="false"] { color: #e66767; }
+/* the repair's sweep (ADR-0136): the pick's row and the repair as it stands are marked in the table of values */
+.repair-chat tr[data-pick="true"] th, .repair-chat tr[data-pick="true"] td { background: rgba(143, 209, 143, 0.12); font-weight: 600; }
+.repair-chat tr[data-current="true"] th { font-style: italic; }
+/* its tables fit the chat's column: heads wrap, and nothing scrolls sideways */
+.repair-chat .studio-table-scroll > .studio-table { width: 100%; min-width: 0; font-size: 11.5px; }
+.repair-chat .studio-table th, .repair-chat .studio-table td { padding: 5px 4px; }
+.repair-chat .studio-table thead th { white-space: normal; vertical-align: bottom; }
+.repair-chat .studio-table .studio-text-cell { white-space: normal; text-align: left; }
+.repair-chat [data-holds="false"], .repair-chat [data-holds="close"] { color: #e6a667; }
 .wing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; align-items: start; }
 .wing-swatch-line { width: 16px; height: 0; border-top: 2px dashed #9085e9; border-radius: 0; vertical-align: 3px; }
 .wing-swatch-ring { border: 2px solid #f2f2f2; border-radius: 50%; background: transparent; }
