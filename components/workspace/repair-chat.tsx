@@ -43,6 +43,7 @@ export function RepairChat() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const next = useRef(1);
+  const last = useRef<RepairAsk | undefined>(undefined); // what the message before was read as
   // a message just sent is brought to the top of the column, so its answer is read from its first line as it arrives
   const newest = useRef<HTMLDivElement>(null);
   const asked = entries.filter((e) => e.role === "user").length;
@@ -69,7 +70,8 @@ export function RepairChat() {
     const message = input.trim();
     if (!message) return;
     setInput("");
-    const ask: RepairAsk = readRepairAsk(message, kindOf(repair));
+    const ask: RepairAsk = readRepairAsk(message, kindOf(repair), last.current); // a fragment leans on the message before it
+    last.current = ask;
     const held: RepairHeld = { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [] };
     let said = repairAnswer(ask, held);
     const id = next.current + 1;

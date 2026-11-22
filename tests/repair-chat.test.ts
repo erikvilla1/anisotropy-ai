@@ -33,7 +33,7 @@ const sweepOf = (message: string, kind: "flush" | "external" = "flush") => {
 };
 
 test("the plan's two changes are read into the engine's form, every number and its unit from the words", () => {
-  for (const message of ["Add a step", "add a step", "add one step", "one more step", "add another step please", "Can you add another step?", "what if I add a step?"]) {
+  for (const message of ["Add a step", "add a step", "add one step", "one more step", "add another step please", "Can you add another step?", "what if I add a step?", "ad a step"]) {
     assert.deepEqual(changeOf(message).change, { action: "add_steps", count: 1 }, message);
   }
   for (const message of ["make each step 0.5 in", "Make each step 0.5 in.", "set the step length to 0.5 in", "make the steps 1/2 in", 'make each step 0.5"', "0.5 in steps", "0.5 inch step length"]) {
@@ -85,11 +85,35 @@ test("a change with no value is asked for one, and what the chat does not change
   }
   assert.equal(say("double the step length").kind, "ask");
   assert.match(say("double the step length").lines[0], /does not work one out: for example “set the step length to 10 mm”/);
-  for (const message of ["remove the cover plies", "change the patch layup to 0/90", "use a different material"]) {
+  for (const message of ["remove the cover plies", "change the patch layup to 0/90", "use a different material", "swap the adhesive", "replace the patch plies", "switch the laminate", "add a ply"]) {
     const ask = changeOf(message);
     assert.ok(ask.change === null && !ask.asks && ask.problem?.includes("model tree on the left"), message);
     assert.equal(say(message).heading, "Not a change the chat makes");
   }
+});
+
+test("a fragment takes its question, its sweep or its change from the message before it, with the new value", () => {
+  const elastic = readRepairAsk("is the adhesive still elastic at 200 N/mm");
+  assert.equal(elastic.route, "repair-result");
+  for (const message of ["and at 250?", "now 250", "what about 250", "at 250 N/mm"]) {
+    const next = readRepairAsk(message, "flush", elastic) as Extract<RepairAsk, { route: "repair-result" }>;
+    assert.equal(next.route, "repair-result", message);
+    assert.equal(next.topic, (elastic as typeof next).topic, message);
+    assert.equal(next.load?.value, 250, message);
+  }
+  assert.equal(repairAnswer(readRepairAsk("and at 250?", "flush", elastic), HAND).heading, "No, by hand: past its elastic limit at 250 N/mm");
+  assert.equal(repairAnswer(elastic, HAND).heading, "Yes, by hand: still elastic at 200 N/mm");
+  const swept = sweepOf("sweep step length 3 to 25 mm at 230 N/mm");
+  assert.deepEqual((readRepairAsk("and at 200?", "flush", swept) as typeof swept).sweep, { quantity: "step_length", start: 3, end: 25, unit: "mm", load: 200 });
+  assert.deepEqual((readRepairAsk("now 1.3 kN/mm", "flush", swept) as typeof swept).sweep, { quantity: "step_length", start: 3, end: 25, unit: "mm", load: 1.3, load_unit: "kN/mm" });
+  const set = changeOf("set the bondline to 0.15 mm");
+  assert.deepEqual((readRepairAsk("now 0.2 mm", "flush", set) as typeof set).change, { action: "set", quantity: "bondline", value: 0.2, unit: "mm" });
+  assert.deepEqual((readRepairAsk("try 0.1", "flush", set) as typeof set).change, { action: "set", quantity: "bondline", value: 0.1 });
+  // A value of another kind, a message that says more than a value, or no message before, is read on its own.
+  assert.deepEqual(changeOf("200 N/mm").change, (readRepairAsk("200 N/mm", "flush", set) as typeof set).change);
+  assert.deepEqual(readRepairAsk("and at 10 mm?", "flush", elastic), readRepairAsk("and at 10 mm?"));
+  assert.deepEqual(changeOf("add a step", "flush").change, (readRepairAsk("add a step", "flush", elastic) as typeof set).change);
+  assert.deepEqual(readRepairAsk("and at 250?"), readRepairAsk("and at 250?", "flush", undefined));
 });
 
 test("a sweep reads its quantity, its range and the load, each with its unit", () => {
@@ -145,9 +169,11 @@ test("a question of the result is answered from the report, the answer as the he
   assert.equal(say("what is the patch layup").heading, "Patch [90/−45/0/45], deepest ply first");
   assert.equal(say("what is the patch layup", ON_TOP).heading, "Patch [0/45/−45/0/0/90], from the laminate upward");
   const forces = say("how much load does the patch carry");
-  assert.equal(forces.heading, "The patch carries 53.03 of the 100 N/mm at the repair's middle; the plies left under it carry the rest");
-  assert.equal(forces.lines[0], "By hand, at the inner end of each step: cover overlap 8.608, ledge of step 1 24.66, ledge of step 2 47.58, ledge of step 3 52.24, floor 53.03 N/mm.");
-  assert.equal(say("how much load does the patch carry", ON_TOP).heading, "The patch carries 100 of the 100 N/mm at the edge of the hole, where the laminate ends");
+  assert.equal(forces.heading, "The patch carries 53.03 of the 100 N/mm at the middle");
+  assert.equal(forces.lines[0], "At the repair's middle the plies left under the patch carry the rest.");
+  assert.equal(forces.lines[1], "By hand, at the inner end of each step: cover overlap 8.608, ledge of step 1 24.66, ledge of step 2 47.58, ledge of step 3 52.24, floor 53.03 N/mm.");
+  assert.equal(say("how much load does the patch carry", ON_TOP).heading, "The patch carries 100 of the 100 N/mm at the hole");
+  assert.equal(say("how much load does the patch carry", ON_TOP).lines[0], "At the edge of the hole the laminate ends, so the patch carries all of it.");
 });
 
 test("a value the repair states is read back as stated, with its unit and its step", () => {
@@ -170,8 +196,8 @@ test("what only the solved slice holds is answered from it, and asked for when i
   assert.equal(say("where is the peel stress highest", SOLVED).heading, peel.heading);
   assert.equal(say("which ply fails first", SOLVED).heading, "Laminate ply 6 (−45°) at 466.1 N/mm");
   const first = say("what fails first", SOLVED);
-  assert.equal(first.heading, "The adhesive reaches its elastic limit in shear, at 260.8 N/mm");
-  assert.deepEqual(first.lines, ["In the solved slice, as the load grows.", NOT_THE_STRENGTH]);
+  assert.equal(first.heading, "The adhesive's elastic limit in shear, at 260.8 N/mm");
+  assert.deepEqual(first.lines, ["In the solved slice, as the load grows, the adhesive reaches its elastic limit in shear first.", NOT_THE_STRENGTH]);
   assert.equal(say("what fails first").heading, "By hand, only the adhesive's shear is worked");
   assert.equal(say("what is the largest shear?", SOLVED).lines[1], "Solved as a slice: 11.5 MPa, 37.29 mm from the middle (the adhesive on the ledge of step 2).");
   assert.equal(say("what is the elastic limit load", SOLVED).lines[1], "Solved as a slice: 260.8 N/mm.");
@@ -192,9 +218,10 @@ test("a question that asks for a verdict is told the page gives none, with what 
   assert.equal(say("can it carry 1500 lb/in?").lines[0], "By hand, the adhesive reaches its elastic limit in shear at 238.5 N/mm; the load stated is 100 N/mm.", "another unit is not converted on the page");
   assert.equal(say("is it strong enough?").offer, "solve");
   // a yes or no about the elastic limit opens with it
-  assert.equal(say("is the adhesive still elastic at 200 N/mm?").heading, "Yes, by hand: the adhesive is still elastic at 200 N/mm");
-  assert.equal(say("does it stay elastic at 250").heading, "No, by hand: the adhesive is past its elastic limit at 250 N/mm");
-  assert.equal(say("is the adhesive still elastic?").heading, "Yes, by hand: the adhesive is still elastic at 100 N/mm");
+  assert.equal(say("is the adhesive still elastic at 200 N/mm?").heading, "Yes, by hand: still elastic at 200 N/mm");
+  assert.equal(say("is the adhesive still elastic at 200 N/mm?").lines[0], "The adhesive reaches its elastic limit in shear at 238.5 N/mm, at the inner end of the ledge of step 1.");
+  assert.equal(say("does it stay elastic at 250").heading, "No, by hand: past its elastic limit at 250 N/mm");
+  assert.equal(say("is the adhesive still elastic?").heading, "Yes, by hand: still elastic at 100 N/mm");
   assert.equal(say("is the adhesive still elastic at 1500 lb/in").heading, "The adhesive reaches its elastic limit at 238.5 N/mm by hand");
 });
 
@@ -217,7 +244,7 @@ test("a command is started or pointed to, and what cannot be read is said with e
   assert.deepEqual([say("open the report").offer, say("open the report").panel], ["report", "repair-report"]);
   assert.equal(say("download the step file").heading, "The STEP file is built in Report and shape");
   for (const message of ["undo", "undo that", "revert", "go back"]) assert.deepEqual(readRepairAsk(message), { route: "repair-command", command: "undo" }, message);
-  for (const message of ["hello", "thanks", "add a ply", "asdf"]) {
+  for (const message of ["hello", "thanks", "asdf"]) {
     assert.equal(readRepairAsk(message).route, "repair-unread", message);
     assert.deepEqual(say(message).lines, [REPAIR_EXAMPLES]);
   }

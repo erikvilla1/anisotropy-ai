@@ -434,6 +434,12 @@ test("the chat answers a question from the page's own results, gives no verdict,
   await expect(verdict).toHaveAttribute("data-kind", "verdict");
   await expect(verdict.getByTestId("repair-chat-heading")).toHaveText("This page gives no strength or verdict");
   await expect(verdict).toContainText("By hand, the adhesive reaches its elastic limit in shear at 238.5 N/mm; the load stated is 100 N/mm.");
+  // a yes or no by hand, and a fragment after it that takes its question from the message before
+  const elastic = await ask(page, "is the adhesive still elastic at 200 N/mm?");
+  await expect(elastic.getByTestId("repair-chat-heading")).toHaveText("Yes, by hand: still elastic at 200 N/mm");
+  const next = await ask(page, "and at 250?");
+  await expect(next.getByTestId("repair-chat-heading")).toHaveText("No, by hand: past its elastic limit at 250 N/mm");
+  await expect(next).toContainText("The adhesive reaches its elastic limit in shear at 238.5 N/mm, at the inner end of the ledge of step 1.");
   // what only the solved slice holds is offered, solved from the chat, and then answered from it
   const peel = await ask(page, "what is the peel stress?");
   await expect(peel.getByTestId("repair-chat-heading")).toHaveText("The hand calculation has no peel stress");

@@ -184,6 +184,9 @@ def test_the_reference_pages_cite_their_sources_name_no_program_and_hold_no_valu
 # page "Bonded repairs" each must find first among what the repair's chat searches (ADR-0136). Every number in an answer is the
 # repair's report's or its solved slice's; the section only explains it.
 REPAIR_ASKS = {
+    "how does the hand calculation work": "repairs:the-hand-calculation-and-the-solved-slice",
+    "why do the two answers differ": "repairs:the-hand-calculation-and-the-solved-slice",
+    "why does the patch need the same stiffness as the laminate": "repairs:a-patch-as-stiff-as-the-laminate",
     "why does the shear stress peak at the end of a step?": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
     "why is the shear highest at the ends": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
     "what is shear lag": "repairs:why-the-shear-stress-peaks-at-the-ends-of-a-step",
@@ -205,7 +208,7 @@ REPAIR_ASKS = {
 
 def test_the_repairs_page_is_searched_only_with_the_repairs_theory_and_answers_the_repairs_questions_first():
     page = of_subject("repair-references")
-    assert {s.source for s in page} == {"repairs"} and len(page) == 10 and all(s.document == "Bonded repairs" for s in page)
+    assert {s.source for s in page} == {"repairs"} and len(page) == 11 and all(s.document == "Bonded repairs" for s in page)
     assert set(repair_sections()) == set(page) | set(of_subject("repair"))
     for question, section in REPAIR_ASKS.items():
         found = [s.id for s, _ in find(question, among=repair_sections(), limit=3)]

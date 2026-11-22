@@ -19,7 +19,8 @@ VALUES = {"filled_by": "A. Engineer", "date": "2026-11-17", "test": "unnotched t
 FIELDS = fixture("fields.json")
 EXPLANATION = fixture("explanation.json")
 TOOLS = ["list_materials", "material_values", "describe_coupon_form", "check_setup", "solve_coupon", "result_values", "result_extreme", "explain_result",
-         "read_wing", "wing_results", "wing_rules", "wing_strengths", "search_wing_references", "preview_wing_change", "show_working"]
+         "read_wing", "wing_results", "wing_rules", "wing_strengths", "search_wing_references", "preview_wing_change",
+         "read_repair", "repair_results", "preview_repair_change", "sweep_repair", "search_repair_references", "show_working"]
 EXAMPLE_WING = (Path(__file__).resolve().parents[2] / "engine" / "examples" / "example-wing.toml").read_text(encoding="utf-8")
 
 
@@ -260,3 +261,97 @@ def test_a_change_is_previewed_never_applied_and_one_the_wing_cannot_take_is_ref
     assert all(round(value, 3) == value for value in previewed["after"]["lowest"].values()), "margins as the wing page prints them"
     assert isinstance(caps, Refused) and caps.endswith(": The wing has no spar caps: add them on the Layup step first.")
     assert isinstance(odd, Refused) and len(fake.calls) == 2, "an odd count is refused before the API is asked"
+
+
+# The repair's tools (ADR-0136): each reads a repair file by its path or an example's name, asks the API, and passes on what the engine
+# and the solved slice answered, every number to the four figures the repair's page prints.
+REPAIRS = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "repair"
+REPAIR = fixture("example-answer.json", REPAIRS)
+EXAMPLE_REPAIR = (Path(__file__).resolve().parents[2] / "engine" / "examples" / "example-patch-repair.toml").read_text(encoding="utf-8")
+
+
+def test_the_rules_for_a_repair_keep_the_elastic_limit_apart_from_a_strength():
+    for rule in ("No tool gives the repair's strength, a failure load, a margin, an allowable or a verdict",
+                 'never "the repair carries", "is good for", "restores" or "is strong enough for"', "the engine converts; you never do",
+                 "Give the tool's `answer`, then what its `check` says, then its `cautions`, each as written",
+                 "never call it a design, a recommendation, a minimum step length or a strength", "A value is never taken from a section"):
+        assert rule in INSTRUCTIONS
+
+
+def test_a_repair_is_read_from_its_file_or_an_example_and_sent_as_its_text(call, fake, tmp_path):
+    kept = tmp_path / "my-repair.toml"
+    kept.write_text(EXAMPLE_REPAIR, encoding="utf-8")
+    read, by_path, on_top = call(("read_repair", {"repair": "example"}), ("read_repair", {"repair": str(kept)}), ("read_repair", {"repair": "example-external"}))
+    assert read["repair"] == REPAIR["repair"] and read["kind"] == "flush" and read["sizes"]["repair_diameter"] == 125.0 and read["solve_still_needs"] == []
+    assert read["sizes"]["thickness"] == 1.463, "a size as the repair's page prints it, to four figures"
+    assert by_path == read and on_top["kind"] == "external"
+    assert [c[1] for c in fake.calls] == ["/v1/repairs/analyze"] * 3 and fake.calls[0][2] == {"toml": EXAMPLE_REPAIR} and fake.calls[0][3]["x-anisotropy-actor"] == "assistant"
+    for given in ("repair.json", str(tmp_path / "missing.toml")):
+        refused = call(("read_repair", {"repair": given}))[0]
+        assert isinstance(refused, Refused) and "repair file" in refused, refused
+    assert len(fake.calls) == 3, "a file that is not a repair file is never sent"
+
+
+def test_a_repairs_results_are_the_hand_calculations_and_the_solved_slice_only_when_asked(call, fake):
+    hand = call(("repair_results", {"repair": "example"}))[0]
+    by_hand = hand["by_hand"]
+    assert by_hand["largest_bondline_shear"] == {"value": 12.58, "at": "Ledge of step 1", "end": "inner end"} and by_hand["elastic_limit_load"] == 238.5
+    assert by_hand["load"] == 100.0 and by_hand["repair_width"] == 125.0 and hand["units"]["force"] == "N/mm"
+    assert by_hand["patch_force_at_the_inner_end_of_each_step"] == {"Cover overlap": 8.608, "Ledge of step 1": 24.66, "Ledge of step 2": 47.58,
+                                                                    "Ledge of step 3": 52.24, "Floor": 53.03}
+    assert "not the repair's strength" in hand["not_a_strength"] and isinstance(hand["solved_slice"], str)
+    assert [c[1] for c in fake.calls] == ["/v1/repairs/analyze"], "the slice is solved only when it is asked for"
+    solved = call(("repair_results", {"repair": "example", "solve": True}))[0]["solved_slice"]
+    assert fake.calls[-1][1] == "/v1/repairs/solve" and fake.calls[-1][2] == {"toml": EXAMPLE_REPAIR, "cut_faces": "open"}
+    assert solved["largest_bondline_shear"] == {"value": 11.5, "r": 37.29, "part": "Adhesive on the ledge of step 2"}
+    assert solved["largest_peel_stress"] == {"value": 4.112, "r": 62.45, "part": "Adhesive under the cover plies"}
+    assert solved["elastic_limit_load_in_shear"] == 260.8 and solved["first_as_the_load_grows"] == {"what": "adhesive", "load": 260.8}
+    assert solved["first_ply"] == {"name": "Laminate ply 6 (-45°)", "mode": "transverse tension", "load": 466.1}
+    assert solved["headline"].endswith("first, the adhesive reaches its elastic limit in shear at 260.8 N/mm")
+    text = json.dumps(solved)
+    assert not re.search(r"calculix|ccx|CPE8R|abaqus", text, re.I), "the program and its element are not handed to the client's model (ADR-0091)"
+    # a slice that cannot be solved leaves the hand calculation whole and says why
+    fake.no_solver = True
+    kept = call(("repair_results", {"repair": "example", "solve": True}))[0]
+    assert kept["by_hand"] == by_hand and kept["solved_slice"] == {"not_solved": "The slice cannot be solved right now. Try again in a minute."}
+
+
+def test_a_change_to_a_repair_is_previewed_never_applied_with_its_unit_as_written(call, fake):
+    added, longer, nine, none = call(("preview_repair_change", {"repair": "example", "action": "add_steps", "count": 1}),
+                                     ("preview_repair_change", {"repair": "example", "action": "set", "quantity": "step_length", "value": 0.5, "unit": "in"}),
+                                     ("preview_repair_change", {"repair": "example", "action": "set_steps", "count": 9}),
+                                     ("preview_repair_change", {"repair": "example", "action": "set_steps", "count": 0}))
+    assert fake.calls[0][2] == {"toml": EXAMPLE_REPAIR, "change": {"action": "add_steps", "count": 1}}, "only what was stated is sent"
+    assert fake.calls[1][2]["change"] == {"action": "set", "quantity": "step_length", "value": 0.5, "unit": "in"}, "the unit goes as written: the engine converts"
+    assert added["words"].startswith("Five steps in place of four") and added["applied"] is False
+    assert (added["before"]["steps"], added["after"]["steps"], added["after"]["repair_diameter"]) == (4, 5, 150.0)
+    assert added["after"]["peak_shear"] == {"value": 12.58, "name": "Ledge of step 1", "end": "end"} and added["after"]["elastic_limit_load"] == 238.5
+    assert longer["words"] == "The step length goes from 12.5 mm to 12.7 mm (0.5 in as written)." and longer["after"]["repair_diameter"] == 126.2
+    assert isinstance(nine, Refused) and nine.endswith("9 steps of 1 plies remove 9 plies, and the laminate has 8")
+    assert isinstance(none, Refused) and len(fake.calls) == 3, "a count below one is refused before the API is asked"
+
+
+def test_a_sweep_gives_its_answer_its_check_and_its_cautions_and_never_a_strength(call, fake):
+    swept = call(("sweep_repair", {"repair": "example", "quantity": "step_length", "start": 3, "end": 25, "unit": "mm", "load": 230, "load_unit": "N/mm"}))[0]
+    assert fake.calls[0][1] == "/v1/repairs/sweeps" and fake.calls[0][2]["sweep"] == {"quantity": "step_length", "start": 3, "end": 25, "unit": "mm", "load": 230, "load_unit": "N/mm"}
+    assert swept["answer"] == ["The smallest of these whose adhesive is still elastic at 230 N/mm: a step length of 4 mm, the repair 74 mm across. "
+                               "Its adhesive reaches its elastic limit at 233.5 N/mm."]
+    assert swept["check"]["state"] == "solved" and swept["check"]["holds"] is True and swept["check"]["words"][-1] == "That is at or above the 230 N/mm named: the slice holds the pick."
+    assert swept["cautions"][0].startswith("Not the repair's strength") and "not a rule for choosing a step length" in swept["cautions"][1]
+    assert swept["pick"] == {"value": 4.0, "steps": 4, "plies_per_step": 1, "repair_diameter": 74.0,
+                             "peak_shear": {"value": 12.85, "name": "Ledge of step 1", "end": "end"}, "elastic_limit_load": 233.5, "elastic": True, "current": False}
+    assert [row["value"] for row in swept["rows"] if row.get("current")] == [12.5], "the repair as it stands is marked among the rows"
+    assert len(swept["rows"]) == 24 and swept["rows"][0]["elastic"] is False and swept["rows"][-1] == {"value": 25.0, "refused": swept["rows"][-1]["refused"]}
+    assert swept["applied"] is False and swept["load_named"] == 230 and swept["load_stated"] == 100.0
+    text = json.dumps(swept)
+    assert not re.search(r"\bmargin|\bsafe\b|strong enough|\bcarries\b|recommend", text, re.I)
+    assert not re.search(r"calculix|ccx|abaqus", text, re.I)
+    refused = call(("sweep_repair", {"repair": "example", "quantity": "bondline"}))[0]
+    assert isinstance(refused, Refused)  # what the API refuses is passed on in its words
+
+
+def test_a_question_finds_the_repairs_reference_sections_and_never_a_value_from_them(call, fake):
+    found = call(("search_repair_references", {"question": "why does the shear stress peak at the ends of a step?"}))[0]
+    assert fake.calls[-1][2] == {"question": "why does the shear stress peak at the ends of a step?", "about": "repair", "limit": 3}
+    assert found["sections"][0]["from"] == "Bonded repairs, Why the shear stress peaks at the ends of a step"
+    assert "never from a section" in found["how_to_answer"]

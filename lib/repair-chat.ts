@@ -126,7 +126,7 @@ function quantityOf(text: string, kind: RepairKind, values: Written[] = []): Rep
 const ASKING = /^(?:what|what's|whats|which|how|why|does|do|is|are|can (?:i|it|we|this|the)|should|where|when|will|would)\b/;
 const WHAT_IF = /^(?:what if|what happens if|what would happen if|how about|what about|and if|suppose|say)\b/;
 const SET = /\b(?:set|make|change|use|put|increase|decrease|reduce|raise|lower|bump|try|give|shorten|lengthen|thicken|widen|grow|shrink|go (?:back )?to|go with|switch|move|want|should be)\b/;
-const ADD = /\b(?:add|adding|another|one more|more|extra|additional)\b/;
+const ADD = /\b(?:add|ad|adding|another|one more|more|extra|additional)\b/; // "ad a step" is read as it was meant
 const REMOVE = /\b(?:remove|removing|take (?:off|out|away)|delete|drop|fewer|less)\b/;
 const RELATIVE = /\b(?:double|halve|half|twice|triple|increase|decrease|reduce|raise|lower|bump|shorten|lengthen|thicken|thin|widen|grow|shrink|longer|shorter|thicker|thinner|bigger|smaller|higher|more|less)\b/;
 
@@ -176,7 +176,8 @@ function changeOf(text: string, kind: RepairKind): RepairAsk | null {
   const steps = stepsChange(text, values);
   if (steps) return steps;
   const verb = SET.test(text) || ADD.test(text) || REMOVE.test(text) || WHAT_IF.test(text);
-  if (verb && /\b(?:cover pl(?:y|ies)|patch pl(?:y|ies)|patch lay-?up|lay-?ups?|materials?|laminate|shear modulus|shear strength|peel strength|poisson|kind of repair|panel)\b/.test(text)
+  if ((verb || /\b(?:use|swap|replace|switch)\b/.test(text))
+    && /\b(?:cover pl(?:y|ies)|patch|pl(?:y|ies)|lay-?ups?|angles?|materials?|adhesive|laminate|shear modulus|shear strength|peel strength|poisson|kind of repair|panel)\b/.test(text)
     && !quantityOf(text.replace(/\bcover pl(?:y|ies)\b/, "cover"), kind, values)) {
     return change("The chat changes the step length, the number of steps, the bondline's thickness, the load, the damage's diameter and the overlaps. Plies, materials and the rest are changed in the model tree on the left.", false);
   }
@@ -295,8 +296,34 @@ const DEFINING = /^(?:what's|whats|what is|what are)\s+(?:a |an )?(?!the\b)[a-z]
 
 /** How a message is answered on the repair's page: a change previewed, a sweep run, a question of the result answered from the report
  * and the solved slice, a question of why, how or what answered from the reference pages, a command, or "not read". */
-export function readRepairAsk(message: string, kind: RepairKind = "flush"): RepairAsk {
+/** A fragment that leans on the message before it, "and at 250?", "what about 300 N/mm", "now 0.2 mm": the question, the sweep or the
+ * change before, with the value it names in place of the one before. Null when the message is not such a fragment, or nothing before
+ * it took a value. */
+function following(text: string, before: RepairAsk | undefined): RepairAsk | null {
+  if (!before) return null;
+  const rest = text.replace(/^(?:(?:and|now|then|ok|okay|so)\s+)+/, "").replace(/^(?:(?:what|how) about|what if|try)\s+/, "").replace(/^(?:at|for|with|to|under)\s+/, "").replace(/\s+(?:instead|then)$/, "");
+  const values = written(rest);
+  if (values.length !== 1 || values[0].at !== 0 || values[0].end !== rest.length) return null; // the value and nothing else
+  const { value, unit, kind } = values[0];
+  if (before.route === "repair-result" && (before.topic === "elastic" || before.topic === "verdict") && kind !== "length") {
+    return { ...before, load: { value, ...(unit ? { unit } : {}) } };
+  }
+  if (before.route === "repair-sweep" && before.sweep && before.sweep.load !== undefined && kind !== "length") {
+    const { load_unit: _, ...sweep } = before.sweep;
+    return { ...before, sweep: { ...sweep, load: value, ...(unit ? { load_unit: unit } : {}) } };
+  }
+  if (before.route === "repair-change" && before.change?.action === "set" && (kind === null || (before.change.quantity === "load" ? kind === "load" : kind === "length"))) {
+    const { unit: _, ...change } = before.change;
+    return { ...before, change: { ...change, value, ...(unit ? { unit } : {}) } };
+  }
+  return null;
+}
+
+/** What a message asks of the repair's chat. `before` is what the message before it was read as, which a fragment leans on. */
+export function readRepairAsk(message: string, kind: RepairKind = "flush", before?: RepairAsk): RepairAsk {
   const text = plain(message).replace(/[?!.]+$/, "").trim();
+  const follows = following(text, before);
+  if (follows) return follows;
   if (/^(?:undo|revert|go back|put it back|change it back)(?: that| it| the last change| the change| please)*$/.test(text)) return { route: "repair-command", command: "undo" };
   const sweep = sweepOf(text, kind);
   if (sweep) return sweep;
@@ -362,6 +389,8 @@ export function sweepLine(found: RepairSweep, assumed = false): string {
   return `${what}${load}.${assumed ? " No quantity was named, so the step length is swept: name the number of steps, the bondline or the overlap to sweep another." : ""}`;
 }
 
+/** What comes first in a solved slice, as a heading. */
+const FIRST_SHORT: Record<"adhesive" | "peel" | "ply", string> = { adhesive: "The adhesive's elastic limit in shear", peel: "The bondline's peel strength", ply: "A ply's strength" };
 const SOLVE_FIRST = "Solve the slice to get it: a few seconds.";
 const staleLine = (held: RepairHeld): string => (held.sliceStale ? "The slice was solved for the repair as it was: solve it again for the repair as it stands." : SOLVE_FIRST);
 
@@ -427,12 +456,12 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
       if (!answer || lap.load === undefined) return noLoad();
       const limit = answer.elastic_limit_load;
       if (limit === undefined) return said("none", "No elastic limit load: the adhesive states no shear strength", ["State it on the Adhesive step: the stress at the adhesive's elastic limit."], {}, "repair-adhesive");
-      const reaches = `It reaches its elastic limit in shear at ${shown(limit)} ${force}, ${peakPlace(report)}.`;
+      const reaches = `The adhesive reaches its elastic limit in shear at ${shown(limit)} ${force}, ${peakPlace(report)}.`;
       if (ask.load?.unit && ask.load.unit !== u.force) {
         return said("result", `The adhesive reaches its elastic limit at ${shown(limit)} ${force} by hand`, [`Give the load in ${force} to compare it: the page converts no number.`, NOT_THE_STRENGTH], { elastic_limit_load: limit }, "repair-solve");
       }
       const at = ask.load?.value ?? lap.load, elastic = at <= limit;
-      return said("result", `${elastic ? "Yes" : "No"}, by hand: the adhesive is ${elastic ? "still elastic" : "past its elastic limit"} at ${shown(at)} ${force}`, [
+      return said("result", `${elastic ? "Yes" : "No"}, by hand: ${elastic ? "still elastic" : "past its elastic limit"} at ${shown(at)} ${force}`, [
         reaches,
         ...(slice?.first ? [`In the solved slice, ${FIRST_WORDS[slice.first.what]} first, at ${shown(slice.first.load)} ${force}.`] : []),
         NOT_THE_STRENGTH,
@@ -461,14 +490,16 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
       }
       if (!slice.first) return said("none", "Nothing is judged in the slice", ["The repair states no strength of the adhesive or of the plies to hold the stresses to."], {}, "repair-adhesive");
       const words = sliceWords(slice);
-      return said("result", `${capital(FIRST_WORDS[slice.first.what])}, at ${shown(slice.first.load)} ${force}`, ["In the solved slice, as the load grows.", slice.first.what === "ply" ? words.ply : NOT_THE_STRENGTH],
+      return said("result", `${FIRST_SHORT[slice.first.what]}, at ${shown(slice.first.load)} ${force}`,
+        [`In the solved slice, as the load grows, ${FIRST_WORDS[slice.first.what]} first.`, slice.first.what === "ply" ? words.ply : NOT_THE_STRENGTH],
         { first: slice.first }, "repair-solve");
     }
     case "forces": {
       if (!answer || lap.load === undefined) return noLoad();
       const forces = answer.boundary_forces, last = forces[forces.length - 1];
-      const ends = lap.ends_at_the_middle ? "at the repair's middle; the plies left under it carry the rest" : "at the edge of the hole, where the laminate ends";
-      return said("result", `The patch carries ${shown(last)} of the ${shown(lap.load)} ${force} ${ends}`, [
+      // "carries" is the force in the patch under the load stated, by hand: where the laminate ends, all of it
+      return said("result", `The patch carries ${shown(last)} of the ${shown(lap.load)} ${force} at ${lap.ends_at_the_middle ? "the middle" : "the hole"}`, [
+        lap.ends_at_the_middle ? "At the repair's middle the plies left under the patch carry the rest." : "At the edge of the hole the laminate ends, so the patch carries all of it.",
         `By hand, at the inner end of each step: ${lap.steps.map((step, i) => `${inSentence(step.name).replace(/^the /, "")} ${shown(forces[i + 1])}`).join(", ")} ${force}.`,
       ], { boundary_forces: forces }, "repair-solve");
     }

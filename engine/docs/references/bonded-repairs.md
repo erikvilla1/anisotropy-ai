@@ -104,7 +104,7 @@ Sources: Laminate theory, stepped patch repair. Goland, M. and Reissner, E. (194
 
 ## A patch as stiff as the laminate
 
-<!-- also: stiffness, stiffness match, matching, stiff patch, soft patch, stiffer, softer, patch layup, patch angles, own layup, imbalance, unbalanced -->
+<!-- also: stiffness, patch stiffness, stiffness of the patch, laminate stiffness, same stiffness, need the same stiffness, stiffness match, stiffness mismatch, matching, match the laminate, as stiff as, stiff patch, soft patch, stiffer, softer, patch layup, patch angles, own layup, imbalance, unbalanced, balanced -->
 
 A bond works best when the two sides stretch alike. Where the patch and the laminate under it are equally stiff, the two ends of a step share its load evenly. Where one is stiffer, the load crowds to one end, the end where the softer side carries the most, and the peak there rises above what an even bond would see.
 
@@ -114,6 +114,18 @@ A ply at an angle counts in these stiffnesses for what it carries inside the bon
 
 Sources: Laminate theory, stepped patch repair. Hart-Smith, L. J. (1973), Adhesive-bonded double-lap joints, NASA CR-112235, public release: the loss a stiffness imbalance between the adherends brings. That a stiffer patch draws load from the laminate around it is stated from general knowledge of the field: UNVERIFIED.
 
+## The hand calculation and the solved slice
+
+<!-- also: hand calculation, by hand, how does the hand calculation work, how is it calculated, solved slice, slice, finite element, two answers, two numbers, differ, different, difference between the two, which is right, why is the slice lower, lower than by hand, agree -->
+
+The page gives two answers for one repair. The hand calculation treats the bond as a row of steps. On each step the patch's plies and the laminate's plies are two bars that only stretch, each straining alike through its thickness, and the adhesive between them only shears. That is solved exactly, step by step, in a fraction of a second. It gives the shear stress along the whole bondline, its largest value and where, and the force the patch has taken up at the end of each step.
+
+The solved slice is a cut through the repair's middle, with every ply and every layer of adhesive modelled in its thickness. There the plies can also shear through their thickness and the patch can bend, which two bars cannot. That spreads the handing over of load, and in both example repairs the slice's largest shear stress is lower than the hand calculation's. The slice also brings what the hand calculation has none of: the peel stress, and each ply's own stresses.
+
+Where the two agree, as on the force in the patch at each step, each is a check on the other. Where they differ, the slice holds more of the physics, and the hand calculation is the one that is worked again at every change. Both are elastic, and neither gives the repair's strength.
+
+Sources: Laminate theory, stepped lap bond. Finite element theory, the repair's slice against the hand calculation.
+
 ## What a sweep and its pick mean
 
 <!-- also: sweep, smallest repair, pick, picked, optimise, optimize, best, best step length, vary, range, try values, compare values, table of values, what if -->
@@ -122,6 +134,6 @@ A sweep changes one quantity of the repair over a range, the step length, the nu
 
 With a load named, the sweep marks the rows whose adhesive is still elastic at that load, and picks the smallest repair among them: the narrowest, and among equally wide ones the nearest to the repair as it stands. The pick is then solved as a slice, which adds the peel stress and the plies, and the page says whether the slice holds it: whether the first limit reached there is at or above the load named.
 
-The pick is not a strength and not a design. It is the smallest repair in that table for which this elastic model finds no yielding of the adhesive at that load. For the step length in particular the model can pick a step far shorter than any repair is given, for the reasons under the longer step above.
+The pick is not a strength and not a design. It is the smallest repair in that table for which this elastic model finds no yielding of the adhesive at that load. For the step length in particular the model can pick a step far shorter than any repair is given, since it leaves out why steps are made long: room for the adhesive to yield, a step that is never cut exactly to its drawn length, and a bond that may hold a flaw.
 
 Sources: Laminate theory, stepped lap bond and stepped patch repair. Finite element theory, the repair's slice.

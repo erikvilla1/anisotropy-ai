@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections import OrderedDict
 from pathlib import Path
@@ -27,6 +28,8 @@ from .api import Api, ApiRefused
 REPO = Path(__file__).resolve().parents[3]
 FORM = REPO / "lib" / "coupon-form-definition.json"  # the form the page is built from, written by fea/tools/export_form_definition.py
 EXAMPLE_WING = REPO / "engine" / "examples" / "example-wing.toml"  # Anisotropy's example wing, the wing tools' `example`
+EXAMPLE_REPAIRS = {"example": REPO / "engine" / "examples" / "example-patch-repair.toml",  # the repair tools' examples: a flush stepped repair
+                   "example-external": REPO / "engine" / "examples" / "example-external-patch-repair.toml"}  # and a patch bonded on top
 MAX_WING_FILE = 200_000  # characters, as the API takes a wing file's text
 RESULTS_KEPT = 8
 RUN_ONLY = ("solver", "document")  # setup items that concern the full run alone; the preview's solve goes ahead without them (ADR-0086)
@@ -54,7 +57,14 @@ A wing: the wing tools read a wing file on this machine by its full path, or `ex
 12. A number about the wing comes from wing_results (margins, mass, deflection, frequencies), wing_rules (the design rules and their limits) or wing_strengths (the strengths the margins use, each with its basis and the report's page). A margin is given as the wing page prints it, with its sign and three decimals (+0.059); write it so. Name the strengths' basis beside a margin: B-basis, B-estimate or test mean.
 13. Answer a wing question the way the wing page does: the answer first, in one sentence (the part, yes or no, or the value, with its basis), then at most three short lines of what it rests on. No table and nothing the engineer did not ask about unless they ask for more. Say parts and checks in words; never name a tool's fields.
 14. For why, how, a design rule's purpose, a test method or an allowable, use search_wing_references and answer from its sections, naming the section. A value is never taken from a section: a rule's limit comes from wing_rules, a strength from wing_strengths.
-15. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file."""
+15. A change of plies is previewed with preview_wing_change: plies of one angle added to or taken from one part over a stretch of the half span, in pairs (a symmetric laminate). Pass only what the engineer stated; when the count, the angle or the part is missing, ask. Report the engine's sentence, the lowest margin before and after, the mass and the rules the change leaves unmet. Nothing is applied: the engineer applies it on the wing page or in the file.
+
+A bonded patch repair: the repair tools read a repair file on this machine by its full path, or `example` for Anisotropy's example of a flush stepped repair (`example-external` for a patch bonded on top), and the API works it by hand in under a second.
+16. A number about the repair comes from repair_results (the hand calculation: the largest shear stress in the adhesive, where, and the load at which the adhesive reaches its elastic limit; with solve, the solved slice too: the peel stress, each ply, and what reaches its limit first), from preview_repair_change or from sweep_repair. Write it as the tool gives it, with its unit. Answer the way the repair's page does: the answer first in one sentence, then at most three short lines of what it rests on.
+17. No tool gives the repair's strength, a failure load, a margin, an allowable or a verdict. The load at which the adhesive reaches its elastic limit is where it starts to yield, not where the repair fails: say "the adhesive reaches its elastic limit at ...", never "the repair carries", "is good for", "restores" or "is strong enough for". Asked whether a repair is strong enough or safe, say in one line that these tools give no strength or verdict, then what they do give.
+18. A change is previewed with preview_repair_change, one change at a time: a quantity set to a value, with the unit as the engineer wrote it (the engine converts; you never do), or steps added, removed or regrouped. Pass only what the engineer stated; when the value is missing, ask for it. Report the engine's sentence and the numbers before and after. Nothing is applied: the engineer applies it on the repair's page or in the file.
+19. A sweep (sweep_repair) works the repair by hand at every value of one quantity. With a load named it picks the smallest repair whose adhesive is still elastic at that load, and the tool solves that pick as a slice. Give the tool's `answer`, then what its `check` says, then its `cautions`, each as written. A pick is the model's answer: never call it a design, a recommendation, a minimum step length or a strength.
+20. For why, how or what a thing is (why the shear peaks at the ends of a step, peel stress, what a pick means), use search_repair_references and answer from its sections, naming the section. A value is never taken from a section."""
 
 Step = Literal["strain", "stress", "criterion", "loading"]  # the steps of the fea package's working, in order (ADR-0103)
 Quantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
@@ -184,6 +194,78 @@ def wing_text(wing: str) -> str:
     if not text.strip() or len(text) > MAX_WING_FILE:
         raise ToolError(f"{path} is {'empty' if not text.strip() else 'larger than a wing file'}.")
     return text
+
+
+REPAIR = ("The repair file (.toml) on this machine, by its full path, or example for Anisotropy's example of a flush stepped repair, or "
+          "example-external for its example of a patch bonded on top")
+MAX_REPAIR_FILE = 200_000  # characters, as the API takes a repair file's text
+NOT_A_STRENGTH = ("The load at the adhesive's elastic limit is where the adhesive starts to yield, not the repair's strength: the adhesive "
+                  "yields before it fails, and the hand calculation has no peel stress.")
+
+
+def repair_text(repair: str) -> str:
+    """A repair file's text, read from this machine: `example` and `example-external` are Anisotropy's own; any other is a .toml file
+    by its path."""
+    path = EXAMPLE_REPAIRS.get(repair.strip().lower()) or Path(repair.strip()).expanduser()
+    if path.suffix.lower() != ".toml":
+        raise ToolError("A repair is given as a repair file (.toml) on this machine, by its full path, or as example or example-external for "
+                        "Anisotropy's two example repairs.")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ToolError(f"No repair file could be read at {path}: give its full path on this machine.") from exc
+    if not text.strip() or len(text) > MAX_REPAIR_FILE:
+        raise ToolError(f"{path} is {'empty' if not text.strip() else 'larger than a repair file'}.")
+    return text
+
+
+def four(value: Any) -> Any:
+    """A tool's answer with every number as the repair's page prints it, to four significant figures: a client's model writes what it
+    is given, and two programs that print the same result must agree to the digit (ADR-0136)."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        return float(f"{value:.4g}") if math.isfinite(value) else value
+    if isinstance(value, dict):
+        return {key: four(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [four(item) for item in value]
+    return value
+
+
+def hand_results(report: dict) -> dict:
+    """The hand calculation of a repair as a client's model reads it: values picked out of the engine's report, never derived."""
+    lap = report.get("lap") or {}
+    answer = lap.get("answer")
+    sizes = report.get("sizes") or {}
+    found: dict[str, Any] = {"kind": report.get("kind"), "repair_width": sizes.get("repair_diameter"), "patch_width": sizes.get("patch_diameter"),
+                             "plies_removed": sizes.get("plies_removed"), "plies_left_under_the_patch": sizes.get("plies_left"), "load": lap.get("load")}
+    if not answer:
+        return {**found, "bondline": "Not worked: the repair states no load per unit width."}
+    peak = answer.get("peak_shear") or {}
+    steps = [step.get("name") for step in lap.get("steps") or []]
+    at = steps[peak["step"] - 1] if isinstance(peak.get("step"), int) and 0 < peak["step"] <= len(steps) else None  # as the page names it
+    return {**found,
+            "largest_bondline_shear": {"value": abs(peak["value"]) if peak.get("value") is not None else None, "at": at,
+                                       "end": "inner end" if peak.get("end") == "end" else "outer end"},
+            "elastic_limit_load": answer.get("elastic_limit_load", "Not given: the adhesive states no shear strength."),
+            "patch_force_at_the_inner_end_of_each_step": dict(zip(steps, (answer.get("boundary_forces") or [])[1:], strict=False))}
+
+
+def slice_results(solved: dict) -> dict:
+    """A solved slice as a client's model reads it: the solve in one line, the largest shear and peel stress with their places, the
+    loads at which the adhesive reaches its limits, the first ply and what comes first. The program and its mesh are left out."""
+    report = solved.get("report") or {}
+    bond = report.get("bond") or {}
+    model = report.get("model") or {}
+    return {"headline": solved.get("headline"), "load": report.get("load"),
+            "largest_bondline_shear": bond.get("peak_shear"), "largest_peel_stress": bond.get("peak_peel"),
+            "elastic_limit_load_in_shear": report.get("elastic_limit_load"),
+            "load_at_the_peel_strength": report.get("peel_limit_load") if report.get("peel_limit_load") is not None else "Not judged: the adhesive states no peel strength.",
+            "first_ply": report.get("first_ply") and {key: report["first_ply"].get(key) for key in ("name", "mode", "load")},
+            "first_as_the_load_grows": report.get("first"), "cut_faces": model.get("cut_faces"),
+            "note": "`r` is the distance from the repair's middle. Stresses in the adhesive are means over a short stretch of it, since a stress at "
+                    "a corner grows as the mesh is refined. A ply is checked by maximum stress."}
 
 
 CRITERION_NAMES = {"max_stress": "Maximum stress", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu", "max_strain": "Maximum strain"}
@@ -467,6 +549,114 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
                      "units": found.get("units"), "rules": found.get("rules"), "table_as_changed": (found.get("wing") or {}).get(part),
                      "applied": False, "note": "Nothing is applied. The engineer applies it with Apply on the wing page, or by changing the wing file "
                                                "themselves. Margins are at ultimate load, on the strengths' basis each summary names."})
+
+    def repair_sent(repair: str) -> dict:
+        return {"toml": repair_text(repair)}
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def read_repair(repair: Annotated[str, Field(description=REPAIR)]) -> str:
+        """The repair as the engine reads its file: its kind (flush in a stepped cut, or a patch bonded on top), units, the laminate and
+        its layup, the damage, the steps, the patch, the cover plies, the adhesive, the panel and the load, with the sizes they work out
+        to (the depth of the cut, the plies removed and left, the patch's and the repair's width). Read it to say what the repair is."""
+        found = ask(api.post, "/v1/repairs/analyze", repair_sent(repair))
+        report = found.get("report") or {}
+        return said(four({"repair": found.get("repair"), "kind": report.get("kind"), "units": report.get("units"), "sizes": report.get("sizes"),
+                          "patch_layup": report.get("patch_layup"), "solve_still_needs": [need.get("words") for need in found.get("needs") or []],
+                          "note": "Layups are listed from the bottom face up; the patch's from the deepest ply up (from the laminate upward for a patch "
+                                  "bonded on top). Lengths, stresses and the load per unit width are in the file's own units."}))
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def repair_results(repair: Annotated[str, Field(description=REPAIR)],
+                       solve: Annotated[bool, Field(description="true also solves the slice through the repair (a few seconds): the peel stress, each "
+                                                                "ply's check and what reaches its limit first. Leave false for the hand calculation alone")] = False) -> str:
+        """The repair's bondline worked by hand: the largest shear stress in the adhesive under the load stated, the step and the end it is
+        at, the force the patch carries at the inner end of each step, and the load at which the adhesive reaches its elastic limit in
+        shear. With solve, the solved slice beside it: the largest shear and peel stress and where, the first ply to reach a strength, and
+        which comes first as the load grows. None of these is the repair's strength or a failure load."""
+        sent = repair_sent(repair)
+        report = ask(api.post, "/v1/repairs/analyze", sent).get("report") or {}
+        answer = four({"by_hand": hand_results(report), "units": report.get("units"), "not_a_strength": NOT_A_STRENGTH})
+        if solve:
+            try:
+                solved = api.post("/v1/repairs/solve", {**sent, "cut_faces": "open"})
+                answer["solved_slice"] = four(slice_results(solved))
+            except ApiRefused as exc:
+                answer["solved_slice"] = {"not_solved": str(exc)}
+        else:
+            answer["solved_slice"] = "Not asked for: call again with solve true for the peel stress, the plies and what comes first."
+        return said(answer)
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def preview_repair_change(
+        repair: Annotated[str, Field(description=REPAIR)],
+        action: Annotated[Literal["set", "add_steps", "remove_steps", "set_steps", "regroup", "regroup_steps"], Field(description=(
+            "set: one quantity to a value. add_steps, remove_steps: count steps more or fewer. set_steps: the number of steps is count. "
+            "regroup: the same plies in steps of count plies each. regroup_steps: the same plies cut in count steps"))],
+        quantity: Annotated[Literal["step_length", "bondline", "load", "damage", "cover_overlap", "patch_overlap"] | None, Field(description=(
+            "For set: step_length, bondline (the adhesive's thickness), load (per unit width), damage (its diameter), cover_overlap "
+            "(a flush repair's cover plies) or patch_overlap (a patch bonded on top)"))] = None,
+        value: Annotated[float | None, Field(description="For set: the value, as the engineer wrote it")] = None,
+        unit: Annotated[str | None, Field(max_length=20, description="The unit the engineer wrote the value in (mm, in, N/mm, lb/in, ...); leave out "
+                                                                     "when none was written and the file's own unit is meant. Never convert")] = None,
+        count: Annotated[int | None, Field(ge=1, le=40, description="For the steps' actions: how many steps, or plies per step for regroup")] = None,
+        angles: Annotated[list[float] | None, Field(max_length=40, description="For add_steps or set_steps where the patch's plies are listed: the "
+                                                                                "angles of a new step's plies, in degrees")] = None,
+    ) -> str:
+        """Preview one change to the repair, never applied: the engine makes it on a copy of the repair file and works the repair by hand
+        as it is and as changed. Returns the change in one sentence and, before and after, the steps, the repair's width, the load, the
+        largest shear stress in the adhesive and where, and the load at the adhesive's elastic limit."""
+        change = {key: value_ for key, value_ in {"action": action, "quantity": quantity, "value": value, "unit": unit, "count": count,
+                                                   "angles": angles}.items() if value_ is not None}
+        found = ask(api.post, "/v1/repairs/changes", {**repair_sent(repair), "change": change})
+        return said(four({"words": found.get("words"), "before": found.get("before"), "after": found.get("after"), "units": found.get("units"),
+                          "applied": False, "not_a_strength": NOT_A_STRENGTH,
+                          "note": "Nothing is applied. The engineer applies it with Apply on the repair's page, or by changing the repair file "
+                                  "themselves. The numbers are the hand calculation's: the solved slice is asked for with repair_results."}))
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def sweep_repair(
+        repair: Annotated[str, Field(description=REPAIR)],
+        quantity: Annotated[Literal["step_length", "bondline", "cover_overlap", "patch_overlap", "steps"], Field(description=(
+            "What is varied: step_length, bondline (the adhesive's thickness), cover_overlap, patch_overlap, or steps (the same plies cut in "
+            "every number of steps that divides them)"))],
+        start: Annotated[float | None, Field(gt=0, description="The range's first value, with end; leave both out for a fifth of the value to twice it")] = None,
+        end: Annotated[float | None, Field(gt=0, description="The range's last value")] = None,
+        unit: Annotated[str | None, Field(max_length=20, description="The unit the range was written in; leave out for the file's own")] = None,
+        load: Annotated[float | None, Field(gt=0, description="The load per unit width the adhesive is to stay elastic at, when the engineer names "
+                                                               "one: the sweep then picks the smallest repair that does")] = None,
+        load_unit: Annotated[str | None, Field(max_length=20, description="The unit the load was written in (N/mm, lb/in, ...); leave out for the file's own")] = None,
+    ) -> str:
+        """Work the repair by hand at every value of one quantity, about 25 of them: each row is a whole repair, with its width, its largest
+        shear stress in the adhesive and the load at the adhesive's elastic limit. With a load, the pick is the smallest repair whose
+        adhesive is still elastic at it (the nearest to the repair as it stands when the quantity leaves the width alone), and that pick is
+        solved as a slice: `check` says what the slice gives and whether it holds the pick. Nothing is applied."""
+        sweep = {key: value for key, value in {"quantity": quantity, "start": start, "end": end, "unit": unit, "load": load,
+                                               "load_unit": load_unit}.items() if value is not None}
+        found = ask(api.post, "/v1/repairs/sweeps", {**repair_sent(repair), "sweep": sweep})
+        rows = [{"value": row.get("value"), "refused": row["refused"]} if row.get("refused") is not None else
+                {key: row.get(key) for key in ("value", "steps", "plies_per_step", "repair_diameter", "peak_shear", "elastic_limit_load", "elastic", "current")
+                 if row.get(key) is not None} for row in found.get("rows") or []]
+        pick = found.get("pick")
+        check = found.get("check")
+        return said(four({"answer": found.get("answer"), "check": check and {key: check.get(key) for key in ("state", "holds", "words", "needs") if check.get(key) is not None},
+                          "cautions": found.get("cautions"), "swept": found.get("words"), "quantity": found.get("quantity"), "units": found.get("units"),
+                          "load_stated": found.get("load"), "load_named": found.get("target"), "pick": None if pick is None else rows[pick], "rows": rows,
+                          "applied": False,
+                          "note": "Every row is the hand calculation's, under the load the repair states; `elastic` says whether the adhesive is still "
+                                  "elastic at the load named. The pick is the model's answer, not a design: give `answer`, `check` and `cautions` as "
+                                  "written. Nothing is applied."}))
+
+    @server.tool(annotations=ASKS, structured_output=False)
+    def search_repair_references(question: Annotated[str, Field(min_length=1, max_length=2000, description="The engineer's question, in their words")]) -> str:
+        """The sections of Anisotropy's pages a question about a bonded repair finds: the theory of the stepped lap and of the solved
+        slice, and the page Bonded repairs, written in our own words, each section ending with its sources. For why, how or what a thing
+        is: why the shear stress peaks at the ends of a step, why a longer step stops helping, peel stress, why the elastic limit is not
+        the strength, what a sweep's pick means. A section explains; its numbers are not the repair's."""
+        sections = ask(api.post, "/v1/workspace/theory-sections", {"question": question, "about": "repair", "limit": 3}).get("sections", [])
+        return said({"question": question, "sections": [{"id": s["id"], "from": f"{s['document']}, {s['title']}", "text": s["text"]} for s in sections],
+                     "how_to_answer": ("Explain from these sections and name the one you rest on. A number about the repair comes from repair_results, "
+                                       "preview_repair_change or sweep_repair, never from a section. " + ("" if sections else
+                                       "No section shares a word with this question: say that Anisotropy's pages do not hold it."))})
 
     @server.tool(annotations=READS, structured_output=False)
     def show_working(result_id: Annotated[str, Field(description="The result_id solve_coupon returned")],
