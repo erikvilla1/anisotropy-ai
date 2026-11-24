@@ -54,6 +54,7 @@ from anisotropy_fea.femodel import build_model
 from anisotropy_fea.fields import run_answer
 from anisotropy_fea.intake import VALUES_SUFFIX, IntakeError, convert, gauge_probes, read_input, values_of_spec
 from anisotropy_fea.preview import preview_data
+from anisotropy_fea.qa import qa_record, run_checks
 from anisotropy_fea.quality import element_quality
 from anisotropy_fea.spec import load_spec
 
@@ -438,6 +439,20 @@ def mesh_study(name: str, out: Path, spec: Path, progress: Progress) -> Path | N
     return study
 
 
+def write_qa(path: Path, checklist, record: Path, study: Path | None) -> Path | None:
+    """The run's quality checks and its verdict (ADR-0137), from the setup checklist, the CalculiX record and the mesh study the run
+    made; returns the file, or None when it could not be written. A reading beside the result, never a reason to stop the run."""
+    try:
+        data = json.loads(study.read_text(encoding="utf-8")) if study is not None else None
+        written = qa_record(run_checks(None if checklist is None else checklist.as_dict(), record, data))
+        path.write_text(json.dumps(written, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        print(f"written    {rel(path)} (the quality checks: {written['verdict']})")
+        return path
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"the quality checks were not written: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else path.name}")
+        return None
+
+
 def report_source(name: str, target: Path) -> Path:
     """The report as LaTeX with the figures it names, one zip in the attempt's run folder: what its PDF is typeset from when someone
     asks for it, for a run that wrote none (ADR-0064 amendment 3). The coupon's latex/ folder is rewritten by its next attempt; this is
@@ -557,6 +572,10 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     study = mesh_study(name, out, spec, progress)
     if study is not None:
         answer.append(("convergence", "our engine: the mesh convergence study", study))
+    qa = write_qa(out / "qa.json", checklist, record, study)
+    if qa is not None:
+        answer.append(("qa", "the run's quality checks and its verdict", qa))
+        progress.made(qa=qa)
     opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress, f"{number:02d}")
     evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`" + ("" if delivered is None else f"; `{paths.DOCUMENTS}/{delivered.name}/`")
     written = ("package written" if pdf else "package written without its PDF") if documents == "written" else documents

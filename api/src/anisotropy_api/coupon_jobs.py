@@ -51,8 +51,8 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
-                      sweep_stale, update_job)
+from .records import (EVERYONE, QARecordError, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, insert_qa_checks, jobs_started_since, list_jobs,
+                      naming_lock, qa_rows, queue_position, running_job_of, sweep_stale, update_job)
 from .storage import ObjectStore, content_type, input_key, job_output_key, owner_key, store_file, store_folder, store_job, sync
 
 REPO = Path(__file__).resolve().parents[3]
@@ -663,9 +663,39 @@ class CouponJobs:
                            timings=job.all_timings(), claimed_at=job.claimed_at, answer=answer_of_outcome(outcome) if state == "done" else None, **row)
             except (SQLAlchemyError, LookupError) as exc:
                 outcome = {**outcome, "message": f"{outcome.get('message')}; its row in the jobs table could not be updated: {str(exc).splitlines()[0]}"}
+            else:
+                if state == "done" and not is_wing(job):
+                    self._record_qa(job, outcome, finished_at)
         with self.lock:
             job.outcome, job.run_id, job.finished_at = outcome, run_id, finished_at
             job.state = state
+
+    def qa_file(self, job: Job, outcome: dict | None = None) -> dict | None:
+        """The QA file a done run's tool wrote (ADR-0137), read under the same rule as output_file: from the repository or the job's own
+        folder, never a path elsewhere; None when the run wrote none or it cannot be read."""
+        text = ((outcome if outcome is not None else job.outcome) or {}).get("outputs", {}).get("qa")
+        if not isinstance(text, str):
+            return None
+        path = repository_path(text).resolve()
+        if not (path.is_relative_to(REPO.resolve()) or path.is_relative_to(job.folder.resolve())) or not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _record_qa(self, job: Job, outcome: dict, recorded_at: dt.datetime) -> None:
+        """A done job's checks into the QA record, once (ADR-0137). A record that cannot be written leaves the job as it ended, with no
+        checks, which the page reads as not checked; the reason goes to the log."""
+        qa = self.qa_file(job, outcome)
+        if qa is None:
+            print(f"coupon job {job.id}: no QA file to record", flush=True)
+            return
+        try:
+            insert_qa_checks(self.table, job.id, qa_rows(qa), recorded_at)
+        except (QARecordError, SQLAlchemyError) as exc:
+            print(f"coupon job {job.id}: its QA record was not written: {str(exc).splitlines()[0]}", flush=True)
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
         """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder,

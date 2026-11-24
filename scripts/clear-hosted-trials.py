@@ -23,7 +23,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
-from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 CLEARED_TABLES = ("runs", "jobs", "projects")
@@ -130,6 +130,10 @@ def delete(engine: Engine, store: Store, expected: dict[str, int], confirmation:
         if busy:
             raise Refused(f"{busy} job(s) are queued or running: wait until they end.")
         unlinked = connection.execute(text("UPDATE abaqus_uploads SET job_id = NULL WHERE job_id IS NOT NULL")).rowcount
+        if inspect(connection).has_table("qa_checks"):  # before jobs: a check names its job (ADR-0137, migration 0015); never deleted one by one either
+            connection.execute(text("ALTER TABLE qa_checks DISABLE TRIGGER qa_checks_immutable"))
+            connection.execute(text("DELETE FROM qa_checks"))
+            connection.execute(text("ALTER TABLE qa_checks ENABLE TRIGGER qa_checks_immutable"))
         connection.execute(text("DELETE FROM jobs"))  # before projects and runs: a job names both
         connection.execute(text("DELETE FROM projects"))  # before runs: a project names its last check's run
         # Run records are never deleted one by one (ADR-0026); this one clearing is amendment 2, as migration 0003 switched the

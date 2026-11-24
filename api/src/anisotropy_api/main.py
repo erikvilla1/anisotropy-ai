@@ -50,7 +50,8 @@ from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
-from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, QARecordError, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+                      fetch_qa_checks, qa_counts, qa_rows, qa_verdict,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
@@ -69,6 +70,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
+    QACheckOutput, QARecordOutput,
     GeneralAnswerResponse, GeneralQuestionRequest, ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
@@ -1476,6 +1478,30 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: Downloa
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path, media_type=content_type(path), filename=_download_name(name, path.suffix) or path.name)
+
+
+@app.get(COUPON_JOBS + "/{job_id}/qa", response_model=QARecordOutput)
+def coupon_job_qa(job_id: uuid.UUID, request: Request) -> QARecordOutput:
+    """A run's quality checks and its verdict (ADR-0137), to the job's owner only, in the same 404 as for no job (ADR-0104). With the
+    jobs table, the checks are the QA record's; without it (the local API with recording off), the QA file the run wrote, under the
+    same rules. A job that has none, a running or stopped one among them, answers `unchecked` with no checks."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(request, jobs, job_id)
+    rows: list[dict] = []
+    if jobs.table is not None:
+        try:
+            rows = [{"layer": r.layer, "check_id": r.check_id, "version": r.version, "verdict": r.verdict, "label": r.label, "message": r.message,
+                     "evidence": r.evidence, "basis": r.basis} for r in fetch_qa_checks(jobs.table, job.id)]
+        except SQLAlchemyError as exc:
+            raise HTTPException(status_code=503, detail="The quality checks cannot be read right now; try again in a minute.") from exc
+    elif job.state == "done" and (qa := jobs.qa_file(job)) is not None:
+        try:
+            rows = qa_rows(qa)
+        except QARecordError as exc:
+            print(f"coupon job {job.id}: its QA file is not one the record keeps: {exc}", flush=True)
+    checks = [QACheckOutput(layer=r["layer"], check=r["check_id"], version=r["version"], verdict=r["verdict"], label=r["label"], message=r["message"],
+                            evidence=r["evidence"], basis=r["basis"]) for r in rows]
+    return QARecordOutput(job_id=str(job.id), verdict=qa_verdict(rows), counts=qa_counts(rows), checks=checks)
 
 
 def _job_json(jobs: CouponJobs, job: Job, key: str, what: str) -> dict:

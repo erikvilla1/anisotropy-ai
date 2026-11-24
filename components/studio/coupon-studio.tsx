@@ -69,7 +69,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   return (
     <section className="studio-output">
       <Slot name="project">
-        {job ? <JobProgress job={job} brief={!allTests} /> : null}
+        {job ? <JobProgress job={job} brief={!allTests} apiBase={apiBaseUrl} /> : null}
         {/* the model as a file for the engineer's own program, once there is a model to write (ADR-0129): beside the results' link
             here, and in the model's heading before a run, so it takes no room of its own from the model. In the FEA workspace's layout
             it stays here from the first model on, one menu that a run's results arriving does not close (ADR-0134) */}

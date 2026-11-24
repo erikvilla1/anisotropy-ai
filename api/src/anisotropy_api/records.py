@@ -21,8 +21,8 @@ from pathlib import Path
 
 from contextlib import contextmanager
 
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Engine, Float, ForeignKey, Integer, Numeric, String, Text, Uuid, create_engine, delete, func,
-                        inspect, select, text, update)
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Engine, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid,
+                        create_engine, delete, func, inspect, select, text, update)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -130,7 +130,39 @@ class JobRow(Base):
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
 
-PROJECT_KINDS = ("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
+QA_LAYERS = ("data", "physics", "fea", "output", "software")  # anisotropy_fea.qa.LAYERS on the day of migration 0015
+QA_VERDICTS = ("pass", "warn", "block")
+QA_CHECK_ID = re.compile(r"[A-Z][A-Z0-9_-]{1,63}")
+
+
+class QACheckRow(Base):
+    """One quality check of one coupon job (ADR-0137, migration 0015): its layer, id and rule version, its verdict, its label and
+    message as a customer reads them, what it measured and the record or clause behind it. Written once when the job ends done, from
+    the QA file the run's tool wrote; never updated or deleted, which a trigger enforces as the runs table's does (ADR-0026). The job's
+    owner is the owner of its checks."""
+
+    __tablename__ = "qa_checks"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    recorded_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    layer: Mapped[str] = mapped_column(String(10), nullable=False)
+    check_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(5), nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    basis: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    __table_args__ = (CheckConstraint(f"layer IN ({_sql_list(QA_LAYERS)})", name="qa_checks_layer_known"),
+                      CheckConstraint(f"verdict IN ({_sql_list(QA_VERDICTS)})", name="qa_checks_verdict_known"),
+                      CheckConstraint("version >= 1", name="qa_checks_version_positive"),
+                      UniqueConstraint("job_id", "position", name="qa_checks_one_per_place"))
+
+
+PROJECT_KINDS =("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
 
 
 class ProjectRow(Base):
@@ -292,7 +324,7 @@ def check_ready(engine: Engine) -> None:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
             for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__, UploadTokenRow.__tablename__, UploadRow.__tablename__,
-                          ModelCallRow.__tablename__):
+                          ModelCallRow.__tablename__, QACheckRow.__tablename__):
                 if not inspect(connection).has_table(table):
                     raise RuntimeError(
                         f"The database at {shown} has no '{table}' table. "
@@ -429,6 +461,66 @@ def list_jobs(engine: Engine, limit: int = 50, user_email: str | None = EVERYONE
     """The newest jobs first; `user_email` keeps one owner's (ADR-0104)."""
     with Session(engine) as session:
         return list(session.scalars(_owned(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit), JobRow.user_email, user_email)))
+
+
+# ------------------------------------------------------------------------------------------- the QA record (ADR-0137)
+
+class QARecordError(ValueError):
+    """A QA file that does not hold checks the record can keep."""
+
+
+def qa_rows(qa: Mapping) -> list[dict]:
+    """The checks of a run's QA file (`anisotropy_fea.qa.qa_record`) as the table's columns, refused whole when one of them is not a
+    check the record can keep: an unknown layer or verdict, an id that is not one, a label or message that is not text, evidence that
+    is not an object or too large to be a check's few values."""
+    checks = qa.get("checks") if isinstance(qa, Mapping) else None
+    if not isinstance(checks, list) or not checks or len(checks) > 200:
+        raise QARecordError("a QA file holds a list of 1 to 200 checks")
+    rows = []
+    for position, c in enumerate(checks):
+        if not isinstance(c, Mapping):
+            raise QARecordError(f"check {position} is not an object")
+        layer, check_id, verdict, version = c.get("layer"), c.get("check"), c.get("verdict"), c.get("version")
+        label, message, evidence, basis = c.get("label"), c.get("message"), c.get("evidence", {}), c.get("basis", "")
+        if layer not in QA_LAYERS or verdict not in QA_VERDICTS:
+            raise QARecordError(f"check {position}: layer {layer!r} or verdict {verdict!r} is not one the record knows")
+        if not isinstance(check_id, str) or not QA_CHECK_ID.fullmatch(check_id):
+            raise QARecordError(f"check {position}: {check_id!r} is not a check's id")
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise QARecordError(f"check {position}: its rule's version is a whole number from 1")
+        if not all(isinstance(t, str) and len(t) <= 4000 for t in (label, message)) or not isinstance(basis, str) or len(basis) > 40:
+            raise QARecordError(f"check {position}: its label, message and basis are text of a check's length")
+        if not isinstance(evidence, Mapping) or len(json.dumps(evidence)) > 4000:
+            raise QARecordError(f"check {position}: its evidence is an object of a few values")
+        rows.append({"position": position, "layer": layer, "check_id": check_id, "version": version, "verdict": verdict, "label": label,
+                     "message": message, "evidence": dict(evidence), "basis": basis})
+    return rows
+
+
+def qa_verdict(rows: list[dict]) -> str:
+    """A run's verdict from its checks alone, as `anisotropy_fea.qa.run_verdict` gives it: blocked, needs engineer, ready, unchecked."""
+    verdicts = {row["verdict"] for row in rows}
+    return "unchecked" if not rows else "blocked" if "block" in verdicts else "needs engineer" if "warn" in verdicts else "ready"
+
+
+def qa_counts(rows: list[dict]) -> dict[str, int]:
+    return {verdict: sum(row["verdict"] == verdict for row in rows) for verdict in QA_VERDICTS}
+
+
+def insert_qa_checks(engine: Engine, job_id: uuid.UUID, rows: list[dict], recorded_at: dt.datetime) -> int:
+    """A job's checks, written once (ADR-0137); a second write for the same job is refused, as the record is never rewritten."""
+    with Session(engine) as session:
+        if session.scalar(select(func.count()).select_from(QACheckRow).where(QACheckRow.job_id == job_id)):
+            raise QARecordError(f"the QA record of job {job_id} is written already")
+        session.add_all(QACheckRow(id=uuid.uuid4(), job_id=job_id, recorded_at=recorded_at, **row) for row in rows)
+        session.commit()
+    return len(rows)
+
+
+def fetch_qa_checks(engine: Engine, job_id: uuid.UUID) -> list[QACheckRow]:
+    """A job's checks in the order its run wrote them; none for a job whose record was not written."""
+    with Session(engine) as session:
+        return list(session.scalars(select(QACheckRow).where(QACheckRow.job_id == job_id).order_by(QACheckRow.position)))
 
 
 def coupon_owners(engine: Engine) -> set[tuple[str, str | None]]:

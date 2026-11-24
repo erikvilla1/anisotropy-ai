@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from anisotropy_api.records import (fetch_upload, insert_job, insert_pairing_code, insert_upload, insert_upload_token, record_run, update_job,
-                                    update_project, upsert_project)
+from anisotropy_api.records import (fetch_upload, insert_job, insert_pairing_code, insert_qa_checks, insert_upload, insert_upload_token, record_run,
+                                    update_job, update_project, upsert_project)
 from conftest import needs_test_database
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "clear-hosted-trials.py"
@@ -57,6 +57,8 @@ def filled(empty_runs):
     job = uuid.uuid4()
     insert_job(engine, job_id=job, actor="browser", user_email="one@example.com", inputs={}, started_at=NOW, process="p", project_id=project.id)
     update_job(engine, job, state="done", run_id=first, finished_at=NOW)
+    insert_qa_checks(engine, job, [{"position": 0, "layer": "fea", "check_id": "FEA-SECOND-SOLVER", "version": 1, "verdict": "warn", "label": "Second solver",
+                                    "message": "52 of 57", "evidence": {}, "basis": "ADR-0030"}], NOW)  # the job's QA record (ADR-0137)
     token = insert_upload_token(engine, token_id=uuid.uuid4(), actor="browser", user_email="one@example.com", name="PC", token_sha256="f" * 64,
                                 hint="abcd", now=NOW)
     insert_pairing_code(engine, code_id=uuid.uuid4(), actor="browser", user_email="one@example.com", code_sha256="e" * 64, now=NOW,
@@ -93,6 +95,10 @@ def test_delete_clears_runs_jobs_projects_and_their_files_and_keeps_the_uploads_
     run_id = _run(engine)
     with pytest.raises(Exception, match="never edited or deleted"), engine.begin() as connection:
         connection.execute(text("DELETE FROM runs WHERE id = :id"), {"id": run_id})
+    # The jobs' QA checks went with them, and their trigger is back on too (ADR-0137).
+    with engine.begin() as connection:
+        assert connection.execute(text("SELECT count(*) FROM qa_checks")).scalar_one() == 0
+        assert connection.execute(text("SELECT tgenabled FROM pg_trigger WHERE tgname = 'qa_checks_immutable'")).scalar_one() == "O"
 
 
 @pytest.mark.parametrize("expected, confirmation, busy, words", [

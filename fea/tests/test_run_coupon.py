@@ -59,7 +59,11 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path, capsys
     out = attempt / "run"
     assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "abaqus_build", "prepomax_deck", "prepomax_results", "kernel_summary",
                                                                       "convergence", "kernel_vtu", "fields", "explanation", "record", "checklist",
-                                                                      "preview", "values", "document_source"}  # no document without the PDF; the build script of ADR-0094 with the deck
+                                                                      "preview", "values", "document_source", "qa"}  # no document without the PDF; the build script of ADR-0094 with the deck
+    # the run's quality checks (ADR-0137): the setup items, the second solver and the mesh study, with the verdict they give
+    qa = json.loads(outcome.outputs["qa"].read_text(encoding="utf-8"))
+    assert [c["check"] for c in qa["checks"][-2:]] == ["FEA-SECOND-SOLVER", "FEA-MESH-CONVERGED"] and len(qa["checks"]) == 15
+    assert qa["verdict"] in ("ready", "needs engineer") and sum(qa["counts"].values()) == 15 and qa["counts"]["block"] == 0
     # without the PDF the run keeps what it is typeset from, its own copy: the LaTeX and the figures it names (ADR-0064 amendment 3)
     with zipfile.ZipFile(outcome.outputs["document_source"]) as source:
         names = source.namelist()

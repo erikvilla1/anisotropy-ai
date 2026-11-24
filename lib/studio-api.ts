@@ -7,6 +7,7 @@ import type { RepairChange, RepairChangePreview, RepairSweep, RepairSweepAnswer 
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
+import { readQARecord, type QARecord } from "./qa";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
 export const ACTOR = "studio";
@@ -468,6 +469,11 @@ export async function wakeSolver(apiBase: string): Promise<void> {
 
 export async function getJob(apiBase: string, jobId: string, signal?: AbortSignal): Promise<JobStatus> {
   return readJob(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the analysis's progress", JOB_GONE));
+}
+
+/** A run's quality checks and its verdict (ADR-0137), its owner's alone; null when the answer is not a QA record. */
+export async function getQARecord(apiBase: string, jobId: string, signal?: AbortSignal): Promise<QARecord | null> {
+  return readQARecord(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/qa`, { method: "GET", signal }, "the quality checks", JOB_GONE));
 }
 
 export async function listJobs(apiBase: string, signal?: AbortSignal): Promise<JobStatus[]> {

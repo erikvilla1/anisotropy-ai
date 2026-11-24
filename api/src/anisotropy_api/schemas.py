@@ -506,6 +506,30 @@ class JobAnswer(Contract):
     face: str | None = None
 
 
+class QACheckOutput(Contract):
+    """One quality check of a run (ADR-0137): its layer, id and rule version, its verdict, its label and message as a customer reads
+    them, what it measured, and the decision record or clause behind it."""
+
+    layer: Literal["data", "physics", "fea", "output", "software"]
+    check: str
+    version: int
+    verdict: Literal["pass", "warn", "block"]
+    label: str
+    message: str
+    evidence: dict[str, Any]
+    basis: str
+
+
+class QARecordOutput(Contract):
+    """A run's QA record (ADR-0137): its checks in the run's order, their counts by verdict and the run's verdict, which follows from
+    them alone: `blocked` when one blocks, `needs engineer` when one warns, `ready` when all pass, `unchecked` when there are none."""
+
+    job_id: str
+    verdict: Literal["blocked", "needs engineer", "ready", "unchecked"]
+    counts: dict[str, int]
+    checks: list[QACheckOutput]
+
+
 class CouponJobOutput(Contract):
     """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
     runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
