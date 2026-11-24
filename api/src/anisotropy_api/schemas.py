@@ -1508,7 +1508,8 @@ class RepairSolveRequest(RepairRequest):
 class RepairAnswer(Contract):
     """The hand calculation of a repair (ADR-0135): the description as the engine read it, what it works out to in the file's units as
     `repair_report` gives it (sizes, the slice's rectangles, areas, volumes, the lap and its answer), what a page draws beside the
-    rectangles (`repair_views`) and what a solve of the slice still needs (`solve_needs`, empty when it can be solved)."""
+    rectangles (`repair_views`), what a solve of the slice still needs (`solve_needs`, empty when it can be solved) and what following
+    the bond until it lets go still needs (`bond_needs`, ADR-0137)."""
 
     run_id: str | None = None
     engine_version: str
@@ -1516,12 +1517,23 @@ class RepairAnswer(Contract):
     report: dict[str, Any]
     views: dict[str, Any]
     needs: list[dict[str, str]]
+    bond_needs: list[dict[str, str]] = []
 
 
 class RepairSolveAnswer(Contract):
     """A repair's slice solved (ADR-0132, ADR-0135): `slice_report` in the file's units (the model and its checks, the bondline's
     stresses, the forces along the slice and at the lap's boundaries beside the hand calculation, the plies, what reaches its limit
     first) and the solve in one line."""
+
+    run_id: str | None = None
+    headline: str
+    report: dict[str, Any]
+
+
+class RepairBondAnswer(Contract):
+    """A repair's bond followed until it lets go (ADR-0137): `bond_report` in the file's units (the model and its checks, the bond's
+    law, the load at which the bond first softens and where, the load at which it lets go with the bond's state there, and the curve
+    of the load against the movement of the panel's end) and the run in one line."""
 
     run_id: str | None = None
     headline: str

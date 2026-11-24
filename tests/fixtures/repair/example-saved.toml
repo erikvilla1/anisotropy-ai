@@ -23,6 +23,9 @@ shear_modulus = 1000
 thickness = 0.1
 shear_strength = 30
 poisson = 0.35
+peel_strength = 40
+peel_energy = 0.5
+shear_energy = 2
 
 [panel]
 length = 300

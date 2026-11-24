@@ -15,13 +15,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from anisotropy_engine.repair import repair_from_dict, repair_report, repair_views
-from anisotropy_api.main import SLICE_NOT_NOW, app
+from anisotropy_api.main import BOND_NOT_NOW, SLICE_NOT_NOW, app
 from anisotropy_api.settings import DATABASE_VARIABLE, RECORDING_VARIABLE
 
 from conftest import TEST_URL, needs_test_database
 
 ROOT = Path(__file__).resolve().parents[2]
-ENDPOINT, SOLVE, SHAPE = "/v1/repairs/analyze", "/v1/repairs/solve", "/v1/repairs/shape"
+ENDPOINT, SOLVE, SHAPE, BOND = "/v1/repairs/analyze", "/v1/repairs/solve", "/v1/repairs/shape", "/v1/repairs/bond"
 EXAMPLE = ROOT / "engine" / "examples" / "example-patch-repair.toml"
 EXTERNAL = ROOT / "engine" / "examples" / "example-external-patch-repair.toml"
 FIXTURES = ROOT / "tests" / "fixtures" / "repair"
@@ -60,7 +60,7 @@ def test_a_repair_file_is_worked_and_its_results_are_the_engines(path):
     repair, load = repair_from_dict(example(path))
     assert close(body["report"], json.loads(json.dumps(repair_report(repair, "mm-MPa", load))))
     assert close(body["views"], json.loads(json.dumps(repair_views(repair, "mm-MPa", load))))
-    assert body["needs"] == [] and body["engine_version"]
+    assert body["needs"] == [] and body["bond_needs"] == [] and body["engine_version"]
     assert close(client.post(ENDPOINT, json={"repair": example(path)}).json()["report"], body["report"]), "the JSON form gives the same answer"
 
 
@@ -70,6 +70,7 @@ def test_a_repair_with_no_load_is_described_and_drawn_and_says_what_a_solve_need
     body = client.post(ENDPOINT, json={"repair": stated}).json()
     assert "answer" not in body["report"]["lap"] and "lap" not in body["views"] and len(body["report"]["regions"]) > 10
     assert [need["path"] for need in body["needs"]] == ["parent.nu23", "adhesive.poisson", "applied.load"]
+    assert [need["path"] for need in body["bond_needs"]] == ["parent.nu23", "adhesive.poisson"], "following the bond needs no load: the load is what it finds"
     refused = client.post(SOLVE, json={"repair": stated})
     assert refused.status_code == 422
     assert refused.json()["detail"] == ("The solve of the slice needs: the laminate ply's constants through the thickness: nu23 for a unidirectional ply, or all of "
@@ -104,8 +105,8 @@ def test_the_pages_choices_and_its_tests_answers_are_what_the_script_writes():
         kept = json.loads((FIXTURES / f"{name}-answer.json").read_text(encoding="utf-8"))
         assert close(kept, json.loads(json.dumps(module.answer(name)))), hint
         sent = client.post(ENDPOINT, json={"repair": example(path)}).json()
-        assert close({key: sent[key] for key in ("repair", "report", "views", "needs")}, {key: kept[key] for key in ("repair", "report", "views", "needs")}), \
-            "the browser test's answer is the API's"
+        keys = ("repair", "report", "views", "needs", "bond_needs")
+        assert close({key: sent[key] for key in keys}, {key: kept[key] for key in keys}), "the browser test's answer is the API's"
 
 
 @pytest.mark.parametrize("name", ["example", "external"])
@@ -136,7 +137,22 @@ if mode == "crash":
 if mode == "slow":
     import time
     time.sleep(5)
-if "--out" in sys.argv:
+if "--out" in sys.argv and "--cut-faces" not in sys.argv:  # the bond followed until it lets go: no choice of the cut faces
+    from pathlib import Path
+    out = Path(sys.argv[sys.argv.index("--out") + 1]); out.mkdir(parents=True)
+    report = {"headline": "The bond first softens at 184 N/mm; in this model it lets go at 1340 N/mm", "units": {"length": "mm", "stress": "MPa", "force": "N/mm"},
+              "model": {"elements": 3045, "pairs": 319}, "checks": {"equilibrium": 1e-11, "far_field": 2e-10}, "ended": "let_go",
+              "onset": {"part": "Adhesive on the ledge of step 2", "step": 2, "r": 37.4, "load": 184.0, "shear": 30.0, "peel": -14.0, "lines": [{"r": [0.0, 1.0]}]},
+              "let_go": {"load": 1340.0, "end_movement": 2.2, "spent": 0.005, "softening_length": 18.7, "parted_length": 0.0, "lines": [{"r": [0.0, 1.0]}]},
+              "largest": {"load": 1340.0}, "curve": {"end_movement": [0.0, 2.2], "load": [0.0, 1340.0]}}
+    if mode == "held":
+        report["let_go"], report["ended"] = None, "steps"
+    if mode == "empty":
+        report = ["not", "a", "report"]
+    if mode == "nan":
+        report["let_go"]["load"] = float("nan")
+    (out / "repair-bond.json").write_text(json.dumps(report), encoding="utf-8")
+elif "--out" in sys.argv:
     from pathlib import Path
     out = Path(sys.argv[sys.argv.index("--out") + 1]); out.mkdir(parents=True)
     report = {"headline": "Under 100 N/mm: largest bondline shear 11.5 MPa", "units": {"length": "mm", "stress": "MPa", "force": "N/mm"}, "load": 100.0,
@@ -163,6 +179,7 @@ def fake_tools(monkeypatch, tmp_path):
     script.write_text(FAKE_TOOL, encoding="utf-8")
     monkeypatch.setattr(main_module, "repair_model_command", lambda: [sys.executable, str(script)])
     monkeypatch.setattr(main_module, "repair_shape_command", lambda: [sys.executable, str(script)])
+    monkeypatch.setattr(main_module, "repair_bond_command", lambda: [sys.executable, str(script)])
     return main_module
 
 
@@ -200,8 +217,10 @@ def test_without_the_tools_the_solve_and_the_shape_are_unavailable(monkeypatch):
     import anisotropy_api.main as main_module
     monkeypatch.setattr(main_module, "repair_model_command", lambda: None)
     monkeypatch.setattr(main_module, "repair_shape_command", lambda: None)
+    monkeypatch.setattr(main_module, "repair_bond_command", lambda: None)
     assert client.post(SOLVE, json={"repair": example()}).status_code == 503
     assert client.post(SHAPE, json={"repair": example()}).status_code == 503
+    assert client.post(BOND, json={"repair": example()}).status_code == 503
 
 
 def test_the_shape_comes_back_as_the_step_files_text_and_the_table_of_its_solids(fake_tools):
@@ -240,6 +259,58 @@ def test_each_is_recorded_by_the_description_and_a_summary_never_the_drawings_or
     assert run["status"] == "rejected" and run["error"].startswith("The solve of the slice needs: the adhesive's Poisson's ratio")
 
 
+# ---- the bond followed until it lets go (ADR-0137), with the stand-in: the report passed on, every way the run can end
+
+def test_the_bond_followed_comes_back_as_the_tools_report_with_its_headline_apart(fake_tools):
+    answer = client.post(BOND, json={"repair": example()})
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    assert body["headline"] == "The bond first softens at 184 N/mm; in this model it lets go at 1340 N/mm" and "headline" not in body["report"]
+    assert body["report"]["let_go"]["load"] == 1340.0 and body["report"]["onset"]["load"] == 184.0 and body["report"]["model"]["pairs"] == 319
+    assert client.post(BOND, json={"toml": EXAMPLE.read_text(encoding="utf-8")}).status_code == 200, "a repair file's text is followed too"
+    unloaded = example()
+    unloaded.pop("applied")
+    assert client.post(BOND, json={"repair": unloaded}).status_code == 200, "no load is needed: the load is what the run finds"
+    held = client.post(BOND, json={"repair": example() | {"title": "held"}})
+    assert held.status_code == 200 and held.json()["report"]["let_go"] is None, "a run that ends before the bond lets go says so, and names no load"
+
+
+def test_a_bond_that_lacks_its_strengths_or_its_energies_is_refused_with_the_list(fake_tools):
+    refused = client.post(BOND, json={"repair": example(adhesive__peel_energy=None, adhesive__shear_energy=None, adhesive__peel_strength=None)})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == ("To follow the bond until it lets go the repair needs: the bond's peel strength; the bond's fracture energy in peel; "
+                                        "the bond's fracture energy in shear.")
+    wrong = client.post(BOND, json={"repair": example(adhesive__shear_energy=0)})
+    assert wrong.status_code == 422 and wrong.json()["detail"] == "[adhesive]: The bond's shear energy must be a positive, finite number, got 0.0"
+
+
+def test_the_bond_tools_refusal_is_passed_on_and_one_that_fails_or_runs_on_says_nothing_of_itself(fake_tools, monkeypatch, capsys):
+    refused = client.post(BOND, json={"repair": example() | {"title": "refuse"}})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == "The forces along the load do not add up to the load at every station (off by 2.00e-02 of it)"
+    for mode in ("stop", "crash", "empty", "nan"):
+        failed = client.post(BOND, json={"repair": example() | {"title": mode}})
+        assert failed.status_code == 503 and failed.json()["detail"] == BOND_NOT_NOW, (mode, failed.text)
+    assert "ccx at /secret/path ended with status 1" in capsys.readouterr().out, "the cause is in the log"
+    monkeypatch.setattr(fake_tools, "REPAIR_BOND_TIMEOUT_S", 0.5)
+    late = client.post(BOND, json={"repair": example() | {"title": "slow"}})
+    assert late.status_code == 504 and late.json()["detail"] == "Following the bond took too long"
+
+
+@needs_test_database
+def test_a_bond_followed_is_recorded_by_its_loads_never_its_curves(recording, fake_tools):
+    followed = recording.post(BOND, json={"repair": example()})
+    run = recording.get(f"/v1/runs/{followed.json()['run_id']}").json()
+    response = run["response"]
+    assert run["endpoint"] == BOND and run["status"] == "solved" and response["headline"] == followed.json()["headline"]
+    assert response["onset"] == {"load": 184.0, "r": 37.4, "part": "Adhesive on the ledge of step 2"}
+    assert response["let_go"] == {"load": 1340.0, "softening_length": 18.7, "parted_length": 0.0} and response["largest_load"] == 1340.0
+    assert response["ended"] == "let_go" and "curve" not in response and "lines" not in json.dumps(response)
+    refused = recording.post(BOND, json={"repair": example(adhesive__peel_energy=None)})
+    run = recording.get(f"/v1/runs/{refused.headers['X-Anisotropy-Run-Id']}").json()
+    assert run["status"] == "rejected" and run["error"] == "To follow the bond until it lets go the repair needs: the bond's fracture energy in peel."
+
+
 # ---- the real tools, where the fea environment is installed
 
 FEA_VENV = ROOT / "fea" / ".venv"
@@ -263,6 +334,20 @@ def test_the_examples_solids_are_built_by_the_fea_package():
     body = answer.json()
     assert body["step"].startswith("ISO-10303-21;") and "Laminate ply 1 (45 deg)" in body["step"]
     assert body["parts"]["title"] == "Example stepped patch repair" and body["parts"]["volumes"]["patch"] > 0
+
+
+@pytest.mark.skipif(not FEA_VENV.is_dir(), reason="the fea environment is not installed here")
+def test_the_examples_bond_is_followed_by_the_fea_package_and_is_the_pages_tests_answer():
+    """The real run, about ten seconds. The path's steps may differ from machine to machine, so the loads are held to a part in a
+    thousand, and the lists' lengths are not compared."""
+    answer = client.post(BOND, json={"toml": EXAMPLE.read_text(encoding="utf-8")})
+    assert answer.status_code == 200, answer.text
+    body, kept = answer.json(), json.loads((FIXTURES / "example-bond.json").read_text(encoding="utf-8"))
+    assert body["report"].keys() == kept["report"].keys() and body["report"]["model"]["pairs"] == kept["report"]["model"]["pairs"]
+    assert body["report"]["onset"]["load"] == pytest.approx(kept["report"]["onset"]["load"], rel=1e-6)
+    assert body["report"]["let_go"]["load"] == pytest.approx(kept["report"]["let_go"]["load"], rel=1e-3)
+    assert body["report"]["let_go"]["softening_length"] == pytest.approx(kept["report"]["let_go"]["softening_length"], rel=0.02)
+    assert body["headline"].split(";")[0] == kept["headline"].split(";")[0]
 
 
 # ---- a change previewed and a quantity swept (ADR-0136): the engine's answers passed on, the pick held to a solved slice

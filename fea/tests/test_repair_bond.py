@@ -227,6 +227,40 @@ def test_the_report_is_in_the_files_units_and_says_what_the_load_is_not(example)
         bond_report(example, "furlongs")
 
 
+def kept_run(name: str) -> dict:
+    return json.loads((ROOT / "tests" / "fixtures" / "repair" / f"{name}-bond.json").read_text(encoding="utf-8"))
+
+
+def same_run(kept: dict, report: dict) -> None:
+    """The run the page's tests draw (tests/fixtures/repair/, written by scripts/repair-choices.py) is what the solver gives today:
+    the model and the law to the last figure, the loads to the digits the page prints. The path's states are not counted: a
+    step that settles in one more iteration on another machine moves them."""
+    for key in ("elements", "nodes", "pairs", "bond_length", "element_size", "fine_size"):
+        assert kept["report"]["model"][key] == pytest.approx(report["model"][key], rel=1e-9), key
+    assert kept["report"]["law"] == pytest.approx(report["law"], rel=1e-9) and kept["report"]["units"] == report["units"]
+    assert kept["report"]["onset"]["load"] == pytest.approx(report["onset"]["load"], rel=1e-6) and kept["report"]["onset"]["part"] == report["onset"]["part"]
+    assert kept["report"]["let_go"]["load"] == pytest.approx(report["let_go"]["load"], rel=1e-3)
+    assert kept["report"]["let_go"]["softening_length"] == pytest.approx(report["let_go"]["softening_length"], rel=0.02)
+    assert kept["report"]["ended"] == report["ended"] and kept["run_id"] is None
+    assert kept["headline"].split(";")[0] == headline(report).split(";")[0]
+
+
+def test_the_examples_run_the_pages_tests_draw_is_what_the_solver_gives(example):
+    same_run(kept_run("example"), bond_report(example, "mm-MPa"))
+
+
+def test_the_external_examples_run_the_pages_tests_draw_is_what_the_solver_gives_and_a_coarser_mesh_agrees():
+    """The patch bonded on top over a hole: the bond softens first at the patch's edge and lets go with two thirds of it softening."""
+    repair = stated(ENGINE / "examples" / "example-external-patch-repair.toml")[0]
+    answer = run_bond(repair)
+    report = bond_report(answer, "mm-MPa")
+    same_run(kept_run("external"), report)
+    assert report["onset"]["part"] == "Adhesive under the patch" and report["onset"]["r"] == pytest.approx(52.5)
+    assert report["onset"]["load"] == pytest.approx(161.9, abs=1.5) and report["let_go"]["load"] == pytest.approx(873.2, abs=5.0)
+    coarse = run_bond(repair, fine_m=0.1 * MM)
+    assert coarse.let_go.load == pytest.approx(answer.let_go.load, rel=0.005) and coarse.onset.load == pytest.approx(answer.onset.load, rel=0.04)
+
+
 def test_a_path_that_ends_before_the_load_falls_says_so():
     built = build_bond_model(stated()[0], fine_m=0.1 * MM)
     path, seconds = follow_bond(built, steps=3)

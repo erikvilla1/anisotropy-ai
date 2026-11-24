@@ -8,7 +8,8 @@ lib/repair-choices.json holds the two example repair files as the engine reads t
 engine/examples/example-patch-repair.toml, and a patch bonded on top, engine/examples/example-external-patch-repair.toml) and
 the library materials a repair can name: a ply material with a ply thickness. tests/fixtures/repair/ holds the API's answer
 to each example (POST /v1/repairs/analyze, with no run id) and, with --solve, the solve of each example's slice (POST
-/v1/repairs/solve), its run time fixed so the file does not change from run to run. For the repair's chat (ADR-0136) it also
+/v1/repairs/solve) and its bond followed until it lets go (POST /v1/repairs/bond, ADR-0137), their run times fixed so the files do
+not change from run to run. For the repair's chat (ADR-0136) it also
 holds two changes previewed on the flush example (POST /v1/repairs/changes: each step 0.5 in long, and a step added), a sweep of
 its step length to a load (POST /v1/repairs/sweeps, with no check) and, with --solve, what the solved slice of that sweep's
 pick says of it (the answer's `check`).
@@ -22,8 +23,8 @@ import tomllib
 from pathlib import Path
 
 from anisotropy_engine.library import library_core, library_material, list_datasets
-from anisotropy_engine.repair import (RepairChange, RepairSweep, pick_check, preview_change, repair_from_dict, repair_report, repair_views, solve_needs,
-                                      sweep_repair)
+from anisotropy_engine.repair import (RepairChange, RepairSweep, bond_needs, pick_check, preview_change, repair_from_dict, repair_report, repair_views,
+                                      solve_needs, sweep_repair)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = {"example": ROOT / "engine" / "examples" / "example-patch-repair.toml",
@@ -71,7 +72,7 @@ def answer(name: str) -> dict:
     data = example(name)
     repair, load = repair_from_dict(data)
     return {"run_id": None, "engine_version": "0.1.0", "repair": data, "report": repair_report(repair, data["units"], load),
-            "views": repair_views(repair, data["units"], load), "needs": solve_needs(repair, load)}
+            "views": repair_views(repair, data["units"], load), "needs": solve_needs(repair, load), "bond_needs": bond_needs(repair)}
 
 
 def answer_text(name: str) -> str:
@@ -86,6 +87,17 @@ def solve(name: str) -> dict:
     repair, load = repair_from_dict(data)
     report = slice_report(solve_slice(repair, load), data["units"])
     report["model"]["seconds"] = 3.0
+    return {"run_id": None, "headline": headline(report), "report": report}
+
+
+def bond(name: str) -> dict:
+    """The API's answer to an example's bond followed until it lets go (POST /v1/repairs/bond, ADR-0137), with no run id and the run
+    time fixed."""
+    from anisotropy_fea.repair_bond import bond_report, headline, run_bond
+
+    data = example(name)
+    report = bond_report(run_bond(repair_from_dict(data)[0]), data["units"])
+    report["model"]["seconds"] = 10.0
     return {"run_id": None, "headline": headline(report), "report": report}
 
 
@@ -124,6 +136,9 @@ if __name__ == "__main__":
         if "--solve" in sys.argv[1:]:
             path = FIXTURES / f"{name}-solve.json"
             path.write_text(json.dumps(solve(name), separators=(",", ":"), ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+            written.append(path)
+            path = FIXTURES / f"{name}-bond.json"
+            path.write_text(compact(bond(name)), encoding="utf-8", newline="\n")
             written.append(path)
     for name, value in ({name: change(name) for name in CHANGES} | {"example-sweep": sweep()}
                         | ({"example-sweep-check": sweep_check()} if "--solve" in sys.argv[1:] else {})).items():
