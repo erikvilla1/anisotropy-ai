@@ -1380,7 +1380,10 @@ test("the working behind an answer is shown when asked: each formula with the so
   // the values put in are the package's own, to six figures
   const criterion = first.locator('[data-step="criterion"]');
   await expect(criterion.getByTestId("chat-working-value").nth(1)).toHaveText("64.0523 MPa");
-  await expect(criterion.locator("annotation").last()).toHaveText(hill.steps[2].equations[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  const judged = hill.steps[2].equations;
+  await expect(criterion.getByTestId("chat-working-equation").nth(2).locator("annotation").last()).toHaveText(judged[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  await expect(criterion.locator("annotation").last()).toHaveText(judged[3].substituted.replaceAll("\\frac", "\\dfrac")); // then the failure index the results show, 1/R = sqrt(FI) (ADR-0103 am. 2)
+  expect(judged[3].result.value).toBe(0.9689);
   await expect(criterion.getByTestId("chat-working-source")).toHaveText("From: Laminate theory, 5. Failure.");
   await expect(first.getByTestId("chat-working-note")).toContainText("Inputs are shown to 6 figures, results to 4.");
 
