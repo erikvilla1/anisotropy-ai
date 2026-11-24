@@ -22,6 +22,7 @@ import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/resul
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
+import { privateAnswerOnStart } from "../../lib/chat-private";
 import { ASKED_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
 import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
@@ -320,6 +321,7 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
  * answered by the API's reader (`modelAnswer`), so here it only names who answers. */
 export function startAnswer(routed: StartRoute): Said {
   switch (routed.route) {
+    case "private": { const { title, lines } = privateAnswerOnStart(routed.topic); return said("about", title, lines); }
     case "set-up": return routed.kind === "wing" ? said("said", "Opens Wing analysis", ["The wing's own page under FEA, a new wing from the example."], { kind: "wing" })
       : routed.kind === "repair" ? said("said", "Opens Patch repair", ["The repair's own page under FEA, with the repair this browser holds or the example."], { kind: "repair" })
       : said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });

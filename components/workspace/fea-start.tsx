@@ -10,6 +10,7 @@ import { generalLines } from "@/lib/result-why";
 import { applyMessage } from "@/lib/studio-chat";
 import { blankForm } from "@/lib/studio-form";
 import { readRepair, routeStart, saysMore, TARGET_TITLES, type WorkTarget } from "@/lib/work-intent";
+import { privateAnswerOnStart } from "@/lib/chat-private";
 import { ASKED_KINDS, FEA_KINDS, feaKind, REPAIR_HREF, type FeaKind } from "@/lib/workspaces";
 import { tabStorage, useProject } from "@/components/studio/project-context";
 import { goTo } from "./go-to";
@@ -158,6 +159,11 @@ export function FeaStartChat() {
     // who answers is a fixed order, in one place the question banks try (lib/work-intent.ts, ADR-0121)
     const routed = routeStart(text);
     switch (routed.route) {
+      case "private": { // a key, the hidden prompt or another person's work: fixed words, no model sees it (ADR-0139)
+        const { title, lines } = privateAnswerOnStart(routed.topic);
+        add({ role: "assistant", title, testId: "fea-start-private", body: <>{lines.map((line) => <p key={line}>{line}</p>)}</> });
+        return;
+      }
       case "set-up": setUp(routed.kind, text); return;
       case "not-here": notHereYet(); return;
       case "open": goTo(routed.target, { prompt: saysMore(text) ? text : "" }, router.push); return; // nothing here is work yet: it opens at once

@@ -25,7 +25,7 @@ The questions are the banks in `tests/assistant-questions/` (ADR-0121): checked 
 - **One model for the site**, named by `ANISOTROPY_ASSISTANT_MODEL` (today `claude-opus-5-5`), at low effort, with a cap on the tokens of each answer (`assistant.py`).
 - **A cap per person per day**: `ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY` in `wrangler.jsonc` (100). Past it the chat reads with its own patterns until midnight UTC and says so ("Reading simple phrases until tomorrow"). Counted from `model_calls` by the sign-in's email. A service token of ours (the deploy check, the site check) has no email and is not counted: the site check keeps a budget of its own (ADR-0138). Locally there is no cap.
 - **Every call is a row** of `model_calls` with who asked, for what, the tokens and the cost (ADR-0120), and every request is a run record that says what became of the model's answer (ADR-0026).
-- **What a model is never shown**: another person's work, a coupon's name, the engineer's notes, the team's files, a key. The page answers questions for these itself, before any model sees them (`lib/chat-about.ts`).
+- **What a model is never shown**: another person's work, a coupon's name, the engineer's notes, the team's files, a key. Every chat that sends a message to a model (the coupon chat, the FEA assistant of a blank project, the laminate chat) answers a question for a key, the hidden prompt or another person's work itself, before any model sees it (`lib/chat-private.ts`).
 
 ## Switch the model off
 
