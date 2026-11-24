@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { blankForm, exampleForm, fieldByKey } from "../lib/studio-form";
 import { bannedIn } from "../lib/studio-copy";
 import {
-  builtLines, D3039, fixRowWords, needsPlyThickness, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel, tensionMissing, tensionReady, tensionValues, underD3039, valuesInUse,
+  builtLines, D3039, fixRowWords, libraryValueLines, needsPlyThickness, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel, tensionMissing, tensionReady, tensionValues,
+  underD3039, valuesInUse,
 } from "../lib/tension-screen";
 import { missingIn, nextStep } from "../lib/studio-chat";
 
@@ -106,4 +107,25 @@ test("the tension screen's chat asks for the material and the layup, the size on
   assert.deepEqual(missingIn("loading", fresh, true), []);
   assert.equal(nextStep({ ...exampleForm("2026-11-11"), filled_by: "A. Engineer" }), "review", "the full panels' chat is as before");
   assert.equal(nextStep(exampleForm("2026-11-11")), "name");
+});
+
+test("the Material step shows the chosen library material's numbers as the engine wrote them, in the coupon's units (ADR-0111 amendment 4)", () => {
+  const shown = (form: Record<string, string>) => {
+    const lines = libraryValueLines(form);
+    return lines && { stiffness: lines.stiffness.map((l) => `${l.label} ${l.value}`), strengths: lines.strengths?.map((l) => `${l.label} ${l.value}`) ?? null };
+  };
+  // IM7/8552 (NCAMP): the mockup's numbers, printed by the one number rule
+  assert.deepEqual(shown(reference), {
+    stiffness: ["E1 162.1 GPa", "E2 8.963 GPa", "G12 4.688 GPa", "ν12 0.316", "Ply 0.1829 mm"],
+    strengths: ["F1t 2559 MPa", "F1c 1731 MPa", "F2t 64.05 MPa", "F2c 285.7 MPa", "F6 91.15 MPa"],
+  });
+  // in inches the moduli are in Msi and the strengths in psi, as the engine converted them: the page converts nothing
+  assert.deepEqual(shown({ ...reference, units: "in-psi" })?.stiffness, ["E1 23.51 Msi", "E2 1.3 Msi", "G12 0.68 Msi", "ν12 0.316", "Ply 0.0072 in"]);
+  assert.equal(shown({ ...reference, units: "in-psi" })?.strengths?.[0], "F1t 371100 psi");
+  // a record with no ply thickness has no Ply line (the field to type it is below); one with no strengths has no strength column
+  assert.deepEqual(shown({ ...reference, library: "as4-8552" })?.stiffness.map((l) => l.split(" ")[0]), ["E1", "E2", "G12", "ν12"]);
+  assert.equal(shown({ ...reference, library: "as4-8552s-pw" })?.strengths, null);
+  // the engineer's own material and no choice show nothing: their numbers are the fields they typed
+  assert.equal(libraryValueLines({ ...reference, library: "" }), null);
+  assert.equal(libraryValueLines({ ...reference, library: "no-such-material" }), null);
 });

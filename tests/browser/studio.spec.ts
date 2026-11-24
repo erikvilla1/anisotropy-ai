@@ -506,11 +506,18 @@ test("the tension screen takes the material and the layup, builds the model, say
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await expect(page.getByTestId("tension-screen").getByRole("alert")).toHaveText("This layup is not symmetric. Use a layup that reads the same from both faces, such as [0/45/-45/90]s.");
 
+  await expect(page.getByTestId("material-values")).toHaveCount(0); // no material chosen, no numbers
   await page.getByLabel("Material", { exact: true }).selectOption("as4-8552"); // its library record gives no ply thickness: the screen asks
   await expect(page.getByTestId("library-ply-thickness")).toBeVisible();
   await expect(page.getByTestId("tension-missing")).toContainText("Ply thickness (mm)");
+  await expect(page.getByTestId("material-values").locator("[data-key=ply_thickness]")).toHaveCount(0);
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
   await expect(page.getByTestId("library-ply-thickness")).toHaveCount(0); // IM7/8552's record gives one
+  // the chosen material's numbers show under the choice the moment it is picked, before any check (ADR-0111 amendment 4)
+  const values = page.getByTestId("material-values");
+  await expect(values.getByRole("definition")).toHaveText(["162.1 GPa", "8.963 GPa", "4.688 GPa", "0.316", "0.1829 mm",
+    "2559 MPa", "1731 MPa", "64.05 MPa", "285.7 MPa", "91.15 MPa"]);
+  await expect(values.getByRole("term")).toHaveText(["E1", "E2", "G12", "ν12", "Ply", "F1t", "F1c", "F2t", "F2c", "F6"]);
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await expect(page.getByTestId("tension-missing")).toHaveCount(0);
@@ -1380,7 +1387,10 @@ test("the working behind an answer is shown when asked: each formula with the so
   // the values put in are the package's own, to six figures
   const criterion = first.locator('[data-step="criterion"]');
   await expect(criterion.getByTestId("chat-working-value").nth(1)).toHaveText("64.0523 MPa");
-  await expect(criterion.locator("annotation").last()).toHaveText(hill.steps[2].equations[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  const judged = hill.steps[2].equations;
+  await expect(criterion.getByTestId("chat-working-equation").nth(2).locator("annotation").last()).toHaveText(judged[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  await expect(criterion.locator("annotation").last()).toHaveText(judged[3].substituted.replaceAll("\\frac", "\\dfrac")); // then the failure index the results show, 1/R = sqrt(FI) (ADR-0103 am. 2)
+  expect(judged[3].result.value).toBe(0.9689);
   await expect(criterion.getByTestId("chat-working-source")).toHaveText("From: Laminate theory, 5. Failure.");
   await expect(first.getByTestId("chat-working-note")).toContainText("Inputs are shown to 6 figures, results to 4.");
 

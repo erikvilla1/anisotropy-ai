@@ -10,8 +10,8 @@ import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, 
 import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import {
-  builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS, tensionMissing, valuesInUse,
-  tensionValues, underD3039, type BuiltLine,
+  builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
+  tensionMissing, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { PlatePanel } from "@/components/studio/plate-panel";
@@ -200,6 +200,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <option value={OWN}>My own material…</option>
           </select>
         </div>
+        {own ? null : <MaterialValues form={form} />}
         {own ? (
           <div data-testid="own-material">
             <p className="studio-hint">Your material&apos;s constants and their source. G13 and G23 are optional.</p>
@@ -302,6 +303,29 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
 
 const NOT_MATERIAL = ["the layup", "a boundary condition", "a load"];
 const missingMaterial = (missing: string[]): boolean => missing.some((m) => !NOT_MATERIAL.includes(m) && !/length|width/i.test(m));
+
+/** The chosen library material's numbers under the choice (ADR-0111 amendment 4), as the founder's mockup shows them: the stiffness on the
+ * left, the strengths on the right, in the coupon's units, as the engine wrote them in the form's definition, so they show the moment the
+ * material is picked, before any check. */
+function MaterialValues({ form }: { form: StudioForm }) {
+  const lines = libraryValueLines(form);
+  if (!lines) return null;
+  const list = (items: ValueLine[], name: string) => (
+    <dl className="ws-tree-values" aria-label={name}>
+      {items.map((line) => <div key={line.key} data-key={line.key}><dt>{line.label}</dt><dd>{line.value}</dd></div>)}
+    </dl>
+  );
+  return (
+    <div data-testid="material-values">
+      <p className="ws-tree-caption">From the library</p>
+      <div className="ws-tree-values-grid">
+        {list(lines.stiffness, "Stiffness")}
+        {lines.strengths ? list(lines.strengths, "Strengths") : null}
+      </div>
+      {lines.strengths ? null : <p className="studio-hint">The library gives no strengths for this material.</p>}
+    </div>
+  );
+}
 
 /** What the software chose for a tab, each with its reason (ADR-0090), shown in the tab it belongs to (ADR-0111). */
 function Defaults({ id, lines }: { id: TabId; lines: BuiltLine[] }) {

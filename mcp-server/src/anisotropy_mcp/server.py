@@ -48,7 +48,7 @@ Rules:
 5. A setup is the rows of the coupon form. Read describe_coupon_form once before the first setup. Pass only what the engineer stated. When a required row is missing, ask for every missing row in one short message, in words and never by the rows' keys, with the form's default or example beside each row that has one, so the engineer can answer yes. If the engineer asks for an example or tells you to choose, use the form's example and say plainly which values were chosen by you and not by them.
 6. solve_coupon solves a preview: say so once, in a few words. The full run, with a mesh convergence study, a check by a second solver and a report, is started from the workspace page.
 7. Which ply fails first is the gauge section's answer, the test's: the criterion, the ply and its angle, the factor on the applied loading and the load at that factor, as the tool gives them. A factor above 1 means the laminate holds at the applied loading. A criterion the tool reports reached earlier at a gripped tab's edge is no failure of the coupon, since a value at a clamped edge grows as the mesh is refined; say it in one line, apart, after the answer.
-8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. When the engineer names one quantity and no criterion (the stress, the strain, the failure index, the load at failure), pass it as step and show that step alone, saying in a few words that the whole working is there if wanted. Lead with what was asked (the formula, or the step named), then give the tool's basis_line as it is written: it names the criterion, the ply and the place, and which criterion fails first when it is another. Say each symbol's meaning in words the first time it appears, from the tool's `what` and step titles. Its Tsai-Hill sum is not the failure index the results show (that index is 1/R); keep the two apart.
+8. For a value at a place use result_values; for where a quantity is largest use result_extreme; for a formula, a derivation or a proof use show_working and show its formulas as written, with their symbols and notes. When the engineer names one quantity and no criterion (the stress, the strain, the failure index, the load at failure), pass it as step and show that step alone, saying in a few words that the whole working is there if wanted. Lead with what was asked (the formula, or the step named), then give the tool's basis_line as it is written: it names the criterion, the ply and the place, and which criterion fails first when it is another. Say each symbol's meaning in words the first time it appears, from the tool's `what` and step titles. The Tsai-Hill working's FI is its sum, not the failure index the results show: that index is the working's last line, 1/R (the square root of the sum); when asked for the failure index, give 1/R.
 9. For why, use explain_result and answer in one to three sentences only from its facts and theory sections. Name the section you rest on. If the sections do not hold the reason, say that they do not; never fill the gap from general knowledge without saying it is not from Anisotropy's pages.
 10. These tools read and solve a coupon. They do not change its shape beyond the form's rows, and they start no full run and write no report.
 11. A question that leaves out the ply or the quantity means every ply and the stresses along the fibres, across them and in shear; ask back only for what has no such default, once, with the choices named. For an element that is not in the model, say the range in one line and give the values at the element where first ply failure is read, saying so. For the working of a criterion the result does not have, say in one line which it has and show the working of the one that fails first.
@@ -170,13 +170,26 @@ def answer_of(summary: dict) -> dict:
     where the coupon has one (the verdict names a criterion reached earlier outside it), where that section is read (ADR-0108: at least
     `stand_off` from each tab line, the same distance on every mesh), the loading and the reaction."""
     gauge = summary.get("fpf_gauge")
+    verdict = summary.get("verdict")
+    if isinstance(verdict, dict) and isinstance(verdict.get("outside_earlier"), dict):
+        verdict = {**verdict, "outside_earlier": by_number(verdict["outside_earlier"])}
+    table = gauge if gauge else summary.get("fpf")
     return {key: value for key, value in {
-        "verdict": summary.get("verdict"),
-        "first_ply_failure": gauge if gauge else summary.get("fpf"),
+        "verdict": verdict,
+        "first_ply_failure": {c: by_number(entry) for c, entry in table.items()} if isinstance(table, dict) else table,
         "first_ply_failure_basis": "the gauge section" if gauge else "the whole model",
         "gauge_section_read": summary.get("gauge_reading") if gauge else None,
         "applied": summary.get("applied"), "reaction": summary.get("reaction"), "max_displacement": summary.get("max_displacement"),
     }.items() if value is not None}
+
+
+def by_number(entry: Any) -> Any:
+    """A first ply to fail with its element given by its own number, as the page, the working and result_values give it (ADR-0107
+    amendment 5): the package's `element` is the element's place in the mesh's list, one less than its number (182 for Strip-1.183)."""
+    if not isinstance(entry, dict) or "element" not in entry:
+        return entry
+    label = entry.get("label")
+    return {**entry, "element": results.number_of(label)} if isinstance(label, str) else {k: v for k, v in entry.items() if k != "element"}
 
 
 WING = "The wing file (.toml) on this machine, by its full path, or example for Anisotropy's example wing"

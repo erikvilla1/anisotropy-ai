@@ -121,8 +121,10 @@ def _max_stress_step(stress: np.ndarray, strengths: dict[str, float], factor: fl
     else:
         skipped.append(r"\tau_{12}")
     equations.append({"formula": rf"R = \min({', '.join(names)})", "substituted": rf"R = {tex(factor, DIGITS)}", "result": {"symbol": "R", "value": printed(factor), "unit": "-"}})
+    equations.append(_shown_index(factor))
     step = {"id": "criterion", "title": "The maximum stress criterion", "source": SOURCES["criterion"],
-            "text": f"Each stress against its own strength; the smallest ratio governs: {MODE_WORDS.get(mode, mode)}.",
+            "text": f"Each stress against its own strength; the smallest ratio governs: {MODE_WORDS.get(mode, mode)}. "
+                    "The failure index the results show is 1/R.",
             "given": rows, "equations": equations}
     if skipped:
         step["note"] = "A stress that is zero sets no limit and is left out."
@@ -150,8 +152,18 @@ def _tsai_hill_step(stress: np.ndarray, strengths: dict[str, float], index: floa
                 {"formula": None, "substituted": rf"\mathrm{{FI}} = {tex(terms[0], DIGITS)} {parts} = {tex(index, DIGITS)}",
                  "result": {"symbol": r"\mathrm{FI}", "value": printed(index), "unit": "-"}},
                 _equation(r"R = \frac{1}{\sqrt{\mathrm{FI}}}", rf"R = \frac{{1}}{{\sqrt{{{tex(given(index))}}}}}", "R", factor, "-"),
+                _shown_index(factor, index),
             ],
-            "note": "The failure index the results show is 1/R, which reaches one at failure together with this sum."}
+            "note": "FI here is the Tsai-Hill sum. The failure index the results show is 1/R, the square root of this sum: both reach one at the "
+                    "same loading."}
+
+
+def _shown_index(factor: float, tsai_hill_sum: float | None = None) -> dict[str, Any]:
+    """The failure index the results show, 1/R (ADR-0103 amendment 2): for maximum stress the largest stress over its strength, for
+    Tsai-Hill the square root of its sum. Written in the working so that "the failure index" means the number on the page."""
+    if tsai_hill_sum is None:
+        return _equation(r"\frac{1}{R}", rf"\frac{{1}}{{R}} = \frac{{1}}{{{tex(given(factor))}}}", "1/R", 1.0 / factor, "-")
+    return _equation(r"\frac{1}{R} = \sqrt{\mathrm{FI}}", rf"\frac{{1}}{{R}} = \sqrt{{{tex(given(tsai_hill_sum))}}}", "1/R", 1.0 / factor, "-")
 
 
 def _loading_step(factor: float, applied: dict[str, Any], reaction: dict[str, Any], at: dict[str, Any]) -> dict[str, Any]:
