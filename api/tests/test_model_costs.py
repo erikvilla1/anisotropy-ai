@@ -15,12 +15,12 @@ from sqlalchemy.orm import Session
 from anisotropy_api import access
 from anisotropy_api.assistant import ClaudeAssistant
 from anisotropy_api.cost_report import report, table
-from anisotropy_api.main import app
+from anisotropy_api.main import MODEL_COST_HEADER, app
 from anisotropy_api.model_costs import FEATURES, PRICES_AS_OF, measure
 from anisotropy_api.records import ModelCallRow, record_model_calls
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, AccessSettings
 
-from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
+from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, service_token, token
 from conftest import TEST_URL, alembic_config, needs_test_database
 from test_assistant import FACTS, TEMPLATE
 from test_laminate_problems import homework
@@ -271,3 +271,34 @@ def test_a_request_with_no_model_call_writes_no_row(signed_in, empty_runs):
     assert answered.status_code == 200 and answered.json()["writer"] == "template"
     with empty_runs.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM model_calls")).scalar_one() == 0
+
+
+# ------------------------------------------------------------------- the cost on the answer, to a service token only (ADR-0138)
+
+def _explained(headers: dict[str, str], *, behind_access: bool):
+    """A laminate explained by the stub model, behind Access or not, with no records kept: the answer as the client sees it."""
+    before = getattr(app.state, "assistant", None), getattr(app.state, "access_verifier", None)
+    app.state.assistant = ClaudeAssistant("claude-opus-5-5", client=Billing(answer("The laminate holds the load.")))
+    app.state.access_verifier = access.verifier(AccessSettings(TEAM, AUDIENCE), key_for=key_for) if behind_access else None
+    try:
+        return TestClient(app, headers={"X-Anisotropy-Actor": "test"}).post("/v1/laminates/solve", json=homework(), headers=headers)
+    finally:
+        app.state.assistant, app.state.access_verifier = before
+
+
+def test_a_service_tokens_answer_carries_what_its_calls_cost():
+    answered = _explained({access.HEADER: service_token()}, behind_access=True)
+    assert answered.status_code == 200, answered.text
+    assert answered.headers[MODEL_COST_HEADER] == "0.030000; calls=1; unpriced=0"  # 3000 in and 900 out at opus's prices
+
+
+def test_a_signed_in_persons_answer_never_carries_it():
+    answered = _explained({access.HEADER: token(email=EMAIL)}, behind_access=True)
+    assert answered.status_code == 200, answered.text
+    assert MODEL_COST_HEADER not in answered.headers and answered.json()["writer"] == "anthropic"
+
+
+def test_with_access_off_the_local_answer_carries_it_and_a_request_with_no_call_does_not():
+    assert _explained({}, behind_access=False).headers[MODEL_COST_HEADER] == "0.030000; calls=1; unpriced=0"
+    plain = TestClient(app, headers={"X-Anisotropy-Actor": "test"}).post("/v1/laminates/solve", json=homework())
+    assert plain.status_code == 200 and MODEL_COST_HEADER not in plain.headers

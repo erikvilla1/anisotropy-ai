@@ -1,7 +1,8 @@
 """What both halves of the real-model check share (ADR-0121, check 2): the store of the model's answers, keyed by the exact request, so a
 request answered once is never paid for again; the prices, so a run stops before its budget is spent; and the sending, in one batch at
-half price or all at once at full price. Imported by `scripts/assistant-live.py` (the API's readers, the judge, the report) and
-`scripts/assistant-live-mcp.py` (an MCP client on our tools)."""
+half price or all at once at full price. Imported by `scripts/assistant-live.py` (the API's readers, the judge, the report),
+`scripts/assistant-live-mcp.py` (an MCP client on our tools) and `scripts/site-check-judge.py` (the site check's judge, ADR-0138), which
+grades with the same judge and the same criteria."""
 
 from __future__ import annotations
 
@@ -14,6 +15,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
+ROOT = Path(__file__).resolve().parents[1]
+JUDGE_MODEL = "claude-haiku-5-5"
+SKILL = ROOT / "docs" / "agents" / "skills" / "chat-answer-quality" / "SKILL.md"
+VERDICTS = ("holds", "weak", "fails")
+JUDGE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["verdict", "criteria", "why"],
+    "properties": {"verdict": {"type": "string", "enum": list(VERDICTS)}, "criteria": {"type": "array", "items": {"type": "integer"}},
+                   "why": {"type": "string"}},
+}
+
 # Dollars per million tokens, input and output (the claude-api reference, read 2026-11-19). A batch costs half of each. A cache read
 # costs a twentieth of the input price on the 5.5 models named here, a tenth elsewhere; a cache write a quarter more.
 PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50)}
@@ -23,6 +34,22 @@ CACHE_WRITE = 1.25
 CHARS_PER_TOKEN = 3.0  # an estimate on the high side, for the budget only
 OUTPUT_GUESS = 800  # tokens an answer is budgeted at, or its max_tokens when lower
 AT_ONCE = 8  # requests sent at the same time when not in a batch, well under the API's rate limits
+
+
+def criteria() -> str:
+    text = SKILL.read_text(encoding="utf-8")
+    return text[text.index("## The criteria"):text.index("## Procedure")].strip()
+
+
+def judge_request(model: str, item: dict[str, Any]) -> dict[str, Any]:
+    system = ("You grade one answer of the chat of an engineering analysis product to an engineer's question, against the criteria below "
+              "and what the question's author expects of a good answer. Grade what the engineer sees, not the reasoning behind it. "
+              "'holds' meets every criterion that applies and the expectation; 'weak' meets the expectation but misses a criterion in a "
+              "small way; 'fails' misses the expectation or a criterion in a way the engineer would notice. Name the criteria missed by "
+              "number, and say why in one short sentence. The product is called Anisotropy: its own name is not a tool, vendor or model name "
+              "under criterion 8.\n\n" + criteria())
+    return {"model": model, "max_tokens": 2000, "system": system, "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
+            "messages": [{"role": "user", "content": json.dumps(item, ensure_ascii=False, indent=1)}]}
 
 
 class OverBudget(RuntimeError):

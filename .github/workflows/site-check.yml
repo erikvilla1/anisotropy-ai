@@ -1,0 +1,157 @@
+name: Site check
+
+# The site check (ADR-0138): a robot uses anisotropy.dev in a real browser as a customer does, asks the question banks' questions in the
+# chats (tests/assistant-questions) and grades each answer as it is shown: fixed checks first (every number one the engine sent, the time,
+# the product's words), then the small model as judge for the answers that pass them. After each deploy of main it asks the questions the
+# page answers itself, which cost nothing on the site; every four days it asks every question, the model's too, for at most $1 a run
+# and $20 a month. The founder hears of it only when an answer fails: one issue labelled `site-check`, which closes itself when a later run
+# passes.
+#
+# Two jobs, so each holds only what it needs: `ask` has the Access service token and nothing that can write to the repository; `grade`
+# has the judge's key and may write issues, and never sees the token. Nothing records the browser (no trace, video, network log or
+# storage), and what is written is scrubbed of the run's secrets and of email addresses (scripts/site-check/scrub.ts). It never runs on a
+# pull request.
+on:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "23 15 */4 * *" # 7:23 AM in California (8:23 in summer), on the 1st, 5th, 9th ... of the month: the full run
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "quick: the questions the page answers itself (no spend on the site); full: every question, within the cap"
+        type: choice
+        options: [quick, full]
+        default: quick
+      features:
+        description: "Banks to ask, by feature, separated by commas (empty: every bank)"
+        default: ""
+        required: false
+      cap:
+        description: "The most this run may spend, in dollars, the site's model and the judge together (never past $20 in a month)"
+        default: "1"
+        required: true
+
+# The actions are pinned to commits (ADR-0114). Each job names what it needs on top.
+permissions:
+  contents: read
+
+concurrency:
+  group: site-check # one run at a time: they share the store of grades and the month's spend
+  cancel-in-progress: false
+
+env:
+  STORE: .local/site-check/store
+  WORK: .local/site-check/work
+  OUT: .local/site-check/report
+
+jobs:
+  ask:
+    # After a deploy only when it succeeded, for main of this repository, and never for a pull request's preview.
+    if: >-
+      github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    # Playwright's own image, as in the Tests workflow (ADR-0114 amendment 2): the browser and its system packages are in it.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --user 1001 --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: The month's spend and when each question was last asked
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.STORE }}
+          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: site-check-store-
+      - name: Ask the questions on anisotropy.dev
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          MODE: ${{ github.event_name == 'schedule' && 'full' || inputs.mode || 'quick' }}
+          FEATURES: ${{ inputs.features }}
+          CAP: ${{ inputs.cap || '1' }}
+        run: |
+          if [ -z "$CF_ACCESS_CLIENT_ID" ] || [ -z "$CF_ACCESS_CLIENT_SECRET" ]; then
+            echo "::error::The site check needs the CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET secrets (docs/walkthroughs/hosted-deploy.md)"
+            exit 1
+          fi
+          npx tsx scripts/site-check/run.ts --site https://anisotropy.dev --mode "$MODE" --features "$FEATURES" --cap "$CAP" --store "$STORE" --work "$WORK"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-check-asked
+          path: ${{ env.WORK }}/
+          retention-days: 3
+
+  grade:
+    needs: ask
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read # to fetch what the robot read
+      issues: write # to open, comment on and close the site check's issue
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: npm ci
+      - run: uv sync --project api --locked
+      - name: The grades kept from earlier runs, the month's spend and the questions that failed before
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.STORE }}
+          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: site-check-store-
+      - name: What the robot read
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name site-check-asked --dir "$WORK"
+      - name: The judge
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_QUESTION_CHECKER || secrets.ANTHROPIC_API_KEY }}
+        run: uv run --project api python scripts/site-check-judge.py --asked "$WORK/asked.json" --store "$STORE" --out "$WORK/judged.json"
+      - name: The report, on the run's page
+        id: report
+        if: always()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          npx tsx scripts/site-check/report.ts --work "$WORK" --store "$STORE" --out "$OUT" --run-url "$RUN_URL" > /dev/null
+          cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Tell the founder only when an answer fails
+        if: always() && steps.report.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_ASSIGNEE: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: npx tsx scripts/site-check/issue.ts --results "$OUT/results.json" --run-url "$RUN_URL"
+      - name: Keep the grades and the spend for the next run
+        if: always() && steps.report.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.STORE }}
+          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.report.outcome == 'success'
+        with:
+          name: site-check-report
+          path: ${{ env.OUT }}/
+          retention-days: 30
