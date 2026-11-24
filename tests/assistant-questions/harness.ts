@@ -40,7 +40,7 @@ export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", 
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
  * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
  * `lib/wing-chat.ts`, ADR-0128), then the repair's chat (pages "repair", "repair-solved" with its slice solved, "repair-external" and
- * "repair-bond" with its bond followed until it lets go, ADR-0137; `readRepairAsk` in `lib/repair-chat.ts`, ADR-0136). */
+ * "repair-bond" with its bond followed until it lets go, ADR-0140; `readRepairAsk` in `lib/repair-chat.ts`, ADR-0136). */
 export const ALL_ROUTES = [...ROUTES, ...START_ROUTES, ...WING_ROUTES, ...REPAIR_ROUTES] as const;
 export type AnyRoute = (typeof ALL_ROUTES)[number];
 
@@ -163,7 +163,7 @@ const WING_ANSWERS: Record<string, { report: WingReport; wing: WingDescription }
   "wing-caps": JSON.parse(readFileSync("tests/fixtures/wing/caps-answer.json", "utf8")),
 };
 /** The repair's page (ADR-0136): the engine's answer to the flush example, the same with its slice solved, the example of a patch
- * bonded on top, and the flush example with its bond followed until it lets go (ADR-0137), as the page holds them when a message
+ * bonded on top, and the flush example with its bond followed until it lets go (ADR-0140), as the page holds them when a message
  * is answered. */
 const repairFile = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf8"));
 const repairHeld = (answer: string, solve?: string, bond?: string): RepairHeld => {

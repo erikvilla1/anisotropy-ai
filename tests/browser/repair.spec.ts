@@ -7,7 +7,7 @@ import { bannedIn } from "../../lib/studio-copy";
  * page sends is recorded, so each test can say what was asked. */
 const read = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf-8"));
 const ANSWER = read("example-answer"), EXTERNAL = read("external-answer"), SOLVE = read("example-solve");
-// the bond followed until it lets go (ADR-0137): the solver's own run of the flush example
+// the bond followed until it lets go (ADR-0140): the solver's own run of the flush example
 const BOND = read("example-bond");
 // the chat's (ADR-0136): the engine's previews of two changes, its sweep of the step length to a load, and what the solved slice of
 // that sweep's pick says of it, as the API puts the two together
@@ -214,7 +214,7 @@ test("a solve that cannot be made says so and keeps the page as it was, and a re
   await expect(page.getByTestId("repair-slice-short")).toHaveText("The solve of the slice still needs the adhesive's Poisson's ratio.");
 });
 
-test("the bond is followed until it lets go on request: the load in this model joins the card, the path and the bond's state the details and the report, never as a strength (ADR-0137)", async ({ page }) => {
+test("the bond is followed until it lets go on request: the load in this model joins the card, the path and the bond's state the details and the report, never as a strength (ADR-0140)", async ({ page }) => {
   const sent = await playRepairs(page);
   await page.goto("/workspace/repair");
   await expect(page.getByTestId("repair-headline")).toBeVisible();
@@ -290,7 +290,7 @@ test("the bond is followed until it lets go on request: the load in this model j
   await expect(page.getByTestId("repair-bond-short")).toContainText("Bond followed:");
 });
 
-test("a bond that cannot be followed says what it needs or why, and the chat starts a run by its words (ADR-0137)", async ({ page }) => {
+test("a bond that cannot be followed says what it needs or why, and the chat starts a run by its words (ADR-0140)", async ({ page }) => {
   const needs = [{ path: "adhesive.peel_energy", words: "the bond's fracture energy in peel" }];
   await playRepairs(page, (body) => {
     const adhesive = (body.repair?.adhesive ?? {}) as Record<string, unknown>;

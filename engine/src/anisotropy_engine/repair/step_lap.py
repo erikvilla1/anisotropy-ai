@@ -41,7 +41,7 @@ class Adhesive:
     """The bondline: shear modulus (Pa) and thickness (m); the shear strength (Pa) and the plastic shear strain it can take
     beyond its elastic limit, when a strength is asked for; and, for a solve of the repair's slice (ADR-0132), which a lap
     does not use, Poisson's ratio and the peel stress the bond can take (Pa), when the peel stress is to be judged. To
-    follow the bond until it lets go (ADR-0137), its two fracture energies as well, in peel and in shear (J/m^2): the
+    follow the bond until it lets go (ADR-0140), its two fracture energies as well, in peel and in shear (J/m^2): the
     energy it takes to part a unit area of the bond."""
 
     shear_modulus_pa: float

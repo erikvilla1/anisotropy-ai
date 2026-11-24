@@ -1,4 +1,4 @@
-"""A bond that softens and lets go, followed along its load path (ADR-0137). The law is checked alone against its six
+"""A bond that softens and lets go, followed along its load path (ADR-0140). The law is checked alone against its six
 numbers; the solver against cases with exact answers: a block pulled off a bond, the peel test and the shear test of
 fracture mechanics against beam theory, and a patch pulled off a strip held flat against its energy answer. The shear
 test's largest load is also held to the one MOOSE gives for the same model (version 2026.08.12, input in
@@ -229,7 +229,7 @@ def shear_test(strength: float, size: float = 0.5 * MM):
 def test_the_shear_tests_largest_load_is_mooses_and_nears_beam_theorys_as_the_strength_rises():
     """Beam theory assumes a sharp crack. A bond of finite strength softens over a length ahead of the crack, which lowers
     the largest load; the length shrinks as the strength rises (7.8 % under beam theory at 60 MPa; 2.65 % at 120 MPa and
-    0.40 % at 240 MPa on the finer meshes those need, ADR-0137). MOOSE, with the same law on the same mesh, gives 729.5 N
+    0.40 % at 240 MPa on the finer meshes those need, ADR-0140). MOOSE, with the same law on the same mesh, gives 729.5 N
     on a 20 mm width at 60 MPa as its damping is taken to nothing."""
     weak, beam = shear_test(30e6)
     stated, _ = shear_test(60e6)

@@ -36,7 +36,7 @@ type Said = Extract<Entry, { role: "assistant" }>;
 /** The repair's chat (ADR-0136), under the answer in words: a change is read from the message and previewed by the engine on a copy of
  * the repair, which changes only when the engineer taps Apply, and an applied change can be undone; a sweep is worked by hand at every
  * value, and its pick, solved as a slice, is applied the same way; a question about the result is answered from the report and the
- * solved slice the page holds, and one about the bond letting go from the bond followed (ADR-0137), which the chat can start; a
+ * solved slice the page holds, and one about the bond letting go from the bond followed (ADR-0140), which the chat can start; a
  * question of why, how or what a thing is from our reference pages. No model reads a message here:
  * what the patterns cannot read is said plainly, with examples. */
 export function RepairChat() {

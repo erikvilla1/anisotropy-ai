@@ -1979,7 +1979,7 @@ BOND_NOT_NOW = "The bond could not be followed right now. Try again in a minute;
 
 @app.post(REPAIR_BOND, response_model=RepairBondAnswer)
 def follow_repair_bond_endpoint(problem: RepairRequest, actor: Actor, request: Request, response: Response) -> RepairBondAnswer:
-    """A repair's bond followed until it lets go (ADR-0137) from the repair's page: the engine reads the description first, so a repair
+    """A repair's bond followed until it lets go (ADR-0140) from the repair's page: the engine reads the description first, so a repair
     the page could not work is refused in the same words, and one that lacks what the run needs (the adhesive's two strengths and two
     fracture energies, and what a solve needs) is refused with the list; then the fea package's `repair_bond` builds the slice with the
     bond as pairs, follows its path and reads it back in a process of its own. It needs no load: the load is what it finds. A run the

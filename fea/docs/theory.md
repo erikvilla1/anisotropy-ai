@@ -498,7 +498,7 @@ and the three shear moduli are the three shear terms themselves. They are comput
 
 ## 12. A repair's bond followed to failure (`repair_bond.py`)
 
-The slice of Section 11 is elastic, and stops where the adhesive first reaches a strength. Here the same slice is solved with a bond that softens and parts, along its whole load path, by a plane solver of this package (`bond_solver.py`; ADR-0137). The answer is the load at which the bond first softens and the load at which it lets go in this model. Every ply stays elastic, so neither is the repair's strength.
+The slice of Section 11 is elastic, and stops where the adhesive first reaches a strength. Here the same slice is solved with a bond that softens and parts, along its whole load path, by a plane solver of this package (`bond_solver.py`; ADR-0140). The answer is the load at which the bond first softens and the load at which it lets go in this model. Every ply stays elastic, so neither is the repair's strength.
 
 ### 12.1 The bond's law
 

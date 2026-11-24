@@ -18,7 +18,7 @@ const SWEEP: RepairSweepAnswer = { ...read<RepairSweepAnswer>("example-sweep"), 
 
 const HAND: RepairHeld = { repair: EXAMPLE_REPAIR, report: ANSWER.report, slice: null, sliceStale: false, needs: [] };
 const SOLVED: RepairHeld = { ...HAND, slice: SOLVE.report };
-// the bond followed until it lets go (ADR-0137): the page that can follow it, and the page that has
+// the bond followed until it lets go (ADR-0140): the page that can follow it, and the page that has
 const BOND = read<RepairBond>("example-bond");
 const CAN_FOLLOW: RepairHeld = { ...HAND, bondNeeds: [] };
 const FOLLOWED: RepairHeld = { ...SOLVED, bond: BOND.report, bondNeeds: [] };
@@ -187,7 +187,7 @@ test("a value the repair states is read back as stated, with its unit and its st
   assert.equal(say("what is the load").heading, "Load per unit width: 100 N/mm");
   assert.equal(say("what is the peel strength").heading, "Peel strength: 40 MPa");
   assert.equal(say("what is the peel strength", { ...HAND, repair: withValue(EXAMPLE_REPAIR, "adhesive.peel_strength", undefined) }).heading, "Peel strength: not stated");
-  // the bond's two fracture energies (ADR-0137), by the names an engineer gives them
+  // the bond's two fracture energies (ADR-0140), by the names an engineer gives them
   assert.deepEqual([say("what is the fracture energy in peel").heading, say("what is the fracture energy in peel").panel], ["Fracture energy, peel: 0.5 N/mm", "repair-adhesive"]);
   assert.equal(say("what is the shear fracture energy").heading, "Fracture energy, shear: 2 N/mm");
   assert.equal(say("what is the mode II toughness").heading, "Fracture energy, shear: 2 N/mm");
@@ -213,7 +213,7 @@ test("what only the solved slice holds is answered from it, and asked for when i
   assert.equal(say("what is the elastic limit load", SOLVED).lines[1], "Solved as a slice: 260.8 N/mm.");
 });
 
-test("when the bond lets go is answered from the bond followed, never as a strength, and offered or asked for when it is not followed (ADR-0137)", () => {
+test("when the bond lets go is answered from the bond followed, never as a strength, and offered or asked for when it is not followed (ADR-0140)", () => {
   for (const message of ["when does the bond let go?", "at what load does the patch come off", "when does the adhesive fail", "what is the debond load", "bond failure load",
     "progressive failure load?", "whne does the patch debond", "does the bond break", "what is the bond's strength"]) {
     const ask = readRepairAsk(message);
@@ -255,7 +255,7 @@ test("when the bond lets go is answered from the bond followed, never as a stren
   assert.deepEqual(repairAnswer(why, FOLLOWED).lines, ["Here: the bond first softens at 184 N/mm and lets go at 1,340 N/mm in this model."]);
 });
 
-test("the bond is followed on a command, when the repair states what that needs (ADR-0137)", () => {
+test("the bond is followed on a command, when the repair states what that needs (ADR-0140)", () => {
   for (const message of ["follow the bond", "follow the bond until it lets go", "run the bond to failure", "run a progressive failure analysis", "progressive failure", "take the bond to failure"]) {
     assert.deepEqual(readRepairAsk(message), { route: "repair-command", command: "bond" }, message);
   }
@@ -269,7 +269,7 @@ test("the bond is followed on a command, when the repair states what that needs 
   assert.equal(readRepairAsk("make the bondline 0.2 mm").route, "repair-change");
 });
 
-test("the bond is set against the plies with the earlier named first, a fragment asks where, and a fracture energy is never read as the load (ADR-0137)", () => {
+test("the bond is set against the plies with the earlier named first, a fragment asks where, and a fracture energy is never read as the load (ADR-0140)", () => {
   // "does the bond fail before the plies?" opens with No where a ply of the solved slice comes first (criterion 1)
   assert.deepEqual(readRepairAsk("does the bond fail before the plies?"), { route: "repair-result", topic: "bond", plies: "yes-no" });
   assert.deepEqual(readRepairAsk("which fails first, the bond or the plies"), { route: "repair-result", topic: "bond", plies: "which" });
@@ -313,7 +313,7 @@ test("a question that asks for a verdict is told the page gives none, with what 
     assert.equal(said.lines[1], "In the solved slice, the adhesive reaches its elastic limit in shear first, at 260.8 N/mm.");
     assert.match(said.lines[2], /^Neither is a failure load/);
   }
-  // with the bond followed, the load at which it lets go is given too, and still no verdict (ADR-0137)
+  // with the bond followed, the load at which it lets go is given too, and still no verdict (ADR-0140)
   const followed = say("is it strong enough?", FOLLOWED);
   assert.deepEqual([followed.kind, followed.heading], ["verdict", "This page gives no strength or verdict"]);
   assert.deepEqual(followed.lines.slice(2), ["With the bond followed, it lets go at 1,340 N/mm in this model.",

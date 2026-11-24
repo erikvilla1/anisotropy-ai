@@ -3,7 +3,7 @@
  * engine's form (`RepairChange`, `engine/src/anisotropy_engine/repair/changes.py`) and a sweep into `RepairSweep`
  * (`repair/sweeps.py`), every number taken from the engineer's words with the unit as written, which the engine converts; the API
  * previews the change, or runs the sweep, before anything on the page changes. A question about the result is answered from the
- * report, the solved slice and the followed bond (ADR-0137) the page already holds, every number as the engine or the solver gave it; a question of why, how or
+ * report, the solved slice and the followed bond (ADR-0140) the page already holds, every number as the engine or the solver gave it; a question of why, how or
  * what a thing is from the reference pages the API's search finds. A question that asks for a verdict is told the page gives none,
  * with what it does give. Nothing here computes a result. Pure: no React, no browser, so `tests/repair-chat.test.ts` runs it.
  */
@@ -285,7 +285,7 @@ function statedOf(text: string, kind: RepairKind): { field: RepairField; panel: 
 
 const VERDICT = /\bstrong enough\b|\bstrength\b|\bsafe\b|\bwill it (?:fail|hold|break|survive|work)\b|\bdoes it (?:pass|fail|hold|work)\b|\bis (?:it|this|the repair) (?:ok|okay|good|fine|acceptable|adequate|enough|sound)\b|\bmargins?\b|\bpass(?:es)?\b|\bfactor of safety\b|\bsafety factor\b|\bfailure load\b|\bultimate\b|\bcan (?:it|the repair|this) (?:carry|take|hold|survive)\b|\b(?:it|repair|this) carr(?:y|ies)\b|\bcarry (?:the|that|this|my) load\b|\brestor|\bgood enough\b|\bverdict\b|\bairworthy\b|\b(?:ok|okay|fine|acceptable|enough)$/;
 
-/** The bond past its elastic limit (ADR-0137): softening, parting, letting go, the patch coming off. */
+/** The bond past its elastic limit (ADR-0140): softening, parting, letting go, the patch coming off. */
 const BOND_FAILS = /\blets? go\b|\bletting go\b|\blet go\b|\bde-?bond|\bdis-?bond|\bunzip|\b(?:comes?|coming|came|pops?|peels?|peeling) off\b|\bdetach|\bseparat|\bprogressive (?:failure|damage)\b|\bdamage (?:initiation|onset)\b|\bcohesive\b|\bfracture\b|\b(?:bond|adhesive|bond\s*-?\s*line|glue)(?:'s)?\b.*\b(?:fails?|failed|failure|failing|breaks?|broken|parts?|parted|softens?|softened|softening|damaged?|cracks?|cracked|gives? (?:way|out)|capacity)\b|\b(?:fails?|failed|failure|breaks?|softens?|softening|damage|cracks?|parts|parted)\b.*\b(?:bond|adhesive|bond\s*-?\s*line|glue)\b|\bbond(?:'s)? strength\b|\bstrength of the bond\b/;
 /** A question of the bond's failure that sets it against the plies': "does the bond fail before the plies?". */
 const BOND_OR_PLIES = /\b(?:before|after|or|than|sooner|earlier|later)\b.*\b(?:pl(?:y|ies)|laminate|patch plies|fib(?:er|re)s?)\b|\b(?:pl(?:y|ies)|laminate|fib(?:er|re)s?)\b.*\b(?:before|after|first|or)\b/;
@@ -397,7 +397,7 @@ const numbered = (n: number, one: string, many: string): string => `${n} ${n ===
 
 /** What the page holds when a message is answered: the description, the hand calculation's report, the solved slice when it belongs to
  * the repair as it stands, whether an older solve is kept, and what a solve still needs; and the same of the bond followed until it
- * lets go (ADR-0137), `bondNeeds` null where the analysis service follows no bonds. */
+ * lets go (ADR-0140), `bondNeeds` null where the analysis service follows no bonds. */
 export type RepairHeld = { repair: RepairDescription; report: RepairReport | null; slice: SliceReport | null; sliceStale: boolean; needs: readonly SolveNeed[];
   bond?: BondReport | null; bondStale?: boolean; bondNeeds?: readonly SolveNeed[] | null };
 
@@ -428,7 +428,7 @@ const staleLine = (held: RepairHeld): string => (held.sliceStale ? "The slice wa
 const bondPanel = (needs: readonly SolveNeed[]): string => (needs.some((n) => n.path.startsWith("adhesive.")) ? "repair-adhesive" : "repair-solve");
 const FOLLOW_FIRST = "Follow the bond to get it: about ten seconds.";
 
-/** A question of the bond past its elastic limit (ADR-0137): the load at which the followed bond lets go in this model, or where and
+/** A question of the bond past its elastic limit (ADR-0140): the load at which the followed bond lets go in this model, or where and
  * when it first softens, as the solver gave them; without a run, what a run needs or the offer to start one. Never a strength. */
 function bondAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held: RepairHeld): RepairSaid {
   const bond = held.bond ?? null, needs = held.bondNeeds ?? null;

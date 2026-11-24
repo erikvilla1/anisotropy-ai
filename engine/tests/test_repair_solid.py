@@ -248,7 +248,7 @@ def test_a_repair_file_that_states_them_wrongly_is_refused(changes, words):
 
 
 def test_a_repair_file_states_what_following_its_bond_needs():
-    """The bond followed until it lets go (ADR-0137) needs the adhesive's six numbers whole. A fracture energy is stated in
+    """The bond followed until it lets go (ADR-0140) needs the adhesive's six numbers whole. A fracture energy is stated in
     the file's force per length: N/mm in "mm-MPa", which is kJ/m^2."""
     from anisotropy_engine.repair import bond_needs
 

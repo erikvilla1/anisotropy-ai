@@ -131,7 +131,7 @@ export function SliceResults({ slice, stale }: { slice: SliceReport; stale: bool
   );
 }
 
-/** A bond followed until it lets go (ADR-0137) in words and a table: the model and its checks, where and at what load the bond first
+/** A bond followed until it lets go (ADR-0140) in words and a table: the model and its checks, where and at what load the bond first
  * softens, the load at which it lets go in this model with how much of it is softening and has parted, and each stretch of the
  * bond at that load. The load is said to be not the repair's strength wherever it is read. */
 export function BondResults({ bond, stale, slice = null }: { bond: BondReport; stale: boolean; slice?: SliceReport | null }) {

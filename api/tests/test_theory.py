@@ -98,7 +98,7 @@ def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
     # amendment 6: the solve of the slice (ADR-0132) added a section to each theory page; the finite element one names `repair_model.py`
     slice_sections = {s.id for s in repair if s.source == "fea"}
     assert {s.id for s in repair} - slice_sections == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair", "engine:18-the-repair-s-plies-as-solids"}
-    # ADR-0137: the bond followed until it lets go added Section 12, which names `repair_bond.py`
+    # ADR-0140: the bond followed until it lets go added Section 12, which names `repair_bond.py`
     assert len(slice_sections) == 13 and all(name.startswith(("fea:11-the-repair-s-slice-in-calculix", "fea:12-a-repair-s-bond-followed-to-failure")) for name in slice_sections)
     assert find("how is the path followed past the peak load by the energy the bond spends?", among=repair)[0][0].id.endswith("12-3-the-path")
     assert set(repair) | set(of_subject("repair-references")) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
@@ -205,7 +205,7 @@ REPAIR_ASKS = {
     "what is the difference between a flush and an external patch": "repairs:flush-and-external-patches",
     "why does the patch layup matter": "repairs:a-patch-as-stiff-as-the-laminate",
     "what does the sweep's pick mean": "repairs:what-a-sweep-and-its-pick-mean",
-    # the bond followed until it lets go (ADR-0137)
+    # the bond followed until it lets go (ADR-0140)
     "why does the bond soften before it lets go": "repairs:how-a-bond-softens-and-lets-go",
     "why does the load keep rising after the bond softens": "repairs:how-a-bond-softens-and-lets-go",
     "what is a cohesive zone": "repairs:how-a-bond-softens-and-lets-go",

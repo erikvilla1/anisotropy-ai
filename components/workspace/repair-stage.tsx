@@ -9,7 +9,7 @@ import { BondChart, ForceChart, LetGoChart, LoadCurve, sliceCaption, SliceDrawin
 
 /** The centre of the repair's page (ADR-0135): the half slice as the engine cut it, the adhesive's stresses along the bond under it on
  * the same scale, the answer in its short form in the card, and the tables under Details. On request the bond is followed until it
- * lets go (ADR-0137): the load at which it does, in this model, joins the card, and the path and the bond's state join Details.
+ * lets go (ADR-0140): the load at which it does, in this model, joins the card, and the path and the bond's state join Details.
  * Every number is the engine's or the solver's; the page picks, draws and words. */
 export function RepairStage() {
   const { answer, stale, working, problem } = useRepair();

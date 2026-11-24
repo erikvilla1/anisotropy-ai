@@ -146,7 +146,7 @@ test("two descriptions are the same repair value for value, and the limits are s
   assert.ok(LIMITS.some((line) => /the load at which the bond lets go is not the repair's strength/.test(line)));
 });
 
-test("the bond followed until it lets go, in the page's words: the load in this model, where it first softens, never a strength (ADR-0137)", () => {
+test("the bond followed until it lets go, in the page's words: the load in this model, where it first softens, never a strength (ADR-0140)", () => {
   const words = bondWords(BOND.report);
   assert.equal(words.headline, "The bond lets go at 1,340 N/mm in this model");
   assert.equal(words.short, `It first softens at 184 N/mm. ${LET_GO_IS_NOT_THE_STRENGTH}`);

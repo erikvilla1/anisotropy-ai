@@ -11,7 +11,7 @@ import { BondChart, ForceChart, LetGoChart, LoadCurve, sliceCaption, SliceDrawin
 
 /** The repair's report (ADR-0135): the repair this browser holds, laid out for paper. It reads the repair and the last solved slice
  * the page kept, asks for the hand calculation again, and prints what the page shows: what the repair is, its slice, the
- * hand calculation, the solved slice and the bond followed until it lets go (ADR-0137) when they belong to this repair, and what
+ * hand calculation, the solved slice and the bond followed until it lets go (ADR-0140) when they belong to this repair, and what
  * the analysis is not. The browser's own print saves it as a PDF. Every number is the engine's or the solver's. */
 export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [repair, setRepair] = useState<RepairDescription | null>(null);

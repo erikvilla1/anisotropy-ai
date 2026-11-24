@@ -1,4 +1,4 @@
-# ADR-0137: A repair's bond is followed to failure in a plane solver of our own: a traction-separation law across the bondline, the path followed by the energy the bond spends, checked against exact fracture answers and MOOSE
+# ADR-0140: A repair's bond is followed to failure in a plane solver of our own: a traction-separation law across the bondline, the path followed by the energy the bond spends, checked against exact fracture answers and MOOSE
 
 - Status: Proposed; the route, the page, the report and the chat since amendment 1
 - Date: 2026-11-24
@@ -53,7 +53,7 @@ Not decided here: damage in the plies (slice 7), a law with a plateau, a bond on
 
 ## As built (2026-11-24)
 
-Built as decided, in `fea/src/anisotropy_fea/bond_solver.py` (the law, the plane elements, the path) and `fea/src/anisotropy_fea/repair_bond.py` (the repair's model, its run, its answer and report; `python -m anisotropy_fea.repair_bond <repair file> --out <folder>`). The engine reads the two new numbers and says what a run still needs (`bond_needs`). The theory is `fea/docs/theory.md`, Section 12.
+Built as decided, in `fea/src/anisotropy_fea/bond_solver.py` (the law, the plane elements, the path) and `fea/src/anisotropy_fea/repair_bond.py` (the repair's model, its run, its answer and report; `python -m anisotropy_fea.repair_bond <repair file> --out <folder>`). The engine reads the two new numbers and says what a run still needs (`bond_needs`). The theory is `fea/docs/theory.md`, Section 12. The record was drafted as ADR-0137 and renumbered 0140 the same day, before its pull request, because another open pull request had taken 0137.
 
 What the plan left open, as built:
 

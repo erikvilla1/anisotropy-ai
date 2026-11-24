@@ -1509,7 +1509,7 @@ class RepairAnswer(Contract):
     """The hand calculation of a repair (ADR-0135): the description as the engine read it, what it works out to in the file's units as
     `repair_report` gives it (sizes, the slice's rectangles, areas, volumes, the lap and its answer), what a page draws beside the
     rectangles (`repair_views`), what a solve of the slice still needs (`solve_needs`, empty when it can be solved) and what following
-    the bond until it lets go still needs (`bond_needs`, ADR-0137)."""
+    the bond until it lets go still needs (`bond_needs`, ADR-0140)."""
 
     run_id: str | None = None
     engine_version: str
@@ -1531,7 +1531,7 @@ class RepairSolveAnswer(Contract):
 
 
 class RepairBondAnswer(Contract):
-    """A repair's bond followed until it lets go (ADR-0137): `bond_report` in the file's units (the model and its checks, the bond's
+    """A repair's bond followed until it lets go (ADR-0140): `bond_report` in the file's units (the model and its checks, the bond's
     law, the load at which the bond first softens and where, the load at which it lets go with the bond's state there, and the curve
     of the load against the movement of the panel's end) and the run in one line."""
 

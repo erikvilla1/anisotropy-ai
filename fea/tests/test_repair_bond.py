@@ -1,4 +1,4 @@
-"""A stepped patch repair's bond followed until it lets go (ADR-0137): the model built from the repair, held four ways, and
+"""A stepped patch repair's bond followed until it lets go (ADR-0140): the model built from the repair, held four ways, and
 the answer read from its path.
 
 - Its elements, load and holds are the elastic solve's: on CalculiX's own model, this package's plane elements return
@@ -171,7 +171,7 @@ def test_with_the_bond_whole_the_patch_carries_what_it_carries_in_calculixs_slic
 
 
 def test_the_example_repairs_bond_softens_over_a_third_of_its_length_and_then_lets_go(example):
-    """The mesh study behind the numbers is in ADR-0137: over eight meshes the load at which the bond lets go stays within
+    """The mesh study behind the numbers is in ADR-0140: over eight meshes the load at which the bond lets go stays within
     0.3 % and the load of first softening settles within 0.5 % from a quarter of the bondline's thickness beside each edge."""
     answer = example
     assert answer.ended == "let_go" and answer.let_go is not None

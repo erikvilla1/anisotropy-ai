@@ -203,7 +203,7 @@ def repair_model_command() -> list[str] | None:
 
 
 def repair_bond_command() -> list[str] | None:
-    """`uv run --project fea python -m anisotropy_fea.repair_bond`, a repair's bond followed until it lets go (ADR-0137); None when
+    """`uv run --project fea python -m anisotropy_fea.repair_bond`, a repair's bond followed until it lets go (ADR-0140); None when
     uv is not on PATH. It needs neither Gmsh nor CalculiX: the solve is the fea package's own."""
     uv = shutil.which("uv")
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_bond"]

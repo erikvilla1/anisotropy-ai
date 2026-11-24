@@ -1,6 +1,6 @@
 # Bonded repairs
 
-How a bonded patch takes up load, why its numbers move as they do when a repair is changed, and what the repair's page does and does not say (ADR-0130, ADR-0131, ADR-0132, ADR-0136, ADR-0137). The repair's assistant answers a question of why, how or what a thing is from these sections, and takes every number from the repair's own report, its solved slice or its followed bond, never from this page.
+How a bonded patch takes up load, why its numbers move as they do when a repair is changed, and what the repair's page does and does not say (ADR-0130, ADR-0131, ADR-0132, ADR-0136, ADR-0140). The repair's assistant answers a question of why, how or what a thing is from these sections, and takes every number from the repair's own report, its solved slice or its followed bond, never from this page.
 
 Status: a draft of 2026-11-21, with the two sections on the followed bond added on 2026-11-24, awaiting the founder's review. Written in our own words. Each section ends with its sources. The three NASA contractor reports of Hart-Smith (1973) are public and were found in NASA's report server under the numbers given; a source marked UNVERIFIED was seen only in a search excerpt or is stated from general knowledge of the field, not read at its section and page.
 

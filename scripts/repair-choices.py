@@ -8,7 +8,7 @@ lib/repair-choices.json holds the two example repair files as the engine reads t
 engine/examples/example-patch-repair.toml, and a patch bonded on top, engine/examples/example-external-patch-repair.toml) and
 the library materials a repair can name: a ply material with a ply thickness. tests/fixtures/repair/ holds the API's answer
 to each example (POST /v1/repairs/analyze, with no run id) and, with --solve, the solve of each example's slice (POST
-/v1/repairs/solve) and its bond followed until it lets go (POST /v1/repairs/bond, ADR-0137), their run times fixed so the files do
+/v1/repairs/solve) and its bond followed until it lets go (POST /v1/repairs/bond, ADR-0140), their run times fixed so the files do
 not change from run to run. For the repair's chat (ADR-0136) it also
 holds two changes previewed on the flush example (POST /v1/repairs/changes: each step 0.5 in long, and a step added), a sweep of
 its step length to a load (POST /v1/repairs/sweeps, with no check) and, with --solve, what the solved slice of that sweep's
@@ -91,7 +91,7 @@ def solve(name: str) -> dict:
 
 
 def bond(name: str) -> dict:
-    """The API's answer to an example's bond followed until it lets go (POST /v1/repairs/bond, ADR-0137), with no run id and the run
+    """The API's answer to an example's bond followed until it lets go (POST /v1/repairs/bond, ADR-0140), with no run id and the run
     time fixed."""
     from anisotropy_fea.repair_bond import bond_report, headline, run_bond
 

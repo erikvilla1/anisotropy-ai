@@ -697,7 +697,7 @@ export async function solveRepair(apiBaseUrl: string, repair: RepairDescription,
   return payload as unknown as RepairSolve;
 }
 
-/** A repair's bond followed until it lets go (ADR-0137): about ten seconds, waited for. The engine reads the description first; a
+/** A repair's bond followed until it lets go (ADR-0140): about ten seconds, waited for. The engine reads the description first; a
  * repair that lacks the bond's strengths or fracture energies is refused with the list, and a run that fails one of its checks in
  * the solver's words. It needs no load: the load is what the run finds. */
 export async function followRepairBond(apiBaseUrl: string, repair: RepairDescription, signal?: AbortSignal): Promise<RepairBond> {

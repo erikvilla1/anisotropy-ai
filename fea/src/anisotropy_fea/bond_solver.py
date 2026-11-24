@@ -1,4 +1,4 @@
-"""A plane of elastic solids joined by a bond that softens and lets go, followed along its load path (ADR-0137).
+"""A plane of elastic solids joined by a bond that softens and lets go, followed along its load path (ADR-0140).
 
 The solids are eight-node plane elements with four integration points, the element CalculiX solves a repair's slice with
 (CPE8R, ADR-0132). The bond is a set of node pairs, one node on each side of it: each pair is one integration point of the

@@ -1,6 +1,6 @@
 /** The repair's page (ADR-0135): one stepped patch repair, the same table a repair file holds (ADR-0131), edited on the page, worked by
  * the engine's hand calculation on every change (ADR-0130) and, on request, solved as a slice in CalculiX (ADR-0132) and its bond followed
- * until it lets go (ADR-0137). Nothing here
+ * until it lets go (ADR-0140). Nothing here
  * computes a result: the description is sent as it stands, the engine reads it by its own rules and refuses what is wrong by name, and
  * the page shows its numbers. What this file does is keep the description (its fields, its two kinds, its materials), write it out as a
  * repair file, and word the engine's and the solver's answers. */
@@ -249,7 +249,7 @@ export type RepairViews = {
   lap?: { r: number[]; shear: number[]; patch_force: number[] };
 };
 export type SolveNeed = { path: string; words: string };
-/** `bond_needs` is what following the bond until it lets go still needs (ADR-0137); an analysis service that does not follow bonds
+/** `bond_needs` is what following the bond until it lets go still needs (ADR-0140); an analysis service that does not follow bonds
  * yet leaves it out, and the page then offers no such run. */
 export type RepairAnswer = { run_id: string | null; engine_version: string; repair: RepairDescription; report: RepairReport; views: RepairViews; needs: SolveNeed[];
   bond_needs?: SolveNeed[] };
@@ -279,7 +279,7 @@ export type BondRunLine = { name: string; step: number | null; r: number[]; shea
 /** A state of a followed bond: the load per unit width, how far the panel's end has moved, the energy spent in the bond, and how much
  * of the bond is softening and has parted (`damaged_length` is the two together: the bond past its strength). */
 export type BondRunState = { load: number; end_movement: number; spent: number; softening_length: number; parted_length: number; damaged_length: number };
-/** A repair's bond followed until it lets go (ADR-0137), as `bond_report` gives it in the file's units. `let_go` is null when the run
+/** A repair's bond followed until it lets go (ADR-0140), as `bond_report` gives it in the file's units. `let_go` is null when the run
  * ended before the load fell, and `ended` then says how ("gone", "steps" or "stalled"). */
 export type BondReport = {
   units: { length: string; stress: string; force: string; energy: string; stiffness: string };
@@ -356,7 +356,7 @@ export function answerWords(report: RepairReport): { headline: string; detail: s
   };
 }
 
-/** The sentence that stands beside the load at which a followed bond lets go (ADR-0137): it is not a strength either. */
+/** The sentence that stands beside the load at which a followed bond lets go (ADR-0140): it is not a strength either. */
 export const LET_GO_IS_NOT_THE_STRENGTH = "Not the repair's strength: the plies are not checked for damage, and the load follows the fracture energies stated.";
 
 /** What following the bond until it lets go still needs, as one sentence, or empty when it can be followed. */
@@ -380,7 +380,7 @@ export function bondModelWords(report: BondReport): string {
     + `The forces along the load add up to the load within ${report.checks.equilibrium.toExponential(1)} of it; far from the repair the strain is the laminate theory's within ${report.checks.far_field.toExponential(1)}.`;
 }
 
-/** A followed bond in the page's words (ADR-0137): the load at which it lets go in this model as the short form, where and at what
+/** A followed bond in the page's words (ADR-0140): the load at which it lets go in this model as the short form, where and at what
  * load it first softens, how much of it is softening and has parted when it lets go, how far the run went on, and the adhesive's
  * numbers the answer follows. The load is never called the repair's strength. */
 export function bondWords(report: BondReport): { headline: string; short: string; card: string; softens: string; onsetStress: string; letsGo: string; extent: string;
@@ -416,7 +416,7 @@ export function bondWords(report: BondReport): { headline: string; short: string
   };
 }
 
-/** What the solved slice says comes before the load at which a followed bond lets go (ADR-0137): the run leaves the plies' damage out,
+/** What the solved slice says comes before the load at which a followed bond lets go (ADR-0140): the run leaves the plies' damage out,
  * so where the elastic slice has a ply at a strength at a lower load, the page says so beside the bond's load. Empty when there is no
  * such ply, no solved slice or no load at which the bond lets go. Both loads are the solver's; this only sets them side by side. */
 export function plyBefore(bond: BondReport, slice: SliceReport | null): string {

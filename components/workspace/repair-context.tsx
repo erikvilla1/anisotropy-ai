@@ -13,7 +13,7 @@ export const REPAIR_STORAGE_KEY = "anisotropy.repair.v1";
 /** Where this browser keeps the last solved slice with the repair and the choice it was solved for, so a reload and the report have it. */
 export const REPAIR_SOLVE_KEY = "anisotropy.repair-solve.v1";
 
-/** Where this browser keeps the last followed bond with the repair it was followed for (ADR-0137). */
+/** Where this browser keeps the last followed bond with the repair it was followed for (ADR-0140). */
 export const REPAIR_BOND_KEY = "anisotropy.repair-bond.v1";
 
 export type CutFaces = "open" | "bonded";
@@ -79,7 +79,7 @@ export type RepairContextValue = {
   cutFaces: CutFaces;
   setCutFaces(choice: CutFaces): void;
   solveSlice(): Promise<void>;
-  /** The last followed bond (ADR-0137), and whether the repair has changed since it was followed. */
+  /** The last followed bond (ADR-0140), and whether the repair has changed since it was followed. */
   bond: RepairBond | null;
   bondStale: boolean;
   following: boolean;
@@ -97,7 +97,7 @@ const RepairContext = createContext<RepairContextValue | null>(null);
  * The repair is kept in this browser as its repair file's table. Every change is worked by hand again once the typing settles; an
  * answer that comes back for an older description than the newest is dropped. The slice is solved when asked, and its answer is kept
  * with the description it was solved for, so the page says when the two no longer belong together; the bond followed until it lets
- * go (ADR-0137) is kept the same way. */
+ * go (ADR-0140) is kept the same way. */
 export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; children: ReactNode }) {
   const [repair, setRepairState] = useState<RepairDescription>(EXAMPLE_REPAIR);
   const [keep, setKeep] = useState(false); // the repair is kept: found in this browser, opened or changed

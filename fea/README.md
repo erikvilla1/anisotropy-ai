@@ -148,7 +148,7 @@ prints, beside the hand calculation's, the force the patch carries at every boun
 
 ## A patch repair's bond followed until it lets go
 
-`anisotropy_fea.repair_bond` follows the bond of the same repair file past its elastic limit (ADR-0137): the slice's grid, elements, holds and load, with the adhesive along every flat bond as pairs of nodes that carry a law of two straight lines in peel and in shear (a strength and a fracture energy each), solved by this package's own plane solver (`bond_solver.py`) along the path by the energy the bond spends. No CalculiX is needed.
+`anisotropy_fea.repair_bond` follows the bond of the same repair file past its elastic limit (ADR-0140): the slice's grid, elements, holds and load, with the adhesive along every flat bond as pairs of nodes that carry a law of two straight lines in peel and in shear (a strength and a fracture energy each), solved by this package's own plane solver (`bond_solver.py`) along the path by the energy the bond spends. No CalculiX is needed.
 
 ```
 uv run --project fea --extra mesh python -m anisotropy_fea.repair_bond engine/examples/example-patch-repair.toml --out run

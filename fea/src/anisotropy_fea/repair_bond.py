@@ -1,4 +1,4 @@
-"""A stepped patch repair's bond followed until it lets go (ADR-0137): the model built from the repair's description, the
+"""A stepped patch repair's bond followed until it lets go (ADR-0140): the model built from the repair's description, the
 path, and the answer read from it.
 
 The slice is the one CalculiX solves in the repair's elastic state (ADR-0132, `repair_model`): the same grid, the same
@@ -37,7 +37,7 @@ from .repair_model import HOLDS, SliceModel, SliceResults, _eight_node, _stress_
 from .repair_shape import MM, REFUSED, SliceMesh, read_repair_file, slice_mesh
 from .wing_shape import ShapeError
 
-FINE_PER_BONDLINE = 4  # the elements beside an edge are this fraction of the bondline's thickness long (ADR-0137's mesh study)
+FINE_PER_BONDLINE = 4  # the elements beside an edge are this fraction of the bondline's thickness long (ADR-0140's mesh study)
 LET_GO_FALL = 0.05  # the load must fall by this much of a peak for the peak to be the load at which the bond lets go
 RUN_ON = 0.10  # the path is followed until the load has fallen this far below the largest it reached
 FAR_FIELD_TOLERANCE = 0.01  # as the elastic solve's: how far the strain midway to the panel's end may be from the laminate theory's
@@ -425,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     modelled or followed, or fails a check of the run."""
     import argparse
 
-    parser = argparse.ArgumentParser(prog="python -m anisotropy_fea.repair_bond", description="Follow a stepped patch repair's bond until it lets go (ADR-0137).")
+    parser = argparse.ArgumentParser(prog="python -m anisotropy_fea.repair_bond", description="Follow a stepped patch repair's bond until it lets go (ADR-0140).")
     parser.add_argument("repair", type=FilePath, help="the repair, a TOML file (engine/examples/example-patch-repair.toml) or the same table as .json")
     parser.add_argument("--out", type=FilePath, help="folder for repair-bond.json")
     parser.add_argument("--size", type=float, help="the longest element along the slice, mm")

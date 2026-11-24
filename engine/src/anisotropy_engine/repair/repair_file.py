@@ -20,7 +20,7 @@ G13 = G12, nu13 = nu12 and G23 = E2 / (2 (1 + nu23)) follow) or all of `E3`, `G1
 adhesive's `poisson`. The adhesive's `peel_strength`, the stress pulling the patch off that the bond can take (the
 adhesive's, or the laminate's own strength through its thickness when that is lower), is optional: with it the solve
 judges the peel stress, without it the peel stress is reported and not judged. To follow the bond until it lets go
-(ADR-0137) the adhesive needs all of `shear_strength`, `poisson`, `peel_strength` and its two fracture energies,
+(ADR-0140) the adhesive needs all of `shear_strength`, `poisson`, `peel_strength` and its two fracture energies,
 `peel_energy` and `shear_energy`: the energy it takes to part a unit area of the bond by pulling it open and by sliding it,
 in the unit system's force per length (N/mm in "mm-MPa", which is kJ/m^2; N/m in "SI", which is J/m^2; lb/in in "US" and
 "psi"). A material typed in full may also state its ply strengths, all of `F1t`, `F1c`, `F2t`, `F2c`, `F6`,
@@ -281,7 +281,7 @@ def solve_needs(repair: Repair, load_n_per_m: float | None = None) -> list[dict]
 
 
 def bond_needs(repair: Repair) -> list[dict]:
-    """What following the bond until it lets go (ADR-0137) still needs, as `solve_needs` words it; empty when it can be
+    """What following the bond until it lets go (ADR-0140) still needs, as `solve_needs` words it; empty when it can be
     followed. It needs what the solve of the slice does, but no load (the load is what it finds), and the adhesive's six
     numbers whole: its two strengths and its two fracture energies beside the stiffness."""
     needs = solve_needs(repair, 1.0)

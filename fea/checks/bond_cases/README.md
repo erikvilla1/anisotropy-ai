@@ -1,6 +1,6 @@
 # fea/checks/bond_cases
 
-Two tests of fracture mechanics run in MOOSE, as an independent check of the bond that softens and lets go (ADR-0137; `fea/docs/theory.md`, Section 12). MOOSE is not a dependency: nothing that runs needs it. The files are kept so that the runs can be made again. Both were made with MOOSE's image `idaholab/moose`, version 2026.08.12-167ee97, on the models of `fea/tests/test_bond_solver.py`: two arms 100 by 1.98 mm of a unidirectional carbon ply in plane strain, 200 eight-node elements along the length and 8 through the two arms.
+Two tests of fracture mechanics run in MOOSE, as an independent check of the bond that softens and lets go (ADR-0140; `fea/docs/theory.md`, Section 12). MOOSE is not a dependency: nothing that runs needs it. The files are kept so that the runs can be made again. Both were made with MOOSE's image `idaholab/moose`, version 2026.08.12-167ee97, on the models of `fea/tests/test_bond_solver.py`: two arms 100 by 1.98 mm of a unidirectional carbon ply in plane strain, 200 eight-node elements along the length and 8 through the two arms.
 
 ## The shear test (end-notched flexure)
 
@@ -20,4 +20,4 @@ The arms are bonded beyond a 30 mm crack and pulled apart at their ends. The fra
 - `peel-test.i`: the input file, run as `combined-opt -i peel-test.i NX=200 SIGMA=30 VISC=1e-4 OUT=peel-test`.
 - `peel-test-moose.csv`: the curve that run gave. `time` is the opening of the arms' ends in mm (`tip_y` is half of it), `force` the force on one arm in N per mm of width.
 
-While the crack grows, at openings from 2.0 to 5.3 mm, MOOSE's load is within 0.81 % of beam theory's with the root correction, and our solver's within 1.02 % (ADR-0137's trial). No test reads this curve: `test_the_peel_tests_load_follows_beam_theory_while_the_crack_grows` holds our solver to beam theory itself, within 2 %.
+While the crack grows, at openings from 2.0 to 5.3 mm, MOOSE's load is within 0.81 % of beam theory's with the root correction, and our solver's within 1.02 % (ADR-0140's trial). No test reads this curve: `test_the_peel_tests_load_follows_beam_theory_while_the_crack_grows` holds our solver to beam theory itself, within 2 %.

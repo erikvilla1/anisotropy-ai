@@ -196,7 +196,7 @@ export function ForceChart({ report, views, slice }: { report: RepairReport; vie
     label={`The force per unit width in the patch and in the laminate along the slice, in ${force}`} />;
 }
 
-/** The adhesive's shear stress along the bond of a followed bond (ADR-0137), on the scale of the slice: as the bond first softens,
+/** The adhesive's shear stress along the bond of a followed bond (ADR-0140), on the scale of the slice: as the bond first softens,
  * when the stress is at the bond's strength at one point, and at the load at which it lets go, when it has spread: where the bond
  * is softening the stress has fallen from the strength, and where it has parted it carries none. */
 export function LetGoChart({ report, views, bond }: { report: RepairReport; views: RepairViews; bond: BondReport }) {
@@ -211,7 +211,7 @@ export function LetGoChart({ report, views, bond }: { report: RepairReport; view
     label={`The adhesive's shear stress along the bond as it first softens and at the load at which it lets go, in ${stress}, against the distance from the repair's middle`} />;
 }
 
-/** The followed bond's path (ADR-0137): the load per unit width against the length of bond past its strength, softening or parted.
+/** The followed bond's path (ADR-0140): the load per unit width against the length of bond past its strength, softening or parted.
  * Nothing is past it until the load at which the bond first softens; from there the softening spreads as the load grows, to the
  * load at which the bond lets go, and the load falls after it. Every point is a state the solver settled; the two loads are marked
  * and named. */

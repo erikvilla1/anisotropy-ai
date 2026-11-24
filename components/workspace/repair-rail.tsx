@@ -205,7 +205,7 @@ function CoverFields() {
 }
 
 /** The solve of the slice (ADR-0132): what it still needs, the one choice it has, and the button; and under it the bond followed
- * until it lets go (ADR-0137): what that still needs, and its button. */
+ * until it lets go (ADR-0140): what that still needs, and its button. */
 function SolvePanel() {
   const { repair, answer, stale, working, problem, solve, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice, apiBaseUrl,
     bond, bondStale, following, bondProblem, bondNeeds, followBond } = useRepair();
