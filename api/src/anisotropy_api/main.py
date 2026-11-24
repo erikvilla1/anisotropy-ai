@@ -10,6 +10,7 @@ import tomllib
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
@@ -74,6 +75,8 @@ from .schemas import (
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+# What a request's calls to the model cost, on the answer to a request with no signed-in email only: the site check's service token (ADR-0138)
+MODEL_COST_HEADER = "X-Anisotropy-Model-Cost"
 # "off" on the 503 of an API that keeps no records, so the page tells "this server keeps no projects" from an outage (ADR-0091 amendment 2)
 RECORDS_HEADER = "X-Anisotropy-Records"
 # With the job queue (ADR-0056 amendment 3), a queued job's answer carries its id here; the Worker sends the id to the queue and
@@ -304,6 +307,16 @@ def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: 
         print(f"{len(calls)} model call(s) of {request.url.path} could not be recorded: {str(exc).splitlines()[0]}", flush=True)
 
 
+def _cost_header(request: Request, response: Response, calls: list[ModelCall]) -> None:
+    """What the request's calls to the model cost at the price list (ADR-0120), as `<dollars>; calls=<n>; unpriced=<n>`, on the answer
+    to a request with no signed-in email. On the hosted site only a service token asks without one: the site check's, which stops
+    before its cap with it (ADR-0138). A signed-in person's answer never carries it, and nothing else about the calls goes with it."""
+    if not calls or _email(request) is not None:
+        return
+    priced = [call.cost_usd for call in calls if call.cost_usd is not None]
+    response.headers[MODEL_COST_HEADER] = f"{sum(priced, Decimal(0)):.6f}; calls={len(calls)}; unpriced={len(calls) - len(priced)}"
+
+
 Body = TypeVar("Body", bound=BaseModel)
 
 
@@ -331,6 +344,7 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
     finally:
         if calls:
             _record_calls(request, actor, calls, run_id)
+    _cost_header(request, response, calls or [])
     if run_id is None:
         return body
     response.headers[RUN_ID_HEADER] = str(run_id)

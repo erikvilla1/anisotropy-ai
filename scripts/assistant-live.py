@@ -27,18 +27,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from assistant_live_common import OverBudget, Spend, Store, key_of, reply, resolve  # noqa: E402
+from assistant_live_common import JUDGE_MODEL, VERDICTS, OverBudget, Spend, Store, judge_request, key_of, reply, resolve  # noqa: E402
 
 READERS_MODEL = "claude-opus-5-5"  # the hosted site's (ANISOTROPY_ASSISTANT_MODEL there)
 CLIENT_MODEL = "claude-sonnet-5-5"  # stands in for an engineer's own assistant on the MCP server
-JUDGE_MODEL = "claude-haiku-5-5"
-SKILL = ROOT / "docs" / "agents" / "skills" / "chat-answer-quality" / "SKILL.md"
-VERDICTS = ("holds", "weak", "fails")
-JUDGE_SCHEMA = {
-    "type": "object", "additionalProperties": False, "required": ["verdict", "criteria", "why"],
-    "properties": {"verdict": {"type": "string", "enum": list(VERDICTS)}, "criteria": {"type": "array", "items": {"type": "integer"}},
-                   "why": {"type": "string"}},
-}
+
 
 
 class Capture(Exception):
@@ -72,22 +65,6 @@ class StoredModel:
 def node(script: str, *args: str) -> Any:
     out = subprocess.run(["npx", "tsx", f"tests/assistant-questions/{script}", *args], cwd=ROOT, check=True, capture_output=True, text=True)
     return json.loads(out.stdout)
-
-
-def criteria() -> str:
-    text = SKILL.read_text(encoding="utf-8")
-    return text[text.index("## The criteria"):text.index("## Procedure")].strip()
-
-
-def judge_request(model: str, item: dict[str, Any]) -> dict[str, Any]:
-    system = ("You grade one answer of the chat of an engineering analysis product to an engineer's question, against the criteria below "
-              "and what the question's author expects of a good answer. Grade what the engineer sees, not the reasoning behind it. "
-              "'holds' meets every criterion that applies and the expectation; 'weak' meets the expectation but misses a criterion in a "
-              "small way; 'fails' misses the expectation or a criterion in a way the engineer would notice. Name the criteria missed by "
-              "number, and say why in one short sentence. The product is called Anisotropy: its own name is not a tool, vendor or model name "
-              "under criterion 8.\n\n" + criteria())
-    return {"model": model, "max_tokens": 2000, "system": system, "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
-            "messages": [{"role": "user", "content": json.dumps(item, ensure_ascii=False, indent=1)}]}
 
 
 def ask_readers(questions: list[dict[str, Any]], store: Store, spend: Spend, client: Any, batch: bool, dry: bool) -> tuple[dict[str, list], dict[str, Any]]:
