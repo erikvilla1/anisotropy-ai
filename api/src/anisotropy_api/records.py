@@ -162,7 +162,7 @@ class QACheckRow(Base):
                       UniqueConstraint("job_id", "position", name="qa_checks_one_per_place"))
 
 
-PROJECT_KINDS =("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
+PROJECT_KINDS = ("fea", "laminate", "wing")  # a wing since migration 0014 (ADR-0122)
 
 
 class ProjectRow(Base):
@@ -490,8 +490,12 @@ def qa_rows(qa: Mapping) -> list[dict]:
             raise QARecordError(f"check {position}: its rule's version is a whole number from 1")
         if not all(isinstance(t, str) and len(t) <= 4000 for t in (label, message)) or not isinstance(basis, str) or len(basis) > 40:
             raise QARecordError(f"check {position}: its label, message and basis are text of a check's length")
-        if not isinstance(evidence, Mapping) or len(json.dumps(evidence)) > 4000:
-            raise QARecordError(f"check {position}: its evidence is an object of a few values")
+        try:
+            shown = json.dumps(evidence, allow_nan=False) if isinstance(evidence, Mapping) else None  # JSONB refuses NaN and infinities
+        except (TypeError, ValueError):
+            shown = None
+        if shown is None or len(shown) > 4000:
+            raise QARecordError(f"check {position}: its evidence is an object of a few finite values")
         rows.append({"position": position, "layer": layer, "check_id": check_id, "version": version, "verdict": verdict, "label": label,
                      "message": message, "evidence": dict(evidence), "basis": basis})
     return rows

@@ -471,9 +471,10 @@ export async function getJob(apiBase: string, jobId: string, signal?: AbortSigna
   return readJob(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the analysis's progress", JOB_GONE));
 }
 
-/** A run's quality checks and its verdict (ADR-0137), its owner's alone; null when the answer is not a QA record. */
+/** A run's quality checks and its verdict (ADR-0137), its owner's alone; null when the answer is not a QA record of this run. */
 export async function getQARecord(apiBase: string, jobId: string, signal?: AbortSignal): Promise<QARecord | null> {
-  return readQARecord(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/qa`, { method: "GET", signal }, "the quality checks", JOB_GONE));
+  const record = readQARecord(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/qa`, { method: "GET", signal }, "the quality checks", JOB_GONE));
+  return record && record.job_id === jobId ? record : null;
 }
 
 export async function listJobs(apiBase: string, signal?: AbortSignal): Promise<JobStatus[]> {

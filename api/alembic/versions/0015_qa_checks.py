@@ -65,12 +65,27 @@ def upgrade() -> None:
         $$;
     """)
     op.execute("CREATE TRIGGER qa_checks_immutable BEFORE UPDATE OR DELETE ON qa_checks FOR EACH ROW EXECUTE FUNCTION qa_checks_are_immutable();")
+    # Written once: a job's checks all carry the moment they were recorded, so a row for a job that already has rows from another
+    # moment is a second write, refused here as well as by the API, so no check can be added to a run's record afterwards.
+    op.execute("""
+        CREATE FUNCTION qa_checks_written_once() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM qa_checks WHERE job_id = NEW.job_id AND recorded_at <> NEW.recorded_at) THEN
+                RAISE EXCEPTION 'a job''s QA checks are written once (ADR-0137)';
+            END IF;
+            RETURN NEW;
+        END
+        $$;
+    """)
+    op.execute("CREATE TRIGGER qa_checks_once BEFORE INSERT ON qa_checks FOR EACH ROW EXECUTE FUNCTION qa_checks_written_once();")
 
 
 def downgrade() -> None:
     count = op.get_bind().execute(text("SELECT count(*) FROM qa_checks")).scalar()
     if count:
         raise RuntimeError(f"the qa_checks table holds {count} check(s); the QA record would be lost, so this migration is not undone over them")
+    op.execute("DROP TRIGGER qa_checks_once ON qa_checks;")
+    op.execute("DROP FUNCTION qa_checks_written_once();")
     op.execute("DROP TRIGGER qa_checks_immutable ON qa_checks;")
     op.execute("DROP FUNCTION qa_checks_are_immutable();")
     op.drop_index("qa_checks_check_idx", table_name="qa_checks")

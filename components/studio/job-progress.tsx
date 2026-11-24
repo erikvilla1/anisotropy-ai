@@ -37,7 +37,7 @@ export function JobProgress({ job, brief = false, apiBase }: {
       {detail ? <p className="studio-muted">{detail}</p> : null}
       {took ? <p className="studio-muted" data-testid="job-took">{took}</p> : null}
       {check ? <p className={check.verified ? "studio-ok" : "studio-warn"} data-testid="job-message">{check.line}</p> : null}
-      {apiBase && job.state === "done" ? <QALine apiBase={apiBase} jobId={job.job_id} brief={brief} /> : null}
+      {apiBase && job.state === "done" ? <QALine apiBase={apiBase} jobId={job.job_id} brief={brief} expected={Boolean(job.outputs?.qa)} /> : null}
       {problem ? <p className="studio-problem" role="alert" data-testid="job-problem">{problem}</p> : null}
     </div>
   );

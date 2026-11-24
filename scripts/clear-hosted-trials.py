@@ -3,7 +3,7 @@
     uv run --project api python scripts/clear-hosted-trials.py count
     uv run --project api python scripts/clear-hosted-trials.py delete --expect runs=373,jobs=27,projects=40 --confirm "delete the trial records"
 
-What goes: every row of `runs`, `jobs` and `projects`, and every object under `coupons/`, `owners/` and `jobs/` in the store. What
+What goes: every row of `runs`, `jobs` and `projects` (with the jobs' QA checks, ADR-0137, reported by count), and every object under `coupons/`, `owners/` and `jobs/` in the store. What
 stays: the Abaqus uploads (the rows and `uploads/` in the store; each loses the link to its run of ours, which goes), the connector's
 upload keys and pairing codes, and anything else in the store. `count` changes nothing. `delete` refuses unless the confirmation is
 typed, the counts are the ones `--expect` names (so it deletes what was counted, from the database that was counted) and no job is
@@ -122,7 +122,8 @@ def delete(engine: Engine, store: Store, expected: dict[str, int], confirmation:
     if confirmation != CONFIRMATION:
         raise Refused(f'Type the confirmation exactly: --confirm "{CONFIRMATION}"')
     with engine.begin() as connection:
-        connection.execute(text(f"LOCK TABLE {', '.join((*CLEARED_TABLES, 'abaqus_uploads'))} IN ACCESS EXCLUSIVE MODE"))
+        has_qa = inspect(connection).has_table("qa_checks")  # the jobs' QA record (ADR-0137, migration 0015): goes with its jobs
+        connection.execute(text(f"LOCK TABLE {', '.join((*CLEARED_TABLES, 'abaqus_uploads', *(('qa_checks',) if has_qa else ())))} IN ACCESS EXCLUSIVE MODE"))
         found = {table: count for table, count in _table_counts(connection).items() if table in CLEARED_TABLES}
         if found != expected:
             raise Refused(f"The counts are {found}, not the {expected} expected: count again and check before deleting.")
@@ -130,9 +131,10 @@ def delete(engine: Engine, store: Store, expected: dict[str, int], confirmation:
         if busy:
             raise Refused(f"{busy} job(s) are queued or running: wait until they end.")
         unlinked = connection.execute(text("UPDATE abaqus_uploads SET job_id = NULL WHERE job_id IS NOT NULL")).rowcount
-        if inspect(connection).has_table("qa_checks"):  # before jobs: a check names its job (ADR-0137, migration 0015); never deleted one by one either
+        checks = 0
+        if has_qa:  # before jobs: a check names its job; never deleted one by one either, so its trigger is off for this statement only
             connection.execute(text("ALTER TABLE qa_checks DISABLE TRIGGER qa_checks_immutable"))
-            connection.execute(text("DELETE FROM qa_checks"))
+            checks = connection.execute(text("DELETE FROM qa_checks")).rowcount
             connection.execute(text("ALTER TABLE qa_checks ENABLE TRIGGER qa_checks_immutable"))
         connection.execute(text("DELETE FROM jobs"))  # before projects and runs: a job names both
         connection.execute(text("DELETE FROM projects"))  # before runs: a project names its last check's run
@@ -146,7 +148,8 @@ def delete(engine: Engine, store: Store, expected: dict[str, int], confirmation:
     with ThreadPoolExecutor(TRANSFERS) as pool:
         list(pool.map(store.delete, keys))
     remaining = {prefix: len(store.objects(prefix)) for prefix in CLEARED_PREFIXES}
-    return {"deleted_rows": expected, "uploads_unlinked": unlinked, "rows_now": left, "deleted_files": len(keys), "files_left": remaining}
+    return {"deleted_rows": expected, "qa_checks_deleted": checks, "uploads_unlinked": unlinked, "rows_now": left, "deleted_files": len(keys),
+            "files_left": remaining}
 
 
 def show(title: str, report: dict) -> None:

@@ -444,11 +444,11 @@ def write_qa(path: Path, checklist, record: Path, study: Path | None) -> Path | 
     made; returns the file, or None when it could not be written. A reading beside the result, never a reason to stop the run."""
     try:
         data = json.loads(study.read_text(encoding="utf-8")) if study is not None else None
-        written = qa_record(run_checks(None if checklist is None else checklist.as_dict(), record, data))
-        path.write_text(json.dumps(written, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        written = qa_record(run_checks(None if checklist is None else checklist.as_dict(), record, data if isinstance(data, dict) else None))
+        path.write_text(json.dumps(written, indent=1, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
         print(f"written    {rel(path)} (the quality checks: {written['verdict']})")
         return path
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except Exception as exc:  # whatever fails here, the result already stands: the run goes on without its checks
         print(f"the quality checks were not written: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else path.name}")
         return None
 

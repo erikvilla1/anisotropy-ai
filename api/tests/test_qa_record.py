@@ -51,6 +51,9 @@ checks = json.loads(%(checks)r)
 if args.run_by == "BADQA":
     checks[0]["verdict"] = "fine"
 qa = result.parent / "qa.json"
+if args.run_by == "ELSEWHERE":  # a file outside the job's folder and its owner's coupons: never read
+    import tempfile
+    qa = pathlib.Path(tempfile.gettempdir()) / "anisotropy-qa-elsewhere.json"
 qa.write_text(json.dumps({"version": 1, "verdict": "ready", "checks": checks}), encoding="utf-8")  # the file's own verdict is never read
 result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": attempt, "message": "done", "outputs": {"qa": str(qa)}}),
                   encoding="utf-8")
@@ -88,7 +91,8 @@ def test_a_qa_file_is_kept_only_as_checks_the_record_knows():
     assert qa_verdict([]) == "unchecked" and qa_verdict(rows[:1]) == "ready" and qa_verdict([*rows, {**rows[0], "verdict": "block"}]) == "blocked"
     bad = [{"checks": []}, {"checks": "all fine"}, {"checks": [{**CHECKS[0], "layer": "vibes"}]}, {"checks": [{**CHECKS[0], "verdict": "fine"}]},
            {"checks": [{**CHECKS[0], "check": "drop table; --"}]}, {"checks": [{**CHECKS[0], "version": 0}]}, {"checks": [{**CHECKS[0], "version": True}]},
-           {"checks": [{**CHECKS[0], "message": 7}]}, {"checks": [{**CHECKS[0], "evidence": {"x": "y" * 5000}}]}, {"checks": [CHECKS[0]] * 201}, []]
+           {"checks": [{**CHECKS[0], "message": 7}]}, {"checks": [{**CHECKS[0], "evidence": {"x": "y" * 5000}}]}, {"checks": [CHECKS[0]] * 201}, [],
+           {"checks": [{**CHECKS[0], "evidence": {"x": float("nan")}}]}]  # JSONB holds no NaN
     for qa in bad:
         with pytest.raises(QARecordError):
             qa_rows(qa)
@@ -103,7 +107,7 @@ def test_without_the_table_the_checks_are_the_runs_own_file(tmp_path, monkeypatc
     qa = client.get(f"/v1/coupon-jobs/{done['job_id']}/qa").json()
     assert qa["verdict"] == "needs engineer" and qa["counts"] == {"pass": 1, "warn": 1, "block": 0}  # from the checks, not the file's "ready"
     assert [c["check"] for c in qa["checks"]] == ["DATA-UNITS", "FEA-SECOND-SOLVER"] and qa["checks"][1]["evidence"] == {"agree": 52, "compared": 57}
-    for run_by in ("BADQA", "STOPS"):  # a file the record cannot keep, and a run that stopped: no checks, unchecked
+    for run_by in ("BADQA", "STOPS", "ELSEWHERE"):  # a file the record cannot keep, a run that stopped, a file from elsewhere: unchecked
         other = run(client, run_by)
         assert client.get(f"/v1/coupon-jobs/{other['job_id']}/qa").json() == {"job_id": other["job_id"], "verdict": "unchecked",
                                                                               "counts": {"pass": 0, "warn": 0, "block": 0}, "checks": []}
@@ -140,6 +144,10 @@ def test_a_done_jobs_checks_are_written_once_and_never_changed(recording, tmp_pa
     for statement in ("UPDATE qa_checks SET verdict = 'pass'", "DELETE FROM qa_checks"):  # nor edited or deleted, whoever asks
         with pytest.raises(DBAPIError, match="never edited or deleted"), engine.begin() as connection:
             connection.execute(text(statement))
+    with pytest.raises(DBAPIError, match="written once"), engine.begin() as connection:  # nor added to: the database refuses it too
+        connection.execute(text("INSERT INTO qa_checks (id, job_id, position, recorded_at, layer, check_id, version, verdict, label, message, "
+                                "evidence, basis) VALUES (:id, :job, 9, now(), 'data', 'DATA-LATE', 1, 'block', 'Late', 'added later', '{}', 'x')"),
+                           {"id": uuid.uuid4(), "job": job_id})
     assert len(fetch_qa_checks(engine, job_id)) == 2
 
 

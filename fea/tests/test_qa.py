@@ -3,6 +3,7 @@ study, each with its layer, id, verdict and evidence, in the words a customer re
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,13 @@ def test_a_check_keeps_to_the_records_layers_and_verdicts():
     with pytest.raises(QAError, match="verdict"):
         check("data", "X", "fail", "X", "")
     assert set(VERDICTS) == {"pass", "warn", "block"}
+
+
+def test_a_check_is_always_one_the_record_can_keep():
+    long = check("data", "X", "warn", "L" * 5000, "M" * 9000, {"a": float("nan"), "b": [1.0, float("inf")], "c": {"d": -float("inf")}})
+    assert len(long["label"]) == 4000 and len(long["message"]) == 4000 and long["message"].endswith("…")
+    assert long["evidence"] == {"a": None, "b": [1.0, None], "c": {"d": None}}
+    json.dumps(long, allow_nan=False)  # what the run writes and the database holds
 
 
 def test_the_second_solver_check_counts_what_the_record_counts():

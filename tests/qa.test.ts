@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { qaItems, qaLine, readQARecord, type QACheck } from "../lib/qa";
+import { QA_UNRECORDED, qaItems, qaLine, readQARecord, type QACheck } from "../lib/qa";
 import { BANNED_TERMS } from "../lib/studio-copy";
 
 const check = (verdict: QACheck["verdict"], label = "Units consistent"): QACheck =>
@@ -26,6 +26,7 @@ test("the run's line says what to do with the result, with counts for the founde
   assert.deepEqual(qaLine(blocked), { line: "2 quality checks block this result; 1 of 3 passed", tone: "block" });
   assert.equal(qaLine(record("unchecked", [])), null);
   assert.equal(qaLine(null), null);
+  assert.ok(!BANNED_TERMS.some((term) => term.pattern.test(QA_UNRECORDED)));
   for (const r of [ready, notes, blocked]) {
     for (const brief of [true, false]) {
       const line = qaLine(r, brief)!.line;

@@ -36,6 +36,9 @@ export function readQARecord(payload: unknown): QARecord | null {
 
 export type QALine = { line: string; tone: "ok" | "warn" | "block" };
 
+/** What a run that wrote its checks says when its record holds none: never silence, which would read as nothing to report. */
+export const QA_UNRECORDED = "The quality checks of this run were not recorded: ask an engineer to look at it before using the result";
+
 /** The run's quality checks in one line; null for a run with none. `brief`, the product's view: no counts, as for the second solver's
  * check (lib/studio-copy.ts, verificationOf), only what the customer should do with the result. */
 export function qaLine(record: QARecord | null, brief = false): QALine | null {

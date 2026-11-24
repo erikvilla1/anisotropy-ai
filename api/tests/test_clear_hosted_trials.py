@@ -86,7 +86,7 @@ def test_delete_clears_runs_jobs_projects_and_their_files_and_keeps_the_uploads_
     store = MemoryStore(KEYS)
     report = clear.delete(engine, store, {"runs": 3, "jobs": 1, "projects": 1}, CONFIRM)
     assert report["rows_now"] == {"runs": 0, "jobs": 0, "projects": 0, "abaqus_uploads": 1, "upload_tokens": 1, "pairing_codes": 1}
-    assert report["uploads_unlinked"] == 1 and report["deleted_files"] == 3
+    assert report["uploads_unlinked"] == 1 and report["deleted_files"] == 3 and report["qa_checks_deleted"] == 1
     assert report["files_left"] == {"coupons/": 0, "owners/": 0, "jobs/": 0}
     assert sorted(store.held) == ["elsewhere/kept.txt", "uploads/u/bundle.zip"]
     kept = fetch_upload(engine, upload_id)

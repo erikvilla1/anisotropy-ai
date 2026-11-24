@@ -56,8 +56,28 @@ def check(layer: str, check_id: str, verdict: str, label: str, message: str, evi
         raise QAError(f"a check's layer is one of {', '.join(LAYERS)}, not {layer!r}")
     if verdict not in VERDICTS:
         raise QAError(f"a check's verdict is one of {', '.join(VERDICTS)}, not {verdict!r}")
-    return {"layer": layer, "check": check_id, "version": VERSION, "verdict": verdict, "label": label, "message": message,
-            "evidence": evidence or {}, "basis": basis}
+    return {"layer": layer, "check": check_id, "version": VERSION, "verdict": verdict, "label": _text(label), "message": _text(message),
+            "evidence": _finite(evidence or {}), "basis": basis}
+
+
+TEXT_LIMIT = 4000  # the longest label or message the QA record keeps (api/src/anisotropy_api/records.py, qa_rows)
+
+
+def _text(words: str) -> str:
+    """A label or message the record keeps whole: cut at its limit, never refused for its length."""
+    words = str(words)
+    return words if len(words) <= TEXT_LIMIT else words[:TEXT_LIMIT - 1] + "…"
+
+
+def _finite(value: Any) -> Any:
+    """Evidence the record keeps: a number that is not finite becomes null, which JSON and the database both hold, wherever it sits."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {str(k): _finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite(v) for v in value]
+    return value
 
 
 def setup_checks(checklist: dict[str, Any] | None) -> list[dict[str, Any]]:
