@@ -100,7 +100,13 @@ def test_a_solve_returns_the_packages_answer_and_sentences_and_an_id_never_the_f
     assert solved["solved"] is True and solved["result_id"] == "r1" and "solver" not in solved and "no check by a second solver" in solved["kind"]
     assert not re.search(r"calculix|prepomax|tectonic|\bkernel\b|[A-Z]:\\\\", json.dumps(solved), re.I)  # no program of the machine, nor its path (ADR-0091)
     assert "solver" not in solved["setup"]["passed"] and "document" not in solved["setup"]["passed"]
-    assert solved["answer"]["verdict"] == summary["verdict"] and solved["answer"]["first_ply_failure"] == summary["fpf_gauge"]
+    first, outside = solved["answer"]["first_ply_failure"], solved["answer"]["verdict"]["outside_earlier"]
+    assert {**solved["answer"]["verdict"], "outside_earlier": summary["verdict"]["outside_earlier"]} == summary["verdict"]
+    assert {c: {**entry, "element": summary["fpf_gauge"][c]["element"]} for c, entry in first.items()} == summary["fpf_gauge"]
+    # every element by its own number, as the page, the working and result_values give it; the package's 182 is its place in a list (ADR-0107 am. 5)
+    assert first["tsai_hill"]["element"] == first["max_stress"]["element"] == "183" == FIELDS["summary"]["working"]["criteria"]["tsai_hill"]["element"]
+    assert summary["fpf_gauge"]["tsai_hill"]["element"] == 182 and "182" not in json.dumps(solved["answer"])
+    assert outside["element"] == "56" and outside["label"] == "Strip-1.56" and summary["verdict"]["outside_earlier"]["element"] == 55
     assert solved["answer"]["first_ply_failure_basis"] == "the gauge section" and solved["answer"]["reaction"] == summary["reaction"]
     assert solved["answer"]["gauge_section_read"] == summary["gauge_reading"] and summary["gauge_reading"]["stand_off"] == 6.25  # ADR-0108
     assert solved["answer"]["first_ply_failure"]["tsai_hill"]["ply"] == 4 and solved["answer"]["applied"] == summary["applied"]
