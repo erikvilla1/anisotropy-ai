@@ -269,6 +269,41 @@ test("the bond is followed on a command, when the repair states what that needs 
   assert.equal(readRepairAsk("make the bondline 0.2 mm").route, "repair-change");
 });
 
+test("the bond is set against the plies with the earlier named first, a fragment asks where, and a fracture energy is never read as the load (ADR-0137)", () => {
+  // "does the bond fail before the plies?" opens with No where a ply of the solved slice comes first (criterion 1)
+  assert.deepEqual(readRepairAsk("does the bond fail before the plies?"), { route: "repair-result", topic: "bond", plies: "yes-no" });
+  assert.deepEqual(readRepairAsk("which fails first, the bond or the plies"), { route: "repair-result", topic: "bond", plies: "which" });
+  const no = say("does the bond fail before the plies?", FOLLOWED);
+  assert.equal(no.heading, "No: a ply reaches a strength first, at 466.1 N/mm");
+  assert.match(no.lines[0], /^Laminate ply 6 \(−45°\), in the solved slice\. The bond lets go later in this model, at 1,340 N\/mm, with every ply kept elastic\.$/);
+  assert.equal(no.lines[1], "The bond first softens at 184 N/mm and goes on carrying load while it softens.");
+  assert.equal(say("which fails first, the bond or the plies", FOLLOWED).heading, "A ply reaches a strength first, at 466.1 N/mm");
+  // a bond that lets go below the first ply's load says Yes, and still not as a strength
+  const weak = { ...BOND.report, let_go: { ...BOND.report.let_go!, load: 400 } };
+  const yes = say("does the bond fail before the plies?", { ...FOLLOWED, bond: weak });
+  assert.equal(yes.heading, "Yes: the bond lets go first in this model, at 400 N/mm");
+  assert.match(yes.lines.join(" "), /reaches a strength at 466\.1 N\/mm.*Not the repair's strength/);
+  // without the slice there is nothing to set it against, and the solve is offered
+  const alone = say("does the bond fail before the plies?", { ...FOLLOWED, slice: null });
+  assert.deepEqual([alone.kind, alone.offer], ["none", "solve"]);
+  assert.match(alone.heading, /^The bond lets go at 1,340 N\/mm in this model; the plies' loads are not worked here$/);
+  // "and where?" after a question of the bond is where it first softens
+  const asked = readRepairAsk("when does the bond let go?");
+  assert.deepEqual(readRepairAsk("and where?", "flush", asked), { route: "repair-result", topic: "bond", onset: true });
+  assert.equal(readRepairAsk("and where?", "flush").route, "repair-reference");
+  // more of the words a user has for it
+  for (const message of ["how much of the bond has failed", "has the adhesive failed", "will the adhesive fail"]) assert.equal((readRepairAsk(message) as { topic?: string }).topic, "bond", message);
+  assert.deepEqual(readRepairAsk("what is the damage initiation load"), { route: "repair-result", topic: "bond", onset: true });
+  // a fracture energy is written in the load's unit: the chat changes neither energy and never reads one as the load
+  for (const message of ["set the peel fracture energy to 0.3 N/mm", "make GIIc 3", "change the shear toughness to 2.5 N/mm"]) {
+    const read = readRepairAsk(message);
+    assert.equal(read.route, "repair-change", message);
+    const refused = repairAnswer(read, HAND);
+    assert.deepEqual([refused.kind, refused.heading, refused.panel], ["refused", "Not a change the chat makes", "repair-adhesive"], message);
+  }
+  assert.deepEqual((readRepairAsk("set the load to 0.3 N/mm") as { change: unknown }).change, { action: "set", quantity: "load", value: 0.3, unit: "N/mm" });
+});
+
 test("a question that asks for a verdict is told the page gives none, with what it does give", () => {
   for (const message of ["is it strong enough?", "what is the strength of the repair", "does it pass", "will it hold", "what is the margin", "is the repair safe", "what is the failure load", "does it restore the strength?"]) {
     const said = say(message, SOLVED);

@@ -1,10 +1,10 @@
 # Bonded repairs
 
-How a bonded patch takes up load, why its numbers move as they do when a repair is changed, and what the repair's page does and does not say (ADR-0130, ADR-0131, ADR-0132, ADR-0136). The repair's assistant answers a question of why, how or what a thing is from these sections, and takes every number from the repair's own report or its solved slice, never from this page.
+How a bonded patch takes up load, why its numbers move as they do when a repair is changed, and what the repair's page does and does not say (ADR-0130, ADR-0131, ADR-0132, ADR-0136, ADR-0137). The repair's assistant answers a question of why, how or what a thing is from these sections, and takes every number from the repair's own report, its solved slice or its followed bond, never from this page.
 
-Status: a draft of 2026-11-21, awaiting the founder's review. Written in our own words. Each section ends with its sources. The three NASA contractor reports of Hart-Smith (1973) are public and were found in NASA's report server under the numbers given; a source marked UNVERIFIED was seen only in a search excerpt or is stated from general knowledge of the field, not read at its section and page.
+Status: a draft of 2026-11-21, with the two sections on the followed bond added on 2026-11-24, awaiting the founder's review. Written in our own words. Each section ends with its sources. The three NASA contractor reports of Hart-Smith (1973) are public and were found in NASA's report server under the numbers given; a source marked UNVERIFIED was seen only in a search excerpt or is stated from general knowledge of the field, not read at its section and page.
 
-The page explains a model. The hand calculation is elastic and holds shear in the adhesive only; the solved slice is elastic and adds the peel stress and every ply's stresses. Neither gives the repair's strength.
+The page explains a model. The hand calculation is elastic and holds shear in the adhesive only; the solved slice is elastic and adds the peel stress and every ply's stresses; the followed bond lets the adhesive soften and part while every ply stays elastic. None of the three gives the repair's strength.
 
 ## Why the shear stress peaks at the ends of a step
 
@@ -54,7 +54,7 @@ Sources: Laminate theory, stepped lap bond. The limits of practice are stated fr
 
 ## Peel stress
 
-<!-- also: peel, peeling, through the thickness, through-thickness, normal stress, cleavage, lifts, edge of the patch, tip of the patch, bending, eccentric, no peel in the hand calculation, peel by hand -->
+<!-- also: peel, peeling, through the thickness, through-thickness, normal stress, cleavage, lifts, edge of the patch, tip of the patch, bending, eccentric, no peel in the hand calculation, peel by hand, hand calculation has no peel, why no peel -->
 
 Peel is the adhesive pulled apart across its thickness, not sheared along it. It arises because the load does not run in a straight line through a repair: it steps from the laminate up into the patch, and that offset bends the patch and the laminate. The bending pulls the bondline open near the ends of the patch and of each step. Adhesives carry far less in peel than in shear, and so does a laminate between its plies, so a bond can open in peel at a load the shear stress alone would allow.
 
@@ -137,3 +137,33 @@ With a load named, the sweep marks the rows whose adhesive is still elastic at t
 The pick is not a strength and not a design. It is the smallest repair in that table for which this elastic model finds no yielding of the adhesive at that load. For the step length in particular the model can pick a step far shorter than any repair is given, since it leaves out why steps are made long: room for the adhesive to yield, a step that is never cut exactly to its drawn length, and a bond that may hold a flaw.
 
 Sources: Laminate theory, stepped lap bond and stepped patch repair. Finite element theory, the repair's slice.
+
+## How a bond softens and lets go
+
+<!-- also: soften, softens, softening, lets go, let go, letting go, debond, debonding, disbond, come off, comes off, detach, part, parted, parts, progressive failure, progressive damage, damage, cohesive, cohesive zone, traction separation, follow the bond, followed bond, bond followed, why does the load keep rising, keeps carrying, after it softens, first softens, unzip, peak load, snap back, pressed together, not the strength of the repair -->
+
+The elastic models stop where the adhesive first reaches its strength. A followed bond goes on. Each point of the bond is given a simple law between the stress it carries and how far its two faces have moved apart or slid: the stress rises in a straight line up to the adhesive's strength, then falls in a straight line to nothing as the faces move further, and from there the point has parted and carries no more. A point that has begun to fall is softening. It never heals: unloaded, it comes back along a softer line, not the one it went up.
+
+The first point reaches its strength at a low load, usually at the end of a step, where the elastic stress peaks. That is the load at which the bond first softens, and nothing lets go there. The softening point still carries most of its stress, and the points next to it take up what it sheds. As the load grows the softening zone spreads along the bond from the ends of the steps. The load keeps rising for as long as the bond still has unsoftened length to pass load to. It peaks when the softening zones have spread so far that any further movement sheds more than the rest can take up. That peak is the load at which the bond lets go in the model. Past it the bond parts for good and the load it can hold falls, so the run is followed by the energy the bond spends, not by the load, which lets it pass the peak and go on.
+
+Peel and shear act together. A point starts to soften when its peel stress and its shear stress, each as a share of its own strength and squared, add to one, so a point pulled open softens at a lower shear stress. A point pressed together carries the pressure without damage and softens by its shear alone.
+
+What the answer is not: every ply stays elastic in this run, so a ply that would break first, or a laminate that would split between its plies at a ledge, is not seen. The load at which the bond lets go is the bond's own answer in a model whose plies cannot fail, and it moves with the strengths and fracture energies stated. It is not the repair's strength. The solved slice says at what load the first ply reaches a strength, and the page sets the two loads side by side.
+
+Sources: Finite element theory, a bond followed to failure. Camanho, P. P. and Dávila, C. G. (2002), Mixed-mode decohesion finite elements for the simulation of delamination in composite materials, NASA/TM-2002-211737, public release: the law that rises to a strength and falls to nothing, with the stresses squared for its start and the energies summed for its end; not read at its section and page: UNVERIFIED. Gutiérrez, M. A. (2004), Energy release control for numerical simulations of failure in quasi-brittle solids, Communications in Numerical Methods in Engineering 20, pp. 19 to 29: following a run by the energy spent; not read at its section and page: UNVERIFIED.
+
+## Fracture energy
+
+<!-- also: fracture energy, fracture toughness, toughness, energy, energies, critical energy release rate, energy release rate, gic, giic, g1c, g2c, mode i, mode ii, mode 1, mode 2, opening mode, sliding mode, n/mm, kj/m2, j/m2, in-lb/in2, what is fracture energy, where do i get the fracture energy, which energy matters, six numbers, what the bond needs, dcb, enf, double cantilever beam, end notched flexure -->
+
+The fracture energy of an adhesive is the energy it takes to part a unit area of the bond, from whole to open. It is a property measured in a test, separate from the strength: the strength says at what stress a point starts to give, and the fracture energy says how much work it then takes to finish parting it. In the bond's law it is the area under the line that rises to the strength and falls to nothing, so a tougher adhesive of the same strength goes on carrying stress over a longer movement before it parts.
+
+An adhesive has two: one for being pulled open, which is called peel or mode I, and one for being slid, which is called shear or mode II. The shear value is usually several times the peel value. Where a point of the bond is loaded both ways, it parts when the share of each energy spent adds to one.
+
+The unit is a force per length, since an energy per area is the same thing: 1 N/mm is 1 kJ/m². That is the same unit the page uses for the load per unit width, and the two are different things.
+
+To follow a bond the repair states six numbers for its adhesive: the shear modulus and Poisson's ratio, which the elastic models already use, the shear strength and the peel strength, and the two fracture energies. The energies come from the adhesive's own fracture tests, for the bondline thickness, surface preparation, temperature and moisture of the repair, since each of those moves them. A value taken from another adhesive or another thickness gives an answer for that other bond.
+
+Which matters more depends on the size of the softening zone against the length of the bond. Where the zone is short against the bond, the load at which the bond lets go follows the energies and hardly notices the strengths. Where the zone would be as long as the bond, the whole bond reaches its strength before any of it parts, and the load follows the strengths. A stepped repair with short steps sits between the two, so both are stated.
+
+Sources: Finite element theory, a bond followed to failure. ASTM D5528, the double cantilever beam test for the opening mode, and ASTM D7905, the end-notched flexure test for the sliding mode: both are written for laminates and are named here as the kind of test, not read: UNVERIFIED. That the shear value is usually several times the peel value, and what moves the energies, are stated from general knowledge of the field: UNVERIFIED.

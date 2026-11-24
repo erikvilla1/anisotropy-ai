@@ -318,6 +318,13 @@ test("a bond that cannot be followed says what it needs or why, and the chat sta
   const started = await ask(page, "follow the bond until it lets go");
   await expect(started.getByTestId("repair-chat-followed")).toContainText("The bond lets go at 1,340 N/mm in this model");
   await expect(started.getByTestId("repair-chat-followed")).toContainText("Not the repair's strength");
+  // a question of the run is answered from it: where it starts, and set against the plies once the slice is solved
+  const where = await ask(page, "where does the bond soften first");
+  await expect(where.getByTestId("repair-chat-heading")).toHaveText("The bond first softens at 184 N/mm, 37.38 mm from the middle");
+  const alone = await ask(page, "does the bond fail before the plies?");
+  await expect(alone.getByTestId("repair-chat-heading")).toHaveText("The bond lets go at 1,340 N/mm in this model; the plies' loads are not worked here");
+  const energy = await ask(page, "set the peel fracture energy to 0.3 N/mm");
+  await expect(energy.getByTestId("repair-chat-heading")).toHaveText("Not a change the chat makes");
   // a service that follows no bonds: the page offers no run
   await page.unrouteAll({ behavior: "wait" });
   const { bond_needs: _none, ...older } = ANSWER;

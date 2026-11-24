@@ -1,10 +1,10 @@
 # ADR-0137: A repair's bond is followed to failure in a plane solver of our own: a traction-separation law across the bondline, the path followed by the energy the bond spends, checked against exact fracture answers and MOOSE
 
-- Status: Proposed
+- Status: Proposed; the route, the page, the report and the chat since amendment 1
 - Date: 2026-11-24
 - Decided by: Founder, 2026-11-24 ("let's keep workigin what we were doing earlier on this thread", read as the plan's sixth slice; the plan's route for it, our own bond element with MOOSE as the check, was put to him on 2026-11-20) | Drafted by: Claude Code
 - Related: [ADR-0130](ADR-0130-a-bonded-repairs-hand-calculation-is-the-stepped-lap-as-a-shear-lag-model-in-the-engine-the-patchs-force-at-every-step-boundary-the-adhesives-elastic-limit-and-the-long-overlap-strength-of-a-yielding-adhesive.md), [ADR-0131](ADR-0131-a-stepped-patch-repair-is-one-description-of-a-few-numbers-in-the-engine-its-slice-is-a-set-of-rectangles-and-the-hand-calculation-the-mesh-and-the-step-file-are-all-made-from-them.md), [ADR-0132](ADR-0132-a-repairs-slice-is-solved-in-calculix-as-a-plane-of-eight-node-elements-held-flat-with-the-laminates-far-field-width-strain-and-its-bondline-and-plies-are-read-back-as-means-by-the-engine.md), [ADR-0133](ADR-0133-the-public-record-states-no-result-of-a-run-in-abaqus-or-ansys-and-names-no-licence-the-numbers-of-such-comparisons-are-kept-privately.md), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md), `fea/src/anisotropy_fea/repair_model.py`, `engine/src/anisotropy_engine/repair/step_lap.py`
-- Area: fea, engine
+- Area: fea, engine, api, website, assistant
 
 ## Context
 
@@ -51,6 +51,47 @@ How the path is followed:
 
 Not decided here: damage in the plies (slice 7), a law with a plateau, a bond on the cut faces, fatigue, heat and moisture, and what the page, the chat and the report show.
 
+## As built (2026-11-24)
+
+Built as decided, in `fea/src/anisotropy_fea/bond_solver.py` (the law, the plane elements, the path) and `fea/src/anisotropy_fea/repair_bond.py` (the repair's model, its run, its answer and report; `python -m anisotropy_fea.repair_bond <repair file> --out <folder>`). The engine reads the two new numbers and says what a run still needs (`bond_needs`). The theory is `fea/docs/theory.md`, Section 12.
+
+What the plan left open, as built:
+
+- **Where the path ends** (item 4). It is followed until the load has fallen 10 % below the largest it reached, the whole bond has parted, or 1,500 steps are taken. The load at which the bond lets go is the first peak after which the load falls by 5 % of it before rising above it again; a path that ends before such a fall reports no such load and says why.
+- **Where nothing is softening**, because what was has parted and nothing else has begun, no step can spend energy. The load leads again there until something does.
+- **The mesh.** The elements beside every edge are a quarter of the bondline's thickness long (the elastic slice uses an eighth, with two elements through the adhesive; here the adhesive is the pairs).
+- **The answer** (item 5) also holds, state by state, the length of bond softening and parted, and the largest shear and peel stress on each stretch of the bond at first softening and at the load at which the bond lets go.
+- **The example's numbers** are round ones of our own, for no named adhesive: peel strength 40 MPa, fracture energy 0.5 N/mm in peel and 2.0 N/mm in shear, beside the shear strength of 30 MPa it had. The example of a patch bonded on top has the same.
+
+The checks of item 6:
+
+- (a) and (b) are tests, `fea/tests/test_bond_solver.py` and `fea/tests/test_repair_bond.py`: 17 and 17 pass. The peel test's load is beam theory's within 2 % while the crack grows; the shear test's largest load is 7.8 % under beam theory's at 60 MPa; the strip runs at its energy answer within 0.5 %. On CalculiX's own nodes and elements the plane elements return CalculiX's strains and stresses within 2 parts in a million; held to the stepped lap's assumptions the bond first softens at the lap's elastic limit load within 1 part in 10,000; with the bond whole the patch carries, midway along every step, what it carries in CalculiX's slice within 0.3 % of the load.
+- (c) The MOOSE input files and curves of the shear test and the peel test are in `fea/checks/bond_cases/`. A test holds our largest load in the shear test to MOOSE's 729.5 N within 0.3 %. No whole repair was run in MOOSE: its version at hand ends a pressed bond's shear law at √2 times the stated slip, and the repair's bond is pressed where it first softens.
+- (d) and (e) are not done: no published repair test is compared, and no Abaqus or Ansys run was made.
+
+**The example repair** (flush, four steps of 12.5 mm, bondline 0.1 mm): the bond first softens at 184.0 N/mm, 37.38 mm from the middle, in the adhesive on the ledge of step 2, in shear alone with the bond pressed together by 14.03 MPa there. It lets go at 1,339.8 N/mm with 18.65 mm of its 62.1 mm softening and none parted; the path was followed on to 1,153 N/mm, with 1.59 mm parted. 3,045 elements, 319 pairs, 46 states, about 10 s on four cores. The mesh study, each row one run:
+
+| Longest element, mm | Element beside an edge, mm | Pairs | First softens, N/mm | Lets go, N/mm | Softening then, mm |
+| --- | --- | --- | --- | --- | --- |
+| 1.5625 | 0.2 | 175 | 174.3 | 1,337.0 | 18.86 |
+| 1.5625 | 0.1 | 229 | 178.3 | 1,341.2 | 18.61 |
+| 1.5625 | 0.05 | 265 | 181.2 | 1,341.2 | 18.80 |
+| 1.5625 | 0.025 (the run's) | 319 | 184.0 | 1,339.8 | 18.65 |
+| 1.5625 | 0.0125 | 373 | 183.1 | 1,336.8 | 18.69 |
+| 1.0 | 0.025 | 341 | 183.9 | 1,341.4 | 18.42 |
+| 0.25 | 0.025 | 613 | 184.2 | 1,341.1 | 18.58 |
+| 0.25 | 0.0125 | 665 | 183.2 | 1,337.0 | 18.46 |
+
+The load at which the bond lets go stays within 0.35 % over the eight. The load of first softening rises by 5.6 % from the coarsest to the run's mesh and moves 0.5 % on the finer ones.
+
+The load of first softening, 184.0 N/mm, is below the solved slice's elastic limit load for the same repair, 260.8 N/mm. The two are read differently: a point of the bond here, a mean over a square of adhesive there (ADR-0132). The difference was not traced further: UNVERIFIED.
+
+In the solved slice the first ply reaches a strength at 466.1 N/mm, below the load at which the bond lets go. For the example the plies decide, which this run cannot see; that is slice 7.
+
+**The patch bonded on top** (the other example): first softens at 161.9 N/mm at the patch's edge, lets go at 873.2 N/mm with 26.7 of its 40 mm softening; 873.4 N/mm on a mesh four times coarser beside each edge.
+
+No evidence yet: the run's time on the hosted container (UNVERIFIED; the route allows it 120 s), and any comparison with a test of a repair.
+
 ## Why (evidence)
 
 A trial on 2026-11-24, before any product code: a prototype of the decision's items 1, 2 and 4 (with the Benzeggagh-Kenane rule, which is the same law when peel and shear have equal numbers, as in the comparisons below) and MOOSE (image `idaholab/moose`, version 2026.08.12-167ee97). The scripts, input files and curves are kept with the project's files, not in the repository; the checks of item 6 replace them as they are built. A unidirectional carbon ply (E1 150 GPa), 0.5 mm elements unless said.
@@ -79,3 +120,21 @@ No evidence yet: the slice of a real repair run to failure, its time on the host
 - The path cannot be followed to the peak on a real repair, or the run takes more than a few minutes on the hosted container.
 - CalculiX gains a bond that softens, or MOOSE a control that follows the path past its peak: ADR-0067's first choice then applies again.
 - The published repair tests are missed by more than their own scatter with the adhesive's measured numbers put in.
+
+## Amendment 1, 2026-11-24 (the route, the page, the report and the chat; proposed, not yet confirmed by the founder)
+
+**Context.** The record left open what the page, the chat and the report show. They are built with the solver so that the run can be seen and judged.
+
+**Options.** (1) *Run the bond with every solve of the slice.* One click fewer; rejected, since the run takes about ten seconds against a few for the slice, and needs three numbers most repairs do not state. (2) *Its own request, on its own button (chosen).* (3) *Draw the load against the movement of the panel's end.* The usual curve; rejected after it was drawn: the long elastic panel makes it a nearly straight line with a snap-back at its end, which shows nothing. The load is drawn against the length of bond past its strength instead. (4) *Draw the peel stress along the bond with the shear.* Rejected: where a step's end presses on the laminate the peel stress has spikes of contact pressure that hide the rest; the table gives the largest peel stress on each stretch.
+
+**Decision.**
+
+1. `POST /v1/repairs/bond` takes the repair as the other repair routes do, runs `anisotropy_fea.repair_bond` in a process with 120 s allowed, and returns its report. A repair that lacks what the run needs is refused with what it lacks. `POST /v1/repairs/analyze` also returns `bond_needs`.
+2. The page asks for the run from a button in the Solve step and beside the results, shown once the repair states the six numbers. The card under the results says "it first softens at ... and lets go at ... in this model. Not the repair's strength." The details show the run's lines, a table by stretch of the bond, the load against the length of bond past its strength, and the adhesive's shear stress along the bond at first softening and at the load at which it lets go. Where the solved slice's first ply reaches a strength below that load, the page says so beside it. A run of the repair as it was is marked as such after a change. The report gains the section.
+3. The chat reads "when does the bond let go", "where does the bond soften first", "follow the bond", the two fracture energies as values the repair states, and "does the bond fail before the plies?", which it answers with Yes or No from the two loads. It changes neither fracture energy, and never reads one as the load, whose unit it shares. A question that asks for a strength or a verdict is told the page gives none, with the bond's load added to what it does give.
+4. The reference page "Bonded repairs" gains two sections, "How a bond softens and lets go" and "Fracture energy", for questions of why and what.
+5. The MCP server gets no tool for the run yet.
+
+What the page calls the load is still the founder's to say (the Decision's item 5).
+
+**Evidence.** `tests/browser/repair.spec.ts` (15 pass, two of them the bond's), `tests/repair.test.ts` and `tests/repair-chat.test.ts` (50 pass with the bank's check), `api/tests/test_repairs_api.py` (27 pass, 3 skipped without a database; one runs the real solver and holds the route's answer to the kept run), 16 questions in `tests/assistant-questions/repair.json`. The repair's chat is read by fixed patterns and no model answers there, so no real-model run was made.

@@ -146,6 +146,16 @@ uv run --project fea --extra mesh python -m anisotropy_fea.repair_model engine/e
 
 prints, beside the hand calculation's, the force the patch carries at every boundary of the lap, the largest shear and peel stress in the bondline (each a mean over a square of adhesive as long as the bondline is thick), the load at the adhesive's elastic limit, every ply's lowest strength ratio and where, and which of the three comes first; `--out` keeps the deck, CalculiX's files and `repair-solve.json`. The file has to state what a solve needs and a hand calculation does not: `nu23` for a unidirectional ply or `E3`, `G13`, `G23`, `nu13` and `nu23` for another, the adhesive's `poisson`, and strengths for the ply check; a solve without them is refused in words. `--cut-faces bonded` counts the adhesive on a flush repair's cut faces as bonded (left open otherwise, as the hand calculation takes it); `--criterion tsai_hill`, `--size` and `--fine` set the ply check and the mesh. Every solve checks itself and is refused otherwise: the forces add up to the load at every station, the strain far from the repair is the laminate theory's, and CalculiX's stresses are the engine's stiffness times its strains. The slice is the strip through the repair's middle, elastic and held flat: it does not count the laminate beside a hole narrower than the panel, a yielding adhesive, or a panel free to bend, and the load at the adhesive's elastic limit is not the repair's strength (`docs/theory.md`, Section 11). It needs CalculiX on the PATH or in `ANISOTROPY_CCX`.
 
+## A patch repair's bond followed until it lets go
+
+`anisotropy_fea.repair_bond` follows the bond of the same repair file past its elastic limit (ADR-0137): the slice's grid, elements, holds and load, with the adhesive along every flat bond as pairs of nodes that carry a law of two straight lines in peel and in shear (a strength and a fracture energy each), solved by this package's own plane solver (`bond_solver.py`) along the path by the energy the bond spends. No CalculiX is needed.
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.repair_bond engine/examples/example-patch-repair.toml --out run
+```
+
+prints the load at which the bond first softens and where, and the load at which it lets go in this model with the length of bond softening and parted; `--out` keeps `repair-bond.json`, which also holds the bond's state by stretch and the path's curve. The file has to state what a solve needs and, for its adhesive, `shear_strength`, `peel_strength`, `peel_energy` and `shear_energy`. Every ply stays elastic, so the load is not the repair's strength. The theory is `docs/theory.md`, Section 12; the checks are `tests/test_bond_solver.py` and `tests/test_repair_bond.py`, and two runs in MOOSE are kept in `checks/bond_cases/`.
+
 `anisotropy_fea.repair_files` writes the same slice for two other solvers and reads them back (ADR-0132 amendment 1):
 
 ```bash
