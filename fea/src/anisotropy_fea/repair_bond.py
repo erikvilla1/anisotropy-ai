@@ -345,8 +345,9 @@ def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: flo
 
 def bond_report(answer: BondAnswer, units: str) -> dict:
     """The followed bond as plain numbers in a unit system (the systems of the engine's units.py): the model, the law, the
-    two checks, the onset, the load at which the bond lets go with the bond's state there, and the curve of the load against
-    the movement of the panel's end. A fracture energy is in the system's force per length, as the repair file states it."""
+    two checks, the onset, the load at which the bond lets go with the bond's state there, and the curve: at every state
+    of the path the load, the movement of the panel's end, the length of bond past its strength (softening or parted) and
+    the length parted. A fracture energy is in the system's force per length, as the repair file states it."""
     if units not in UNIT_SYSTEMS:
         raise BondRunError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
     system = UNIT_SYSTEMS[units]
@@ -360,7 +361,8 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
 
     def state(found: BondState, lines: bool) -> dict:
         out = {"load": found.load / force, "end_movement": found.end_movement_m / length, "spent": found.spent / force,
-               "softening_length": answer.softening_m(found) / length, "parted_length": answer.parted_m(found) / length}
+               "softening_length": answer.softening_m(found) / length, "parted_length": answer.parted_m(found) / length,
+               "damaged_length": float(model.weight[found.damage > 0].sum()) / length}
         if lines:
             out["lines"] = []
             for stretch in built.stretches:
@@ -394,7 +396,9 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
         "largest": state(answer.largest, False),
         "last": state(answer.last, False) | {"most_damaged": where(worst) | {"damage": float(answer.last.damage[worst])}},
         "ended": answer.ended,
-        "curve": {"end_movement": (answer.end_movements_m / length).tolist(), "load": (answer.loads / force).tolist()},
+        "curve": {"end_movement": (answer.end_movements_m / length).tolist(), "load": (answer.loads / force).tolist(),
+                  "damaged_length": [0.0] + [float(model.weight[point.damage > 0].sum()) / length for point in path.points],
+                  "parted_length": [0.0] + [float(model.weight[point.damage >= 1].sum()) / length for point in path.points]},
     }
 
 

@@ -3,14 +3,14 @@
  * engine's form (`RepairChange`, `engine/src/anisotropy_engine/repair/changes.py`) and a sweep into `RepairSweep`
  * (`repair/sweeps.py`), every number taken from the engineer's words with the unit as written, which the engine converts; the API
  * previews the change, or runs the sweep, before anything on the page changes. A question about the result is answered from the
- * report and the solved slice the page already holds, every number as the engine or the solver gave it; a question of why, how or
+ * report, the solved slice and the followed bond (ADR-0137) the page already holds, every number as the engine or the solver gave it; a question of why, how or
  * what a thing is from the reference pages the API's search finds. A question that asks for a verdict is told the page gives none,
  * with what it does give. Nothing here computes a result. Pure: no React, no browser, so `tests/repair-chat.test.ts` runs it.
  */
 import {
-  ADHESIVE_FIELDS, COVER_FIELDS, DAMAGE_FIELDS, EXTERNAL_PATCH_FIELDS, FIRST_WORDS, inSentence, kindOf, NOT_THE_STRENGTH, PANEL_FIELDS, peakPlace,
-  REPAIR_UNIT_LABELS, shown, sliceWords, unitsOf, unitText, valueAt,
-  type RepairDescription, type RepairField, type RepairKind, type RepairReport, type SliceReport, type SolveNeed,
+  ADHESIVE_FIELDS, bondWords, COVER_FIELDS, DAMAGE_FIELDS, EXTERNAL_PATCH_FIELDS, FIRST_WORDS, inSentence, kindOf, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, PANEL_FIELDS,
+  peakPlace, plyBefore, REPAIR_UNIT_LABELS, shown, sliceWords, unitsOf, unitText, valueAt,
+  type BondReport, type RepairDescription, type RepairField, type RepairKind, type RepairReport, type SliceReport, type SolveNeed,
 } from "./repair";
 
 /** Every way the repair's chat answers a message. */
@@ -30,17 +30,18 @@ export type RepairChange =
 /** A sweep as the engine's `RepairSweep` takes it: the range and the load are the message's, each in its unit as written. */
 export type RepairSweep = { quantity: SweepQuantity; start?: number; end?: number; unit?: string; load?: number; load_unit?: string };
 /** What a question of the result asks for. */
-export type RepairTopic = "shear" | "limit" | "elastic" | "peel" | "ply" | "first" | "forces" | "size" | "steps" | "layup" | "stated" | "verdict";
+export type RepairTopic = "shear" | "limit" | "elastic" | "peel" | "ply" | "first" | "forces" | "size" | "steps" | "layup" | "stated" | "verdict" | "bond";
 
 export type RepairAsk =
   /** A change: read whole (`change`), or not (`problem`, in the page's words, and whether it asks back rather than declines). */
   | { route: "repair-change"; change: RepairChange | null; problem: string | null; asks: boolean; panel?: string }
   /** A sweep: read whole, or not; `assumed` says what the page took when the message named no quantity. */
   | { route: "repair-sweep"; sweep: RepairSweep | null; problem: string | null; asks: boolean; assumed?: boolean }
-  | { route: "repair-result"; topic: RepairTopic; field?: RepairField; panel?: string; load?: { value: number; unit?: string } }
+  /** `onset` says a question of the bond's failure asks where or when it starts, not when the bond lets go. */
+  | { route: "repair-result"; topic: RepairTopic; field?: RepairField; panel?: string; load?: { value: number; unit?: string }; onset?: boolean }
   /** A question of why, how or what a thing is: the reference pages answer it, beside the repair's own number on what it names. */
   | { route: "repair-reference"; topic: RepairTopic | null }
-  | { route: "repair-command"; command: "solve" | "report" | "shape" | "undo" }
+  | { route: "repair-command"; command: "solve" | "bond" | "report" | "shape" | "undo" }
   | { route: "repair-unread" };
 
 export const QUANTITY_WORDS: Record<RepairQuantity | "steps", string> = {
@@ -258,6 +259,8 @@ function sweepOf(text: string, kind: RepairKind): RepairAsk | null {
 const STATED: [RegExp, (kind: RepairKind) => RepairField, string][] = [
   [/\b(?:adhesive(?:'s)? )?shear strength\b|\bstrength of the adhesive\b/, () => ADHESIVE_FIELDS[2], "repair-adhesive"],
   [/\bpeel strength\b/, () => ADHESIVE_FIELDS[4], "repair-adhesive"],
+  [/\b(?:peel|mode (?:i|1|one)|opening)\b.*\b(?:fracture )?(?:energy|toughness)\b|\b(?:energy|toughness)\b.*\b(?:in peel|mode (?:i|1|one))\b|\bg\s?(?:1|i)c\b/, () => ADHESIVE_FIELDS[5], "repair-adhesive"],
+  [/\b(?:shear|mode (?:ii|2|two)|sliding)\b.*\b(?:fracture )?(?:energy|toughness)\b|\b(?:energy|toughness)\b.*\b(?:in shear|mode (?:ii|2|two))\b|\bg\s?(?:2|ii)c\b/, () => ADHESIVE_FIELDS[6], "repair-adhesive"],
   [/\bshear modulus\b/, () => ADHESIVE_FIELDS[0], "repair-adhesive"],
   [BONDLINE, () => ADHESIVE_FIELDS[1], "repair-adhesive"],
   [/\bstep(?:'s)? lengths?\b|\bhow long (?:is|are) (?:each|the|a) steps?\b|\blength of (?:each |the |a )?steps?\b/, (kind) => DAMAGE_FIELDS[kind][2], "repair-damage"],
@@ -276,7 +279,14 @@ function statedOf(text: string, kind: RepairKind): { field: RepairField; panel: 
 
 const VERDICT = /\bstrong enough\b|\bstrength\b|\bsafe\b|\bwill it (?:fail|hold|break|survive|work)\b|\bdoes it (?:pass|fail|hold|work)\b|\bis (?:it|this|the repair) (?:ok|okay|good|fine|acceptable|adequate|enough|sound)\b|\bmargins?\b|\bpass(?:es)?\b|\bfactor of safety\b|\bsafety factor\b|\bfailure load\b|\bultimate\b|\bcan (?:it|the repair|this) (?:carry|take|hold|survive)\b|\b(?:it|repair|this) carr(?:y|ies)\b|\bcarry (?:the|that|this|my) load\b|\brestor|\bgood enough\b|\bverdict\b|\bairworthy\b|\b(?:ok|okay|fine|acceptable|enough)$/;
 
+/** The bond past its elastic limit (ADR-0137): softening, parting, letting go, the patch coming off. */
+const BOND_FAILS = /\blets? go\b|\bletting go\b|\blet go\b|\bde-?bond|\bdis-?bond|\bunzip|\b(?:comes?|coming|came|pops?|peels?|peeling) off\b|\bdetach|\bseparat|\bprogressive (?:failure|damage)\b|\bcohesive\b|\bfracture\b|\b(?:bond|adhesive|bond\s*-?\s*line|glue)(?:'s)?\b.*\b(?:fails?|failure|failing|breaks?|parts?|parted|softens?|softening|damaged?|cracks?|gives? (?:way|out)|capacity)\b|\b(?:fails?|failure|breaks?|softens?|softening|damage|cracks?|parts|parted)\b.*\b(?:bond|adhesive|bond\s*-?\s*line|glue)\b|\bbond(?:'s)? strength\b|\bstrength of the bond\b/;
+/** A question of the bond's failure that asks for its start: where or when it first softens. */
+const BOND_STARTS = /\bsoftens?\b|\bsoftening\b|\bstarts?\b|\bbegins?\b|\binitiat|\bonset\b|\bfirst\b/;
+
 function topicOf(text: string): RepairTopic | null {
+  // a strength or a fracture energy the adhesive states is a value of the file, not the bond's failure
+  if (BOND_FAILS.test(text) && !/\b(?:peel|shear) (?:stress|strength)\b|\benerg(?:y|ies)\b|\btoughness\b|\bg\s?(?:1|2|i|ii)c\b/.test(text)) return "bond";
   if (/\bpeel/.test(text)) return "peel";
   if (/\bfirst ply\b|\bwhich ply\b|\bply (?:fails?|failure|stress(?:es)?)\b|\bplies fail\b/.test(text)) return "ply";
   if (/\b(?:what|which)\b.*\b(?:first|governs?)\b|\bfails? first\b|\bcomes? first\b|\blimit first\b|\bweakest\b|\bcritical\b|\bgovern/.test(text)) return "first";
@@ -329,6 +339,8 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
   if (sweep) return sweep;
   const changed = changeOf(text, kind);
   if (changed) return changed;
+  if (/\b(?:follow|run|start|do|trace|take|load)\b.*\b(?:bond|de-?bond(?:ing)?|dis-?bond(?:ing)?|progressive (?:failure|damage)|to failure|until it (?:lets go|fails|comes off))\b|^progressive (?:failure|damage)(?: analysis)?$/.test(text)
+    && !ASKING.test(text) && !BONDLINE.test(text)) return { route: "repair-command", command: "bond" };
   if (/^(?:please\s+)?(?:re-?)?solve\b|\b(?:run|start|do)\s+(?:the\s+)?(?:slice|solve|finite element|fe|fea)\b|\bsolve (?:the |this |a )?(?:slice|repair|section|model)\b/.test(text)
     && !/^(?:what|why|how|does|is)\b/.test(text)) return { route: "repair-command", command: "solve" };
   if (/\b(?:step file|\.step|\.stp|cad|solids?)\b/.test(text) && /\b(?:export|download|save|get|give|make|send|build|open)\b/.test(text)) return { route: "repair-command", command: "shape" };
@@ -339,7 +351,8 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
     return { route: "repair-reference", topic: topic ?? (VERDICT.test(text) ? "verdict" : null) };
   }
   const stated = statedOf(text, kind);
-  if (stated && !topic) return { route: "repair-result", topic: "stated", ...stated };
+  // a fracture energy is a value the adhesive states, whatever else the words "peel" and "shear" name
+  if (stated && (!topic || stated.field.unit === "energy")) return { route: "repair-result", topic: "stated", ...stated };
   // "What is the peel strength" asks for the value the adhesive states, not for the peel stress of the solved slice.
   if (stated && /\b(?:shear|peel) strength\b/.test(text) && !/\b(?:reach|reaches|reached|exceed|exceeds|pass|passes|above|below|over|under|when|where|at what|enough|safe|ok|okay|adequate|restor\w*)\b/.test(text)) {
     return { route: "repair-result", topic: "stated", ...stated };
@@ -347,6 +360,7 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
   const named = written(text).find((v) => v.kind === "load" || (v.kind === null && /\b(?:at|carry|take|hold|under|for)\s*$/.test(text.slice(0, v.at))));
   const load = named ? { load: { value: named.value, ...(named.unit ? { unit: named.unit } : {}) } } : {};
   if (topic === "elastic") return { route: "repair-result", topic, ...load };
+  if (topic === "bond") return { route: "repair-result", topic, ...(BOND_STARTS.test(text) ? { onset: true } : {}) };
   if ((topic === "forces" && /\b(?:patch|laminate|cover)\b/.test(text)) || topic === "ply" || topic === "first" || topic === "peel") return { route: "repair-result", topic };
   if (VERDICT.test(text) && !(stated && /\b(?:shear|peel) strength\b/.test(text))) return { route: "repair-result", topic: "verdict", ...load };
   if (stated && (topic === null || topic === "size" || topic === "shear")) return { route: "repair-result", topic: "stated", ...stated };
@@ -359,17 +373,19 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
 
 /** What the chat says: its kind, the answer as the heading, the lines under it (the basis first), what it read, the step it points to
  * and what the engineer may start from it. */
-export type RepairSaid = { kind: string; heading: string; lines: string[]; data: Record<string, unknown>; panel?: string; offer?: "solve" | "report" };
+export type RepairSaid = { kind: string; heading: string; lines: string[]; data: Record<string, unknown>; panel?: string; offer?: "solve" | "report" | "bond" };
 
-const said = (kind: string, heading: string, lines: string[] = [], data: Record<string, unknown> = {}, panel?: string, offer?: "solve" | "report"): RepairSaid =>
+const said = (kind: string, heading: string, lines: string[] = [], data: Record<string, unknown> = {}, panel?: string, offer?: "solve" | "report" | "bond"): RepairSaid =>
   ({ kind, heading, lines, data, ...(panel ? { panel } : {}), ...(offer ? { offer } : {}) });
 
 const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 const numbered = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 /** What the page holds when a message is answered: the description, the hand calculation's report, the solved slice when it belongs to
- * the repair as it stands, whether an older solve is kept, and what a solve still needs. */
-export type RepairHeld = { repair: RepairDescription; report: RepairReport | null; slice: SliceReport | null; sliceStale: boolean; needs: readonly SolveNeed[] };
+ * the repair as it stands, whether an older solve is kept, and what a solve still needs; and the same of the bond followed until it
+ * lets go (ADR-0137), `bondNeeds` null where the analysis service follows no bonds. */
+export type RepairHeld = { repair: RepairDescription; report: RepairReport | null; slice: SliceReport | null; sliceStale: boolean; needs: readonly SolveNeed[];
+  bond?: BondReport | null; bondStale?: boolean; bondNeeds?: readonly SolveNeed[] | null };
 
 /** A change as the page read it, before the engine words it: what the engineer checks the reading by. */
 export function changeLine(found: RepairChange): string {
@@ -394,6 +410,33 @@ const FIRST_SHORT: Record<"adhesive" | "peel" | "ply", string> = { adhesive: "Th
 const SOLVE_FIRST = "Solve the slice to get it: a few seconds.";
 const staleLine = (held: RepairHeld): string => (held.sliceStale ? "The slice was solved for the repair as it was: solve it again for the repair as it stands." : SOLVE_FIRST);
 
+/** The step that states what following the bond still needs: the adhesive's own numbers, or the rest of what a solve needs. */
+const bondPanel = (needs: readonly SolveNeed[]): string => (needs.some((n) => n.path.startsWith("adhesive.")) ? "repair-adhesive" : "repair-solve");
+const FOLLOW_FIRST = "Follow the bond to get it: about ten seconds.";
+
+/** A question of the bond past its elastic limit (ADR-0137): the load at which the followed bond lets go in this model, or where and
+ * when it first softens, as the solver gave them; without a run, what a run needs or the offer to start one. Never a strength. */
+function bondAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held: RepairHeld): RepairSaid {
+  const bond = held.bond ?? null, needs = held.bondNeeds ?? null;
+  if (!bond) {
+    const heading = "The bond is not followed yet";
+    if (needs === null) return said("none", heading, ["This page works the bondline by hand and as a solved slice, both elastic: neither says when the bond lets go."], {}, "repair-solve");
+    if (needs.length) return said("none", heading, [`To follow it until it lets go, the repair still needs ${needs.map((n) => n.words).join("; ")}.`], {}, bondPanel(needs));
+    return said("none", heading, [held.bondStale ? "The bond was followed for the repair as it was: follow it again for the repair as it stands." : FOLLOW_FIRST], {}, "repair-solve", "bond");
+  }
+  const words = bondWords(bond), u = bond.units, force = unitText(u.force), length = unitText(u.length);
+  const data = { onset: bond.onset.load, let_go: bond.let_go?.load ?? null };
+  if (ask.onset) {
+    return said("result", `The bond first softens at ${shown(bond.onset.load)} ${force}, ${shown(bond.onset.r)} ${length} from the middle`, [
+      `In ${inSentence(bond.onset.part)}: ${words.onsetStress}`,
+      bond.let_go ? `${words.headline}. ${LET_GO_IS_NOT_THE_STRENGTH}` : words.short,
+    ], data, "repair-solve");
+  }
+  const before = plyBefore(bond, held.slice);
+  return said("result", words.headline, [words.softens, ...(words.extent ? [words.extent] : [words.short]), ...(before ? [before] : []), ...(bond.let_go ? [LET_GO_IS_NOT_THE_STRENGTH] : [])],
+    data, "repair-solve");
+}
+
 function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held: RepairHeld, report: RepairReport): RepairSaid {
   const u = report.units, stress = unitText(u.stress), force = unitText(u.force), length = unitText(u.length);
   const lap = report.lap, answer = lap.answer, slice = held.slice, sizes = report.sizes;
@@ -403,6 +446,7 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
     ? said("none", heading, [`The solve of the slice still needs ${held.needs.map((n) => n.words).join("; ")}.`], {}, "repair-solve")
     : said("none", heading, [staleLine(held)], {}, "repair-solve", "solve"));
   switch (ask.topic) {
+    case "bond": return bondAnswer(ask, held);
     case "stated": {
       const field = ask.field!;
       const value = valueAt(held.repair, field.path);
@@ -515,14 +559,23 @@ function resultAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held:
           : `By hand, the adhesive reaches its elastic limit in shear at ${shown(limit)} ${force}; the load stated is ${shown(lap.load)} ${force}.`);
       }
       lines.push(slice?.first ? `In the solved slice, ${FIRST_WORDS[slice.first.what]} first, at ${shown(slice.first.load)} ${force}.` : "The solved slice adds the peel stress and each ply, and says which comes first.");
-      lines.push("Neither is a failure load: the adhesive yields before it fails, and what the analysis leaves out is listed under the results.");
-      return said("verdict", "This page gives no strength or verdict", lines, { elastic_limit_load: limit ?? null }, "repair-solve", slice || held.needs.length ? undefined : "solve");
+      const fell = held.bond?.let_go ?? null;
+      if (fell && held.bond) {
+        lines.push(`With the bond followed, it lets go at ${shown(fell.load)} ${unitText(held.bond.units.force)} in this model.`);
+        lines.push("None of these is the repair's strength: the plies are not checked for damage, and what the analysis leaves out is listed under the results.");
+      } else lines.push("Neither is a failure load: the adhesive yields before it fails, and what the analysis leaves out is listed under the results.");
+      return said("verdict", "This page gives no strength or verdict", lines, { elastic_limit_load: limit ?? null, let_go: fell?.load ?? null }, "repair-solve",
+        slice || held.needs.length ? undefined : "solve");
     }
   }
 }
 
 /** The repair's own number on what a question of why or how names, to stand beside the pages' words. */
 function whyFacts(topic: RepairTopic, held: RepairHeld): string[] {
+  if (topic === "bond") {
+    const bond = held.bond ?? null, force = bond ? unitText(bond.units.force) : "";
+    return bond?.let_go ? [`Here: the bond first softens at ${shown(bond.onset.load)} ${force} and lets go at ${shown(bond.let_go.load)} ${force} in this model.`] : [];
+  }
   const report = held.report;
   const answer = report?.lap.answer;
   if (!report || !answer) return [];
@@ -534,7 +587,7 @@ function whyFacts(topic: RepairTopic, held: RepairHeld): string[] {
   return [];
 }
 
-export const REPAIR_EXAMPLES = "Ask “what is the largest shear?”, “add a step”, “make each step 0.5 in” or “sweep the step length for the smallest repair that stays elastic at 230 N/mm”.";
+export const REPAIR_EXAMPLES = "Ask “what is the largest shear?”, “add a step”, “make each step 0.5 in”, “when does the bond let go?” or “sweep the step length for the smallest repair that stays elastic at 230 N/mm”.";
 
 /** What the chat says to a message as read, from what the page holds. A change and a sweep are then worked by the API. */
 export function repairAnswer(ask: RepairAsk, held: RepairHeld): RepairSaid {
@@ -550,6 +603,13 @@ export function repairAnswer(ask: RepairAsk, held: RepairHeld): RepairSaid {
         return held.needs.length
           ? said("none", "The slice cannot be solved yet", [`It still needs ${held.needs.map((n) => n.words).join("; ")}.`], { command: "solve" }, "repair-solve")
           : said("solve", "Solving the slice", ["It takes a few seconds. The drawings and the Solve step show it too."], { command: "solve" }, "repair-solve");
+      }
+      if (ask.command === "bond") {
+        const needs = held.bondNeeds ?? null;
+        if (needs === null) return said("none", "The bond cannot be followed here", ["This page works the bondline by hand and as a solved slice."], { command: "bond" }, "repair-solve");
+        return needs.length
+          ? said("none", "The bond cannot be followed yet", [`It still needs ${needs.map((n) => n.words).join("; ")}.`], { command: "bond" }, bondPanel(needs))
+          : said("bond", "Following the bond until it lets go", ["About ten seconds. Details and the Solve step show it too."], { command: "bond" }, "repair-solve");
       }
       if (ask.command === "undo") return said("undo", "Undo", [], { command: "undo" });
       return ask.command === "report"

@@ -3,19 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { analyzeRepair, StudioError } from "@/lib/studio-api";
-import { answerWords, EXAMPLE_REPAIR, needsWords, repairFileName, sameRepair, sentence, statedGroups, type RepairAnswer, type RepairDescription } from "@/lib/repair";
+import { answerWords, bondWords, EXAMPLE_REPAIR, needsWords, repairFileName, sameRepair, sentence, statedGroups, type RepairAnswer, type RepairDescription } from "@/lib/repair";
 import { REPAIR_HREF } from "@/lib/workspaces";
-import { storedRepair, storedSolve, type KeptSolve } from "./repair-context";
-import { LapTable, Limits, SizesTable, SliceResults } from "./repair-details";
-import { BondChart, ForceChart, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
+import { storedBond, storedRepair, storedSolve, type KeptBond, type KeptSolve } from "./repair-context";
+import { BondResults, LapTable, Limits, SizesTable, SliceResults } from "./repair-details";
+import { BondChart, ForceChart, LetGoChart, LoadCurve, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
 
 /** The repair's report (ADR-0135): the repair this browser holds, laid out for paper. It reads the repair and the last solved slice
  * the page kept, asks for the hand calculation again, and prints what the page shows: what the repair is, its slice, the
- * hand calculation, the solved slice when it belongs to this repair, and what the analysis is not. The browser's own print saves it
- * as a PDF. Every number is the engine's or the solver's. */
+ * hand calculation, the solved slice and the bond followed until it lets go (ADR-0137) when they belong to this repair, and what
+ * the analysis is not. The browser's own print saves it as a PDF. Every number is the engine's or the solver's. */
 export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [repair, setRepair] = useState<RepairDescription | null>(null);
   const [kept, setKept] = useState<KeptSolve | null>(null);
+  const [keptBond, setKeptBond] = useState<KeptBond | null>(null);
   const [answer, setAnswer] = useState<RepairAnswer | null>(null);
   const [problem, setProblem] = useState("");
   const [printed, setPrinted] = useState("");
@@ -24,6 +25,7 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
     const found = storedRepair() ?? EXAMPLE_REPAIR;
     setRepair(found);
     setKept(storedSolve());
+    setKeptBond(storedBond());
     setPrinted(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }));
     if (!apiBaseUrl) { setProblem("The analysis service is not set up on this page."); return; }
     const controller = new AbortController();
@@ -48,6 +50,9 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
   // the solve belongs to this report only when it was made of the repair this browser holds now, value for value
   const solve = answer && kept && sameRepair(kept.repair, repair) ? kept.solve : null;
   const staleSolve = answer !== null && kept !== null && !solve;
+  // and so does the followed bond
+  const bond = answer && keptBond && sameRepair(keptBond.repair, repair) ? keptBond.bond.report : null;
+  const bondSaid = bond ? bondWords(bond) : null;
   const words = answer ? answerWords(answer.report) : null;
   let section = 0;
   const next = () => { section += 1; return section; };
@@ -75,6 +80,7 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
               {solve ? <p data-testid="repair-report-solve-line">Solved slice: {sentence(solve.headline)}</p>
                 : <p data-testid="repair-report-solve-line">{staleSolve ? "The slice was solved for an earlier state of this repair, so its results are left out of this report."
                   : answer.needs.length ? `The slice was not solved. ${needsWords(answer.needs)}` : "The slice was not solved for this report; the bondline is worked by hand only."}</p>}
+              {bondSaid ? <p data-testid="repair-report-bond-line">Bond followed: {bondSaid.card}</p> : null}
               <p className="repair-report-facts">{words.facts.join(" · ")}</p>
             </section>
 
@@ -125,10 +131,28 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
               </section>
             ) : null}
 
+            {bond ? (
+              <section data-testid="repair-report-bond">
+                <h2>{next()}. The bond followed until it lets go</h2>
+                <p>The same slice is loaded again with the adhesive on the flat bondline as a line that carries stress up to its strength, then softens, and has parted once its fracture energy is spent. The load is raised step by step, each state settled before the next, until it can grow no further.</p>
+                <BondResults bond={bond} stale={false} slice={solve?.report ?? null} />
+                <figure className="repair-report-figure">
+                  <LoadCurve bond={bond} />
+                  <figcaption>The load per unit width against the length of bond past its strength, softening or parted. Every point is a settled state.</figcaption>
+                </figure>
+                {bond.let_go ? (
+                  <figure className="repair-report-figure">
+                    <LetGoChart report={answer.report} views={answer.views} bond={bond} />
+                    <figcaption>The adhesive&apos;s shear stress along the bond as it first softens and at the load at which it lets go, on the scale of the slice above.</figcaption>
+                  </figure>
+                ) : null}
+              </section>
+            ) : null}
+
             <section className="repair-report-last">
               <h2>{next()}. What these numbers are not</h2>
               <Limits />
-              <p className="repair-report-foot">Every number in this report was computed from the repair as stated in section 1{solve ? ", by hand calculation or by the solved slice" : ", by hand calculation"}. None was typed or estimated.</p>
+              <p className="repair-report-foot">Every number in this report was computed from the repair as stated in section 1{solve && bond ? ", by hand calculation, by the solved slice or by following the bond" : solve ? ", by hand calculation or by the solved slice" : bond ? ", by hand calculation or by following the bond" : ", by hand calculation"}. None was typed or estimated.</p>
             </section>
           </>
         ) : null}

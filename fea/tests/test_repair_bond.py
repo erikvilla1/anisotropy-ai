@@ -216,7 +216,12 @@ def test_the_report_is_in_the_files_units_and_says_what_the_load_is_not(example)
     assert [line["name"] for line in lines] == [stretch.name for stretch in example.built.stretches]
     assert sum(line["softening_length"] for line in lines) == pytest.approx(report["let_go"]["softening_length"])
     assert all(len(line["r"]) == len(line["shear"]) == len(line["peel"]) == len(line["damage"]) for line in lines)
-    assert report["curve"]["load"][0] == 0.0 and max(report["curve"]["load"]) == pytest.approx(report["let_go"]["load"])
+    curve = report["curve"]
+    assert curve["load"][0] == 0.0 and max(curve["load"]) == pytest.approx(report["let_go"]["load"])
+    assert len(curve["end_movement"]) == len(curve["damaged_length"]) == len(curve["parted_length"]) == len(curve["load"])
+    assert curve["damaged_length"][0] == 0.0 and np.all(np.diff(curve["damaged_length"]) >= 0), "damage is never undone"
+    assert report["let_go"]["damaged_length"] == pytest.approx(report["let_go"]["softening_length"] + report["let_go"]["parted_length"])
+    assert curve["damaged_length"][-1] == pytest.approx(report["last"]["damaged_length"])
     assert report["ended"] == "let_go" and report["last"]["most_damaged"]["damage"] > 0.9
     line = headline(report)
     assert line.startswith("The bond first softens at 184") and "in this model it lets go at 13" in line
