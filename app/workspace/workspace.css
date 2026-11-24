@@ -74,6 +74,13 @@
 .ws-tree-answer dt { color: var(--muted); }
 .ws-tree-answer dd { margin: 0; }
 .ws-tree-caption { margin: 10px 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+/* The chosen material's numbers under the choice (ADR-0111 amendment 4): stiffness left, strengths right, as in the mockup; one column on a
+   narrow rail. */
+.ws-tree-values-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5em, 1fr)); gap: 4px 22px; margin-bottom: 2px; }
+.ws-tree-values { display: grid; gap: 4px; margin: 0; font-size: 13px; align-content: start; }
+.ws-tree-values > div { display: flex; justify-content: space-between; gap: 10px; }
+.ws-tree-values dt { color: var(--muted); }
+.ws-tree-values dd { margin: 0; text-align: right; white-space: nowrap; font-weight: 500; font-variant-numeric: tabular-nums; }
 .ws-tree-fields { display: flex; flex-wrap: wrap; gap: 6px; }
 .ws-tree-fields button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .ws-tree-fields button:hover { border-color: var(--muted); }

@@ -6,8 +6,8 @@
 import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
-  FORM_VERSION, fieldByKey, labelFor, libraryOptions, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitWords, type Checklist, type FieldDefinition, type StudioForm,
-  type StudioValues,
+  FORM_VERSION, fieldByKey, labelFor, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf, unitWords, type Checklist,
+  type FieldDefinition, type StudioForm, type StudioValues,
 } from "./studio-form";
 
 export const TENSION_INPUT = "tension";
@@ -149,4 +149,29 @@ export function builtLines(checklist: Checklist | null, units = "mm-MPa"): Built
     return { key: b.row, label, value, reason: b.reason };
   });
 }
+/** One constant of the chosen material as the Material step shows it: its symbol and its value with the unit. */
+export type ValueLine = { key: string; label: string; value: string };
+
+/** The chosen library material's constants, shown under the choice in the Material step (ADR-0111 amendment 4), as the engine wrote them
+ * in the coupon's system (`library_values`): the stiffness column (E1, E2, G12, nu12, and the ply thickness when the library gives one)
+ * and the strength column, null for a material the library gives no strengths for. Null for the engineer's own material, whose values
+ * are the fields they typed, and before a material is chosen. The page converts nothing; it only prints by the one number rule. */
+export function libraryValueLines(form: StudioForm): { stiffness: ValueLine[]; strengths: ValueLine[] | null } | null {
+  if (isOwnMaterial(form)) return null;
+  const units = unitsOf(form);
+  const v = libraryValuesIn(form.library, units);
+  if (!v) return null;
+  const lab = unitLabels(units);
+  const n = (x: number) => formatNumber(x, { zeros: false });
+  const line = (key: string, label: string, value: string): ValueLine => ({ key, label, value });
+  const stiffness = [
+    line("E1", "E1", `${n(v.E1)} ${lab.modulus}`), line("E2", "E2", `${n(v.E2)} ${lab.modulus}`), line("G12", "G12", `${n(v.G12)} ${lab.modulus}`),
+    line("nu12", "ν12", n(v.nu12)),
+    ...(v.ply_thickness === null ? [] : [line("ply_thickness", "Ply", `${n(v.ply_thickness)} ${lab.length}`)]),
+  ];
+  const strengths = v.strengths
+    ? (["F1t", "F1c", "F2t", "F2c", "F6"] as const).map((role) => line(role, role, `${n(v.strengths![role])} ${lab.stress}`)) : null;
+  return { stiffness, strengths };
+}
+
 const sentenceCase = (text: string): string => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);

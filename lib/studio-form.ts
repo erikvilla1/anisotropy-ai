@@ -20,6 +20,11 @@ export type SectionDefinition = { title: string; fields: FieldDefinition[] };
 export type LibraryEntry = Record<string, string | number | null>;
 export type UnitSystem = { words: string; labels: Record<string, string> };
 export type LibraryConstants = { E1: number; E2: number; G12: number; ply_thickness: number | null };
+/** A library material's constants as the Material step shows them in a system (ADR-0111 amendment 4): moduli in GPa or Msi, strengths in
+ * the system's stress unit and the ply thickness in its length unit, as the engine wrote them; null where the library gives none. */
+export type LibraryValues = {
+  E1: number; E2: number; G12: number; nu12: number; strengths: Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", number> | null; ply_thickness: number | null;
+};
 export type FormDefinition = {
   form_version: string; fea_version: string; units: string; row_units: Record<string, string>;
   /** Every system a coupon may be stated in, as the engine labels it; `deck_units` is the system the decks are written in. */
@@ -29,6 +34,8 @@ export type FormDefinition = {
   tests: Record<string, string>; criteria: string[]; library: LibraryEntry[];
   /** Each library material's E1, E2, G12 and ply thickness in every system, written by the engine: the page converts nothing. */
   library_constants: Record<string, Record<string, LibraryConstants>>;
+  /** Each library material's constants as the Material step shows them, in every system (ADR-0111 amendment 4). */
+  library_values: Record<string, Record<string, LibraryValues>>;
   plate?: { test: string; edges: string[]; areas: string[]; with_tabs: string[]; with_hole: string[]; dofs: Record<string, string> };
   /** The test standards the Standard row offers (ADR-0072): each with its tests, the rows it needs, its specimens or classes with their sizes in
    * every system, and its requirements by clause. The page judges nothing: the checklist's Test standard item carries the judgement. */
@@ -80,6 +87,8 @@ export const unitWords = (units: string): string => formDefinition.unit_systems[
 export const labelFor = (field: FieldDefinition, units: string): string => field.labels?.[units] ?? field.label;
 /** A library material's constants in a system, as the engine wrote them; null when the material is not in the library. */
 export const libraryConstantsIn = (id: string, units: string): LibraryConstants | null => formDefinition.library_constants[id]?.[units] ?? null;
+/** A library material's constants as the Material step shows them in a system; null when the material is not in the library. */
+export const libraryValuesIn = (id: string, units: string): LibraryValues | null => formDefinition.library_values[id]?.[units] ?? null;
 export const PLY_KEYS = fields.map((field) => field.key).filter((key) => /^ply_\d+$/.test(key));
 export const HOLE_KEYS = ["hole_diameter", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"];
 export const BENDING_KEYS = ["span", "overhang", "load_span"];
