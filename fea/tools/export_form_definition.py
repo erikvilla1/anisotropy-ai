@@ -7,7 +7,8 @@ Every row of the form (key, label, kind, what it means, whether it is required, 
 with a unit its label and default in each unit system), the sections they sit in, the unit systems a coupon may be stated in with
 their labels, the instructions, the Definitions sheet, the tests offered and, under `enabled`, the ones the studio shows until the first
 workflow is validated (ADR-0089), the criterion words, and the library materials the form
-lists with their constants in MPa and mm and, under `library_constants`, in every system (ADR-0061), and under `standards` the test
+lists with their constants in MPa and mm and, under `library_constants`, in every system (ADR-0061), under `library_values` as the
+Material step shows them in every system (ADR-0111 amendment 4), and under `standards` the test
 standards the Standard row offers, each with the tests it covers, the rows it needs, its specimens or classes with their sizes in every
 system, and its requirements by clause (ADR-0072). The page converts nothing:
 every number it shows in a system is written here by the engine. The website imports the file at build time;
@@ -52,6 +53,23 @@ def library_constants() -> dict:
         t = lib.ply_thickness_m
         out[lib.material_id] = {units: {"E1": from_si(lib.lamina.E1, "stress", units), "E2": from_si(lib.lamina.E2, "stress", units),
                                         "G12": from_si(lib.lamina.G12, "stress", units),
+                                        "ply_thickness": None if t is None else from_si(t, "length", units)} for units in UNIT_SYSTEMS}
+    return out
+
+
+STRENGTH_ROLES = ("F1t", "F1c", "F2t", "F2c", "F6")
+
+
+def library_values() -> dict:
+    """Each library material's constants as the Material step shows them under the choice (ADR-0111 amendment 4), in every system: the
+    moduli in GPa or Msi, nu12, the five strengths in the system's stress unit (null when the library gives none) and the ply thickness
+    in its length unit (null when the library gives none), so the page converts nothing."""
+    out = {}
+    for lib in library_records():
+        la, s, t = lib.lamina, lib.lamina.strengths, lib.ply_thickness_m
+        out[lib.material_id] = {units: {"E1": from_si(la.E1, "modulus", units), "E2": from_si(la.E2, "modulus", units),
+                                        "G12": from_si(la.G12, "modulus", units), "nu12": la.nu12,
+                                        "strengths": None if s is None else {role: from_si(getattr(s, role), "stress", units) for role in STRENGTH_ROLES},
                                         "ply_thickness": None if t is None else from_si(t, "length", units)} for units in UNIT_SYSTEMS}
     return out
 
@@ -112,6 +130,7 @@ def definition() -> dict:
         "criteria": list(CRITERION_WORDS),
         "library": library,
         "library_constants": library_constants(),
+        "library_values": library_values(),  # what the Material step shows under the choice (ADR-0111 amendment 4)
         "plate": {"test": "plate", "edges": list(EDGE_REGIONS), "areas": list(AREA_REGIONS), "with_tabs": ["Tab-Bottom", "Tab-Top"], "with_hole": ["Hole"],
                   "dofs": {"1": "x", "2": "y", "3": "z", "4": "tilt about x", "5": "tilt about y", "6": "rotation about z"}},
         "standards": standards(),
