@@ -20,7 +20,7 @@ import { NumberPool, untraced } from "./numbers";
 import { setUp, stillOn } from "./pages";
 import { moves, NOT_OFFERED, plan, type Mode, type Planned } from "./plan";
 import type { PageResult, QuestionResult } from "./record";
-import { runSecrets, scrubbed } from "./scrub";
+import { runSecrets, scrub, scrubbed } from "./scrub";
 
 type Args = { site: string; mode: Mode; features: string[]; cap: number; store: string; work: string; dryRun: boolean };
 
@@ -46,14 +46,20 @@ async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, sit
   const origin = new URL(site).origin;
   const FILE = /\/v1\/coupon-jobs\/[^/]+\/files\/[^/]+$/;
   await ctx.route((url) => url.origin === origin, async (route) => {
-    const sent = route.request().headers();
-    const headers: Record<string, string> = { ...sent, ...(id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {}) };
-    if (sent["x-anisotropy-actor"]) headers["x-anisotropy-actor"] = "test";
-    if (!FILE.test(new URL(route.request().url()).pathname)) return route.continue({ headers });
-    const answer = await route.fetch({ headers, maxRedirects: 0 });
-    const link = answer.headers()["location"];
-    if (answer.status() !== 307 || !link) return route.fulfill({ response: answer });
-    return route.fulfill({ response: await ctx.request.get(link, { headers: { Origin: origin } }) });
+    try {
+      const sent = route.request().headers();
+      const headers: Record<string, string> = { ...sent, ...(id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {}) };
+      if (sent["x-anisotropy-actor"]) headers["x-anisotropy-actor"] = "test";
+      if (!FILE.test(new URL(route.request().url()).pathname)) return await route.continue({ headers });
+      const answer = await route.fetch({ headers, maxRedirects: 0 });
+      const link = answer.headers()["location"];
+      if (answer.status() !== 307 || !link) return await route.fulfill({ response: answer });
+      return await route.fulfill({ response: await ctx.request.get(link, { headers: { Origin: origin } }) });
+    } catch {
+      // The page was closed while a request was in flight (a setup that failed, the next page opened). Its error names the request,
+      // which for a file is the bucket's signed link: it is dropped here, never printed (2026-11-24, the first run).
+      await route.abort().catch(() => undefined);
+    }
   });
   return ctx;
 }
@@ -144,9 +150,15 @@ async function main(): Promise<number> {
         const t0 = Date.now();
         try {
           await setUp(page, which as never);
-          if (commit === null) {
-            const version = await ctx.request.get(`${a.site}/api/version`).catch(() => null);
-            commit = version?.ok() ? ((await version.json()) as { git_commit?: string }).git_commit ?? null : null;
+          if (commit === null) { // asked by the page itself, so the request passes Access as the page's own do
+            commit = await page.evaluate(async () => {
+              try {
+                const answer = await fetch("/api/version");
+                return answer.ok ? ((await answer.json()) as { git_commit?: string }).git_commit ?? null : null;
+              } catch {
+                return null;
+              }
+            }).catch(() => null);
           }
           listening.pool.addText(await pageText(page));
           if (!pages.some((x) => x.page === which)) pages.push({ page: which, state: "set-up", seconds: (Date.now() - t0) / 1000, reason: null, picture: null });
@@ -223,4 +235,14 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then((code) => process.exit(code), (error) => { console.error(error instanceof Error ? error.message : error); process.exit(2); });
+// Everything the robot prints goes to a public log: each line is scrubbed, and an error nobody caught is printed scrubbed too, never by
+// Node itself, whose message can hold a request's signed link (2026-11-24, the first run).
+const SECRETS = runSecrets();
+for (const name of ["log", "error", "warn"] as const) {
+  const write = console[name].bind(console);
+  console[name] = (...parts: unknown[]) => write(...parts.map((part) => scrub(part instanceof Error ? part.message : String(part), SECRETS)));
+}
+const fail = (error: unknown) => { console.error(error instanceof Error ? error.message : error); process.exit(2); };
+process.on("unhandledRejection", fail);
+process.on("uncaughtException", fail);
+main().then((code) => process.exit(code), fail);
