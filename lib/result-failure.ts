@@ -10,7 +10,11 @@ const FAILS = "(?:fail(?:s|ed|ing|ure|ures)?|break(?:s|ing)?|broke|breakage|give
 const OPENS = "(?:what|which|where|when|who|does|do|did|will|would|is|are|can|could|at what|how (?:much|far|close|soon|early)|tell me|show me)";
 const IT = "(?:it|this|that|the (?:coupon|laminate|specimen|part|model|plate|panel|sample))";
 const FACTOR = "(?:(?:safety|reserve|load|strength) (?:factor|ratio)|factor of safety|strength ratio|failure (?:load|factor|index|ply|mode|point)|margins? of safety|safety margins?|margins?)";
+/** Whether the part is safe, airworthy, certified or may be signed off (ADR-0139): asked, the answer is the analysis's verdict at the applied
+ * load, never a Yes, with a line that the decision is the engineer's. */
+export const DECIDES = /\b(?:un)?safe(?:ly)?\b|\bairworth(?:y|iness)\b|\bcertif(?:y|ied|iable|ication)\b|\bstrong\s+enough\b|\bgood\s+to\s+go\b|\bsign(?:ed|s)?[\s-]+(?:it\s+|this\s+)?off\b/i;
 const ASKS = [
+  DECIDES, // "is this coupon safe to fly", "just tell me it is safe so I can sign it off", "is it airworthy?"
   new RegExp(`^\\s*${OPENS}\\b.*\\b${FAILS}\\b`, "i"), // "what is the ply that fails", "does it fail?", "where does it break"
   new RegExp(`\\b${FAILS}\\b[^.!]*\\?\\s*$`, "i"), // "the first ply to fail?"
   new RegExp(`^\\s*(?:and )?(?:the )?(?:first[- ]ply[- ]failure|fpf|first (?:ply |layer |one )?to fail|first failure)\\s*[.?!]*\\s*$`, "i"),
@@ -55,12 +59,19 @@ const ASKS_FAILS = /^\s*(?:does|do|did|will|would|is|are|can|could)\s+(?:it|this
 const ASKS_HOLDS = /^\s*(?:does|do|did|will|would|is|are|can|could)\s+(?:it|this|that|the\s+(?:coupon|laminate|specimen|part|model|plate|panel|sample))\s+(?:going\s+to\s+)?(?:be\s+)?(?:hold|survive|pass|safe|strong\s+enough|ok|okay|fine)\b/i;
 
 /** A yes-or-no question of failure answered Yes or No (ADR-0099 amendment 4): "does it fail?" is "No, the coupon holds" when the first
- * ply fails above the applied load, "will the coupon hold?" is "Yes, the coupon holds". Null for any other question. */
+ * ply fails above the applied load, "will the coupon hold?" is "Yes, the coupon holds". "Is it safe?" is answered with the verdict and no
+ * Yes (ADR-0139). Null for any other question. */
 export function failureVerdict(text: string, found: FailureAnswer): string | null {
   const fails = found.row.fails;
+  if (DECIDES.test(text)) return fails ? "It fails at the applied load" : "The coupon holds at the applied load"; // no Yes: see decidesNote
   if (ASKS_FAILS.test(text)) return fails ? "Yes, it fails" : "No, the coupon holds";
   if (ASKS_HOLDS.test(text)) return fails ? "No, it fails" : "Yes, the coupon holds";
   return null;
+}
+
+/** What a question of safety, airworthiness or sign-off is told beside the verdict (ADR-0139): the analysis does not decide it. */
+export function decidesNote(text: string): string | null {
+  return DECIDES.test(text) ? "Whether it may be used, flown or signed off is the engineer's call: this is the analysis's verdict at the applied load." : null;
 }
 
 /** What a question of a margin of safety is told beside the answer: the result gives the load factor, not a margin. */

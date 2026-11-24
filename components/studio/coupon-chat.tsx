@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, answerGeneral, answerResult, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
+import { allCouponTests, answerGeneral, answerResult, DAILY_LIMIT_REASON, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
   type GeneralAnswer, type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
-import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
+import { confirmsFailure, contradictsFailure, decidesNote, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { summaryAnswer, type SummaryQuantity } from "@/lib/result-summary";
 import { factsOf, generalLines, headed, readAt, whyLines } from "@/lib/result-why";
 import { isConditionOrLoad, termLines, type FeaTerm, type TermQuestion } from "@/lib/fea-terms";
@@ -789,7 +789,10 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
-      add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
+      if (reason === DAILY_LIMIT_REASON) // the day's cap on calls to the model (ADR-0139)
+        add({ role: "assistant", kind: "text", title: "Reading simple phrases until tomorrow",
+          body: <p className="chat-note" data-testid="chat-daily-limit">Today&rsquo;s free-text readings are used, so short phrases like the examples are read until midnight UTC.</p> });
+      else add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
     const parts = answer?.unread ?? [];
@@ -1203,6 +1206,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const verdict = entry.confirmed ? null : failureVerdict(asked, found);
     const denied = !entry.confirmed && lines.confirmed !== null && contradictsFailure(asked, found, printed);
     const margin = marginNote(asked, found, printed);
+    const decides = decidesNote(asked); // "is it safe?": the verdict, and that the decision is the engineer's (ADR-0139)
     const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
     const outside = answer.outside;
     return (
@@ -1215,6 +1219,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
           : <><h4 data-testid="chat-failure-ply">{lines.headline}</h4><p data-testid="chat-failure-loading"><strong>{lines.loading}</strong></p>
             {lines.applied ? <p className="chat-note" data-testid="chat-failure-applied">{lines.applied}</p> : null}</>}
         {margin ? <p className="chat-note" data-testid="chat-failure-margin">{margin}</p> : null}
+        {decides ? <p className="chat-note" data-testid="chat-failure-decides">{decides}</p> : null}
         <p className="chat-note" data-testid="chat-failure-facts">{lines.facts.join(" · ")}{preview ? " · preview, run the analysis to verify" : ""}</p>
         {found.missing ? <p className="chat-note" data-testid="chat-failure-missing">{found.missing} is not in this result, so the governing criterion is shown.</p> : null}
         <details className="chat-details" data-testid="chat-failure-details"><summary>Details</summary>

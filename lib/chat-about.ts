@@ -7,12 +7,13 @@ import { libraryOptions, unitLabels, unitsOf, unitWords, type StudioForm } from 
  * banks (2026-11-20) found each of these answered "Not sure what to change", or read as a change: "can I use inches?" switched the units.
  * A value of the setup asked for ("what is the width?") is read from the setup's own rows (amendment 4). What a model file is, where the
  * report is, and a model brought in from a program whose files are not read here came from the real-model run of the downloads' questions
- * (ADR-0129 amendment 1).
+ * (ADR-0129 amendment 1). A key, a password or another person's work asked for is answered here too, before any model sees the message
+ * (ADR-0139): none of them is on the page.
  *
  * Nothing here names a tool, a vendor or a model (ADR-0091), and nothing here is a number of a result. */
 
 export type AboutTopic = "identity" | "abilities" | "instructions" | "other-program" | "units" | "units-other" | "own-material" | "layup-advice"
-  | "needs" | "mises" | "setup-value" | "model-file-what" | "report" | "bring-in";
+  | "needs" | "mises" | "setup-value" | "model-file-what" | "report" | "bring-in" | "others";
 
 const IDENTITY = [
   /^\s*(?:who|what)\s+(?:are|r)\s+(?:you|u)\b/i,
@@ -30,6 +31,10 @@ const ABILITIES = [
   /^\s*what\s+(?:questions|things|kinds?\s+of\s+(?:questions|things))\s+can\s+i\s+ask\b/i,
 ];
 const INSTRUCTIONS = /\b(?:system\s+prompt|your\s+(?:instructions|prompt|rules|guidelines|configuration|initial\s+prompt)|(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+|your\s+)?(?:previous|prior|above|earlier)\s+(?:instructions|messages|prompts?|rules)|jailbreak|developer\s+mode)\b/i;
+/** A key, a password or the hidden prompt asked for (ADR-0139): none of them is on the page, and none is said. */
+const SECRETS = /\b(?:api[\s_-]*keys?|passwords?|credentials?|secret\s+keys?|(?:access|auth(?:entication)?|bearer)\s+tokens?|env(?:ironment)?\s+(?:variables?|vars?)|hidden\s+(?:prompt|instructions|rules))\b/i;
+/** Another person's work asked for ("the runs of the other users", "what did the previous user ask"): this page holds only the engineer's own. */
+const OTHERS = /\b(?:other|another|previous|last|earlier|different)\s+(?:users?|persons?|people|customers?|accounts?|sign-?ins?)\b|\b(?:someone|somebody|anyone|anybody)\s+else\b|\b(?:everyone|everybody)(?:'s|’s)|\ball\s+(?:the\s+)?users\b|\bwho\s+else\b|\bemails?\s+(?:address\s+)?of\b/i;
 const PROGRAM = /\b(abaqus|ansys|nastran|femap|hypermesh|comsol|ls-?dyna|calculix|patran|optistruct|solidworks\s+simulation)\b/i;
 const ASKS_TO_RUN = /^\s*(?:can|could|will|would|do|does|is|are)\b.*\b(?:run|solve|use|using|work|send|export|open|done)\b/i;
 const UNITS = [
@@ -87,7 +92,8 @@ export function setupRowAsked(text: string): string | null {
 /** The topic a message asks about, or null. A message with a value in it is a change, not a question of what is offered ("can I use
  * inches?" is asked; "use 0.5 in tabs" is not). On an imported model or a past run only what changes nothing of a setup is answered. */
 export function aboutAsked(text: string, readOnly = false): AboutTopic | null {
-  if (INSTRUCTIONS.test(text)) return "instructions";
+  if (INSTRUCTIONS.test(text) || SECRETS.test(text)) return "instructions";
+  if (OTHERS.test(text)) return "others";
   if (IDENTITY.some((p) => p.test(text))) return "identity";
   if (ABILITIES.some((p) => p.test(text))) return "abilities";
   if (FILE_WHAT.test(text)) return "model-file-what";
@@ -130,6 +136,10 @@ export function aboutAnswer(topic: AboutTopic, text: string, c: AboutContext): {
       return { title: "Not something I share", lines: [
         c.results ? "Ask about this result instead, for example “which ply fails first?” or “stress in ply 3 at element 120”."
           : "Ask about the setup instead, for example “is it ready to run?” or “what is a boundary condition?”."] };
+    case "others":
+      return { title: "Only your own work", lines: [
+        "This chat sees the page you have open and nothing of anyone else's: no other person's analyses, questions or sign-in.",
+        "Your own past analyses are under “Your analyses” on the start page."] };
     case "other-program": {
       const named = (PROGRAM.exec(text)?.[1] ?? "").toLowerCase();
       return { title: "Solved here", lines: [

@@ -124,6 +124,17 @@ def main() -> int:
         return fail(f"after {args.wait:.0f} s the API still does not answer with {args.commit}: {seen}")
     step(f"The API answers after {time.monotonic() - t0:.0f} s; {seen}.")
 
+    # 2b. the model the chat reads with, if any, is one the Assistant check has been run with (ADR-0121 amendment 8)
+    status, body, _ = call(api + "/v1/workspace/assistant", timeout=30.0)
+    if status != 200:
+        return fail(f"GET /api/v1/workspace/assistant answered {status}: {body[:200].decode('utf-8', 'replace')}")
+    info = json.loads(body)
+    if info.get("model") and info.get("checked") is False:
+        return fail(f"the site's model {info['model']} is not one the Assistant check has been run with: run the workflow \"Assistant check\" "
+                    "with that model and add it to CHECKED_MODELS (api/src/anisotropy_api/assistant.py) by pull request, or set "
+                    "ANISOTROPY_ASSISTANT_MODEL back (docs/ai-catalog.md)")
+    step(f"The chat reads with {info['model'] + ', a checked model' if info.get('model') else 'its own patterns: no model is set'}.")
+
     # 3. one public coupon job, through the queue to a solver, to its result
     values = json.loads(args.values.read_text(encoding="utf-8"))
     t0 = time.monotonic()

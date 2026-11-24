@@ -21,6 +21,7 @@ from typing import Any, Protocol
 
 from .model_costs import ModelCall, measure
 from .proposals import UNREAD_REASONS
+from .verdict_guard import verdict_guard
 
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
@@ -33,6 +34,12 @@ VOICE = (
     "Abaqus, CalculiX or PrePoMax), and never internal files, scripts, records or people. Call the second solver the reference solver. "
     "Use the symbols σ₁, σ₂ and τ₁₂ for the ply stresses."
 )
+# What no prose of the model's may say (ADR-0139): the verdict guard sets aside an answer that does, and these words keep that rare.
+DECIDES = (
+    " Never call a design safe, unsafe, certified or strong enough: the analysis gives a verdict by each criterion, and the engineer "
+    "decides."
+)
+VERDICT = DECIDES + " Say the laminate holds or fails only as the fact sheet's verdict for each criterion says, at the applied loading."
 SETUP_SYSTEM = (
     "You explain the setup check of a composite coupon test to the engineer who stated it. You are given the check's items, each passed, "
     "warned, failed, missing or pending, with what the tools found. Write short plain sentences, one per item that needs the engineer's "
@@ -45,7 +52,7 @@ RESULT_SYSTEM = (
     "carries, where it moves and is stressed most, and by each failure criterion whether the laminate holds at the applied loading, which "
     "ply limits it, where, and the physical reason in the mode's words. Every number you write must appear in the fact sheet exactly as "
     "printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
-    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE
+    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE + VERDICT
 )
 LAMINATE_SYSTEM = (
     "You explain the answer to a laminate problem (classical lamination theory) to the engineer or student who stated it. You are given a "
@@ -53,7 +60,7 @@ LAMINATE_SYSTEM = (
     "five short sentences: what the stack is, how it deforms under the loads, how stiff it is, and by each failure criterion which ply "
     "fails first, in which mode, at what multiple of the loads. Every number you write must appear in the fact sheet exactly as printed "
     "there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
-    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE
+    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE + DECIDES
 )
 PROPOSE_MAX_TOKENS = 8000
 PROPOSE_SYSTEM = (
@@ -156,7 +163,7 @@ ANSWER_SYSTEM = (
     "answer; list in 'sections' the ids of those your answer rests on, and the page names them. Set 'covered' to true only when those "
     "sections hold the reason or the meaning asked for. When they do not, set it to false, say what the fact sheet shows about the "
     "matter and that the theory pages do not explain it yet, and give no reason of your own. When the question is not about this "
-    "result or its theory, set 'covered' to false and say in one sentence what can be asked here. Do not use markdown." + VOICE
+    "result or its theory, set 'covered' to false and say in one sentence what can be asked here. Do not use markdown." + VOICE + VERDICT
 )
 
 
@@ -174,7 +181,7 @@ GENERAL_SYSTEM = (
     "what it means; a ply may be named by its angle, as the 90-degree ply. Do not name or number a section in the answer; list in 'sections' the ids of those your answer rests on, and the page "
     "names them. Set 'covered' to true only when those sections answer the question. When they do not, set it to false, say in one "
     "sentence that the theory pages do not cover it yet, and give no answer of your own. Set 'start' to the kind of work the engineer "
-    "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE
+    "asks to set up or to analyse, when the question asks for one of those offered, and to 'none' otherwise. Do not use markdown." + VOICE + DECIDES
 )
 
 
@@ -327,6 +334,57 @@ class TemplateAssistant:
         return Reading(None, "template", None)
 
 
+# The models the real-model Assistant check (ADR-0121, check 2) has been run with over every bank, by id, with the run (ADR-0121
+# amendment 8). A model joins only by pull request, after a run with it (the workflow's `model` input) fails no more answers than the
+# listed run of the model it replaces, and a person has read its report. Another model may still be set on the site; the page is told it
+# is unchecked (/v1/workspace/assistant) and the check after a deploy fails until it is listed or set back.
+CHECKED_MODELS: dict[str, str] = {
+    "claude-opus-5-5": "run 44671161192, 2026-11-20: 95 answers graded, 64 hold, 26 weak, 5 fail (ADR-0121 amendment 7)",
+}
+
+# Why the model was not asked (ADR-0139): the person's calls today reached the day's cap. The page shows its own fixed words for it, by
+# this sentence (lib/studio-api.ts, DAILY_LIMIT_REASON), and reads with its patterns until midnight UTC.
+DAILY_LIMIT_REASON = "the day's limit of free-text readings for this sign-in is reached"
+
+
+class LimitedAssistant(TemplateAssistant):
+    """The writer of a person who has reached the day's cap on calls to the model (ADR-0139): the template's, which calls nothing, with
+    the reason the page reads. Nothing is billed, so nothing is recorded in model_calls."""
+
+    def __init__(self, cap: int):
+        self.cap = cap
+
+    def _draft(self, template: list[str]) -> Draft:
+        return Draft(tuple(template), "template", None, reason=DAILY_LIMIT_REASON)
+
+    def _reading(self) -> Reading:
+        return Reading(None, "template", None, DAILY_LIMIT_REASON)
+
+    def explain_setup(self, checklist: dict[str, Any], template: list[str]) -> Draft:
+        return self._draft(template)
+
+    def explain_result(self, facts: dict[str, Any], template: list[str]) -> Draft:
+        return self._draft(template)
+
+    def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
+        return self._draft(template)
+
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
+        return self._reading()
+
+    def choose_tools(self, view: dict[str, Any]) -> Reading:
+        return self._reading()
+
+    def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        return self._reading()
+
+    def answer_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        return self._reading()
+
+    def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        return self._reading()
+
+
 def _sentences(text: str) -> tuple[str, ...]:
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text.strip()) if p.strip()]
     return tuple(parts)
@@ -395,6 +453,9 @@ class ClaudeAssistant:
         if not guard.ok:
             return Draft(tuple(template), "template", None, withheld=True, offending=guard.offending,
                          reason="the model's draft held numbers that are not in the fact sheet: " + ", ".join(guard.offending), call=call)
+        words = verdict_guard(text, facts)  # and no word against the engine's verdict, none deciding for the engineer (ADR-0139)
+        if not words.ok:
+            return Draft(tuple(template), "template", None, withheld=True, offending=words.offending, reason=words.reason, call=call)
         return Draft(_sentences(text), self.name, self.model, call=call)
 
     def explain_setup(self, checklist: dict[str, Any], template: list[str]) -> Draft:

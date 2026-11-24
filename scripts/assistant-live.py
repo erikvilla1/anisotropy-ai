@@ -76,7 +76,7 @@ def ask_readers(questions: list[dict[str, Any]], store: Store, spend: Spend, cli
     from anisotropy_api.main import app
 
     model = StoredModel(store)
-    app.state.assistant = ClaudeAssistant(os.environ.get("ANISOTROPY_ASSISTANT_MODEL", READERS_MODEL), client=model)
+    app.state.assistant = ClaudeAssistant((os.environ.get("ANISOTROPY_ASSISTANT_MODEL") or READERS_MODEL), client=model)
     api = TestClient(app, headers={"X-Anisotropy-Actor": "studio"})  # no lifespan: nothing recorded, no database
 
     def post(request: dict[str, Any]) -> dict[str, Any]:
@@ -246,7 +246,7 @@ def main() -> int:
     summary = args.store / "summary.json"
     before = json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else {}
     header = [f"# Assistant check with a real model, {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC", "",
-              f"Readers: {os.environ.get('ANISOTROPY_ASSISTANT_MODEL', READERS_MODEL)}; MCP client: {CLIENT_MODEL}; judge: {JUDGE_MODEL}. "
+              f"Readers: {(os.environ.get('ANISOTROPY_ASSISTANT_MODEL') or READERS_MODEL)}; MCP client: {CLIENT_MODEL}; judge: {JUDGE_MODEL}. "
               f"Spent ${spend.dollars:.2f} of ${args.budget:.2f}: {len(store.sent) + mcp_out.get('sent', 0)} requests sent, "
               f"{len(store.used - store.sent) + mcp_out.get('stored', 0)} answered from the store."]
     if mcp_out.get("stopped"):

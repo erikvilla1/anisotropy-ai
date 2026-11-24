@@ -10,7 +10,7 @@ import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
 import { modelFileAnswer } from "../../lib/model-file";
 import { MODEL_FILE_LABELS } from "../../lib/studio-api";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
-import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
+import { confirmsFailure, contradictsFailure, decidesNote, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
 import { summaryAnswer } from "../../lib/result-summary";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
 import { workingFor } from "../../lib/result-working";
@@ -269,7 +269,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const confirmed = confirmsFailure(text, found, printed) && lines.confirmed !== null;
       const data = { criterion: found.row.criterion, confirmed, element: found.row.label.split(".").pop(), plies: [found.row.ply] };
       const margin = marginNote(text, found, printed);
-      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : [])];
+      const decides = decidesNote(text);
+      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : []), ...(decides ? [decides] : [])];
       if (confirmed) return said("failure", "Yes", [lines.confirmed!, ...facts], data);
       // as failureMessage in coupon-chat.tsx: a loading stated back wrongly is answered No, "does it fail?" opens with Yes or No
       if (lines.confirmed !== null && contradictsFailure(text, found, printed)) return said("failure", "No", [lines.confirmed, ...facts], data);
