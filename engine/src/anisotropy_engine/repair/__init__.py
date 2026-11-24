@@ -8,7 +8,7 @@ from .changes import RepairChange, change_repair, preview_change
 from .description import Repair, RepairError, RepairMaterial, ThroughThickness, tape_through_thickness
 from .lap_file import lap_from_dict, lap_report
 from .patch_lap import lap_steps, repair_lap, shared_stiffnesses, stretching_matrix
-from .repair_file import repair_from_dict, repair_report, repair_views, solve_needs
+from .repair_file import bond_needs, repair_from_dict, repair_report, repair_views, solve_needs
 from .section import Region, areas, bond_lengths, check_regions, region_at, regions, volumes
 from .solid import FarField, adhesive_stiffness, far_field, plane_stress_stiffness, ply_axis_stress, ply_compliance, ply_stiffness, turned_stiffness
 from .sweeps import RepairSweep, pick_check, sweep_repair

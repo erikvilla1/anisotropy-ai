@@ -9,7 +9,8 @@ units (ADR-0131).
     [patch]     optional: a material as in [parent], and layup, deepest ply first. Left out, the patch is the laminate's own
                 material in the angles of the plies removed
     [cover]     optional: layup (lowest first) and overlap, how far the cover plies reach past the widest cut
-    [adhesive]  shear_modulus, thickness, shear_strength (optional), poisson and peel_strength (optional, for the solve)
+    [adhesive]  shear_modulus, thickness, shear_strength (optional), poisson and peel_strength (optional, for the solve),
+                peel_energy and shear_energy (optional, to follow the bond until it lets go)
     [panel]     length (along the load), width
     [applied]   optional: load, per unit width, tension positive
 
@@ -18,7 +19,11 @@ hand: in a material's table its constants through the thickness, `nu23` alone fo
 G13 = G12, nu13 = nu12 and G23 = E2 / (2 (1 + nu23)) follow) or all of `E3`, `G13`, `G23`, `nu13`, `nu23`; and the
 adhesive's `poisson`. The adhesive's `peel_strength`, the stress pulling the patch off that the bond can take (the
 adhesive's, or the laminate's own strength through its thickness when that is lower), is optional: with it the solve
-judges the peel stress, without it the peel stress is reported and not judged. A material typed in full may also state its ply strengths, all of `F1t`, `F1c`, `F2t`, `F2c`, `F6`,
+judges the peel stress, without it the peel stress is reported and not judged. To follow the bond until it lets go
+(ADR-0137) the adhesive needs all of `shear_strength`, `poisson`, `peel_strength` and its two fracture energies,
+`peel_energy` and `shear_energy`: the energy it takes to part a unit area of the bond by pulling it open and by sliding it,
+in the unit system's force per length (N/mm in "mm-MPa", which is kJ/m^2; N/m in "SI", which is J/m^2; lb/in in "US" and
+"psi"). A material typed in full may also state its ply strengths, all of `F1t`, `F1c`, `F2t`, `F2c`, `F6`,
 for the check of which ply fails first; a library material brings its own.
 
 A patch bonded on top over a hole (ADR-0131 amendment 1) says so and states its patch in full:
@@ -130,21 +135,23 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
         raise RepairError(f"The repair has tables it does not read: {', '.join(unknown)}")
     system = UNIT_SYSTEMS[units]
 
-    def si(value, quantity):
+    def si(value, quantity, called=None):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise RepairError(f"A {quantity if quantity != 'N' else 'load'} must be a number, got {value!r}")
+            raise RepairError(f"A {called or (quantity if quantity != 'N' else 'load')} must be a number, got {value!r}")
         return value * system[quantity][0]
 
     parent = _material_keys(data.get("parent"), "parent", {"layup"})
     damage = _keys(data.get("damage"), "damage", {"diameter"})
     steps = _keys(data.get("steps"), "steps", {"count", "length"}, {"plies"})
-    stated = _keys(data.get("adhesive"), "adhesive", {"shear_modulus", "thickness"}, {"shear_strength", "poisson", "peel_strength"})
+    stated = _keys(data.get("adhesive"), "adhesive", {"shear_modulus", "thickness"}, {"shear_strength", "poisson", "peel_strength", "peel_energy", "shear_energy"})
     panel = _keys(data.get("panel"), "panel", {"length", "width"})
     try:
         adhesive = Adhesive(si(stated["shear_modulus"], "stress"), si(stated["thickness"], "length"),
                             si(stated["shear_strength"], "stress") if "shear_strength" in stated else None,
                             poisson_ratio=stated.get("poisson"),
-                            peel_strength_pa=si(stated["peel_strength"], "stress") if "peel_strength" in stated else None)
+                            peel_strength_pa=si(stated["peel_strength"], "stress") if "peel_strength" in stated else None,
+                            peel_energy_j_m2=si(stated["peel_energy"], "N", "fracture energy") if "peel_energy" in stated else None,
+                            shear_energy_j_m2=si(stated["shear_energy"], "N", "fracture energy") if "shear_energy" in stated else None)
     except ValueError as error:
         raise RepairError(f"[adhesive]: {error}") from error
     kind = data.get("kind", "flush")
@@ -270,4 +277,19 @@ def solve_needs(repair: Repair, load_n_per_m: float | None = None) -> list[dict]
         needs.append({"path": "adhesive.poisson", "words": "the adhesive's Poisson's ratio"})
     if load_n_per_m is None or load_n_per_m == 0:
         needs.append({"path": "applied.load", "words": "a load per unit width that is not zero"})
+    return needs
+
+
+def bond_needs(repair: Repair) -> list[dict]:
+    """What following the bond until it lets go (ADR-0137) still needs, as `solve_needs` words it; empty when it can be
+    followed. It needs what the solve of the slice does, but no load (the load is what it finds), and the adhesive's six
+    numbers whole: its two strengths and its two fracture energies beside the stiffness."""
+    needs = solve_needs(repair, 1.0)
+    adhesive = repair.adhesive
+    for value, key, words in ((adhesive.shear_strength_pa, "shear_strength", "the adhesive's shear strength"),
+                              (adhesive.peel_strength_pa, "peel_strength", "the bond's peel strength"),
+                              (adhesive.peel_energy_j_m2, "peel_energy", "the bond's fracture energy in peel"),
+                              (adhesive.shear_energy_j_m2, "shear_energy", "the bond's fracture energy in shear")):
+        if value is None:
+            needs.append({"path": f"adhesive.{key}", "words": words})
     return needs

@@ -40,7 +40,9 @@ def _positive(value: float, name: str) -> float:
 class Adhesive:
     """The bondline: shear modulus (Pa) and thickness (m); the shear strength (Pa) and the plastic shear strain it can take
     beyond its elastic limit, when a strength is asked for; and, for a solve of the repair's slice (ADR-0132), which a lap
-    does not use, Poisson's ratio and the peel stress the bond can take (Pa), when the peel stress is to be judged."""
+    does not use, Poisson's ratio and the peel stress the bond can take (Pa), when the peel stress is to be judged. To
+    follow the bond until it lets go (ADR-0137), its two fracture energies as well, in peel and in shear (J/m^2): the
+    energy it takes to part a unit area of the bond."""
 
     shear_modulus_pa: float
     thickness_m: float
@@ -48,6 +50,8 @@ class Adhesive:
     plastic_strain: float = 0.0
     poisson_ratio: float | None = None
     peel_strength_pa: float | None = None
+    peel_energy_j_m2: float | None = None
+    shear_energy_j_m2: float | None = None
 
     def __post_init__(self):
         _positive(self.shear_modulus_pa, "The adhesive's shear modulus")
@@ -58,6 +62,10 @@ class Adhesive:
             raise ValueError(f"The adhesive's plastic shear strain must be finite and not negative, got {self.plastic_strain!r}")
         if self.peel_strength_pa is not None:
             _positive(self.peel_strength_pa, "The bond's peel strength")
+        if self.peel_energy_j_m2 is not None:
+            _positive(self.peel_energy_j_m2, "The bond's peel energy")
+        if self.shear_energy_j_m2 is not None:
+            _positive(self.shear_energy_j_m2, "The bond's shear energy")
         if self.poisson_ratio is not None:
             nu = self.poisson_ratio
             if isinstance(nu, bool) or not isinstance(nu, (int, float)) or not math.isfinite(nu) or not -1 < nu < 0.5:

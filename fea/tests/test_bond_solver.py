@@ -131,9 +131,10 @@ def test_simpsons_weights_add_up_to_the_bonds_length():
 
 def test_a_block_pulled_off_its_bond_reaches_the_strength_and_spends_the_fracture_energy():
     """Two blocks joined along 2 mm, the lower held, the upper pulled evenly: the stress is even, so the largest load is
-    the peel strength times the length and the energy spent is the peel energy times the length. The blocks hold more
-    energy at that load than the bond can spend, so the load and the movement both fall back: a path that plain steps
-    of load or of movement cannot follow."""
+    the peel strength times the length, and by the time the bond is gone it has spent the peel energy times the length. The
+    blocks hold more energy at that load than the bond can spend, so the load and the movement both fall back: a path that
+    plain steps of load or of movement cannot follow. The even state is also one the bond can leave, one pair parting while
+    the others unload; the load must then rise again to part those, and the follower lets it."""
     length = 2 * MM
     nodes, elements, lower, upper, under, over, weight = two_parts(np.linspace(0, length, 3), np.linspace(-20 * MM, 0, 5), np.linspace(0, 20 * MM, 5))
     transverse = np.diag([E2, E2, G13])  # no sideways coupling, so the blocks strain evenly
@@ -145,15 +146,16 @@ def test_a_block_pulled_off_its_bond_reaches_the_strength_and_spends_the_fractur
     assert path.ended == "stopped"
     assert path.onset_load == pytest.approx(LAW.peel_strength * length, rel=1e-9)
     assert path.peak.load == pytest.approx(LAW.peel_strength * length, rel=1e-3)
-    # what the path says the bond spent is what the law says of each pair's last state: half the strength times the
-    # opening times the damage, which is the peel energy once the pair is gone
+    # In peel alone a pair that has reached damage d has spent half its strength times the largest opening it reached times
+    # d, which is the peel energy once it is gone. The path's own count of the energy spent is the sum of those, but for
+    # what its steps lose where the load turns sharply.
     last = path.points[-1]
-    opening, _ = model.jumps(last.displacement)
-    assert last.spent == pytest.approx(float(weight @ (0.5 * LAW.peel_strength * opening * last.damage)), rel=2e-3)
-    assert 0.97 * LAW.peel_energy * length < last.spent < LAW.peel_energy * length
-    assert path.points[-1].load < 0.03 * path.peak.load
+    reached = LAW.onset_opening * LAW.final_opening / (LAW.final_opening - last.damage * (LAW.final_opening - LAW.onset_opening))
+    assert last.spent == pytest.approx(float(weight @ (0.5 * LAW.peel_strength * reached * last.damage)), rel=0.05)
+    assert 0.97 * LAW.peel_energy * length < last.spent < 1.05 * LAW.peel_energy * length
+    assert last.load < 0.03 * path.peak.load and np.all(path.loads > 0)
     assert path.movements.max() > 1.5 * path.movements[-1]  # the movement fell back with the load
-    assert np.all(np.diff([point.spent for point in path.points]) > 0)
+    assert np.all(np.diff([point.spent for point in path.points]) > -1e-12 * LAW.peel_energy * length)
 
 
 def test_a_model_without_pairs_or_without_load_is_refused():

@@ -19,7 +19,8 @@ shear law alone.
 The path (`follow`): every load and every prescribed strain is one unit load times a load factor. The answer is elastic up to
 the first pair at onset, found by scaling one linear solve. From there the factor rises in small steps while the bond spends
 little energy, and then every step spends a set amount of energy in the bond and the load factor is one of the step's
-unknowns (Gutierrez 2004; Verhoosel, Remmers and Gutierrez 2009). For a bond that unloads to the origin, as this one does,
+unknowns (Gutierrez 2004; Verhoosel, Remmers and Gutierrez 2009). Where no step can spend energy, because what was
+softening has parted and nothing else has begun to, the load leads again until something does. For a bond that unloads to the origin, as this one does,
 the energy spent in a step from (u0, f0) to (u, f) is (f0 F.(u - u0) - (f - f0) F.u0) / 2, with F the unit load. A step that
 must spend energy cannot stall where the load peaks or where load and displacement both fall back, and nothing artificial is
 added to get through.
@@ -101,6 +102,8 @@ class BondLaw:
         return np.where(opening > 0, (1 - d) * kn * opening, kn * opening), (1 - d) * ks * slip, d
 
 
+# The solids' matrix is symmetric and the bond's tangent nearly so: the ordering made for such a matrix halves the work.
+FACTOR = {"permc_spec": "MMD_AT_PLUS_A"}
 Q8_SIGNS = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [1, 0], [0, 1], [-1, 0]], dtype=float)
 GAUSS = 1 / math.sqrt(3)
 
@@ -249,8 +252,9 @@ class BondModel:
         return (displacement[2 * self.over + 1] - displacement[2 * self.under + 1],
                 displacement[2 * self.over] - displacement[2 * self.under])
 
-    def bond_forces(self, displacement: np.ndarray, damage: np.ndarray, tangent: bool = True):
-        """The bond's forces on the nodes, its tangent stiffness (None unless asked) and the damage after this state."""
+    def bond_forces(self, displacement: np.ndarray, damage: np.ndarray, tangent: bool = True, position: np.ndarray | None = None):
+        """The bond's forces on the nodes, its tangent stiffness (None unless asked) and the damage after this state. With
+        `position`, each degree of freedom's row in a smaller matrix (-1 for one left out), the tangent is that matrix."""
         opening, slip = self.jumps(displacement)
         tn, ts, after = self.law.traction(opening, slip, damage)
         ux, uy, ox, oy = 2 * self.under, 2 * self.under + 1, 2 * self.over, 2 * self.over + 1
@@ -275,8 +279,12 @@ class BondModel:
                         rows.append(side[a][i])
                         cols.append(side[c][j])
                         values.append((1.0 if a == c else -1.0) * self.weight * slopes[(i, j)])
-        matrix = sp.coo_matrix((np.concatenate(values), (np.concatenate(rows), np.concatenate(cols))), shape=(self.size, self.size)).tocsr()
-        return force, matrix, after
+        rows, cols, values, size = np.concatenate(rows), np.concatenate(cols), np.concatenate(values), self.size
+        if position is not None:
+            rows, cols = position[rows], position[cols]
+            inside = (rows >= 0) & (cols >= 0)
+            rows, cols, values, size = rows[inside], cols[inside], values[inside], int(position.max()) + 1
+        return force, sp.coo_matrix((values, (rows, cols)), shape=(size, size)).tocsr(), after
 
 
 @dataclass(frozen=True)
@@ -340,23 +348,34 @@ def follow(model: BondModel, *, first_energy: float | None = None, largest_energ
     if not np.any(unit_free):
         raise BondError("The model has no load")
     solid_free = model.matrix[free][:, free].tocsr()
+    position = np.full(model.size, -1)
+    position[free] = np.arange(len(free))
     counters = {"solves": 0, "cuts": 0}
 
     def state(displacement: np.ndarray, damage: np.ndarray):
-        force, bond, after = model.bond_forces(displacement, damage)
-        return (model.matrix @ displacement + force)[free], (solid_free + bond[free][:, free]).tocsc(), after
+        force, bond, after = model.bond_forces(displacement, damage, position=position)
+        return (model.matrix @ displacement + force)[free], (solid_free + bond).tocsc(), after
+
+    def factored(tangent):
+        counters["solves"] += 1
+        return spla.splu(tangent, **FACTOR)
 
     damage = model.damage.copy()
     u = np.zeros(model.size)
-    for _ in range(25):  # the unit load's elastic answer; which pairs are pressed may change on the way
+    # The unit load's elastic answer. A whole pair is as stiff pressed as pulled, so the answer is one linear solve unless
+    # some pairs are damaged from the start (a crack's faces): those carry only when pressed, and which of them are pressed
+    # is found by solving again until it no longer changes.
+    cracked = damage > 0
+    pressed = None
+    for _ in range(25):
         internal, tangent, _ = state(u, damage)
-        step = spla.splu(tangent).solve(unit_free - internal)
-        counters["solves"] += 1
-        u[free] += step
-        if np.linalg.norm(step) <= 1e-10 * np.linalg.norm(u[free]):
+        u[free] += factored(tangent).solve(unit_free - internal)
+        now = model.jumps(u)[0][cracked] < 0
+        if pressed is not None and np.array_equal(now, pressed):
             break
+        pressed = now
     else:
-        raise BondError("The elastic answer did not settle: the pairs pressed together keep changing")
+        raise BondError("The elastic answer did not settle: the damaged pairs pressed together keep changing")
     opening, slip = model.jumps(u)
     index = np.where(damage > 0, 0.0, model.law.index(opening, slip))
     if not index.max() > 0:
@@ -371,8 +390,9 @@ def follow(model: BondModel, *, first_energy: float | None = None, largest_energ
     spent = 0.0
     points = [PathPoint(load, float(unit @ u), 0.0, damage.copy(), u.copy())]
     by_energy = False
-    load_step = 0.02 * load
+    load_step = 0.02 * load  # grows while the steps settle quickly, to a twentieth of the load at most
     last = None  # the last step taken: displacement change, load change, energy spent
+    idle = False  # whether no step has settled since the load took the lead back from the energy
     ended = "steps"
     taken = 0
     for _ in range(steps * 4):
@@ -394,12 +414,11 @@ def follow(model: BondModel, *, first_energy: float | None = None, largest_energ
             residual = trial_load * unit_free - internal
             gap = 0.0 if not by_energy else 0.5 * (load0 * float(unit @ (trial - u0)) - (trial_load - load0) * float(unit @ u0)) - energy
             if np.linalg.norm(residual) <= tolerance * np.linalg.norm(model.matrix @ trial) and abs(gap) <= 1e-4 * energy:
-                converged, used = True, iteration
+                converged, used = trial_load * load0 > 0, iteration  # a load that changed sign is another problem's answer
                 break
             if abs(trial_load) > 5 * abs(load0):
                 break
-            factor = spla.splu(tangent)
-            counters["solves"] += 1
+            factor = factored(tangent)
             correction = factor.solve(residual)
             if by_energy:
                 unit_answer = factor.solve(unit_free)
@@ -414,23 +433,34 @@ def follow(model: BondModel, *, first_energy: float | None = None, largest_energ
             if by_energy:
                 energy *= 0.25
                 if energy < 1e-12 * abs(stored):
-                    ended = "stalled"  # the steps shrank to nothing: the path so far is returned, and says so
-                    break
-            elif load_step > 1e-4 * abs(load0):
+                    if idle:  # no step has settled since the load last took the lead: the path so far is returned, and says so
+                        ended = "stalled"
+                        break
+                    # no step spends energy from here: nothing is softening any more (what was has parted), and the load must
+                    # rise again before more of the bond does. The load leads until the bond spends energy again.
+                    by_energy, idle, last = False, True, None
+                    load_step, energy = 0.02 * load0, first_energy
+            elif last is not None and last[2] > 1e-9 * abs(stored):
+                by_energy = True  # the load will not rise by this step: let the energy lead, at half the last step's
+                energy = 0.5 * last[2] if largest_energy is None else min(0.5 * last[2], largest_energy)
+            elif abs(load_step) > 1e-4 * abs(load0):
                 load_step *= 0.5
             else:
-                by_energy = True  # the load will not rise further in steps of load: let the energy lead
-                energy = max(last[2] if last else 0.0, 1e-9 * abs(stored))
+                by_energy = True  # the bond has spent nothing yet and the load will not rise at all: the smallest of energies leads
+                energy = 1e-9 * abs(stored)
             continue
         step_spent = 0.5 * (load0 * float(unit @ (trial - u0)) - (trial_load - load0) * float(unit @ u0))
         work = 0.5 * (load0 + trial_load) * float(unit @ (trial - u0))
         last = (trial - u0, trial_load - load0, step_spent)
+        idle = False
         u, load, damage = trial, trial_load, after
         spent += step_spent
         taken += 1
         if not by_energy and step_spent > 0.02 * abs(work):
             by_energy = True
             energy = min(step_spent, energy) if largest_energy is None else min(step_spent, largest_energy)
+        elif not by_energy and used <= 3:
+            load_step = math.copysign(min(1.5 * abs(load_step), 0.05 * abs(load)), load_step)
         elif by_energy:
             energy *= min(2.0, max(0.5, (target_iterations / max(used, 1)) ** 0.5))
             if largest_energy is not None:
