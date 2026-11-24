@@ -94610,7 +94610,7 @@
        "id": "criterion",
        "title": "The maximum stress criterion",
        "source": "Laminate theory, 5. Failure",
-       "text": "Each stress against its own strength; the smallest ratio governs: tension across the fibres (sigma_2 reaching F2t, a matrix-dominated mode).",
+       "text": "Each stress against its own strength; the smallest ratio governs: tension across the fibres (sigma_2 reaching F2t, a matrix-dominated mode). The failure index the results show is 1/R.",
        "given": [
         {
          "symbol": "F_{1c}",
@@ -94650,6 +94650,15 @@
          "result": {
           "symbol": "R",
           "value": 1.057,
+          "unit": "-"
+         }
+        },
+        {
+         "formula": "\\frac{1}{R}",
+         "substituted": "\\frac{1}{R} = \\frac{1}{1.05702} = 0.9461",
+         "result": {
+          "symbol": "1/R",
+          "value": 0.9461,
           "unit": "-"
          }
         }
@@ -94851,9 +94860,18 @@
           "value": 1.032,
           "unit": "-"
          }
+        },
+        {
+         "formula": "\\frac{1}{R} = \\sqrt{\\mathrm{FI}}",
+         "substituted": "\\frac{1}{R} = \\sqrt{0.938842} = 0.9689",
+         "result": {
+          "symbol": "1/R",
+          "value": 0.9689,
+          "unit": "-"
+         }
         }
        ],
-       "note": "The failure index the results show is 1/R, which reaches one at failure together with this sum."
+       "note": "FI here is the Tsai-Hill sum. The failure index the results show is 1/R, the square root of this sum: both reach one at the same loading."
       },
       {
        "id": "loading",

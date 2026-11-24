@@ -78,6 +78,7 @@ def test_every_result_is_the_solves_own(data):
         assert got[r"\sigma_1"] == printed(stress[0]) and got[r"\sigma_2"] == printed(stress[1])
         assert got[r"\tau_{12}"] == printed(stress[2])
         assert results(step(chain, "criterion"))["R"] == printed(entry["factor"])
+        assert results(step(chain, "criterion"))["1/R"] == printed(entry["index"])  # the failure index the results show (ADR-0103 am. 2)
         loading = results(step(chain, "loading"))
         assert loading[r"u_{\mathrm{FPF}}"] == printed(abs(entry["at_failure"]["applied"]))
         assert loading[r"F_{\mathrm{FPF}}"] == printed(abs(entry["at_failure"]["reaction"]))
@@ -99,9 +100,12 @@ def test_a_step_repeated_by_hand_with_the_values_shown_meets_its_result(data):
             assert judged["title"] == "The maximum stress criterion" and "skipped" not in judged
             assert close(f["F_{1c}"] / -s1, r["R_1"]) and close(f["F_{2t}"] / s2, r["R_2"]) and close(f["F_6"] / abs(t12), r["R_6"])
             assert r["R"] == min(r["R_1"], r["R_2"], r["R_6"]) == r["R_2"] and "tension across the fibres" in judged["text"]
+            assert close(s2 / f["F_{2t}"], r["1/R"]) and judged["equations"][-1]["formula"] == r"\frac{1}{R}"  # the largest stress over its strength
         else:
             index = (s1 / f["X"]) ** 2 - s1 * s2 / f["X"] ** 2 + (s2 / f["Y"]) ** 2 + (t12 / f["F_6"]) ** 2
             assert close(index, r[r"\mathrm{FI}"]) and close(1 / math.sqrt(index), r["R"])
+            assert close(math.sqrt(index), r["1/R"]) and r["1/R"] > r[r"\mathrm{FI}"]  # the index the results show is the root of the sum
+            assert judged["equations"][-1]["formula"] == r"\frac{1}{R} = \sqrt{\mathrm{FI}}" and "Tsai-Hill sum" in judged["note"]
             assert "F1c" in judged["given"][0]["what"] and "F2t" in judged["given"][1]["what"]  # the strengths by the sign of each stress
         last = step(chain, "loading")
         at, load = values(last), results(last)
@@ -167,7 +171,7 @@ def test_a_stress_that_is_zero_to_the_solvers_precision_is_written_as_zero_and_s
     strengths = {"F1t": 2326.0, "F1c": 1731.0, "F2t": 64.05, "F2c": 285.7, "F6": 91.15}
     judged = _max_stress_step(np.array([-333.4, 60.6, 0.0]), strengths, 64.05 / 60.6, "transverse tension", "MPa")
     assert judged["skipped"] == [r"\tau_{12}"] and "left out" in judged["note"]
-    assert [e["result"]["symbol"] for e in judged["equations"]] == ["R_1", "R_2", "R"] and judged["equations"][-1]["formula"] == r"R = \min(R_1, R_2)"
+    assert [e["result"]["symbol"] for e in judged["equations"]] == ["R_1", "R_2", "R", "1/R"] and judged["equations"][-2]["formula"] == r"R = \min(R_1, R_2)"
 
 
 def test_numbers_are_written_plainly_and_as_a_power_of_ten_outside_the_plain_range():
