@@ -51,6 +51,11 @@ export type RunResult = {
   finished: string;
   /** The commit the site's API answered with, when it said. */
   commit: string | null;
+  /** The commit whose banks were asked, when the run was started for one (a deploy's run). */
+  expected?: string | null;
+  /** Why the run tells nothing, when it does not: the site ran another commit than the banks', or changed while the run asked. No issue
+   * is opened, commented on or closed for it, and the questions that failed before are kept for the next run. */
+  void: string | null;
   cap: number;
   spent: { site: number; judge: number; month: number };
   /** Why the run stopped asking the model's questions, when it did. */
@@ -63,7 +68,14 @@ export type RunResult = {
   /** Questions that failed in an earlier run and were not asked again in this one (a quick run asks no model's question): the issue that
    * tells the founder stays open until each is asked again and holds. */
   unresolved: string[];
+  /** What fails now and did not when the issue last heard (question ids, and `page:<name>` for a page not set up): only these are added
+   * to an open issue, so a failure that stays is told once, not after every deploy. */
+  newlyFailing: string[];
 };
+
+/** Whether two commits are the same, one of them perhaps shortened. */
+export const sameCommit = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  !!a && !!b && (a.toLowerCase().startsWith(b.toLowerCase()) || b.toLowerCase().startsWith(a.toLowerCase()));
 
 /** The verdict of a question from its fixed checks and its judge. */
 export function verdictOf(asked: boolean, checks: readonly Check[], judge: QuestionResult["judge"]): Verdict {

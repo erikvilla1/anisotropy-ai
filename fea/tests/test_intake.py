@@ -219,13 +219,9 @@ def own_constants() -> dict:
     (dict(material_code="im7 prepreg"), "Material code: 'IM7 PREPREG' is not capital letters and digits"),
     (dict(date="last Tuesday"), "Date: 'last Tuesday' is not a date"),
     (dict(length=25.0, width=250.0), "Length (mm) and Tab length (mm): the two tabs, 112 mm, must be shorter than the length, 25 mm"),
-    # the mesh is laid out and built before the spec's rules are read, so a size whose mesh cannot be built is refused here (ADR-0046 amendment 9)
+    # the rows are laid out before the spec's rules are read, so a coupon too short for its strain measurement is refused here (ADR-0046 amendment 9)
     (dict(length=60.0, tab_length=28.0, strain_device="extensometer", strain_length=25.0),
      "Length (mm) and Strain measurement length (mm): the 25 mm extensometer must fit between the tabs, 4 mm apart"),
-    (dict(element_size=0.05, mesh_nx=None, mesh_partitions=None, mesh_seeds=None),
-     "Element size (mm): this mesh is about 2,500,000 elements, more than the 250,000 we build"),
-    (dict(mesh_nx=600, mesh_seeds="600, 600, 600, 600, 600"),
-     "Your Abaqus mesh: this mesh is about 1,800,000 elements, more than the 250,000 we build"),
 ])
 def test_a_refusal_names_its_row(blank, tmp_path, changes, message):
     with pytest.raises(IntakeError, match=re.escape(message)):

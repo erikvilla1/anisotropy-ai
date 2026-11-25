@@ -6,7 +6,8 @@
 import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
-  FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf, unitWords, type Checklist,
+  DEFAULT_UNITS, FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf,
+  unitWords, type Checklist,
   type FieldDefinition, type StudioForm, type StudioValues,
 } from "./studio-form";
 
@@ -107,13 +108,17 @@ export const TRANSVERSE_HINTS: Record<string, string> = {
 
 export function tensionValues(form: StudioForm): StudioValues {
   const values: StudioValues = { form_version: FORM_VERSION, input: TENSION_INPUT };
+  const units = unitsOf(form);
+  // every number sent is in the coupon's units, and the package chooses the rest in them too (ADR-0090 amendment 2); mm-MPa goes unsaid,
+  // so the package's choice of it, with its reason, stays under How we built it
+  if (units !== DEFAULT_UNITS) values.units = units;
   const own = isOwnMaterial(form);
   for (const key of TENSION_KEYS) {
     if (own ? key === "library" : OWN_MATERIAL_KEYS.includes(key) && !LIBRARY_TOO.includes(key)) continue;
     if (key === "standard" && !(form.test ?? "").trim()) continue; // a new form: the package chooses D3039
     const text = (form[key] ?? "").trim();
     if (!text) continue;
-    if (LEFT_AT_DEFAULT.includes(key) && text === String(fieldByKey[key]?.default ?? "")) continue;
+    if (LEFT_AT_DEFAULT.includes(key) && text === String(fieldByKey[key]?.defaults?.[units] ?? fieldByKey[key]?.default ?? "")) continue;
     const kind = fieldByKey[key]?.kind;
     values[key] = (kind === "number" || kind === "whole" || kind === "angle") && NUMBER.test(text) ? Number(text) : text;
   }

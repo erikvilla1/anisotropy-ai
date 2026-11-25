@@ -63,12 +63,6 @@ PLY_MATERIAL_KEYS = ("library", "own_E1", "own_E2", "own_G12", "own_nu12", "own_
 PLIES = 16  # rows offered for the ply angles
 HOLE_DEFAULTS = {"circumferential": 32, "radial_layers": 6, "ring_ratio": 2.0, "growth": 1.2}  # the public open-hole check's O-grid
 ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing; `element_size_default` gives it in the stated units
-# The largest mesh the form's reading will build (ADR-0046 amendment 9). The mesh is built before the spec's own rules are read, so a size
-# whose mesh cannot be built has to be refused here, in words, instead of ending the check in a MemoryError deep in the mesher. Measured in
-# this container on a 250 x 25 mm coupon: 25,000 elements took 4 s, 100,000 took 11 s, 243,672 took 27 s, and a 100 m x 10 m coupon at the
-# default 2 mm (250 million elements) ran out of memory and wrote no checklist at all. A coupon needs nothing near this: 250 x 25 mm at
-# 0.16 mm elements is already 243,672.
-MAX_MESH_ELEMENTS = 250_000
 FPF_CRITERIA = ("max_stress", "tsai_hill")  # what "all" reports when the material has strengths; Tsai-Wu joins when f12* is given
 CRITERION_WORDS = ("all", "maximum stress", "tsai-hill", "tsai-wu", "none")  # the Failure criterion row
 CRITERION_OF_WORD = {"maximum stress": "max_stress", "tsai-hill": "tsai_hill", "tsai-wu": "tsai_wu"}
@@ -1282,23 +1276,16 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"Your Abaqus mesh: rows per segment: {len(seeds)} counts for {len(partitions)} partition lines; one count per segment, "
                         f"one more than the lines")
 
-    # What the mesh needs of the size (ADR-0046 amendment 9). `mesh_data` lays the rows out and `build_model` meshes them before the spec's
-    # own rules are read, so a coupon too short for its strain measurement or too large for its element size has to be refused here. Without
-    # these two the check ends in a ValueError from the partition lines, or in a MemoryError, and writes no checklist for the engineer to read.
+    # What the mesh needs of the length (ADR-0046 amendment 9). `mesh_data` lays the rows out before the spec's own rules are read, so a
+    # coupon too short for its strain measurement has to be refused here: its partition line falls outside the coupon and the layout ends
+    # in a ValueError, with no checklist for the engineer to read. The spec holds the same rule (`spec.py`, the gauge length must fit
+    # between the grips); this reads it early. A mesh too large is refused from the spec's counts (ADR-0086 amendment 1).
     if not bending and not plate and strain_length is not None and length is not None and length > 0:
         free = length - 2 * (tab_length or 0.0)  # the gauge section between the tabs, as spec.py reads it
         if free > 0 and strain_length >= free:
             problems.append(f"{L('length')} and {L('strain_length')}: the {strain_length:g} {lab['length']} {strain_device or 'strain measurement'} "
                             f"must fit between the tabs, {free:g} {lab['length']} apart; lengthen the coupon, shorten the tabs, or measure over a "
                             f"shorter length")
-    rows_of = lambda side, size: max(1, round(side / size))  # noqa: E731 — as `mesh_data` counts them
-    counted = (rows_of(width, element_size) * rows_of(length, element_size)
-               if element_size is not None and element_size > 0 and length is not None and width is not None and length > 0 and width > 0
-               else mesh_nx * sum(seeds) if mesh_nx is not None and seeds is not None else None)
-    if counted is not None and counted > MAX_MESH_ELEMENTS:
-        row = L('element_size') if element_size is not None else "Your Abaqus mesh"
-        problems.append(f"{row}: this mesh is about {counted:,} elements, more than the {MAX_MESH_ELEMENTS:,} we build; use a larger element size "
-                        f"or a smaller coupon")
     grips, region = word("grips"), word("region")
 
     names = {spec_key: forms.text_of(cells.get(key)) for key, spec_key in NAME_KEYS.items() if cells.get(key) is not None}

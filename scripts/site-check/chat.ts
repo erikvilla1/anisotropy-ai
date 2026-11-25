@@ -8,9 +8,10 @@ export const BOX = "textarea[aria-label^='Message the']";
 
 /** What the page shows for one question, read from the chat's own elements. */
 export type Answer = { heading: string; shown: string; folded: string; parts: string[]; applies: boolean };
-/** `interim`: the first answer shown, when the page then replaced it with another (a sweep or a solve the page works on after it says so). */
-export type Asked = Answer & { seconds: number; timedOut: boolean; interim?: Answer };
-type Probe = { label: string | null; sent: boolean; typing: boolean; answers: number; answer: Answer };
+/** `interim`: the first answer shown, when the page then replaced it with another (a sweep or a solve the page works on after it says so).
+ * `busy`: what the page said it was still doing when the robot stopped waiting ("Checking the setup…"), its answer shown above it. */
+export type Asked = Answer & { seconds: number; timedOut: boolean; interim?: Answer; busy?: string };
+type Probe = { label: string | null; sent: boolean; typing: boolean; busy: string; answers: number; answer: Answer };
 
 /** The chat's state, read in the page. The answers are those after the engineer's message `asked`, the `n`-th or a later one, in the chat
  * whose box is labelled `label`; when the page has put another chat in its place (the FEA start setting up a coupon), every answer of
@@ -18,7 +19,7 @@ type Probe = { label: string | null; sent: boolean; typing: boolean; answers: nu
 function probe(args: { selector: string; asked: string; n: number; label: string }): Probe {
   const empty = { heading: "", shown: "", folded: "", parts: [] as string[], applies: false };
   const box = [...document.querySelectorAll<HTMLTextAreaElement>(args.selector)].find((el) => el.offsetParent !== null);
-  if (!box) return { label: null, sent: false, typing: false, answers: 0, answer: empty };
+  if (!box) return { label: null, sent: false, typing: false, busy: "", answers: 0, answer: empty };
   const label = box.getAttribute("aria-label");
   const root = box.closest("[data-testid$='chat']") ?? box.closest("section") ?? document.body;
   const items = [...root.querySelectorAll<HTMLElement>(".chat-user, .chat-assistant")];
@@ -26,7 +27,7 @@ function probe(args: { selector: string; asked: string; n: number; label: string
   if (label === args.label) {
     const users = items.filter((el) => el.classList.contains("chat-user"));
     const mine = users.slice(args.n).find((el) => (el.textContent ?? "").trim() === args.asked.trim());
-    if (!mine) return { label, sent: false, typing: false, answers: 0, answer: empty };
+    if (!mine) return { label, sent: false, typing: false, busy: "", answers: 0, answer: empty };
     after = items.slice(items.indexOf(mine) + 1);
     const next = after.findIndex((el) => el.classList.contains("chat-user"));
     if (next >= 0) after = after.slice(0, next);
@@ -35,6 +36,7 @@ function probe(args: { selector: string; asked: string; n: number; label: string
   }
   const answers = after.filter((el) => el.classList.contains("chat-assistant") && (!el.querySelector(".chat-typing") || (el.textContent ?? "").trim().length > 40));
   const typing = !!root.querySelector(".chat-typing");
+  const busy = (root.querySelector(".chat-typing")?.textContent ?? "").trim();
   const heading = answers.map((el) => el.querySelector("h2, h3, h4")?.textContent?.trim() ?? "").find(Boolean) ?? "";
   // A closed fold is not drawn, so its innerText is its bare text, which runs a table's cells together ("74" "12.85" "233.5" read as
   // 7412.85233.5): its text is walked instead, with a space between cells and a line between blocks. No named function is declared in
@@ -65,7 +67,7 @@ function probe(args: { selector: string; asked: string; n: number; label: string
   }
   const applies = answers.some((el) => !!el.querySelector(".proposal-card input[type=checkbox]")
     || [...el.querySelectorAll("button")].some((b) => /^\s*Apply\b/.test(b.textContent ?? "")));
-  return { label, sent: true, typing, answers: answers.length,
+  return { label, sent: true, typing, busy, answers: answers.length,
     answer: { heading, shown: answers.map((el) => el.innerText.trim()).join("\n"), folded: folded.join("\n"), parts: [...parts], applies } };
 }
 
@@ -90,6 +92,7 @@ export async function ask(page: Page, text: string, limit: number, still = 900):
   let since = Date.now();
   let seen: Probe | null = null;
   let first: Answer | null = null;
+  let firstAt = 0;
   const withFirst = (answer: Answer) => (first && first.heading !== answer.heading ? { interim: first } : {});
   while (Date.now() - started < limit) {
     await page.waitForTimeout(250);
@@ -105,7 +108,7 @@ export async function ask(page: Page, text: string, limit: number, still = 900):
       continue; // the page is between two states
     }
     seen = now;
-    if (!first && now.sent && now.answers > 0 && now.answer.heading) first = now.answer;
+    if (!first && now.sent && now.answers > 0 && now.answer.heading) { first = now.answer; firstAt = Date.now(); }
     const shape = JSON.stringify(now.answer) + now.typing;
     if (shape !== last) { last = shape; since = Date.now(); continue; }
     if (now.sent && !now.typing && now.answers > 0 && Date.now() - since >= still) {
@@ -113,7 +116,9 @@ export async function ask(page: Page, text: string, limit: number, still = 900):
     }
   }
   const answer = seen?.answer ?? { heading: "", shown: "", folded: "", parts: [], applies: false };
-  return { ...answer, ...withFirst(answer), seconds: (Date.now() - started) / 1000, timedOut: true };
+  // an answer shown, and the page still at work under it when the limit passed ("Checking the setup…"): timed from when it was shown
+  const busy = seen?.typing && seen.busy && first ? { busy: seen.busy, seconds: (firstAt - started) / 1000 } : null;
+  return { ...answer, ...withFirst(answer), seconds: (Date.now() - started) / 1000, timedOut: true, ...(busy ?? {}) };
 }
 
 /** The chat's whole pane, for a picture of an answer. */

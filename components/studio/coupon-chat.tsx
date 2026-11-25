@@ -554,6 +554,16 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   }
 
   /** A question about the results that nothing here read: what can be asked, in place of a guess at the setup. */
+  /** "show all the rows": the full form opens its names and codes under Advanced; the tension screen has every row in its model tree and
+   * opens it at the top (ADR-0090 amendment 2). Either way the chat says where, so the message is never left without an answer. */
+  function showAllRows(text: string) {
+    const advanced = !simpleRef.current;
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: "All inputs", body: <p data-testid="chat-all-rows">{advanced
+      ? "Every row is in the steps on the left; the names and codes are under Advanced, now open."
+      : "Every row is in the model tree on the left: open a step, such as Geometry or Mesh, to see or change its rows. The rows chosen for you say why."}</p> });
+    showPanel(advanced ? "advanced" : "test");
+  }
+
   function unread(text: string, echoed = false) {
     const words = unreadWords(!!shown.fields); // with no results, what can be asked of the setup (ADR-0121 amendment 2)
     add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: words.title,
@@ -738,7 +748,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       case "setup-fixed": answerSetup(text, routed.term); return;
       case "run": void run(); return;
       case "check": add({ role: "user", text }); void check(formRef.current); return;
-      case "full-form": add({ role: "user", text }); showPanel("advanced"); return;
+      case "full-form": showAllRows(text); return;
       case "section": add({ role: "user", text }); openSection(routed.target, text); return; // at once when the coupon holds no work, else one tap (ADR-0124)
       case "name": answer(text, { filled_by: text }); return;
       case "general": void answerMeaning(text); return;
