@@ -19,6 +19,7 @@ from typing import Any
 from .assistant import _sentences, number_guard
 from .result_answers import MAX_ANSWER
 from .theory import Section
+from .verdict_guard import verdict_guard
 
 # The kinds of FEA work the page may offer to set up, with the words the model reads them by (ADR-0124); the wing is offered since it joined FEA (ADR-0118 amendment 1).
 KIND_WORDS = {
@@ -71,6 +72,9 @@ def general_guard(raw: dict[str, Any], question: str, found: list[Section], kind
     guard = number_guard(PLY_ANGLE.sub(" ", text), {"the question": question})
     if not guard.ok:
         return KeptGeneral(withheld=True, reason="the model's answer held numbers that are not in the question: " + ", ".join(guard.offending), start=start)
+    words = verdict_guard(text, None)  # no result to hold it to: only that it decides nothing for the engineer (ADR-0139)
+    if not words.ok:
+        return KeptGeneral(withheld=True, reason=words.reason, start=start)
     named = raw.get("sections") if isinstance(raw.get("sections"), list) else []
     sources = tuple(s for s in found if s.id in named)
     covered = raw.get("covered") is True and bool(sources)

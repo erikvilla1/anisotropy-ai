@@ -10,7 +10,7 @@ import { aboutAnswer, checkTitle, unreadWords } from "../../lib/chat-about";
 import { modelFileAnswer } from "../../lib/model-file";
 import { MODEL_FILE_LABELS } from "../../lib/studio-api";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, RESULT_COLUMNS, questionFrom, resultOffer, resultUnit, thresholdVerdict, valueLines, type ResultQuestion } from "../../lib/result-question";
-import { confirmsFailure, contradictsFailure, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
+import { confirmsFailure, contradictsFailure, decidesNote, failureAnswer, failureLines, failureVerdict, marginNote } from "../../lib/result-failure";
 import { summaryAnswer } from "../../lib/result-summary";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
 import { workingFor } from "../../lib/result-working";
@@ -22,6 +22,7 @@ import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/resul
 import { emptyPlate } from "../../lib/studio-plate";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
+import { privateAnswerOnStart } from "../../lib/chat-private";
 import { ASKED_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
 import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
@@ -272,7 +273,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const confirmed = confirmsFailure(text, found, printed) && lines.confirmed !== null;
       const data = { criterion: found.row.criterion, confirmed, element: found.row.label.split(".").pop(), plies: [found.row.ply] };
       const margin = marginNote(text, found, printed);
-      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : [])];
+      const decides = decidesNote(text);
+      const facts = [lines.facts.join(" · "), ...(margin ? [margin] : []), ...(decides ? [decides] : [])];
       if (confirmed) return said("failure", "Yes", [lines.confirmed!, ...facts], data);
       // as failureMessage in coupon-chat.tsx: a loading stated back wrongly is answered No, "does it fail?" opens with Yes or No
       if (lines.confirmed !== null && contradictsFailure(text, found, printed)) return said("failure", "No", [lines.confirmed, ...facts], data);
@@ -322,6 +324,7 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
  * answered by the API's reader (`modelAnswer`), so here it only names who answers. */
 export function startAnswer(routed: StartRoute): Said {
   switch (routed.route) {
+    case "private": { const { title, lines } = privateAnswerOnStart(routed.topic); return said("about", title, lines); }
     case "set-up": return routed.kind === "wing" ? said("said", "Opens Wing analysis", ["The wing's own page under FEA, a new wing from the example."], { kind: "wing" })
       : routed.kind === "repair" ? said("said", "Opens Patch repair", ["The repair's own page under FEA, with the repair this browser holds or the example."], { kind: "repair" })
       : said("said", "Coupon test set up", ["The model tree on the left now holds a coupon's tabs."], { kind: routed.kind });

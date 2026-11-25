@@ -29,7 +29,8 @@ export type ResultTopic = "verdict" | "which" | WingCheckName | "skin" | "web" |
 export type WingAsk =
   /** A change: read whole (`change`), or not (`problem`, in the page's words, and whether it asks back rather than declines). */
   | { route: "wing-change"; change: PlyChange | null; whole: boolean; problem: string | null; asks: boolean }
-  | { route: "wing-result"; topic: ResultTopic; yesNo: boolean; part?: WingPart | null }
+  // `decides`: the message asks whether the wing is safe, airworthy or may be signed off, which the engineer decides (ADR-0139)
+  | { route: "wing-result"; topic: ResultTopic; yesNo: boolean; part?: WingPart | null; decides?: boolean }
   | { route: "wing-rules"; rules: WingRuleName[]; part: WingPart | null; limit: boolean }
   | { route: "wing-strengths"; part: WingPart | null }
   /** A question of why, how or which test: the reference pages answer it, beside the wing's own facts on what it names. */
@@ -185,11 +186,13 @@ export function readWingAsk(message: string): WingAsk {
   const topic = topicOf(text);
   if (topic === "layup" && !/\bwhy\b/.test(text)) return { route: "wing-result", topic, yesNo, part: rulePart(text) };
   if (/\bwhy\b|\bhow (?:does|do|is|are|can|should)\b|\bexplain\b/.test(text)) return { route: "wing-reference", topic };
-  if (topic) return { route: "wing-result", topic, yesNo };
+  if (topic) return { route: "wing-result", topic, yesNo, ...(topic === "verdict" && DECIDES.test(text) ? { decides: true } : {}) };
   if (/\?$/.test(text) || /^(?:what|how|when|where|which|should)\b/.test(text)) return { route: "wing-reference", topic: null };
   return { route: "wing-unread" };
 }
 
+/** Whether the wing is safe, airworthy, certified or may be signed off: answered with the margins, never with a Yes (ADR-0139). */
+const DECIDES = /\b(?:un)?safe(?:ly)?\b|\bairworth|\bcertif|\bstrong enough\b|\bgood to go\b|\bsign(?:ed|s)?[\s-]+(?:it\s+|this\s+)?off\b|\bfly\b/;
 const DEFINING = /^(?:what's|whats|what is|what are)\s+(?:a |an )?(?:b-basis|a-basis|b-estimates?|allowables?|basis values?|design values?|ply drops?|run-?outs?|margins? of safety|buckling|shear flow|spar caps?|10 ?% rule|balance|symmetry)\b/;
 const RULE_NAMES_CHECKED: WingRuleName[] = ["ten_percent", "in_a_row", "balance", "symmetry", "drop_count", "drop_ratio", "drop_cover"];
 
@@ -208,7 +211,7 @@ function topicOf(text: string): ResultTopic | null {
   }
   if (web) return buckling ? "web buckling" : strength && !/\bmargin\b/.test(text) ? "spar plies" : "web";
   if (skin) return buckling ? "skin buckling" : strength && !/\bmargin\b/.test(text) ? "skin plies" : "skin";
-  if (/\bmargins?\b|\bpass(?:es)?\b|\bfail(?:s)?\b|\bsafe\b|\bok(?:ay)?\b|\bhold(?:s)?\b|\bstrong enough\b|\bverdict\b/.test(text)) return "verdict";
+  if (/\bmargins?\b|\bpass(?:es)?\b|\bfail(?:s)?\b|\b(?:un)?safe\b|\bok(?:ay)?\b|\bhold(?:s)?\b|\bstrong enough\b|\bverdict\b|\bairworth|\bcertif|\bsign(?:ed|s)?[\s-]+(?:it\s+|this\s+)?off\b|\bgood to go\b/.test(text)) return "verdict";
   return null;
 }
 
@@ -248,6 +251,9 @@ function basisLine(report: WingReport): string {
   return `At ultimate load${basis ? `, on ${basis}` : ""}, by the hand calculation of the ${report.cases.length} case${report.cases.length === 1 ? "" : "s"} run.`;
 }
 
+/** Said under the margins when the wing is asked whether it is safe or may fly: the checks run are not a decision to build or fly it. */
+const DECIDED_BY_ENGINEER = "Whether it may be built or flown is the engineer's call: these are the checks run, on the strengths shown.";
+
 function resultAnswer(ask: Extract<WingAsk, { route: "wing-result" }>, report: WingReport): WingSaid {
   const u = report.units, d = report.design;
   if (!report.cases.length && ["verdict", "which", ...CHECK_NAMES, "skin", "web", "tip_deflection", "tip_twist"].includes(ask.topic)) {
@@ -261,8 +267,9 @@ function resultAnswer(ask: Extract<WingAsk, { route: "wing-result" }>, report: W
       const check = report.cases.find((c) => c.number === g.case && c.altitude === g.altitude)?.checks[g.check];
       const member = check?.member ? capital(check.member) : CHECK_WORDS[g.check];
       const heading = ask.topic === "which" ? `${member} first: ${marginText(g.margin_ultimate)}`
-        : `${report.passes ? "Yes" : "No"}: ${words.verdict.charAt(0).toLowerCase()}${words.verdict.slice(1)}`;
-      return said("result", heading, [words.detail, basisLine(report)], { topic: ask.topic, check: g.check, margin: g.margin_ultimate });
+        : ask.decides ? words.verdict : `${report.passes ? "Yes" : "No"}: ${words.verdict.charAt(0).toLowerCase()}${words.verdict.slice(1)}`;
+      return said("result", heading, [words.detail, basisLine(report), ...(ask.decides ? [DECIDED_BY_ENGINEER] : [])],
+        { topic: ask.topic, check: g.check, margin: g.margin_ultimate });
     }
     case "skin": case "web": {
       const checks: WingCheckName[] = ask.topic === "skin" ? ["skin plies", "skin buckling"] : ["spar plies", "web buckling"];

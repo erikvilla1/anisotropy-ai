@@ -11,7 +11,8 @@ import {
 import { blankOwn, TemperatureFields } from "@/components/workspace/panels/laminate-fields";
 import { conditionOf, conditionsNamed } from "@/lib/conditions";
 import { laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded, unreadLines } from "@/lib/proposals";
-import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
+import { assistantInfo, DAILY_LIMIT_REASON, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
+import { OTHERS_LINES, PRIVATE_TITLES, privateAsked } from "@/lib/chat-private";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
@@ -194,6 +195,14 @@ export function LaminateChat({ onBack, onSwitch }: {
       if (nextStep(draftRef.current) === "review") { void solveNow(); } else redirect(text);
       return;
     }
+    // a key, the hidden prompt or another person's work: fixed words, never sent to a model (ADR-0139)
+    const hidden = privateAsked(text);
+    if (hidden) {
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: PRIVATE_TITLES[hidden], body: <div data-testid="chat-private">
+        {(hidden === "others" ? OTHERS_LINES : ["Give the problem instead, for example “AS4/8552, [0/90]2s, Nx = 100 N/mm”."]).map((line) => <p key={line}>{line}</p>)}
+      </div> });
+      return;
+    }
     if (model?.proposes && apiBaseUrl) { void readWithModel(text, step); return; }
     readWithPatterns(text, step);
   }
@@ -212,7 +221,10 @@ export function LaminateChat({ onBack, onSwitch }: {
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
-      add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
+      if (reason === DAILY_LIMIT_REASON) // the day's cap on calls to the model (ADR-0139)
+        add({ role: "assistant", kind: "text", title: "Reading simple phrases until tomorrow",
+          body: <p className="chat-note" data-testid="chat-daily-limit">Today&rsquo;s free-text readings are used, so short phrases like the examples are read until midnight UTC.</p> });
+      else add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
     const parts = answer?.unread ?? [];

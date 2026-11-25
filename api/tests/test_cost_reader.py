@@ -1,5 +1,6 @@
 """The read-only login for the model-cost views (scripts/create-cost-reader.py, ADR-0120 amendment 1), against the test database: it
-reads the three views and nothing else, writes nothing, and a second run gives it a new password that replaces the old one."""
+reads the three views and the guards' weekly counts (ADR-0139) and nothing else, writes nothing, and a second run gives it a new password
+that replaces the old one."""
 
 import datetime as dt
 import importlib.util
@@ -38,7 +39,7 @@ def database(empty_runs):
 
 
 @needs_test_database
-def test_the_reader_reads_the_three_views_and_nothing_else(database):
+def test_the_reader_reads_the_views_and_nothing_else(database):
     call = ModelCall(feature="explain_result", answered_at=dt.datetime(2026, 11, 19, 18, tzinfo=dt.timezone.utc), model="claude-opus-5-5",
                      effort="low", input_tokens=3000, output_tokens=900, thinking_tokens=700, cache_read_tokens=0, cache_write_tokens=0,
                      answer_characters=720, stop_reason="end_turn", seconds=8.0, cost_usd=Decimal("0.030000"), prices_as_of=PRICES_AS_OF)
@@ -52,6 +53,7 @@ def test_the_reader_reads_the_three_views_and_nothing_else(database):
                 ("engineer@example.com", 1, Decimal("0.030000"))]
             assert connection.execute(text("SELECT count(*) FROM model_costs_by_feature")).scalar_one() == 1
             assert connection.execute(text("SELECT cost_usd FROM model_costs_by_day")).scalar_one() == Decimal("0.030000")
+            assert connection.execute(text("SELECT count(*) FROM assistant_guards_by_feature")).scalar_one() == 0  # counts, no email
         for table in ("model_calls", "runs", "jobs", "projects"):
             with reader.connect() as connection, pytest.raises(DBAPIError, match="permission denied"):
                 connection.execute(text(f"SELECT * FROM {table}"))

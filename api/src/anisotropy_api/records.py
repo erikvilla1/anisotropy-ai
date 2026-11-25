@@ -348,6 +348,15 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
         return run.id
 
 
+def model_calls_since(engine: Engine, user_email: str, since: dt.datetime) -> int:
+    """How many calls to the model the signed-in person's requests made at or after `since` (ADR-0120), whatever the client, for the
+    day's cap (ADR-0139)."""
+    statement = (select(func.count()).select_from(ModelCallRow)
+                 .where(ModelCallRow.called_at >= since, ModelCallRow.user_email == user_email))
+    with Session(engine) as session:
+        return session.scalar(statement) or 0
+
+
 def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None) -> int:
     """One row per call (ADR-0120), in one transaction; returns how many. A database failure raises; the caller decides."""
     if not calls:
