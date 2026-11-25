@@ -71,7 +71,10 @@
         "dead_letter_queue": "anisotropy-coupon-jobs-dead"
       }
     ]
-  }
+  },
+  // Settings that are no secret, versioned here and reviewed like code. The day's calls to the model per signed-in person (ADR-0139):
+  // past it, the chat reads with its own patterns until midnight UTC. Change the number by pull request, not as a secret.
+  "vars": { "ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY": "100" }
   // Secrets, never here: `npx wrangler secret put <NAME>` for DATABASE_URL, the ANISOTROPY_ACCESS_*, ANISOTROPY_R2_* and
   // assistant variables; the Worker hands them to the container (worker/routing.ts names them). ANISOTROPY_GIT_COMMIT is set by
   // the deploy workflow as a variable (`--var`).

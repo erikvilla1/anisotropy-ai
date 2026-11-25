@@ -814,6 +814,9 @@ export type LoadProposal = {
 export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
 /** Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1); the page writes the sentence. */
 export const UNREAD_REASONS = ["not_offered", "no_value", "refers_back"] as const;
+/** The reason a reader gives when the person's calls to the model today reached the day's cap (ADR-0139), as the API writes it
+ * (`DAILY_LIMIT_REASON` in api/src/anisotropy_api/assistant.py): the page then reads with its own patterns until midnight UTC. */
+export const DAILY_LIMIT_REASON = "the day's limit of free-text readings for this sign-in is reached";
 export type UnreadPart = { quote: string; reason: (typeof UNREAD_REASONS)[number] };
 export type ProposalAnswer = {
   run_id: string | null; writer: string; model: string | null; proposals: Proposal[];

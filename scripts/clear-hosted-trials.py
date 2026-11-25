@@ -122,7 +122,7 @@ def delete(engine: Engine, store: Store, expected: dict[str, int], confirmation:
     if confirmation != CONFIRMATION:
         raise Refused(f'Type the confirmation exactly: --confirm "{CONFIRMATION}"')
     with engine.begin() as connection:
-        has_qa = inspect(connection).has_table("qa_checks")  # the jobs' QA record (ADR-0137, migration 0015): goes with its jobs
+        has_qa = inspect(connection).has_table("qa_checks")  # the jobs' QA record (ADR-0137, migration 0016): goes with its jobs
         connection.execute(text(f"LOCK TABLE {', '.join((*CLEARED_TABLES, 'abaqus_uploads', *(('qa_checks',) if has_qa else ())))} IN ACCESS EXCLUSIVE MODE"))
         found = {table: count for table, count in _table_counts(connection).items() if table in CLEARED_TABLES}
         if found != expected:

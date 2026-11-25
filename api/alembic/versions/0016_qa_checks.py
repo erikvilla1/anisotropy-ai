@@ -10,8 +10,8 @@ Rows are never updated or deleted: a trigger refuses both, as the runs table's d
 cannot be deleted before them, so the one clearing of the hosted trials (scripts/clear-hosted-trials.py) deletes them first, with the
 trigger off for that statement as it does for the runs. The downgrade refuses while the table holds a row: the record would be lost.
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0016
+Revises: 0015
 Create Date: 2026-11-24
 """
 
@@ -20,8 +20,8 @@ from alembic import op
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 

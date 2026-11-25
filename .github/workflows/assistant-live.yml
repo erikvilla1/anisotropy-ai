@@ -21,6 +21,10 @@ on:
         description: "Fast: send everything at once at full price (done in minutes, about twice the cost) instead of a half-price batch"
         type: boolean
         default: false
+      model:
+        description: "The model the API's readers use (empty: the site's, claude-opus-5-5). A new model is run over every bank before it is set on the site (ADR-0121 amendment 8)"
+        default: ""
+        required: false
 
 permissions:
   contents: read
@@ -56,7 +60,14 @@ jobs:
           FEATURES: ${{ inputs.features }}
           BUDGET: ${{ inputs.budget }}
           FAST: ${{ inputs.fast }}
-        run: uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET" $([ "$FAST" = "true" ] && echo --now)
+          MODEL: ${{ inputs.model }}
+        run: |
+          if [ -n "$MODEL" ]; then
+            # a model id, nothing else: the input reaches the API's settings and the report
+            [[ "$MODEL" =~ ^claude-[a-z0-9-]{1,60}$ ]] || { echo "::error::The model input is not a model id such as claude-sonnet-5-5"; exit 2; }
+            export ANISOTROPY_ASSISTANT_MODEL="$MODEL"
+          fi
+          uv run --project api python scripts/assistant-live.py --store assistant-live --features "$FEATURES" --budget "$BUDGET" $([ "$FAST" = "true" ] && echo --now)
       - name: The report, on the run's page
         if: always()
         run: if [ -f assistant-live/report.md ]; then cat assistant-live/report.md >> "$GITHUB_STEP_SUMMARY"; fi

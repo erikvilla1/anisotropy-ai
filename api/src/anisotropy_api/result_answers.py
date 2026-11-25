@@ -15,6 +15,7 @@ from typing import Any
 
 from .assistant import _sentences, number_guard
 from .theory import Section
+from .verdict_guard import verdict_guard
 
 SECTIONS_SHOWN = 3  # how many sections a question brings to the model
 MAX_ANSWER = 1500  # characters; the model is asked for at most three sentences of at most 25 words (ADR-0102 amendment 1)
@@ -55,6 +56,9 @@ def answer_guard(raw: dict[str, Any], question: str, facts: dict[str, Any], foun
     guard = number_guard(text, {**facts, "the question": question})
     if not guard.ok:
         return KeptAnswer(withheld=True, reason="the model's answer held numbers that are in neither the results nor the question: " + ", ".join(guard.offending))
+    words = verdict_guard(text, facts)  # no word against the engine's verdict, none deciding for the engineer (ADR-0139)
+    if not words.ok:
+        return KeptAnswer(withheld=True, reason=words.reason)
     named = raw.get("sections") if isinstance(raw.get("sections"), list) else []
     sources = tuple(s for s in found if s.id in named)
     covered = raw.get("covered") is True and bool(sources)

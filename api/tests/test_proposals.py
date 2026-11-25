@@ -235,7 +235,7 @@ REQUEST = {"product": "coupon", "message": "A 250 mm long strip, pulled to 10 kN
 
 def test_with_no_model_the_page_is_told_and_a_proposal_request_reads_nothing(monkeypatch):
     monkeypatch.setattr(app.state, "assistant", TemplateAssistant(), raising=False)
-    assert client.get("/v1/workspace/assistant").json() == {"proposes": False, "provider": None, "model": None}
+    assert client.get("/v1/workspace/assistant").json() == {"proposes": False, "provider": None, "model": None, "checked": None}
     body = client.post("/v1/workspace/proposals", json=REQUEST).json()
     assert body["writer"] == "template" and body["proposals"] == [] and body["model"] is None and body["reason"] is None
 
@@ -245,7 +245,7 @@ def test_the_endpoint_returns_what_the_guard_keeps_and_the_model_saw_no_name_or_
                             proposal("width", "1", "in", "1 in wide"), proposal("width", "25", "mm", "25 mm wide")], "conditions": [], "question": None}
     stub = StubClient(json.dumps(answer))
     monkeypatch.setattr(app.state, "assistant", ClaudeAssistant("claude-opus-5-5", client=stub), raising=False)
-    assert client.get("/v1/workspace/assistant").json() == {"proposes": True, "provider": "anthropic", "model": "claude-opus-5-5"}
+    assert client.get("/v1/workspace/assistant").json() == {"proposes": True, "provider": "anthropic", "model": "claude-opus-5-5", "checked": True}
     body = client.post("/v1/workspace/proposals", json=REQUEST).json()
     assert body["writer"] == "anthropic" and body["model"] == "claude-opus-5-5"
     assert [(p["key"], p["value"], p["unit"]) for p in body["proposals"]] == [("length", "250", "mm"), ("force", "10000", "N")]

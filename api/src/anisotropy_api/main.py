@@ -10,6 +10,7 @@ import tomllib
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
@@ -37,7 +38,7 @@ from anisotropy_engine.wing.wing_file import wing_from_dict, wing_report, wing_v
 from .abaqus_coupon import NotABuildScript, coupon_data
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
-from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for, model_view_of_facts
+from .assistant import CHECKED_MODELS, PROPOSAL_SCHEMA, Assistant, LimitedAssistant, TemplateAssistant, assistant_for, model_view_of_facts
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .plate_proposals import PLATE_SYSTEM, KeptPlate, plate_guard, plate_schema, plate_view
 from .proposals import model_view_of_form, source_guard
@@ -51,7 +52,7 @@ from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECK
                           SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, QARecordError, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
-                      fetch_qa_checks, qa_counts, qa_rows, qa_verdict,
+                      fetch_qa_checks, model_calls_since, qa_counts, qa_rows, qa_verdict,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
@@ -76,6 +77,8 @@ from .schemas import (
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+# What a request's calls to the model cost, on the answer to a request with no signed-in email only: the site check's service token (ADR-0138)
+MODEL_COST_HEADER = "X-Anisotropy-Model-Cost"
 # "off" on the 503 of an API that keeps no records, so the page tells "this server keeps no projects" from an outage (ADR-0091 amendment 2)
 RECORDS_HEADER = "X-Anisotropy-Records"
 # With the job queue (ADR-0056 amendment 3), a queued job's answer carries its id here; the Worker sends the id to the queue and
@@ -149,6 +152,8 @@ async def lifespan(app: FastAPI):
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
                                        per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command())
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
+    if settings.assistant.model is not None and settings.assistant.model not in CHECKED_MODELS:  # said, not refused (ADR-0121 amendment 8)
+        print(f"the assistant's model {settings.assistant.model} is not one the Assistant check has been run with (CHECKED_MODELS)", flush=True)
     # our kernel's answer to every edit (ADR-0086): warm workers, started on the first live request
     app.state.live = LiveSolver(studio_command(), Path(tempfile.gettempdir()) / "anisotropy-live", settings.live_workers)
     # The uploads from Abaqus (ADR-0094 part 6): in the bucket under their own prefix, or in a folder of the local disk without one.
@@ -306,6 +311,16 @@ def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: 
         print(f"{len(calls)} model call(s) of {request.url.path} could not be recorded: {str(exc).splitlines()[0]}", flush=True)
 
 
+def _cost_header(request: Request, response: Response, calls: list[ModelCall]) -> None:
+    """What the request's calls to the model cost at the price list (ADR-0120), as `<dollars>; calls=<n>; unpriced=<n>`, on the answer
+    to a request with no signed-in email. On the hosted site only a service token asks without one: the site check's, which stops
+    before its cap with it (ADR-0138). A signed-in person's answer never carries it, and nothing else about the calls goes with it."""
+    if not calls or _email(request) is not None:
+        return
+    priced = [call.cost_usd for call in calls if call.cost_usd is not None]
+    response.headers[MODEL_COST_HEADER] = f"{sum(priced, Decimal(0)):.6f}; calls={len(calls)}; unpriced={len(calls) - len(priced)}"
+
+
 Body = TypeVar("Body", bound=BaseModel)
 
 
@@ -333,6 +348,7 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
     finally:
         if calls:
             _record_calls(request, actor, calls, run_id)
+    _cost_header(request, response, calls or [])
     if run_id is None:
         return body
     response.headers[RUN_ID_HEADER] = str(run_id)
@@ -376,6 +392,31 @@ def solve_case_endpoint(problem: CaseRequest, actor: Actor, request: Request, re
 
 def _email(request: Request) -> str | None:
     return getattr(request.state, "user_email", None)
+
+
+def _assistant(request: Request, actor: str) -> Assistant:
+    """Who writes or reads for this request (ADR-0052): the settings' model, or the template with none. A signed-in person whose
+    requests have called the model the day's cap of times since midnight UTC (ADR-0139) gets the template with the reason the page reads,
+    until midnight. With no cap set, no records, no model or no email, nothing is counted: behind Access a request with no email is a
+    service token of ours (the deploy check, the site check, ADR-0138), which keeps a budget of its own. A count that cannot be read
+    leaves the model on: the run's own record then fails and withholds the answer (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    settings = getattr(request.app.state, "settings", None)
+    cap = getattr(settings, "model_calls_per_user_per_day", None)
+    engine = getattr(request.app.state, "records", None)
+    email = _email(request)
+    if cap is None or engine is None or email is None or isinstance(assistant, TemplateAssistant):
+        return assistant
+    midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        used = model_calls_since(engine, email, midnight)
+    except SQLAlchemyError as exc:
+        print(f"the day's calls to the model could not be counted: {str(exc).splitlines()[0]}", flush=True)
+        return assistant
+    if used >= cap:
+        print(f"model call capped for the actor {actor}: {used} today, the cap is {cap}", flush=True)
+        return LimitedAssistant(cap)
+    return assistant
 
 
 def _owner(request: Request) -> str | None:
@@ -1532,7 +1573,7 @@ def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor,
     seen = checklist if problem.kind == "setup" else facts
     receipt = ExplainReceipt(job_id=str(job_id), kind=problem.kind,
                              facts_sha256=hashlib.sha256(json.dumps(seen, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     calls: list[ModelCall] = []
 
     def compute() -> ExplainResponse:
@@ -1641,7 +1682,7 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
     the case the engine's runner solves (ADR-0024), every result in the units asked for, the stack described (ADR-0059), and the
     answer worded from the engine's numbers by the template or, behind the setting, by the model with the number guard (ADR-0052).
     Recorded with its actor and, when a model wrote the words, the model's name (ADR-0026)."""
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     calls: list[ModelCall] = []
 
     def compute() -> LaminateAnswer:
@@ -2082,10 +2123,13 @@ def repair_shape_endpoint(problem: RepairRequest, actor: Actor, request: Request
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)
 def workspace_assistant(request: Request) -> AssistantInfo:
-    """Whether a model reads the chat's messages here (ADR-0088); the page asks once. Not a run: nothing is computed or recorded."""
+    """Whether a model reads the chat's messages here (ADR-0088); the page asks once. Not a run: nothing is computed or recorded. With a
+    model, whether the Assistant check has been run with it (ADR-0121 amendment 8); the check after a deploy reads it."""
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
     proposes = assistant.name != "template"
-    return AssistantInfo(proposes=proposes, provider=assistant.name if proposes else None, model=getattr(assistant, "model", None) if proposes else None)
+    model = getattr(assistant, "model", None) if proposes else None
+    return AssistantInfo(proposes=proposes, provider=assistant.name if proposes else None, model=model,
+                         checked=None if model is None else model in CHECKED_MODELS)
 
 
 @app.get("/v1/coupon-tests", response_model=CouponTests)
@@ -2150,7 +2194,7 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
     each value as written, in the quote it came from, converted only between the decimal units of the row's own system. The engineer ticks
     what enters the problem; nothing here computes a result. With no model, or one that does not answer, nothing is proposed and the page
     reads the message with its own patterns. Recorded with the model's name when one read it (ADR-0026)."""
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     calls: list[ModelCall] = []
 
     def compute() -> ProposalResponse:
@@ -2183,7 +2227,7 @@ def read_result_question(asked: ResultQuestionRequest, actor: Actor, request: Re
     (ADR-0100): quantities and a region by name, plies the laminate holds, an element the message writes. No result is sent here, shown to
     the model or returned: the page runs the request on the results it shows. With no model, or one that does not answer, nothing is read
     and the page's own patterns stand (ADR-0099). Recorded with the model's name when one read it (ADR-0026)."""
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     calls: list[ModelCall] = []
 
     def compute() -> ResultQuestionResponse:
@@ -2206,7 +2250,7 @@ def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Re
     (the explanation's guard, ADR-0052), and the sections it rests on come back by name. With no model, or an answer set aside, no prose
     comes back and the sections found do, so the page says where to read. Recorded with the question, the digest of the facts, the
     sections found and the model's name when one wrote (ADR-0026)."""
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     facts = model_view_of_facts(asked.facts)
     found = [section for section, _ in find_theory(asked.question, limit=SECTIONS_SHOWN)]
     receipt = ResultAnswerReceipt(question=asked.question, sections=[s.id for s in found],
@@ -2240,7 +2284,7 @@ def answer_general_question(asked: GeneralQuestionRequest, actor: Actor, request
     only when every number in it is the question's (the why answers' guard, ADR-0102), and the sections it rests on come back by name.
     With no model, or an answer set aside, no prose comes back and the sections found do, so the page says where to read. Recorded with
     the question and the model's name when one wrote (ADR-0026)."""
-    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    assistant = _assistant(request, actor)
     kinds = list(dict.fromkeys(asked.kinds))
     found = [section for section, _ in find_theory(asked.question, limit=SECTIONS_SHOWN)]
     calls: list[ModelCall] = []

@@ -130,13 +130,13 @@ class JobRow(Base):
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
 
-QA_LAYERS = ("data", "physics", "fea", "output", "software")  # anisotropy_fea.qa.LAYERS on the day of migration 0015
+QA_LAYERS = ("data", "physics", "fea", "output", "software")  # anisotropy_fea.qa.LAYERS on the day of migration 0016
 QA_VERDICTS = ("pass", "warn", "block")
 QA_CHECK_ID = re.compile(r"[A-Z][A-Z0-9_-]{1,63}")
 
 
 class QACheckRow(Base):
-    """One quality check of one coupon job (ADR-0137, migration 0015): its layer, id and rule version, its verdict, its label and
+    """One quality check of one coupon job (ADR-0137, migration 0016): its layer, id and rule version, its verdict, its label and
     message as a customer reads them, what it measured and the record or clause behind it. Written once when the job ends done, from
     the QA file the run's tool wrote; never updated or deleted, which a trigger enforces as the runs table's does (ADR-0026). The job's
     owner is the owner of its checks."""
@@ -378,6 +378,15 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
         session.add(run)
         session.commit()
         return run.id
+
+
+def model_calls_since(engine: Engine, user_email: str, since: dt.datetime) -> int:
+    """How many calls to the model the signed-in person's requests made at or after `since` (ADR-0120), whatever the client, for the
+    day's cap (ADR-0139)."""
+    statement = (select(func.count()).select_from(ModelCallRow)
+                 .where(ModelCallRow.called_at >= since, ModelCallRow.user_email == user_email))
+    with Session(engine) as session:
+        return session.scalar(statement) or 0
 
 
 def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None) -> int:

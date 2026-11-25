@@ -3,6 +3,8 @@
  * start screen and in every section's chat. "What is a coupon test?" names a coupon but starts nothing; "I want to test some coupons",
  * "coupon testing", "ABD of [0/90]s" or "Laminate" start one: a statement that names the work asks for it. Pure, so `tests/work-intent.test.ts` runs it in Node. */
 
+import { privateAsked, type PrivateTopic } from "./chat-private";
+
 export type WorkTarget = "coupon" | "wing" | "fea" | "laminate" | "cad";
 export type Intent = { target: WorkTarget; start: boolean };
 
@@ -64,8 +66,9 @@ export function readIntent(text: string): Intent | null {
 
 /** Every way the FEA assistant of a blank project answers a message (ADR-0124), in the order `routeStart` tries them. The question banks
  * ask at least one question that takes each (ADR-0121, `tests/assistant-questions/sections.json`, page "start"). */
-export const START_ROUTES = ["set-up", "not-here", "open", "general"] as const;
+export const START_ROUTES = ["private", "set-up", "not-here", "open", "general"] as const;
 export type StartRoute =
+  | { route: "private"; topic: PrivateTopic } // a key, the hidden prompt or another person's work: answered in fixed words, never sent to a model (ADR-0139)
   | { route: "set-up"; kind: "coupon" | "wing" | "repair" } // a kind of FEA work: a coupon set up in place, a wing or a patch repair opened on its own page (ADR-0118 amendment 1, ADR-0135)
   | { route: "not-here"; target: "fea" } // FEA itself, where the engineer already is
   | { route: "open"; target: "laminate" | "cad" } // another section, opened at once with the message: a blank project holds no work
@@ -73,6 +76,8 @@ export type StartRoute =
 
 /** Who answers a message in the FEA assistant of a blank project: `components/workspace/fea-start.tsx` answers by the route this returns. */
 export function routeStart(text: string): StartRoute {
+  const hidden = privateAsked(text);
+  if (hidden) return { route: "private", topic: hidden };
   // a repair's words first: "a bonded repair over an open hole" is a repair, though an open hole is a coupon's word too
   if (readRepair(text) === "start") return { route: "set-up", kind: "repair" };
   const intent = readIntent(text);
