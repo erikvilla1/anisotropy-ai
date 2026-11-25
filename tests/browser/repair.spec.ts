@@ -527,10 +527,10 @@ test("a sweep names the smallest repair whose adhesive stays elastic at the load
   await expect(rows.nth(0)).toHaveText("36813.15228.1No");
   await expect(swept.locator("tr[data-pick=true]")).toHaveText("4 (pick)7412.85233.5Yes");
   await expect(swept.locator("tr[data-current=true] th")).toHaveText("12.5 (as it is)");
-  await expect(rows.last()).toContainText("Not worked: The repair is 0.2 m across");
+  await expect(rows.last()).toContainText("Not worked: The repair is 200 mm across");
   await expect(swept.getByTestId("repair-sweep-rest")).toHaveText([
     "The step length from 3 mm to 25 mm, 24 values, each worked by hand under 100 N/mm.",
-    "1 of them could not be worked. At 25 mm: The repair is 0.2 m across, so the panel must be longer and wider than that (it is 0.3 m by 0.2 m).",
+    "1 of them could not be worked. At 25 mm: The repair is 200 mm across, so the panel must be longer and wider than that (it is 300 mm by 200 mm).",
     "From 6 mm up the elastic limit load stays within 1 % of 238.6 N/mm: past it, the step length no longer changes it.",
   ]);
   const words = await swept.innerText();

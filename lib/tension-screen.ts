@@ -6,11 +6,15 @@
 import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
-  DEFAULT_UNITS, FORM_VERSION, fieldByKey, labelFor, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf, unitWords, type Checklist,
+  buildValues, DEFAULT_UNITS, FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLATE_TEST, PLY_KEYS, shortHelp, unitLabels, unitsOf,
+  unitWords, type Checklist,
   type FieldDefinition, type StudioForm, type StudioValues,
 } from "./studio-form";
+import { plateValues, type PlateLists } from "./studio-plate";
 
 export const TENSION_INPUT = "tension";
+/** The same for a plate set up on the model tree (ADR-0089 amendment 8): the package chooses the rows its engineer is not asked for. */
+export const PLATE_INPUT = "plate";
 export const D3039 = "ASTM D3039/D3039M-17";
 
 /** The engineer's own material: the constants, the source, and the ply thickness the library would otherwise give; G13 and G23 optional. */
@@ -124,6 +128,26 @@ export function tensionValues(form: StudioForm): StudioValues {
   return values;
 }
 
+/** The values file of a plate set up on the model tree: every row the form shows for a plate, its supports, loads and regions, and
+ * `"input": "plate"`, so the package chooses what the engineer is not asked for (who and when, the element size left blank, G13 and G23
+ * of a library material), each with its reason (ADR-0089 amendment 8). The full form sends a plate without it, and is asked for every row. */
+export function plateTreeValues(form: StudioForm, lists: Record<string, unknown[]>): StudioValues {
+  return { ...buildValues(form, lists), input: PLATE_INPUT };
+}
+
+/** The values the workspace sends for the project as it stands, by every path that sends them (the tree's Run analysis, the chat, the
+ * live solve, the model's file), so they are one model: with every test offered (`allTests`, the development view) every row, as the full
+ * form states it; else the tension screen's own rows, or a plate's with what the package chooses for it. */
+export function workspaceValues(form: StudioForm, lists: PlateLists, allTests: boolean): StudioValues {
+  if (form.test === PLATE_TEST) return allTests ? buildValues(form, plateValues(lists)) : plateTreeValues(form, plateValues(lists));
+  return allTests ? buildValues(form) : tensionValues(form);
+}
+/** Whether a plate on the model tree has what it needs to be built: its material, layup and size, something held and a load. */
+export function plateTreeReady(form: StudioForm, lists: PlateLists): boolean {
+  const tabs = fieldByKey.tab_length?.label; // a plate's tabs are optional
+  return tensionMissing(form).every((m) => m === tabs) && lists.supports.length > 0 && (lists.loads.length > 0 || lists.supports.some((s) => s.value.trim() !== ""));
+}
+
 export type BuiltRow = { row: string; value: unknown; reason: string };
 export type BuiltLine = { key: string; label: string; value: string; reason: string };
 
@@ -163,6 +187,42 @@ export function builtLines(checklist: Checklist | null, units = "mm-MPa"): Built
     return { key: b.row, label, value, reason: b.reason };
   });
 }
+/** A name for the material copied out of a library record: the record's id in capitals, as a name the decks accept (a letter first, then
+ * letters, digits, - and _). An id that starts with a digit, as "7781-5245c" does, takes an M in front. */
+export function ownNameFromLibrary(id: string): string {
+  const cleaned = id.toUpperCase().replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 79);
+  return /^[A-Za-z]/.test(cleaned) ? cleaned : `M${cleaned}`;
+}
+
+/** The chosen library material's values copied into the engineer's own rows (ADR-0111 amendment 6), so a material picked from the library
+ * can be edited rather than only read. Every constant goes across exactly as the engine wrote it, never as the four figures the page
+ * prints, so copying and changing nothing changes no number; G13 and G23 carry the estimates the coupon was already built with, and the
+ * source names the record the numbers came from. The coupon then holds the engineer's own constants, as one typed from the start does: the
+ * library's record is no longer cited, because the numbers are no longer only its own. Null when no library material is chosen. */
+export function ownFromLibrary(form: StudioForm): StudioForm | null {
+  const id = (form.library ?? "").trim();
+  const units = unitsOf(form);
+  const picked = libraryOptions.find((m) => m.id === id);
+  const v = libraryValuesIn(id, units);
+  // the moduli as the rows hold them (MPa, not the GPa the step prints): `library_constants`, written by the engine in every system
+  const c = libraryConstantsIn(id, units);
+  if (!picked || !v || !c) return null;
+  const text = (x: number | null): string => (x === null ? "" : String(x));
+  return {
+    library: "",
+    own_name: ownNameFromLibrary(id),
+    own_E1: text(c.E1), own_E2: text(c.E2), own_G12: text(c.G12), own_nu12: text(v.nu12),
+    ...(v.strengths
+      ? { own_F1t: text(v.strengths.F1t), own_F1c: text(v.strengths.F1c), own_F2t: text(v.strengths.F2t), own_F2c: text(v.strengths.F2c), own_F6: text(v.strengths.F6) }
+      : { own_F1t: "", own_F1c: "", own_F2t: "", own_F2c: "", own_F6: "" }),
+    // the ply thickness the library gives, if any; a record without one leaves the row for the engineer, as picking it does
+    ply_thickness: (form.ply_thickness ?? "").trim() || text(c.ply_thickness),
+    // the values the coupon was already built with: the engineer's own if they gave them, else the estimates, now theirs to change
+    G13: (form.G13 ?? "").trim() || text(v.estimates.G13), G23: (form.G23 ?? "").trim() || text(v.estimates.G23),
+    own_source: `${picked.name} from our library, edited here${picked.source ? ` · ${picked.source}` : ""}`,
+  };
+}
+
 /** One constant of the chosen material as the Material step shows it: its symbol, its value with the unit, and whether it is an estimate. */
 export type ValueLine = { key: string; label: string; value: string; estimate?: boolean };
 

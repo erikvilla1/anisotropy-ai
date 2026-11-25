@@ -236,7 +236,7 @@ def test_the_pick_is_the_smallest_repair_whose_adhesive_is_still_elastic():
     assert rows[sweep["pick"]]["repair_diameter"] == min(row["repair_diameter"] for row in rows if row["elastic"])
     assert ("The smallest of these whose adhesive is still elastic at 230 N/mm: a step length of 4 mm, the repair 74 mm across. "
             "Its adhesive reaches its elastic limit at 233.5 N/mm.") in sweep["words"]
-    assert "1 of them could not be worked. At 25 mm: The repair is 0.2 m across" in sweep["words"][1]
+    assert "1 of them could not be worked. At 25 mm: The repair is 200 mm across" in sweep["words"][1]
     # the answer is the pick's sentence alone; the basis, the value not worked and the flat stretch stay in the words under it
     assert sweep["answer"] == [sweep["words"][2]] and sweep["answer"][0].startswith("The smallest of these") and len(sweep["words"]) == 4
 

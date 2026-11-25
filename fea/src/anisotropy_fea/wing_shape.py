@@ -48,6 +48,7 @@ MM = 1e-3  # metres per millimetre
 SECTION_POINTS = 81  # points along each side of the airfoil, cosine spaced, before the spar points are added
 SPLIT_GAP = 1e-3  # an airfoil point closer than this share of the chord to a spar point is dropped, so the spline does not wiggle
 CROSSING_SAMPLES = 4001
+SLIVER = 1e-6  # an element of less than this share of the square of the size asked for is refused as one without area
 
 
 class ShapeError(ValueError):
@@ -64,6 +65,7 @@ class Section:
     spar_x_m: tuple[float, float]
     spar_top_m: tuple[float, float]  # z of each web's top, on the upper mid-surface
     spar_bottom_m: tuple[float, float]
+    nose_closed: bool = False  # the two curves meet at a point at the nose, where the skin is thicker than the nose is round
 
 
 @dataclass(frozen=True)
@@ -133,9 +135,57 @@ def reference_depth(wing: Wing) -> float:
     return layup_thickness(layup.stretches()[0][2]) / 2
 
 
+def _crossing(a0: np.ndarray, a1: np.ndarray, b0: np.ndarray, b1: np.ndarray) -> np.ndarray | None:
+    """Where the segment a0 to a1 crosses the segment b0 to b1 in the plane, or None when they do not cross."""
+    da, db, between = a1 - a0, b1 - b0, b0 - a0
+    cross = da[0] * db[1] - da[1] * db[0]
+    if cross == 0:
+        return None
+    s = (between[0] * db[1] - between[1] * db[0]) / cross
+    t = (between[0] * da[1] - between[1] * da[0]) / cross
+    return a0 + s * da if 0 <= s <= 1 and 0 <= t <= 1 else None
+
+
+def _without_fold(curve: np.ndarray, first: int, last: int) -> tuple[np.ndarray, int | None]:
+    """A curve without the loops it makes between points `first` and `last`, and the index of the point where the last loop was
+    cut off, or None when there was none.
+
+    The outline of an airfoil moved inward by more than the radius of its nose folds over itself there: it comes in along one
+    skin, crosses the part going out along the other and turns back twice. The surface at that depth under both skins ends
+    where the two parts cross, so the loop is cut off and the crossing is the curve's point there (ADR-0116 amendment 1).
+    """
+    cut = None
+    while True:
+        widest = None
+        for i in range(first, last - 2):
+            for j in range(last - 1, i + 1, -1):  # the widest loop from i first
+                if widest is not None and j - i <= widest[1] - widest[0]:
+                    break
+                point = _crossing(curve[i], curve[i + 1], curve[j], curve[j + 1])
+                if point is not None:
+                    widest = (i, j, point)
+                    break
+        if widest is None:
+            return curve, cut
+        i, j, point = widest
+        curve = np.vstack([curve[:i + 1], [point], curve[j + 1:]])
+        last -= j - i - 1
+        cut = i + 1
+
+
+def _spaced(curve: np.ndarray, gap: float) -> np.ndarray:
+    """A curve from its first point on without the points closer than `gap` to the one kept before them: beside a fold that was
+    cut off the moved outline's points crowd together, and a curve drawn through them would wiggle."""
+    kept = [curve[0]]
+    for point in curve[1:]:
+        if np.linalg.norm(point - kept[-1]) >= gap:
+            kept.append(point)
+    return np.array(kept)
+
+
 def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Section:
     """The skins' reference section: the airfoil's outline moved inward by `reference_depth`, half the skin's thickness when the
-    wing has no caps or zones, closed aft."""
+    wing has no caps or zones, closed aft, and closed at the nose too where that depth is more than the nose's radius."""
     g = wing.geometry
     c = g.chord_m
     half = reference_depth(wing)
@@ -151,7 +201,13 @@ def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Se
     inward = np.c_[-tangent[:, 1], tangent[:, 0]]
     mid = outline + half * inward
     nose = points_per_side - 1
+    # Forward of mid-chord the moved outline may fold over itself at the nose: the fold is cut off where it crosses.
+    fore = np.nonzero(outline[:, 0] < 0.5 * c)[0]
+    mid, cut = _without_fold(mid, int(fore[0]), int(fore[-1]))
+    nose_closed = cut is not None
     upper, lower = mid[:nose + 1][::-1], mid[nose:]
+    if nose_closed:
+        upper, lower = _spaced(mid[:cut + 1][::-1], SPLIT_GAP * c), _spaced(mid[cut:], SPLIT_GAP * c)
 
     # Aft of mid-chord both curves are functions of x: find where the upper falls to the lower.
     aft = max(upper[0, 0], 0.5 * c)
@@ -196,7 +252,7 @@ def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Se
         return np.vstack([nose_point, rest[np.argsort(rest[:, 0], kind="stable")]])
 
     return Section(upper=with_spars(upper, tops), lower=with_spars(lower, bottoms), trailing_edge_closed=closed,
-                   spar_x_m=spar_x, spar_top_m=tops, spar_bottom_m=bottoms)
+                   spar_x_m=spar_x, spar_top_m=tops, spar_bottom_m=bottoms, nose_closed=nose_closed)
 
 
 def _step_string(text: str) -> str:
@@ -261,13 +317,14 @@ def _gmsh():
 def _section_curves(occ, section: Section, y_mm: float) -> dict[str, int]:
     """The section's curves at one station: the upper and lower skin's from the leading edge aft, and the trailing edge strip's
     when the skins do not meet. Each spline leaves the leading edge vertically, as the airfoil's outline does, so the skin turns
-    round the nose without a crease; the interpolation points between the ends are removed once the curve exists."""
+    round the nose without a crease; where the skins' surfaces meet at a point at the nose (`nose_closed`), each leaves it as its
+    own points lead. The interpolation points between the ends are removed once the curve exists."""
     def spline(curve: np.ndarray, start: int, end: int | None, side: int) -> tuple[int, int]:
         tags = [start] + [occ.addPoint(x / MM, y_mm, z / MM) for x, z in curve[1:-1]]
         tags.append(end if end is not None else occ.addPoint(curve[-1, 0] / MM, y_mm, curve[-1, 1] / MM))
         tangents = [0.0] * (3 * len(tags))
         tangents[2] = float(side)
-        tag = occ.addSpline(tags, tangents=tangents)
+        tag = occ.addSpline(tags) if section.nose_closed else occ.addSpline(tags, tangents=tangents)
         occ.remove([(0, t) for t in tags[1:-1]])
         return tag, tags[-1]
 
@@ -439,7 +496,8 @@ def _mesh(gmsh, parts: list[tuple[Region, int]], section: Section, element_size_
         wanted = _outward(kind[name], section, p[members].mean(axis=1))
         flip = members[np.einsum("ij,ij->i", normal[members], wanted) < 0]
         elements[flip] = elements[flip][:, ::-1]
-    if (np.linalg.norm(normal, axis=1) <= 1e-18).any():
+    # An element a millionth of the size asked for is a sliver between two faces that nearly touch, not a piece of the wing.
+    if (np.linalg.norm(normal, axis=1) / 2 <= SLIVER * element_size_m**2).any():
         raise ShapeError("The mesh has an element without area")
     root = np.nonzero(np.abs(nodes[:, 1]) < 1e-9)[0]
     return ShellMesh(nodes=nodes, elements=elements, element_sets={name: np.array(sorted(m)) for name, m in sets.items()},

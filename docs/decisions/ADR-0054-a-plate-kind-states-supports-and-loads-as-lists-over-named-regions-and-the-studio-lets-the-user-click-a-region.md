@@ -1,6 +1,6 @@
 # ADR-0054: A `plate` coupon kind states its supports and loads as lists over named regions (edges, tabs, the hole's ring, the face, drawn boxes), including pressures; the studio lets the user click a region and hold or load it
 
-- Status: Proposed
+- Status: Proposed; two supports that give one node two values are refused by name, amendment 1 (drafted)
 - Date: 2026-10-28
 - Decided by: Founder, 2026-10-28 ("Coupon first, then general edges", the interaction question of the studio plan: the four coupon tests first, then any edge, tab, hole or face held or loaded; the shape of the spec and the studio's picking are the drafter's proposal) | Drafted by: Claude Code
 - Related: [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) (models from a spec), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (the form and its values file), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md) (part 5 of the studio plan), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md) (the flat shell, the pressure sign), `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/femodel.py`, `fea/src/anisotropy_fea/intake.py`, `fea/src/anisotropy_fea/checks.py`, `fea/checks/plate-pressure-isotropic/`, `lib/studio-plate.ts`, `components/studio/plate-panel.tsx`
@@ -52,3 +52,13 @@ Build option 1 with the rules above: the spec's `Region`, `Support` and `Load` r
 - An engineer needs a support or a load the regions cannot express (a point load, a traction that varies, a region on one face only) more often than a box or an edge serves.
 - A plate's CalculiX record disagrees with the kernel on a deflection or a ply face beyond its tolerance.
 - A region picked on the model does not survive a mesh change, or two meshes of the same plate give different sets for the same name.
+
+## Amendment 1, 2026-11-25 (two supports that give one node two values for a direction are refused by name; drafted, not yet confirmed by the founder)
+
+**Context.** With boundary conditions set freely by anyone ([ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) amendment 8), an edge can be held where a tab that reaches it is moved. The check passed such a plate and the solve then stopped with an error from the deck writer, which the page could only show as a failure.
+
+**Options.** (1) Let the later support win, as some programs do. Rejected: the result then depends on the order of a list, silently. (2) Refuse in the check, naming the two regions, the direction and the two values (chosen; [ADR-0003](ADR-0003-reject-invalid-input.md)). (3) Add the values. Rejected: not what either support says.
+
+**Decision.** `checks.support_clash` finds the first pair of supports that share nodes and give a direction two different values there; the plate's constraints check fails on the Supports rows with, for example, "Tab-Top and Edge-Top share 13 nodes and give y two values there, 1 mm and 0 mm; free y on one of them". Two supports that give the same value are not a clash.
+
+**Evidence.** `cd fea && uv run pytest -q tests/test_tension_input.py tests/test_checks.py`: passed within the 143 of 2026-11-25 (the clash is refused by name; the coupon's own grips are not).

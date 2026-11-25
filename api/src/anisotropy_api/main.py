@@ -48,6 +48,7 @@ from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory, repair_sections, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
+from .processes import run_tool
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
@@ -1583,11 +1584,21 @@ def list_coupons(request: Request) -> list[CouponSummary]:
 @app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
 def coupon_values(name: str, request: Request) -> CouponValuesOutput:
     """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading. 404 for a coupon that
-    is not the requester's (ADR-0104, ADR-0106)."""
+    is not the requester's (ADR-0104, ADR-0106). A coupon of a test not offered yet is kept, not reopened (422, ADR-0089), but for a
+    plate where plates are offered (amendment 8): its rows are read with the option, and anything else that reads so stays kept."""
     jobs = _coupon_jobs(request)
     _their_coupon(request, jobs, name)
+    every = _every_test(request)
     try:
-        return CouponValuesOutput(name=name, values=jobs.coupon_values(name, every=_every_test(request), user_email=_email(request)))
+        try:
+            values = jobs.coupon_values(name, every=every, user_email=_email(request))
+        except NotOffered:
+            if every or not _plates(request):
+                raise
+            values = jobs.coupon_values(name, every=True, user_email=_email(request))
+            if str(values.get("test", "")).strip().lower() != PLATE_WORD:
+                raise
+        return CouponValuesOutput(name=name, values=values)
     except UnknownCoupon as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
     except NotOffered as exc:
@@ -1771,8 +1782,7 @@ def wing_shape_endpoint(problem: WingRequest, actor: Actor, request: Request, re
         wing_json, step_path, parts_path = Path(folder) / "wing.json", Path(folder) / "wing.step", Path(folder) / "parts.json"
         wing_json.write_text(json.dumps(data), encoding="utf-8")
         try:
-            done = subprocess.run([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", cwd=FEA, timeout=WING_SHAPE_TIMEOUT_S, check=False)
+            done = run_tool([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], cwd=FEA, timeout_s=WING_SHAPE_TIMEOUT_S)
         except subprocess.TimeoutExpired as exc:
             run_id = _record(request, actor, problem, error="the shape took longer than the time allowed")
             raise HTTPException(status_code=504, detail="The shape took too long to build", headers=_run_header(run_id)) from exc
@@ -1896,7 +1906,7 @@ def _repair_read(request: Request, actor: str, problem: RepairRequest):
 def _repair_tool(request: Request, actor: str, problem: RepairRequest, command: list[str], folder: Path, what: str, timeout_s: float) -> subprocess.CompletedProcess:
     """One of the fea package's repair tools run to its end in a process of its own (ADR-0051, ADR-0135); 504 when it outlasts its time."""
     try:
-        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+        return run_tool(command, cwd=FEA, timeout_s=timeout_s)
     except subprocess.TimeoutExpired as exc:
         run_id = _record(request, actor, problem, error=f"{what} took longer than the time allowed")
         raise HTTPException(status_code=504, detail=f"{what[0].upper()}{what[1:]} took too long", headers=_run_header(run_id)) from exc
@@ -1942,8 +1952,7 @@ def _repair_tool_report(command: list[str] | None, data: dict, options: list[str
         stated, out = Path(folder) / "repair.json", Path(folder) / "model"
         stated.write_text(json.dumps(data), encoding="utf-8")
         try:
-            done = subprocess.run([*command, str(stated), "--out", str(out), *options], capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+            done = run_tool([*command, str(stated), "--out", str(out), *options], cwd=FEA, timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             return "slow", None
         refusal = next((line.strip()[len("refused:"):].strip() for line in reversed(done.stdout.splitlines()) if line.strip().startswith("refused:")), "")
@@ -2159,7 +2168,8 @@ def workspace_assistant(request: Request) -> AssistantInfo:
 def coupon_tests(request: Request) -> CouponTests:
     """What is offered to the requester (ADR-0089); the page asks once. `all`: every coupon test, by the machine's switch alone; the
     page offers the unnotched tension coupon only unless this says so. `imports`: bringing a model in as a file (ADR-0105), by the
-    switch or a founder's sign-in (amendment 6). Not a run: nothing is computed or recorded."""
+    switch or a founder's sign-in (amendment 6). `plates`: a plate held and loaded on any edge or face, everyone's (amendment 8). Not a
+    run: nothing is computed or recorded."""
     return CouponTests(all=_every_test(request), imports=_imports(request), plates=_plates(request), ansys_model=_ansys_model(request))
 
 
@@ -2175,15 +2185,16 @@ PLATE_WORD = "plate"  # the Test row's word of a plate, held and loaded on regio
 
 
 def _plates(request: Request) -> bool:
-    """Whether a plate may be set up on the model tree by this request (ADR-0089 amendment 7): where the import is, the machine's switch
-    or a founder's sign-in. Nothing the request itself says can turn it on."""
-    return _imports(request)
+    """Whether a plate may be set up on the model tree by this request (ADR-0089): everyone's since amendment 8, on the founder's
+    word, so anyone can hold and load any edge or face. It was offered where the import is (amendment 7) until then; a False here
+    closes it again, and a plate's values are then refused by the package's list, by row."""
+    return True
 
 
 def _every_for(request: Request, values: bytes | Callable[[], bytes] | None) -> bool:
-    """Whether every test is offered to this call: the machine's switch is on, or a founder sets up a plate (ADR-0089 amendment 7), that
-    is, the values the call sends name the plate's test. The package's list holds the tension coupon alone, so the plate needs the option;
-    a founder's values of any other test are judged by the list, as everyone's are."""
+    """Whether every test is offered to this call: the machine's switch is on, or the call sets up a plate (ADR-0089 amendments 7 and 8),
+    that is, the values it sends name the plate's test. The package's list holds the tension coupon alone, so the plate needs the
+    option; values of any other test are judged by the list, a founder's too."""
     if _every_test(request):
         return True
     if values is None or not _plates(request):

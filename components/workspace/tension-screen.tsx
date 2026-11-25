@@ -7,11 +7,12 @@ import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadable, runStatus,
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { appliedOf } from "@/lib/applied";
 import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tab, tabState, type TabId } from "@/lib/model-tree";
-import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
+import { fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
+import { canBecomePlate, plateFromCoupon } from "@/lib/plate-edits";
 import {
-  builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
-  tensionMissing, TRANSVERSE_HINTS, TRANSVERSE_KEYS, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
+  builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, ownFromLibrary, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
+  plateTreeValues, tensionMissing, tensionReady, TRANSVERSE_HINTS, TRANSVERSE_KEYS, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { PlatePanel } from "@/components/studio/plate-panel";
@@ -27,9 +28,9 @@ const OWN = "own";
 
 /** The model tree (ADR-0111, on ADR-0090): Test, Geometry, Material, Layup, Analysis step, Boundary conditions, Loads, Mesh, Solve and
  * Results, in the order a finite element program sets a model up. For the tension coupon the engineer gives the material and the layup;
- * the standard and the software choose every other row, and each tab says what it chose and why. Where a plate is offered (a founder's
- * sign-in, ADR-0089 amendment 7), the Test tab also offers it: then Boundary conditions and Loads hold its lists, filled here, by a click
- * on the model or by the chat. A tab's line says its value; Boundary conditions and Loads light their part of the model while open. Run
+ * the standard and the software choose every other row, and each tab says what it chose and why. The Test tab also offers a plate
+ * (everyone's since ADR-0089 amendment 8): then Boundary conditions and Loads hold its lists, filled here, by a click on the model or by
+ * the chat; and a tension coupon's Boundary conditions tab carries the coupon over to one, the test's grips kept. A tab's line says its value; Boundary conditions and Loads light their part of the model while open. Run
  * analysis, above the tree, runs the setup check and, when it is ready, the full analysis; the report and the solver input appear under
  * Results (ADR-0091 amendment 2). */
 export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
@@ -49,7 +50,23 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   const edit = (rows: StudioForm) => { setForm((f) => ({ ...f, ...rows })); runner.clearChecked(); setMessage(""); setErrors({}); };
   const editPlate = (lists: PlateLists) => { setPlate(lists); runner.clearChecked(); setMessage(""); setErrors({}); };
   /** The kind of model: the tension coupon, its test choosing its boundary conditions, or a plate held and loaded where the engineer says. */
-  const pickKind = (kind: "tension" | "plate") => edit(kind === "plate" ? withTest(form, PLATE_TEST).form : { test: TENSION, standard: D3039 });
+  // a plate's element size follows its own size: the blank form's figure, a coupon's, is left for the software to choose (amendment 8)
+  const usualSize = String(fieldByKey.element_size?.defaults?.[unitsOf(form)] ?? fieldByKey.element_size?.default ?? "");
+  const pickKind = (kind: "tension" | "plate") => edit(kind === "plate"
+    ? { ...withTest(form, PLATE_TEST).form, ...(form.element_size === usualSize ? { element_size: "" } : {}) } : { test: TENSION, standard: D3039 });
+  /** Boundary conditions of the engineer's own, from a tension coupon (ADR-0089 amendment 8): the coupon becomes a plate held and loaded
+   * as the test holds and loads it, from the model the setup built (checked first when it was not yet), ready to be changed. */
+  async function ownConditions() {
+    let built = checked?.preview ?? null, chosen = valuesInUse(checked?.checklist ?? null);
+    if (!built && apiBaseUrl && tensionReady(form)) {
+      try { const answer = await runner.check(tensionValues(form)); built = answer.preview ?? null; chosen = valuesInUse(answer.checklist); }
+      catch { /* carried over from the rows alone */ }
+    }
+    const over = plateFromCoupon(form, built, chosen);
+    versions.attribute("you", "Boundary conditions of my own");
+    setForm(over.form); setPlate(over.lists); runner.clearChecked(); setErrors({});
+    setMessage("");
+  }
   const own = ownPicked || isOwnMaterial(form) && Boolean(form.own_name);
   // a plate's tabs are optional; it needs something held and a load (ADR-0101 amendment 1)
   const missing = [...tensionMissing(form).filter((m) => !(isPlate && m === fieldByKey.tab_length?.label)), ...(isPlate ? plateMissing(plate) : [])];
@@ -66,6 +83,15 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     edit({ library: value, ...Object.fromEntries(OWN_MATERIAL_KEYS.map((key) => [key, ""])) });
   }
 
+  /** The chosen library record copied into the own-material rows, so every constant can be changed (ADR-0111 amendment 6). Picking a
+   * material from the list again puts the library's own numbers back. */
+  function editLibraryValues() {
+    const rows = ownFromLibrary(form);
+    if (!rows) return;
+    setOwnPicked(true);
+    edit(rows);
+  }
+
   function applyLayup(text = layup) {
     const parsed = parseLayup(text);
     if (!parsed) { setLayupError("Use the form [45/0/-45/90]s, [0/90]2s or [±45]2s, bottom ply first."); return; }
@@ -80,8 +106,9 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     if (!apiBaseUrl || missing.length || layupError) return;
     setMessage(""); setErrors({});
     const rows = { ...form, filled_by: form.filled_by || remembered(RUN_BY_KEY) };
-    // a plate sends every row with its lists, as the full form does (ADR-0089 amendment 7); the tension coupon its own rows (ADR-0090)
-    const values = isPlate ? buildValues(rows, plateValues(plate)) : tensionValues(rows);
+    // a plate sends its rows with its lists, and the software chooses what its engineer is not asked for (ADR-0089 amendment 8); the
+    // tension coupon its own rows (ADR-0090)
+    const values = isPlate ? plateTreeValues(rows, plateValues(plate)) : tensionValues(rows);
     try {
       const answer = await runner.check(values);
       setErrors(rowErrorsFrom(answer.checklist));
@@ -138,13 +165,13 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
 
       <StepPanel id="test" title="Test" step={1} state={state("test")} open={false}
         note={isPlate ? "Plate, held and loaded where you say" : `Unnotched tension, ${underD3039(form) ? "ASTM D3039" : "no standard"}`}>
-        {/* a plate, held and loaded on any edge or face, where it is offered: a founder's sign-in until it is validated (ADR-0089 amendment 7) */}
+        {/* a plate, held and loaded on any edge or face, where it is offered: everyone's since ADR-0089 amendment 8 */}
         {plates ? (
           <fieldset className="ws-question" data-testid="tree-kind" disabled={busy}>
             <legend>What are you analysing?</legend>
             <div className="ws-choices" role="radiogroup" aria-label="Model">
               {([["tension", "Tension coupon", "Held by its grips and pulled, as in the test machine"],
-                ["plate", "Plate", "Held and loaded on any edge or face you choose. Founders only, until it is validated"]] as const).map(([kind, title, detail]) => (
+                ["plate", "Plate", "Held and loaded on any edge or face you choose"]] as const).map(([kind, title, detail]) => (
                 <label key={kind} className="ws-choice" data-checked={(kind === "plate") === isPlate}>
                   <input type="radio" name="tree-kind" value={kind} checked={(kind === "plate") === isPlate} aria-label={title} onChange={() => pickKind(kind)} />
                   <span className="ws-choice-title">{title}</span>
@@ -200,7 +227,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <option value={OWN}>My own material…</option>
           </select>
         </div>
-        {own ? null : <MaterialValues key={form.library ?? ""} form={form} errors={errors} busy={busy} edit={edit} />}
+        {own ? null : <MaterialValues key={form.library ?? ""} form={form} errors={errors} busy={busy} edit={edit} editValues={editLibraryValues} />}
         {own ? (
           <div data-testid="own-material">
             <p className="studio-hint">Your material&apos;s constants and their source. G13 and G23 are optional.</p>
@@ -246,7 +273,18 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <p className="studio-hint" data-testid="tree-plate-how">Click an edge or the face on the model, or say it: “fix the left edge”, “XSYMM on the bottom edge”. Or add one here.</p>
             <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="supports" />
           </>
-        ) : <p className="studio-hint">A tension test holds the coupon by its grips: the bottom one fixed, the top one moving along the coupon.</p>}
+        ) : (
+          <>
+            <p className="studio-hint">A tension test holds the coupon by its grips: the bottom one fixed, the top one moving along the coupon.</p>
+            {plates && canBecomePlate(form) ? (
+              <div data-testid="own-conditions">
+                <button type="button" className="studio-text-button" disabled={busy} onClick={() => void ownConditions()}>Apply my own boundary conditions</button>
+                <p className="studio-hint">Starts from the test&rsquo;s grips, then hold or load any edge or face: click it on the model, or say “fix the left edge”.
+                  The model then no longer follows the tension test standard.</p>
+              </div>
+            ) : null}
+          </>
+        )}
         {defaults("conditions")}
       </StepPanel>
 
@@ -307,8 +345,8 @@ const missingMaterial = (missing: string[]): boolean => missing.some((m) => !NOT
 /** The chosen library material's numbers under the choice (ADR-0111 amendment 4), as the founder's mockup shows them: the stiffness on the
  * left, the strengths on the right, in the coupon's units, as the engine wrote them in the form's definition, so they show the moment the
  * material is picked, before any check. G13 and G23 show as the estimates, or as two fields when the engineer gives their own (amendment 5). */
-function MaterialValues({ form, errors, busy, edit }: {
-  form: StudioForm; errors: Record<string, string>; busy: boolean; edit: (rows: StudioForm) => void;
+function MaterialValues({ form, errors, busy, edit, editValues }: {
+  form: StudioForm; errors: Record<string, string>; busy: boolean; edit: (rows: StudioForm) => void; editValues: () => void;
 }) {
   // G13 and G23 (ADR-0111 amendment 5): the library gives neither, so the estimates show, marked, until the engineer chooses to give their own
   const given = TRANSVERSE_KEYS.some((key) => (form[key] ?? "").trim());
@@ -348,6 +386,13 @@ function MaterialValues({ form, errors, busy, edit }: {
         <FieldGrid form={form} keys={TRANSVERSE_KEYS} errors={errors} disabled={busy} hints={TRANSVERSE_HINTS} placeholders={lines.transverse.estimates}
           onChange={(key, value) => edit({ [key]: value })} />
       ) : null}
+      {/* every constant, not only G13 and G23, is the engineer's to change (ADR-0111 amendment 6): the record's numbers are copied into the
+          own-material rows exactly as they stand, and the coupon carries them as its own from then on */}
+      <p className="studio-hint" data-testid="edit-values-note">Need different numbers? Editing copies this record into your own material, exactly as it
+        stands, and the coupon then carries your values instead of the library&rsquo;s.</p>
+      <button type="button" className="studio-text-button" disabled={busy} onClick={editValues} data-testid="edit-library-values">
+        Edit these values
+      </button>
     </div>
   );
 }
