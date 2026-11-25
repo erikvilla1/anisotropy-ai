@@ -19,7 +19,8 @@ import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/s
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
 import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/result-why";
-import { emptyPlate } from "../../lib/studio-plate";
+import { emptyPlate, plateValues } from "../../lib/studio-plate";
+import { ownWords, plateFromCoupon, readPlateEdit } from "../../lib/plate-edits";
 import { bannedIn, customerText } from "../../lib/studio-copy";
 import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../lib/work-intent";
 import { privateAnswerOnStart } from "../../lib/chat-private";
@@ -81,6 +82,8 @@ export type Expected = {
   change?: Record<string, unknown>;
   /** The sweep a repair's message is read into (ADR-0136), as the engine's form takes it. */
   sweep?: Record<string, unknown>;
+  /** A plate's supports and loads after the message, as the API takes them (ADR-0101 amendment 4): each list given is the whole list. */
+  plate?: { supports?: unknown[]; loads?: unknown[] };
 };
 
 /** What a real model should read the question as (the real-model run, `scripts/assistant-live.py`). */
@@ -195,7 +198,7 @@ export function scene(question: Question, modelReads: boolean): Scene {
     state: {
       form, readOnly: question.page === "imported" || question.page === "past", results: !!fields, facts: !!results?.facts, api: true, modelReads,
       onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: (question.asking as ChatState["step"]) ?? null,
-      about: null, thread: null, sections: true,
+      about: null, thread: null, sections: true, plates: true, plate: emptyPlate(), here: [],
     },
   };
 }
@@ -292,6 +295,13 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     case "read-only": return s.past ? said("said", "A past run is shown as it was solved") : said("said", "An imported model is read as it stands");
     // the setup check answers; on the page set up and checked it is ready, and a setup not yet checked is checked first
     case "ready": return s.state.ready ? said("check", checkTitle(true, 0, true), [], { ready: true }) : said("said", "Checking the setup");
+    case "plate-edit": { // as editPlateBy in coupon-chat.tsx: a tension coupon is carried over first, the test's grips kept
+      const over = s.form.test === PLATE_TEST ? null : plateFromCoupon(s.form, null);
+      const edit = readPlateEdit(text, over?.form ?? s.form, over?.lists ?? emptyPlate(), []);
+      if (!edit || !edit.done.length) return said("said", "Not applied", edit?.notes ?? []);
+      const kept = over ? [ownWords(over.carried)] : [];
+      return said("rows", "Got it", [...edit.done, ...edit.notes, ...kept], { plate: plateValues(edit.lists), carried: !!over });
+    }
     case "setup-fixed": {
       const term = routed.term;
       const heading = isConditionOrLoad(term) ? (s.form.test === PLATE_TEST ? "Add it on the model tree" : "Set by the test")
@@ -394,6 +404,10 @@ function expected(e: Expected, answer: Said): string[] {
   if (e.columns !== undefined && JSON.stringify(data.columns) !== JSON.stringify(e.columns)) out.push(`quantities ${JSON.stringify(data.columns)}, expected ${JSON.stringify(e.columns)}`);
   if (e.change !== undefined && JSON.stringify(data.change) !== JSON.stringify(e.change)) out.push(`change ${JSON.stringify(data.change)}, expected ${JSON.stringify(e.change)}`);
   if (e.sweep !== undefined && JSON.stringify(data.sweep) !== JSON.stringify(e.sweep)) out.push(`sweep ${JSON.stringify(data.sweep)}, expected ${JSON.stringify(e.sweep)}`);
+  for (const list of ["supports", "loads"] as const) {
+    const want = e.plate?.[list], got = (data.plate as Record<string, unknown[]> | undefined)?.[list];
+    if (want !== undefined && JSON.stringify(got) !== JSON.stringify(want)) out.push(`${list} ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+  }
   if (e.rows !== undefined) {
     const rows = (data.rows ?? {}) as Record<string, string>;
     for (const [key, value] of Object.entries(e.rows)) if (rows[key] !== value) out.push(`row ${key} = ${rows[key] ?? "unset"}, expected ${value}`);

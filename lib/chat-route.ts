@@ -8,7 +8,8 @@ import { isConditionOrLoad, setupAsked, termAsked, type FeaTerm, type TermQuesti
 import { readIntent } from "./work-intent";
 import { applyMessage, isSwitchRequest, unitsNamed, type ChatStep } from "./studio-chat";
 import { unitsOf, type StudioForm } from "./studio-form";
-import { namesPlateEdit } from "./studio-plate";
+import { emptyPlate, namesPlateEdit, PLATE_TEST, type PlateLists } from "./studio-plate";
+import { asksPlateEdit, canBecomePlate, namesOffAxis, readPlateEdit } from "./plate-edits";
 import { modelFileAsked } from "./model-file";
 import type { ModelProgram } from "./studio-api";
 
@@ -48,7 +49,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
 export const ROUTES = ["start-over", "model-file", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
-  "ready", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
+  "ready", "plate-edit", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 /** What the coupon chat opens when asked for by name (ADR-0124): another section, or the wing's page under FEA (ADR-0118 amendment 1). */
 export type SectionAsked = "laminate" | "cad" | "wing";
@@ -68,6 +69,7 @@ export type ChatRoute =
   | { route: "follow-up"; question: ResultQuestion } // "now in ply 5": the question before it, with one thing changed (ADR-0099 amendment 3)
   | { route: "read-only" } // an imported model or a past run is on the page: nothing is changed by talking (ADR-0105, ADR-0109)
   | { route: "ready" } // "is it ready to run?": the setup checked, the answer opening with Yes or No (ADR-0121 amendment 2)
+  | { route: "plate-edit" } // a boundary condition or a load on an edge or a face, read by the page and applied at once (ADR-0101 amendment 4)
   | { route: "setup-fixed"; term: FeaTerm } // "add a boundary condition" where the test fixes them (ADR-0110)
   | { route: "run" }
   | { route: "check" }
@@ -94,6 +96,12 @@ export type ChatState = {
   modelReads: boolean;
   /** A plate is set up and a model reads its regions (ADR-0101). */
   onPlate: boolean;
+  /** Boundary conditions and loads of one's own are offered here (ADR-0089 amendment 8): a plate's regions can be held and loaded. */
+  plates: boolean;
+  /** The plate's supports and loads as they stand, which a message changes. */
+  plate?: PlateLists;
+  /** The plate's regions the element clicked belongs to: what "here" and "this edge" mean. */
+  here?: string[];
   /** The setup is checked and ready to run. */
   ready: boolean;
   /** The step the chat's open question asks, if it asked one ("reopen" when it offers saved coupons). */
@@ -176,6 +184,14 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   if (s.readOnly) return { route: "read-only" };
   // whether the setup is ready is the setup check's answer, said as Yes or No (ADR-0121 amendment 2)
   if (asksReady(text)) return { route: "ready" };
+  // a boundary condition or a load on an edge or a face, said so the page itself reads all of it, is applied at once, with no model to
+  // wait for (ADR-0101 amendment 4): on a plate into its lists; on a tension coupon the coupon is first carried over to boundary conditions
+  // of the engineer's own, the test's grips kept (ADR-0089 amendment 8). The coupon's own pull ("pull it with 2 kN") stays the coupon's,
+  // and its top and bottom are the grips' unless the message says edge or tab
+  if (s.plates) {
+    if (s.form.test === PLATE_TEST ? readPlateEdit(text, s.form, s.plate ?? emptyPlate(), s.here ?? []) !== null
+      : canBecomePlate(s.form) && asksPlateEdit(text, s.form) && (namesOffAxis(text, s.form) || (!edits() && /\b(?:edges?|sides?|tabs?)\b/i.test(text)))) return { route: "plate-edit" };
+  }
   // "add a boundary condition" where the setup fixes them, "partition the coupon", "create a step": said once, nothing changes (ADR-0110).
   // On a plate read by a model, a boundary condition or a load is read into its lists instead (ADR-0101)
   const adding = setupAsked(text);

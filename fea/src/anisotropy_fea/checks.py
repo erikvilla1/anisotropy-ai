@@ -19,6 +19,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from anisotropy_engine.failure import check_criterion
 from anisotropy_engine.library import library_material
 
@@ -26,7 +28,7 @@ from . import paths
 from .audit import CRITERION
 from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
-from .femodel import FEModel, build_model
+from .femodel import BoundaryDefinition, FEModel, build_model
 from .intake import FIELDS, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
@@ -429,7 +431,13 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if model.plate:
             # constraints: the supports must leave no rigid-body motion, judged by the rank of the rigid modes on the held dofs (ADR-0054)
             in_plane, out_of_plane = rigid_modes_left(model)
-            if in_plane:
+            clash = support_clash(model)
+            if clash is not None:  # two supports that give one direction of the same nodes two values: no model can hold both
+                first, second, dof, shared = clash
+                amount = lambda v: (f"{from_si(v, 'length', units):g} {lab['length']}" if dof <= 3 else f"{v:g} rad")  # noqa: E731
+                notes.note("constraints", "fail", f"{first.target} and {second.target} share {shared} node{'s' if shared != 1 else ''} and give {DOF_WORDS[dof]} two values "
+                           f"there, {amount(first.value)} and {amount(second.value)}; free {DOF_WORDS[dof]} on one of them", ("Supports",))
+            elif in_plane:
                 notes.note("constraints", "fail", f"the supports leave the plate free to {in_plane} in its plane; hold x and y at points that are "
                            "not all on one line through the same point", ("Supports",))
             elif model.bending and out_of_plane:
@@ -540,6 +548,20 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
     return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality
+
+
+def support_clash(model: FEModel) -> tuple[BoundaryDefinition, BoundaryDefinition, int, int] | None:
+    """The first two of a plate's supports that prescribe one direction of shared nodes differently (an edge held where its tab is moved),
+    with the direction and how many nodes they share; None when no two do. Regions overlap by design, an edge lies in its tab and in the
+    face, so two supports may name the same nodes: only two values for one direction cannot both stand."""
+    entries = [(b, dof) for b in model.boundaries for dof in range(b.dof_first, b.dof_last + 1) if b.target in model.node_sets]
+    for i, (first, dof) in enumerate(entries):
+        for second, other in entries[i + 1:]:
+            if other == dof and first.value != second.value:
+                shared = np.intersect1d(model.node_sets[first.target], model.node_sets[second.target]).size
+                if shared:
+                    return first, second, dof, int(shared)
+    return None
 
 
 # --------------------------------------------------------------------------------------------- a plate's shape before it is held or loaded

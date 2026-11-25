@@ -6,12 +6,15 @@
 import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
-  DEFAULT_UNITS, FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf,
+  buildValues, DEFAULT_UNITS, FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLATE_TEST, PLY_KEYS, shortHelp, unitLabels, unitsOf,
   unitWords, type Checklist,
   type FieldDefinition, type StudioForm, type StudioValues,
 } from "./studio-form";
+import { plateValues, type PlateLists } from "./studio-plate";
 
 export const TENSION_INPUT = "tension";
+/** The same for a plate set up on the model tree (ADR-0089 amendment 8): the package chooses the rows its engineer is not asked for. */
+export const PLATE_INPUT = "plate";
 export const D3039 = "ASTM D3039/D3039M-17";
 
 /** The engineer's own material: the constants, the source, and the ply thickness the library would otherwise give; G13 and G23 optional. */
@@ -123,6 +126,26 @@ export function tensionValues(form: StudioForm): StudioValues {
     values[key] = (kind === "number" || kind === "whole" || kind === "angle") && NUMBER.test(text) ? Number(text) : text;
   }
   return values;
+}
+
+/** The values file of a plate set up on the model tree: every row the form shows for a plate, its supports, loads and regions, and
+ * `"input": "plate"`, so the package chooses what the engineer is not asked for (who and when, the element size left blank, G13 and G23
+ * of a library material), each with its reason (ADR-0089 amendment 8). The full form sends a plate without it, and is asked for every row. */
+export function plateTreeValues(form: StudioForm, lists: Record<string, unknown[]>): StudioValues {
+  return { ...buildValues(form, lists), input: PLATE_INPUT };
+}
+
+/** The values the workspace sends for the project as it stands, by every path that sends them (the tree's Run analysis, the chat, the
+ * live solve, the model's file), so they are one model: with every test offered (`allTests`, the development view) every row, as the full
+ * form states it; else the tension screen's own rows, or a plate's with what the package chooses for it. */
+export function workspaceValues(form: StudioForm, lists: PlateLists, allTests: boolean): StudioValues {
+  if (form.test === PLATE_TEST) return allTests ? buildValues(form, plateValues(lists)) : plateTreeValues(form, plateValues(lists));
+  return allTests ? buildValues(form) : tensionValues(form);
+}
+/** Whether a plate on the model tree has what it needs to be built: its material, layup and size, something held and a load. */
+export function plateTreeReady(form: StudioForm, lists: PlateLists): boolean {
+  const tabs = fieldByKey.tab_length?.label; // a plate's tabs are optional
+  return tensionMissing(form).every((m) => m === tabs) && lists.supports.length > 0 && (lists.loads.length > 0 || lists.supports.some((s) => s.value.trim() !== ""));
 }
 
 export type BuiltRow = { row: string; value: unknown; reason: string };

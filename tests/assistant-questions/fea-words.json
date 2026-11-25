@@ -14,7 +14,7 @@
     {"ask": "what are the boundary conditions", "kind": "what-is", "style": "plain", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Boundary conditions", "term": "boundary-condition"}},
     {"ask": "what loads are applied", "kind": "what-is", "style": "plain", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Loads", "term": "load"}, "gap": "10: 'what loads are applied' is not read as the model's own loads"},
     {"ask": "add a boundary condition", "kind": "change", "style": "plain", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Set by the test", "term": "boundary-condition"}},
-    {"ask": "apply a pressure of 2 MPa on the top face", "kind": "change", "style": "units", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Set by the test", "term": "pressure"}},
+    {"ask": "apply a pressure of 2 MPa on the top face", "kind": "change", "style": "units", "page": "setup", "route": "plate-edit", "answer": {"kind": "rows", "heading": "Got it", "says": ["Face: pressure of 2 MPa", "no longer follows the tension test standard"]}},
     {"ask": "partition the coupon", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Already partitioned", "term": "partition"}},
     {"ask": "create a step", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "One static step", "term": "step"}},
     {"ask": "add a contact between the tabs", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Not offered yet", "term": "interaction"}},
