@@ -63,11 +63,12 @@ What the decision left open, as built:
 - **Which cracks are pulled open** and which pairs of the bond are pressed together is found by solving again until it stops changing, as ADR-0140 does for a damaged bond.
 - **The width strain** is the undamaged laminate's, in proportion to the load, and the load on the panel's end is the whole unit load. The stress the width strain makes is the plies' own and moves with their damage.
 - **The report** holds the levels of load held with the end's movement, so a curve can be drawn, and the mesh study's rows when one was run.
+- **Three changes to the bond's model reach this run** ([ADR-0140](ADR-0140-a-repairs-bond-is-followed-to-failure-in-a-plane-solver-of-our-own-a-traction-separation-law-across-the-bondline-the-path-followed-by-the-energy-the-bond-spends-checked-against-exact-fracture-answers-and-moose.md) amendment 3): a bondline thicker than a ply is one bond through its whole thickness, a refusal states its numbers in the file's units, and the elastic slice is held to ADR-0140's far-field check before any load is raised, a check this run did not make before. The flush example passes it (off by 8 parts in 10^11) and softens first at the same 184.4 N/mm, so the run reported below stands.
 - **The four energies ride through the page already**, because the flush example states them: `lib/repair-choices.json`, the API's stored answers and the saved-file fixture (`tests/fixtures/repair/example-saved.toml`) all carry them, and the page's writer keeps a key it does not itself offer. The page has no field for them and no button for this run yet; that is the next pull request.
 
 **The example repair** (flush, four steps of 12.5 mm, bondline 0.1 mm; the ply energies are round numbers of our own: 80 N/mm for a fibre break either way, 0.3 N/mm for a matrix crack pulled open, 0.8 N/mm slid). The elements must be under 0.903 mm for the matrix crack slid along the fibres to soften, so the run takes 0.361 mm, a quarter of the elastic slice's 1.5625 mm: 6,322 elements, 489 pairs, 958 solves, 258 s on four cores.
 
-- The first softening is the **bond**, at 184.0 N/mm, as ADR-0140 has it.
+- The first softening is the **bond**, at 184.4 N/mm on this run's mesh (ADR-0140's own run, on its mesh, has 184.0; its mesh study runs from 184.0 to 184.2).
 - The slice **carries 1,208 N/mm and does not carry 1,213**. The mesh study, each row one run:
 
 | Longest element, mm | Elements | Carries, N/mm | Does not carry, N/mm |

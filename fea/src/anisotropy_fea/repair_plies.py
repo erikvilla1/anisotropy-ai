@@ -36,7 +36,7 @@ from anisotropy_engine.units import UNIT_SYSTEMS
 
 from .bond_solver import BondError, BondModel
 from .ply_damage import Held, Holder, PlyDamage
-from .repair_bond import BondRunError, RepairBondModel, build_bond_model
+from .repair_bond import BondRunError, RepairBondModel, build_bond_model, check_far_field, unit_system
 from .repair_shape import MM, REFUSED, ShapeError, read_repair_file
 
 REPORT = "repair-plies.json"
@@ -104,16 +104,16 @@ class RepairPliesModel:
         return f"{part}, ply {self.ply[element]} at {self.angle_deg[element]:g} degrees, {middle * 1e3:.1f} mm from the middle"
 
 
-def build_plies_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None) -> RepairPliesModel:
+def build_plies_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, units: str = "SI") -> RepairPliesModel:
     """The model of a repair's slice whose plies may damage. `element_size_m` is the longest element along the slice, cut
-    down to what lets every crack soften (`longest_element`); `fine_m` is as in `build_bond_model`."""
+    down to what lets every crack soften (`longest_element`); `fine_m` and `units` are as in `build_bond_model`."""
     needs = ply_needs(repair)
     if needs:
         raise BondRunError("To carry the repair until the plies and the bond cannot hold the load it needs "
                            + "; ".join(need["words"] for need in needs))
     longest = SHORTEN * longest_element(repair)
     size = longest if element_size_m is None else min(element_size_m, longest)
-    built = build_bond_model(repair, element_size_m=size, fine_m=fine_m)
+    built = build_bond_model(repair, element_size_m=size, fine_m=fine_m, units=units)
     mesh, old = built.mesh, built.model
     count = len(old.elements)
     compliance, angle, strength, energy = np.empty((count, 6, 6)), np.empty(count), np.empty((count, 4)), np.empty((count, 4))
@@ -205,14 +205,18 @@ def _forces_along(built: RepairPliesModel, held: Held) -> np.ndarray:
 
 
 def run_plies(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, most: int = 60,
-              solves: int = 400) -> PliesAnswer:
-    """Build the repair's slice with its plies able to damage and raise the load until it cannot hold it."""
+              solves: int = 400, units: str = "SI") -> PliesAnswer:
+    """Build the repair's slice with its plies able to damage and raise the load until it cannot hold it. Before any load is
+    raised the elastic slice is held to ADR-0140's far-field check, so a panel too short round its repair is refused in the
+    time of one solve. `units` is the system a refusal states its numbers in."""
     started = time.perf_counter()
-    built = build_plies_model(repair, element_size_m=element_size_m, fine_m=fine_m)
+    force, label = unit_system(units)["N"]
+    built = build_plies_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units)
     try:
         holder = Holder(built.model)
     except BondError as error:
         raise BondRunError(str(error)) from error
+    check_far_field(built.built, holder.unit, 1.0)
     damage = holder.begin()
     first = holder.hold(holder.onset_load / (1 + 1e-3), damage, solves)
     if not first.held:
@@ -238,7 +242,7 @@ def run_plies(repair: Repair, *, element_size_m: float | None = None, fine_m: fl
         else:
             not_held, why = now.load, now.why
     if not_held is None:
-        raise BondRunError(f"The slice held every load tried, up to {held[-1].load:.4g} N per metre of width")
+        raise BondRunError(f"The slice held every load tried, up to {held[-1].load / force:.4g} {label} of width")
     top = held[-1]
     error = float(np.max(np.abs(_forces_along(built, top) - top.load))) / abs(top.load)
     if not error < EQUILIBRIUM_TOLERANCE:
@@ -267,12 +271,13 @@ def what_failed(answer: PliesAnswer) -> list[str]:
     return words or ["nothing had failed yet: the slice came apart within one step of the load"]
 
 
-def mesh_study(repair: Repair, meshes: int, *, element_size_m: float | None = None, fine_m: float | None = None) -> list[PliesAnswer]:
+def mesh_study(repair: Repair, meshes: int, *, element_size_m: float | None = None, fine_m: float | None = None,
+               units: str = "SI") -> list[PliesAnswer]:
     """The same repair run on `meshes` meshes, each with elements `MESH_STEP` of the one before."""
     answers = []
     size = element_size_m
     for _ in range(max(meshes, 1)):
-        answer = run_plies(repair, element_size_m=size, fine_m=fine_m)
+        answer = run_plies(repair, element_size_m=size, fine_m=fine_m, units=units)
         answers.append(answer)
         size = MESH_STEP * answer.built.element_size_m
     return answers
@@ -335,8 +340,8 @@ def main(argv: list[str] | None = None) -> int:
         repair, _ = repair_from_dict(case)
         size = None if args.size is None else args.size * MM
         fine = None if args.fine is None else args.fine * MM
-        study = mesh_study(repair, args.meshes, element_size_m=size, fine_m=fine) if args.meshes > 1 else None
-        answer = study[0] if study else run_plies(repair, element_size_m=size, fine_m=fine)
+        study = mesh_study(repair, args.meshes, element_size_m=size, fine_m=fine, units=case["units"]) if args.meshes > 1 else None
+        answer = study[0] if study else run_plies(repair, element_size_m=size, fine_m=fine, units=case["units"])
         report = plies_report(answer, case["units"], study)
     except (BondRunError, BondError, RepairError, ShapeError, OSError) as error:
         print(f"refused: {(str(error).splitlines() or [type(error).__name__])[0]}")

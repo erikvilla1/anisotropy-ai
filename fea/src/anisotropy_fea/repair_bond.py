@@ -86,13 +86,29 @@ class RepairBondModel:
         return float(np.min(np.diff(self.mesh.r_lines_m)))
 
 
-def bond_law(repair: Repair) -> BondLaw:
-    """The bond's six numbers from the repair's adhesive. Refused when one is missing or when they cannot make a law."""
+def unit_system(units: str) -> dict:
+    """A unit system of the engine's units.py by its name, for a refusal's numbers; refused when it is not one."""
+    if units not in UNIT_SYSTEMS:
+        raise BondRunError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
+    return UNIT_SYSTEMS[units]
+
+
+def bond_law(repair: Repair, units: str = "SI") -> BondLaw:
+    """The bond's six numbers from the repair's adhesive. Refused when one is missing or when they cannot make a law; a
+    fracture energy that is too small is refused with the least it may be in `units`, the repair file's (a fracture energy
+    is in the system's force per length, as the file states it)."""
     needs = [need for need in bond_needs(repair) if need["path"].startswith("adhesive.")]
     if needs:
         raise BondRunError("To follow the bond until it lets go the repair needs " + "; ".join(need["words"] for need in needs))
     adhesive = repair.adhesive
     solid = adhesive_stiffness(adhesive)
+    force, label = unit_system(units)["N"]
+    for name, stiffness, strength, energy in (("peel", float(solid[2, 2]), adhesive.peel_strength_pa, adhesive.peel_energy_j_m2),
+                                              ("shear", float(solid[4, 4]), adhesive.shear_strength_pa, adhesive.shear_energy_j_m2)):
+        least = strength**2 / (2 * stiffness / adhesive.thickness_m)  # the energy the bond holds when it reaches its strength
+        if not energy > least:
+            raise BondRunError(f"The bond's {name} energy is under the energy it holds when it reaches its {name} strength: "
+                               f"it must be above {least / force:.4g} {'J/m^2' if units == 'SI' else label}")
     try:
         return BondLaw(peel_stiffness=float(solid[2, 2]) / adhesive.thickness_m, shear_stiffness=float(solid[4, 4]) / adhesive.thickness_m,
                        peel_strength=adhesive.peel_strength_pa, shear_strength=adhesive.shear_strength_pa,
@@ -101,17 +117,19 @@ def bond_law(repair: Repair) -> BondLaw:
         raise BondRunError(str(error)) from error
 
 
-def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, hold: str = "bottom") -> RepairBondModel:
+def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, hold: str = "bottom",
+                     units: str = "SI") -> RepairBondModel:
     """The model of a repair's slice with its bond as pairs. `element_size_m` is the longest element along the slice and
     `fine_m` the length of the elements beside every step's end, cut and edge (a quarter of the bondline's thickness unless
     said), as in `build_slice_model`. With `hold="everywhere"` no node moves through the thickness: not a repair, the stepped
-    lap's own assumptions, used to check the model against the lap's closed form."""
+    lap's own assumptions, used to check the model against the lap's closed form. `units` is the system a refusal states its
+    numbers in."""
     if hold not in HOLDS:
         raise BondRunError(f"hold must be one of {', '.join(HOLDS)}, got {hold!r}")
     needs = bond_needs(repair)
     if needs:
         raise BondRunError("To follow the bond until it lets go the repair needs " + "; ".join(need["words"] for need in needs))
-    law = bond_law(repair)
+    law = bond_law(repair, units)
     try:
         far = far_field(repair, 1.0)
         if fine_m is None:
@@ -126,25 +144,38 @@ def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fin
     kind_at = {(int(c), int(k)): str(kind) for c, k, kind in zip(column, layer, kinds)}
     length = np.diff(whole.r_lines_m)
 
-    # every flat bond: the adhesive's elements with the patch (or a cover ply) on them and the laminate under them
+    # every flat bond: the adhesive between the laminate under it and the patch (or a cover ply) on it. The grid gives a
+    # bondline thicker than a ply more than one element through its thickness, so a bond is the whole stack of adhesive
+    # elements in a column, as thick as the bondline: its lowest element's bottom nodes pair with its highest's top nodes.
+    at = {(int(c), int(k)): e for e, (c, k) in enumerate(zip(column, layer))}
+    height = np.diff(whole.z_lines_m)
+    bondline = repair.adhesive.thickness_m
     weight: dict[tuple[int, int], float] = {}
     owner: dict[tuple[int, int], int] = {}
     found = []
     for index, part in enumerate(whole.regions):
-        rows = np.flatnonzero((whole.region == index) & (kinds == "adhesive"))
-        inside = [e for e in rows if kind_at.get((int(column[e]), int(layer[e]) + 1)) in ("patch", "cover")
-                  and kind_at.get((int(column[e]), int(layer[e]) - 1)) == "parent"]
+        inside = []
+        for low in np.flatnonzero((whole.region == index) & (kinds == "adhesive")):
+            c, k = int(column[low]), int(layer[low])
+            if kind_at.get((c, k - 1)) != "parent":
+                continue
+            top = k
+            while kind_at.get((c, top + 1)) == "adhesive":
+                top += 1
+            if kind_at.get((c, top + 1)) in ("patch", "cover") and abs(float(height[k:top + 1].sum()) - bondline) <= 1e-6 * bondline:
+                inside.append((low, at[(c, top)]))
         if not inside:
             continue
         found.append((index, part))
-        for e in sorted(inside, key=lambda e: column[e]):
-            q, size = elements[e], float(length[column[e]])
-            for under, over, share in ((q[0], q[3], 1 / 6), (q[4], q[6], 4 / 6), (q[1], q[2], 1 / 6)):
+        for low, high in sorted(inside, key=lambda pair: column[pair[0]]):
+            under_nodes, over_nodes, size = elements[low], elements[high], float(length[column[low]])
+            for under, over, share in ((under_nodes[0], over_nodes[3], 1 / 6), (under_nodes[4], over_nodes[6], 4 / 6), (under_nodes[1], over_nodes[2], 1 / 6)):
                 key = (int(under), int(over))
                 weight[key] = weight.get(key, 0.0) + share * size
                 owner.setdefault(key, index)
     if not weight:
-        raise BondRunError("The repair has no flat bondline to follow")
+        raise BondRunError("No part of the repair's bondline lies flat between the patch and the laminate, so there is no bond to follow: "
+                           "check the patch's plies, the steps and the overlap")
 
     keep = kinds != "adhesive"
     used = np.unique(elements[keep])
@@ -297,29 +328,42 @@ def _force_along(built: RepairBondModel, load: float, displacement: np.ndarray) 
     return np.bincount(mesh.cell[:, 0], weights=stress * height, minlength=len(mesh.r_lines_m) - 1)
 
 
+def far_field_error(built: RepairBondModel, displacement: np.ndarray, load: float) -> float:
+    """How far the laminate's strain along the load, midway between the repair and the panel's end, is from the laminate
+    theory's far from a repair, as a fraction of it, in an elastic state: `displacement` at `load`."""
+    repair, mesh, model = built.repair, built.mesh, built.model
+    stations = (mesh.r_lines_m[:-1] + mesh.r_lines_m[1:]) / 2
+    kinds = np.array([part.kind for part in mesh.regions])[mesh.region]
+    outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
+    midway = int(np.argmin(np.abs(stations - (outer + repair.panel_length_m / 2) / 2)))
+    there = (mesh.cell[:, 0] == midway) & (kinds == "parent")
+    strain = element_strains(model.nodes, model.elements, displacement)[there, 0]
+    far = built.far.strain_x * load
+    return float(np.max(np.abs(strain - far))) / abs(far)
+
+
+def check_far_field(built: RepairBondModel, displacement: np.ndarray, load: float) -> float:
+    """`far_field_error`, refused when the strain there is not yet the laminate's: the panel is too short round the repair
+    for a slice whose end carries the laminate's own stresses."""
+    error = far_field_error(built, displacement, load)
+    if not error < FAR_FIELD_TOLERANCE:
+        raise BondRunError(f"Midway between the repair and the panel's end the strain is not yet the laminate's far from a repair (off by "
+                           f"{error:.1%}): the panel is too short around the repair for this model; give a longer panel")
+    return error
+
+
 def bond_answer(built: RepairBondModel, path: Path, seconds: float = 0.0) -> BondAnswer:
     """Read a followed path: the onset, the load at which the bond lets go, and the run's two checks. Refused when the
     strain midway between the repair and the panel's end is not the laminate theory's while the bond is whole, or when the
     plies' forces do not add up to the load at every station of the last state read."""
-    repair, mesh, model = built.repair, built.mesh, built.model
+    model = built.model
     first = path.points[0]
     scale = path.onset_load / first.load  # the first state is elastic, a little under the onset: the onset's is it, scaled
     onset = _state(built, path.onset_load, scale * first.displacement, first.damage, 0.0)
     opening, slip = model.jumps(scale * first.displacement)
     onset_pair = int(np.argmax(np.where(first.damage > 0, 0.0, built.law.index(opening, slip))))
 
-    column = mesh.cell[:, 0]
-    stations = (mesh.r_lines_m[:-1] + mesh.r_lines_m[1:]) / 2
-    kinds = np.array([part.kind for part in mesh.regions])[mesh.region]
-    outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
-    midway = int(np.argmin(np.abs(stations - (outer + repair.panel_length_m / 2) / 2)))
-    there = (column == midway) & (kinds == "parent")
-    strain = element_strains(model.nodes, model.elements, scale * first.displacement)[there, 0]
-    far = built.far.strain_x * path.onset_load
-    far_error = float(np.max(np.abs(strain - far))) / abs(far)
-    if not far_error < FAR_FIELD_TOLERANCE:
-        raise BondRunError(f"Midway between the repair and the panel's end the strain is not yet the laminate's far from a repair (off by "
-                           f"{far_error:.1%}): the panel is too short around the repair for this model; give a longer panel")
+    far_error = check_far_field(built, scale * first.displacement, path.onset_load)
 
     fell = path.first_peak(LET_GO_FALL)
     read = fell if fell is not None else path.peak
@@ -336,9 +380,14 @@ def bond_answer(built: RepairBondModel, path: Path, seconds: float = 0.0) -> Bon
                       state(path.points[-1]), "let_go" if fell is not None else path.ended, loads, movements, far_error, equilibrium)
 
 
-def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, steps: int = 1500) -> BondAnswer:
-    """Build the repair's bond model, follow its path and read the answer: `build_bond_model`, `follow_bond`, `bond_answer`."""
-    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m)
+def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, steps: int = 1500,
+             units: str = "SI") -> BondAnswer:
+    """Build the repair's bond model, follow its path and read the answer: `build_bond_model`, `follow_bond`, `bond_answer`.
+    The far-field check is made on the first, elastic state before the path is followed, so a panel too short round its
+    repair is refused in the time of one solve, not after the whole path."""
+    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units)
+    elastic, _ = follow_bond(built, steps=1)
+    check_far_field(built, elastic.points[0].displacement, elastic.points[0].load)
     path, seconds = follow_bond(built, steps=steps)
     return bond_answer(built, path, seconds)
 
@@ -348,9 +397,7 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
     two checks, the onset, the load at which the bond lets go with the bond's state there, and the curve: at every state
     of the path the load, the movement of the panel's end, the length of bond past its strength (softening or parted) and
     the length parted. A fracture energy is in the system's force per length, as the repair file states it."""
-    if units not in UNIT_SYSTEMS:
-        raise BondRunError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
-    system = UNIT_SYSTEMS[units]
+    system = unit_system(units)
     length, stress, force = system["length"][0], system["stress"][0], system["N"][0]
     built, path, law = answer.built, answer.path, answer.built.law
     model = built.model
@@ -436,7 +483,7 @@ def main(argv: list[str] | None = None) -> int:
         case = read_repair_file(args.repair)
         repair, _ = repair_from_dict(case)
         answer = run_bond(repair, element_size_m=None if args.size is None else args.size * MM, fine_m=None if args.fine is None else args.fine * MM,
-                          steps=args.steps)
+                          steps=args.steps, units=case["units"])
         report = bond_report(answer, case["units"])
     except (BondRunError, RepairError, ShapeError, OSError) as error:
         print(f"refused: {(str(error).splitlines() or [type(error).__name__])[0]}")

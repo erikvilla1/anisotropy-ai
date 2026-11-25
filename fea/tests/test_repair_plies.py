@@ -106,6 +106,19 @@ def test_a_repair_without_the_bonds_fracture_energies_is_refused_too(tmp_path) -
     assert main([str(path)]) == 2
 
 
+def test_a_panel_too_short_round_its_repair_is_refused_before_any_load_is_raised() -> None:
+    """The elastic slice is held to ADR-0140's far-field check first, so a short panel costs one solve, not the run."""
+    repair, _ = repair_from_dict(small(panel={"length": 34.0}))
+    with pytest.raises(BondRunError, match="the panel is too short around the repair for this model; give a longer panel"):
+        run_plies(repair)
+
+
+def test_a_refusal_states_its_numbers_in_the_files_units() -> None:
+    repair, _ = repair_from_dict(small(adhesive={"shear_energy": 0.04}))
+    with pytest.raises(BondRunError, match="it must be above 0.045 N/mm"):
+        build_plies_model(repair, units="mm-MPa")
+
+
 def test_the_answer_holds_a_load_it_does_not_hold_and_what_failed(answer) -> None:
     assert answer.onset > 0
     assert answer.held.load > answer.onset
