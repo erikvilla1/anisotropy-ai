@@ -10,9 +10,18 @@ import { JobFiles, namingOf } from "@/components/studio/job-files";
 import { useProject } from "@/components/studio/project-context";
 import { resultsOnPage } from "@/components/studio/use-imported-model";
 
-/** The fields the Results tab offers to colour the model by, in this order, where the result has them: the answer first, then the
- * deformation, then each ply's stresses and strains in its fibre axes. The viewer under the model still offers every field. */
-export const TREE_FIELDS = ["failure_index", "u_mag", "u_z", "S11", "S22", "S12", "E11", "E22", "E12"];
+/** What the Results tab offers to colour the model by, in groups as a desktop tool's results tree lists them, each field where the
+ * result has it: the answer first, then the deformation (the total and each direction), the stress of the whole laminate, and each
+ * ply's stresses and strains in its fibre axes (ADR-0111 amendment 7). A chip's words are short because its group names the quantity;
+ * the legend under the model prints the field's full name. The viewer under the model still offers every field. */
+export const TREE_GROUPS: { title: string; fields: [id: string, chip: string | null][]; note?: string }[] = [
+  { title: "Failure", fields: [["failure_index", null]] },
+  { title: "Deformation (displacement)", fields: [["u_mag", "Total, |u|"], ["u_x", "Along x, uₓ"], ["u_y", "Along y, uᵧ"], ["u_z", "Along z, w"]] },
+  { title: "Stress of the whole laminate", fields: [["S_x", "Along x, σx"], ["S_y", "Along y, σy"], ["S_xy", "Shear, τxy"]],
+    note: "The force per width over the laminate's thickness: the mean through every ply, in the model's x and y. A ply's own stress is below." },
+  { title: "One ply, in its fibre axes", fields: [["S11", null], ["S22", null], ["S12", null], ["E11", null], ["E22", null], ["E12", null]] },
+];
+export const TREE_FIELDS = TREE_GROUPS.flatMap((g) => g.fields.map(([id]) => id));
 
 /** The Results tab of the model tree (ADR-0111): the answer in three lines, buttons that colour the model by a field and a ply, and the
  * report and files once the run has ended; for an imported model, its results and no files. Every number is the result's own (the fields
@@ -32,7 +41,11 @@ export function ResultsTab({ apiBaseUrl }: { apiBaseUrl: string }) {
   const s = fields.summary, lab = fields.labels;
   const stat = answerStat(fields, printed);
   const options = fieldOptions(fields);
-  const offered = TREE_FIELDS.map((id) => options.find((o) => o.id === id)).filter((o) => o !== undefined);
+  const groups = TREE_GROUPS.map((g) => ({ ...g, offered: g.fields.flatMap(([id, chip]) => {
+    const o = options.find((x) => x.id === id);
+    return o ? [{ ...o, chip: chip ?? o.label }] : [];
+  }) })).filter((g) => g.offered.length);
+  const flat = (fields.mesh.translations ?? 2) !== 3; // an in-plane model: nothing moves along z
   const angles = fields.mesh.angles ?? [];
   const perPlyShown = options.find((o) => o.id === shownField?.id)?.perPly ?? false;
   const shownPly = perPlyShown && shownField ? shownField.ply : ply; // the viewer's ply while it shows a ply's field
@@ -45,12 +58,19 @@ export function ResultsTab({ apiBaseUrl }: { apiBaseUrl: string }) {
       </dl>
       {live ? <p className="studio-hint">From the quick solve. Run analysis checks it with a second solver and writes the report.</p> : null}
       <p className="ws-tree-caption">Show on the model</p>
-      <div className="ws-tree-fields" role="group" aria-label="Show on the model">
-        {offered.map((o) => (
-          <button key={o.id} type="button" data-field={o.id} aria-pressed={shownField?.id === o.id}
-            onClick={() => showField({ id: o.id, ply: o.perPly ? shownPly : undefined })}>{o.label}</button>
-        ))}
-      </div>
+      {groups.map((g) => (
+        <div key={g.title} className="ws-tree-group" data-testid="tree-results-group">
+          <p className="ws-tree-group-title">{g.title}</p>
+          <div className="ws-tree-fields" role="group" aria-label={g.title}>
+            {g.offered.map((o) => (
+              <button key={o.id} type="button" data-field={o.id} title={o.label} aria-pressed={shownField?.id === o.id}
+                onClick={() => showField({ id: o.id, ply: o.perPly ? shownPly : undefined })}>{o.chip}</button>
+            ))}
+          </div>
+          {g.note ? <p className="studio-hint">{g.note}</p> : null}
+          {flat && g.offered.some((o) => o.id === "u_mag") ? <p className="studio-hint">Nothing moves along z: this model stays in its own plane.</p> : null}
+        </div>
+      ))}
       {fields.mesh.plies > 1 ? (
         <label className="studio-field ws-tree-ply">
           <span>Ply, for a ply&apos;s stress or strain</span>

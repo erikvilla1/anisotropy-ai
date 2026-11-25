@@ -131,6 +131,16 @@ The section forces are $`\mathbf{N} = \mathbf{A}\boldsymbol{\varepsilon}`$ at th
 
 <!-- code: section_forces -->
 
+The stress of the laminate as one material is the section force over the section's whole thickness $`h`$, in the model's axes:
+
+```math
+\bar{\boldsymbol{\sigma}} = \frac{\mathbf{N}}{h} = \frac{1}{h} \sum_k \int_{z_{k-1}}^{z_k} \boldsymbol{\sigma}_{xy}^{(k)}\, dz .
+```
+
+It is the mean of the plies' stresses through the thickness, what a test reports as load over area, and it is computed by `laminate_stress`. No single ply carries it, and a moment adds nothing to it, so a plate that only bends has none; the plies' own stresses (section 6) and the first-ply-failure check (section 7) judge the laminate, not this mean.
+
+<!-- code: laminate_stress -->
+
 ## 6. Ply stresses in material axes
 
 A membrane state has no curvature, so every ply of an element carries the element's strain $`\boldsymbol{\varepsilon}`$. Each ply's stress in laminate axes and its strain and stress in material axes follow from the engine's ply recovery with $`\boldsymbol{\kappa} = \mathbf{0}`$ ([engine theory](../../engine/docs/theory.md), response to loads, ply surface recovery):

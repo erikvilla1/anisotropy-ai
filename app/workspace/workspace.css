@@ -84,6 +84,9 @@
 .ws-tree-est { color: var(--muted); font-weight: 400; font-size: 11px; }
 .ws-tree-check { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; font-size: 13px; cursor: pointer; }
 .ws-tree-check input { margin: 0; accent-color: var(--accent); }
+.ws-tree-group { margin-top: 10px; }
+.ws-tree-group-title { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.ws-tree-group .studio-hint { margin: 6px 0 0; }
 .ws-tree-fields { display: flex; flex-wrap: wrap; gap: 6px; }
 .ws-tree-fields button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .ws-tree-fields button:hover { border-color: var(--muted); }

@@ -529,3 +529,34 @@ def test_each_ply_carries_what_abaqus_prints_beside_mises(solved, data):
         assert name not in data["nodal"]["averages"]
     tresca, mises = np.array(written["tresca"]), np.array(data["element"]["ply"]["mises"])
     assert np.all(tresca >= mises - 1e-6)  # Tresca is never below Mises
+
+
+def test_the_laminate_stress_is_the_mean_of_the_plies_through_the_thickness(solved, data):
+    """The stress of the whole laminate (ADR-0111 amendment 7) is the section force over the laminate's thickness, in the model's axes.
+    Checked another way than it is computed: it must equal the mean of the plies' own stresses in those axes, weighted by ply thickness,
+    in a membrane state and in a bending one (each ply's mean being the mean of its two faces); a plate that only bends has none."""
+    from anisotropy_fea.kernel import solve_deck
+
+    _, solution = solved
+    bending_deck = read_deck(paths.deck_path(paths.spec_path("three-point-im7-8552"), "abaqus"), UNITS)
+    bending = solve_deck(bending_deck)
+    for found, written in ((solution, data), (bending, field_data(bending_deck, bending, UNITS))):
+        mesh = found.mesh
+        laminate = np.array(written["element"]["laminate_stress"])
+        ply_xy = np.array(written["element"]["ply"]["stress_xy"])  # (ne, plies, 3), or (ne, plies, 2, 3) with both faces
+        if ply_xy.ndim == 4:
+            ply_xy = ply_xy.mean(axis=2)
+        for e in range(mesh.element_count):
+            thickness = np.array([ply.thickness_m for ply in mesh.sections[mesh.element_section[e]].plies])
+            mean = (ply_xy[e] * thickness[:, None]).sum(axis=0) / thickness.sum()
+            assert np.allclose(laminate[e], mean, rtol=1e-6, atol=1e-6 * np.abs(ply_xy).max()), e
+        free = np.ones(mesh.element_count, dtype=bool)
+        free[written["mesh"]["held_elements"]] = False
+        assert written["ranges"]["S_y"]["element"] == [laminate[free][:, 1].min(), laminate[free][:, 1].max()]
+        averages = np.array(written["nodal"]["averages"]["laminate_stress"], dtype=float)
+        assert written["ranges"]["S_xy"]["nodal"] == [np.nanmin(averages[:, 2]), np.nanmax(averages[:, 2])]
+    pulled = np.array(data["element"]["laminate_stress"])
+    # the coupon is pulled along y: its laminate stress there is the reaction over the cross-section, within the grips' hold on the width
+    width_mm, thickness_mm = np.ptp(np.array(data["mesh"]["nodes"])[:, 0]), sum(p.thickness_m for p in solution.mesh.sections[0].plies) * 1e3
+    assert np.median(pulled[:, 1]) == pytest.approx(abs(data["summary"]["reaction"]["value"]) / (width_mm * thickness_mm), rel=0.02)
+    assert np.abs(np.array(field_data(bending_deck, bending, UNITS)["element"]["laminate_stress"])).max() < 1e-6 * np.abs(pulled).max()

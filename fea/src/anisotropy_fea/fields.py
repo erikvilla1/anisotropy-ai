@@ -38,7 +38,8 @@ from .cases import element_name
 from .mesh import KernelError
 from .model import Deck, all_boundaries, node_name, resolve_elements, resolve_nodes
 from .quality import QualityField, quality_summary
-from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_invariants, ply_mises, ply_ratio_per_ply, strength_ratios
+from .recovery import (FACES, FailureField, PlyField, deck_f12_star, element_ply_states, laminate_stress, ply_invariants, ply_mises, ply_ratio_per_ply,
+                       strength_ratios)
 from .report import edge_widths, fpf_place, gauge_element, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
@@ -566,15 +567,19 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     section_force_out, stress_12_out, mises_out, displacement_out = per_length(section_force), stress(stress_12), stress(mises), length(displacement)
     strain_average = nodal_averages(corners, n, strain, held)
     section_force_average = nodal_averages(corners, n, section_force_out, held)
+    # the stress of the whole laminate, the section force over its thickness, in the model's axes: one picture with no ply to choose
+    laminate_out = stress(_finite("laminate stress", laminate_stress(solution)))
+    laminate_average = nodal_averages(corners, n, laminate_out, held)
     stress_12_average = nodal_averages(corners, n, stress_12_out, held)
     mises_average = nodal_averages(corners, n, mises_out, held)
     averages: dict[str, Any] = {
-        "strain": rounded(strain_average), "section_force": rounded(section_force_average),
+        "strain": rounded(strain_average), "section_force": rounded(section_force_average), "laminate_stress": rounded(laminate_average),
         "ply_stress_12": rounded(stress_12_average), "ply_mises": rounded(mises_average),
         "failure_index": failure_average,
     }
     element: dict[str, Any] = {
-        "strain": rounded(strain), "section_force": rounded(section_force_out), "centroids": rounded(length(centroids)),
+        "strain": rounded(strain), "section_force": rounded(section_force_out), "laminate_stress": rounded(laminate_out),
+        "centroids": rounded(length(centroids)),
         "ply": {"stress_12": rounded(stress_12_out), "stress_xy": rounded(stress(stress_xy)), "strain_12": rounded(strain_12), "mises": rounded(mises_out),
                 "invariants": {name: rounded(stress(values)) for name, values in invariants.items()}},
         "failure": failure, "modes": list(MODES),
@@ -593,6 +598,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         ranges[name] = both(strain[:, i], strain_average[:, i])
     for i, name in enumerate(("N_x", "N_y", "N_xy")):
         ranges[name] = both(section_force_out[:, i], section_force_average[:, i])
+    for i, name in enumerate(("S_x", "S_y", "S_xy")):
+        ranges[name] = both(laminate_out[:, i], laminate_average[:, i])
     for i, name in enumerate(STRESS_NAMES):
         ranges[name] = {"element": per_ply_spans(stress_12_out[free][..., i]), "nodal": per_ply_spans(stress_12_average[..., i])}
     ranges["mises"] = {"element": per_ply_spans(mises_out[free]), "nodal": per_ply_spans(mises_average)}

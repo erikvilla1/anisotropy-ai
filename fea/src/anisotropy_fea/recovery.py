@@ -89,6 +89,16 @@ def element_ply_states(solution: Solution) -> PlyField:
                     faces=FACES if shell else None)
 
 
+def laminate_stress(solution: Solution) -> np.ndarray:
+    """The stress of the laminate as one material, (ne, 3) Pa in the model's axes x, y and xy: each element's section force over its
+    section's whole thickness, N / h, the mean of the plies' stresses through the thickness. It is what a test reports as load over
+    area. No single ply carries it (a ply's own stress is `element_ply_states`'s), and a moment adds nothing to it: a plate that only
+    bends has none."""
+    mesh = solution.mesh
+    thickness = np.array([sum(ply.thickness_m for ply in section.plies) for section in mesh.sections], dtype=float)
+    return solution.section_force / thickness[np.asarray(mesh.element_section)][:, None]
+
+
 INVARIANTS = ("tresca", "max_principal", "mid_principal", "min_principal", "pressure")
 
 

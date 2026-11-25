@@ -719,6 +719,23 @@ test.describe("the model tree", () => {
     await expect(tree.locator("button[data-field=S11]")).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Ply shown", { exact: true }).selectOption("2");
     await expect(viewer.getByLabel("Ply", { exact: true })).toHaveValue("2");
+    // the fields are in groups, as a desktop tool's results tree lists them: the stress of the whole laminate with no ply to choose,
+    // and the deformation as a total and along each direction (ADR-0111 amendment 7)
+    await expect(tree.getByTestId("tree-results-group").locator(".ws-tree-group-title")).toHaveText(
+      ["Failure", "Deformation (displacement)", "Stress of the whole laminate", "One ply, in its fibre axes"]);
+    await tree.locator("button[data-field=S_y]").click();
+    await expect(viewer.getByLabel("Field", { exact: true })).toHaveValue("S_y");
+    await expect(page.getByTestId("legend")).toContainText("Laminate stress σy (MPa)");
+    await expect(tree).toContainText("The force per width over the laminate's thickness");
+    await page.screenshot({ path: ".local/website/screenshots/model-tree-laminate-stress.png" });
+    await expect(tree.locator("button[data-field=u_mag]")).toHaveText("Total, |u|");
+    await tree.locator("button[data-field=u_x]").click();
+    await expect(viewer.getByLabel("Field", { exact: true })).toHaveValue("u_x");
+    await expect(page.getByTestId("legend")).toContainText("Displacement uₓ (mm)");
+    await tree.locator("button[data-field=u_y]").click();
+    await expect(viewer.getByLabel("Field", { exact: true })).toHaveValue("u_y");
+    await expect(tree.locator("button[data-field=u_z]")).toHaveCount(0); // a coupon pulled in its plane: nothing moves along z, and the step says so
+    await expect(tree).toContainText("Nothing moves along z");
     await openView(page); // the viewer's own controls are in the View menu under the legend (ADR-0134 amendment 1)
     await viewer.getByLabel("Field", { exact: true }).selectOption("u_mag");
     await expect(tree.locator("button[data-field=u_mag]")).toHaveAttribute("aria-pressed", "true");

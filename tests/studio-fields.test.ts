@@ -20,6 +20,35 @@ test("the options follow what the package wrote", () => {
   assert.ok(!hasFaces(fields) && !options.some((o) => o.id === "u_z" || o.id === "M_y"));
 });
 
+test("the stress of the whole laminate is the package's, with its ends, and is not offered on a result solved before it (ADR-0111 amendment 7)", () => {
+  for (const result of [fields, bending]) {
+    const options = fieldOptions(result);
+    assert.deepEqual(options.filter((o) => o.group === "Laminate stress").map((o) => [o.id, o.unit, o.perPly ?? false]),
+      [["S_x", "MPa", false], ["S_y", "MPa", false], ["S_xy", "MPa", false]]);
+    const perElement = valuesFor(result, { id: "S_y", ply: 1, criterion: "", averaged: false });
+    assert.equal(perElement.by, "element");
+    assert.equal(perElement.label, "Laminate stress σy");
+    assert.deepEqual(perElement.values, result.element.laminate_stress!.map((row) => row[1]));
+    assert.deepEqual(perElement.range, at(result.ranges, "S_y", "element"));
+    const perNode = valuesFor(result, { id: "S_xy", ply: 1, criterion: "", averaged: true });
+    assert.equal(perNode.by, "node");
+    assert.deepEqual(perNode.values, result.nodal.averages.laminate_stress!.map((row) => row[2]));
+    assert.deepEqual(perNode.range, at(result.ranges, "S_xy", "nodal"));
+    assert.deepEqual(perElement.held, result.mesh.held_elements ?? []); // inside a grip the stress is the clamp's, as for every field but the displacement
+  }
+  // the fixture's coupon is pulled along y: the laminate's stress there is the pull per width over the thickness, a few hundred MPa
+  // outside the grips, where the ends are read
+  const [least, most] = valuesFor(fields, { id: "S_y", ply: 1, criterion: "", averaged: false }).range!;
+  assert.ok(least > 400 && most < 500);
+  const row = elementReadout(fields, 200, { id: "S_y", ply: 1, criterion: "", averaged: false }, String).rows.find(([name]) => name.startsWith("Laminate"));
+  assert.deepEqual(row, ["Laminate σx, σy, τxy (MPa)", fields.element.laminate_stress![200].join(", ")]); // a clicked element says its own
+  const { laminate_stress: _gone, ...older } = fields.element;
+  assert.ok(!fieldOptions({ ...fields, element: older }).some((o) => o.group === "Laminate stress"));
+  // the deformation along each direction the model moves in: x and y always, z where it bends
+  assert.deepEqual(fieldOptions(fields).filter((o) => o.group === "Displacement").map((o) => o.id), ["u_mag", "u_x", "u_y"]);
+  assert.deepEqual(fieldOptions(bending).filter((o) => o.group === "Displacement").map((o) => o.id), ["u_mag", "u_x", "u_y", "u_z"]);
+});
+
 test("the values are the package's arrays, per element or per node", () => {
   const perElement = valuesFor(fields, { id: "eps_y", ply: 1, criterion: "tsai_hill", averaged: false });
   assert.equal(perElement.by, "element");
