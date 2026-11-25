@@ -2000,6 +2000,9 @@ def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Re
 
 REPAIR_BOND = "/v1/repairs/bond"
 REPAIR_BOND_TIMEOUT_S = 120.0  # the example's bond is followed in about 10 s; a cold start of the fea environment takes a few more
+# ADR-0140 amendment 4: the run itself is given less than the request, so a bond that takes longer is read as far as it was followed
+# (its `ended` says "time") and not lost to the timeout; and a slice of more elements than a solve takes is refused before it is meshed.
+REPAIR_BOND_OPTIONS = ["--seconds", "75", "--most", "40000"]
 REPAIR_BOND_REPORT = "repair-bond.json"  # anisotropy_fea.repair_bond.REPORT, in the folder the run is given
 BOND_NOT_NOW = "The bond could not be followed right now. Try again in a minute; if it keeps failing, contact us."
 
@@ -2009,7 +2012,8 @@ def follow_repair_bond_endpoint(problem: RepairRequest, actor: Actor, request: R
     """A repair's bond followed until it lets go (ADR-0140) from the repair's page: the engine reads the description first, so a repair
     the page could not work is refused in the same words, and one that lacks what the run needs (the adhesive's two strengths and two
     fracture energies, and what a solve needs) is refused with the list; then the fea package's `repair_bond` builds the slice with the
-    bond as pairs, follows its path and reads it back in a process of its own. It needs no load: the load is what it finds. A run the
+    bond as pairs, follows its path and reads it back in a process of its own. It needs no load: the load is what it finds. The run is
+    given 75 s: a path not followed to its end by then is answered as far as it went, and a slice past 40,000 elements is refused. A run the
     tool refuses is refused in its words; one that fails is said so without them. Recorded with its actor: the description and the
     run's headline numbers, not its curves."""
     data, repair, _ = _repair_read(request, actor, problem)
@@ -2018,7 +2022,7 @@ def follow_repair_bond_endpoint(problem: RepairRequest, actor: Actor, request: R
         detail = "To follow the bond until it lets go the repair needs: " + "; ".join(need["words"] for need in needs) + "."
         run_id = _record(request, actor, problem, error=detail)
         raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
-    ended, report = _repair_tool_report(repair_bond_command(), data, [], REPAIR_BOND_REPORT, "the repair's bond run", REPAIR_BOND_TIMEOUT_S)
+    ended, report = _repair_tool_report(repair_bond_command(), data, REPAIR_BOND_OPTIONS, REPAIR_BOND_REPORT, "the repair's bond run", REPAIR_BOND_TIMEOUT_S)
     if ended == "absent":
         raise HTTPException(status_code=503, detail="The solver is not installed here")
     if ended == "slow":

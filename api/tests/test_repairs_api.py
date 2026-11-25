@@ -141,12 +141,12 @@ if "--out" in sys.argv and "--cut-faces" not in sys.argv:  # the bond followed u
     from pathlib import Path
     out = Path(sys.argv[sys.argv.index("--out") + 1]); out.mkdir(parents=True)
     report = {"headline": "The bond first softens at 184 N/mm; in this model it lets go at 1340 N/mm", "units": {"length": "mm", "stress": "MPa", "force": "N/mm"},
-              "model": {"elements": 3045, "pairs": 319}, "checks": {"equilibrium": 1e-11, "far_field": 2e-10}, "ended": "let_go",
+              "model": {"elements": 3045, "pairs": 319, "given": sys.argv[sys.argv.index("--out") + 2:]}, "checks": {"equilibrium": 1e-11, "far_field": 2e-10}, "ended": "let_go",
               "onset": {"part": "Adhesive on the ledge of step 2", "step": 2, "r": 37.4, "load": 184.0, "shear": 30.0, "peel": -14.0, "lines": [{"r": [0.0, 1.0]}]},
               "let_go": {"load": 1340.0, "end_movement": 2.2, "spent": 0.005, "softening_length": 18.7, "parted_length": 0.0, "lines": [{"r": [0.0, 1.0]}]},
               "largest": {"load": 1340.0}, "curve": {"end_movement": [0.0, 2.2], "load": [0.0, 1340.0]}}
     if mode == "held":
-        report["let_go"], report["ended"] = None, "steps"
+        report["let_go"], report["ended"] = None, "time"
     if mode == "empty":
         report = ["not", "a", "report"]
     if mode == "nan":
@@ -273,6 +273,9 @@ def test_the_bond_followed_comes_back_as_the_tools_report_with_its_headline_apar
     assert client.post(BOND, json={"repair": unloaded}).status_code == 200, "no load is needed: the load is what the run finds"
     held = client.post(BOND, json={"repair": example() | {"title": "held"}})
     assert held.status_code == 200 and held.json()["report"]["let_go"] is None, "a run that ends before the bond lets go says so, and names no load"
+    assert held.json()["report"]["ended"] == "time", "a run cut short by its time is answered as far as it went"
+    # the run is given less time than the request and a limit on its elements (ADR-0140 amendment 4)
+    assert body["report"]["model"]["given"] == ["--seconds", "75", "--most", "40000"]
 
 
 def test_a_bond_that_lacks_its_strengths_or_its_energies_is_refused_with_the_list(fake_tools):

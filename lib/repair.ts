@@ -280,7 +280,7 @@ export type BondRunLine = { name: string; step: number | null; r: number[]; shea
  * of the bond is softening and has parted (`damaged_length` is the two together: the bond past its strength). */
 export type BondRunState = { load: number; end_movement: number; spent: number; softening_length: number; parted_length: number; damaged_length: number };
 /** A repair's bond followed until it lets go (ADR-0140), as `bond_report` gives it in the file's units. `let_go` is null when the run
- * ended before the load fell, and `ended` then says how ("gone", "steps" or "stalled"). */
+ * ended before the load fell, and `ended` then says how ("gone", "steps", "stalled" or "time"). */
 export type BondReport = {
   units: { length: string; stress: string; force: string; energy: string; stiffness: string };
   model: { solver: string; element: string; elements: number; nodes: number; pairs: number; bond_length: number; element_size: number; fine_size: number;
@@ -370,6 +370,7 @@ const ENDED_WORDS: Record<string, string> = {
   gone: "The whole bond parted and the load never fell.",
   steps: "The run reached its limit of steps before the load fell.",
   stalled: "The path could not be followed further.",
+  time: "The run reached the time it is given before the load fell; a shorter panel, longer steps or fewer plies make a model it finishes.",
 };
 
 /** The model of a followed bond in one line: what was followed and how its two checks came out. No tool is named (ADR-0091). */

@@ -169,6 +169,9 @@ test("the bond followed until it lets go, in the page's words: the load in this 
   assert.equal(held.short, "The path could not be followed further. The largest load reached is 1,340 N/mm.");
   assert.equal(held.extent, "");
   assert.equal(held.card, "no load at which it lets go was found. The path could not be followed further. The largest load reached is 1,340 N/mm.");
+  // a run cut short by its time says so, and what makes a model it finishes (ADR-0140 amendment 4)
+  assert.equal(bondWords({ ...BOND.report, let_go: null, ended: "time" }).short,
+    "The run reached the time it is given before the load fell; a shorter panel, longer steps or fewer plies make a model it finishes. The largest load reached is 1,340 N/mm.");
   // the path's states: the load, the panel's end and the bond past its strength, one of each a state, the last three never falling
   const curve = BOND.report.curve;
   assert.deepEqual([curve.end_movement.length, curve.damaged_length.length, curve.parted_length.length], [curve.load.length, curve.load.length, curve.load.length]);

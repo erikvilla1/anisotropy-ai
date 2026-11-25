@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path as FilePath
 
 import numpy as np
@@ -33,7 +33,7 @@ from anisotropy_engine.repair import FarField, Repair, RepairError, adhesive_sti
 from anisotropy_engine.units import UNIT_SYSTEMS
 
 from .bond_solver import FACTOR, BondError, BondLaw, BondModel, Path, element_strains, follow, solid_stiffness, stress_load
-from .repair_model import HOLDS, SliceModel, SliceResults, _eight_node, _stress_in_slice_axes, _without_cut_faces, held_nodes, region_stiffness
+from .repair_model import HOLDS, MOST_ELEMENTS, SliceModel, SliceResults, _eight_node, _stress_in_slice_axes, _without_cut_faces, held_nodes, region_stiffness
 from .repair_shape import MM, REFUSED, SliceMesh, read_repair_file, slice_mesh
 from .wing_shape import ShapeError
 
@@ -117,13 +117,20 @@ def bond_law(repair: Repair, units: str = "SI") -> BondLaw:
         raise BondRunError(str(error)) from error
 
 
+def _too_many(elements: int, most: int, at_least: bool = False) -> BondRunError:
+    """The refusal of a slice larger than a run from the page takes, with what makes it large (ADR-0140 amendment 4)."""
+    return BondRunError(f"The slice would have {'more than ' if at_least else ''}{elements:,} elements, and the bond's run takes at most {most:,}. "
+                        "Its elements are an eighth of a step long over half the panel's length: lengthen the steps or shorten the panel")
+
+
 def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, hold: str = "bottom",
-                     units: str = "SI") -> RepairBondModel:
+                     units: str = "SI", most_elements: int | None = None) -> RepairBondModel:
     """The model of a repair's slice with its bond as pairs. `element_size_m` is the longest element along the slice and
     `fine_m` the length of the elements beside every step's end, cut and edge (a quarter of the bondline's thickness unless
     said), as in `build_slice_model`. With `hold="everywhere"` no node moves through the thickness: not a repair, the stepped
     lap's own assumptions, used to check the model against the lap's closed form. `units` is the system a refusal states its
-    numbers in."""
+    numbers in. With `most_elements`, a slice with more elements than that is refused, one far larger before it is meshed, as
+    `build_slice_model` refuses it."""
     if hold not in HOLDS:
         raise BondRunError(f"hold must be one of {', '.join(HOLDS)}, got {hold!r}")
     needs = bond_needs(repair)
@@ -134,6 +141,11 @@ def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fin
         far = far_field(repair, 1.0)
         if fine_m is None:
             fine_m = repair.adhesive.thickness_m / FINE_PER_BONDLINE
+        if most_elements is not None:  # no element along the slice is longer than the element size, so it has at least this many columns
+            longest = repair.step_length_m / 8 if element_size_m is None else element_size_m
+            columns = repair.panel_length_m / 2 / longest if longest > 0 else 0
+            if columns > most_elements:
+                raise _too_many(int(columns), most_elements, at_least=True)
         whole = _without_cut_faces(repair, slice_mesh(repair, element_size_m, fine_m=fine_m, adhesive_layers=1))
         solid = [region_stiffness(repair, part) for part in whole.regions]
     except (RepairError, ShapeError) as error:
@@ -178,6 +190,8 @@ def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fin
                            "check the patch's plies, the steps and the overlap")
 
     keep = kinds != "adhesive"
+    if most_elements is not None and int(keep.sum()) > most_elements:
+        raise _too_many(int(keep.sum()), most_elements)
     used = np.unique(elements[keep])
     renumber = np.full(len(nodes), -1)
     renumber[used] = np.arange(len(used))
@@ -242,20 +256,27 @@ def elastic_slice(model: SliceModel) -> SliceResults:
     return SliceResults(strain, stress, time.perf_counter() - started, len(free), "anisotropy_fea.bond_solver")
 
 
-def follow_bond(built: RepairBondModel, *, steps: int = 1500, stop=None, **options) -> tuple[Path, float]:
+def follow_bond(built: RepairBondModel, *, steps: int = 1500, stop=None, seconds: float | None = None, **options) -> tuple[Path, float]:
     """The model's path and the seconds it took. Unless another `stop` is given the path ends once the load has fallen a
-    tenth below the largest it reached: past the load at which the bond lets go, and far enough to say so."""
-    largest = [0.0]
+    tenth below the largest it reached: past the load at which the bond lets go, and far enough to say so. With `seconds`
+    it ends too at the first state reached after that long, and the path then says it `ended` by "time" (ADR-0140
+    amendment 4): what was followed is kept and read, and whoever reads it says the run was cut short."""
+    largest, late = [0.0], [False]
+    started = time.perf_counter()
 
     def fallen(point, _points) -> bool:
         largest[0] = max(largest[0], point.load)
-        return point.load < (1 - RUN_ON) * largest[0]
+        if point.load < (1 - RUN_ON) * largest[0]:
+            return True
+        late[0] = seconds is not None and time.perf_counter() - started > seconds
+        return late[0]
 
-    started = time.perf_counter()
     try:
         path = follow(built.model, steps=steps, stop=fallen if stop is None else stop, **options)
     except BondError as error:
         raise BondRunError(str(error)) from error
+    if late[0]:
+        path = replace(path, ended="time")
     return path, time.perf_counter() - started
 
 
@@ -381,15 +402,19 @@ def bond_answer(built: RepairBondModel, path: Path, seconds: float = 0.0) -> Bon
 
 
 def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, steps: int = 1500,
-             units: str = "SI") -> BondAnswer:
+             units: str = "SI", seconds: float | None = None, most_elements: int | None = None) -> BondAnswer:
     """Build the repair's bond model, follow its path and read the answer: `build_bond_model`, `follow_bond`, `bond_answer`.
     The far-field check is made on the first, elastic state before the path is followed, so a panel too short round its
-    repair is refused in the time of one solve, not after the whole path."""
-    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units)
+    repair is refused in the time of one solve, not after the whole path. `seconds` is the time the whole run is given,
+    the model's building included: a path not followed to its end by then is read as far as it went, and `most_elements`
+    refuses a slice larger than that before anything is solved (ADR-0140 amendment 4)."""
+    started = time.perf_counter()
+    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units, most_elements=most_elements)
     elastic, _ = follow_bond(built, steps=1)
     check_far_field(built, elastic.points[0].displacement, elastic.points[0].load)
-    path, seconds = follow_bond(built, steps=steps)
-    return bond_answer(built, path, seconds)
+    left = None if seconds is None else max(0.0, seconds - (time.perf_counter() - started))
+    path, taken = follow_bond(built, steps=steps, seconds=left)
+    return bond_answer(built, path, taken)
 
 
 def bond_report(answer: BondAnswer, units: str) -> dict:
@@ -451,7 +476,8 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
 
 ENDED_WORDS = {"gone": "the whole bond parted and the load never fell",
                "steps": "the path was not followed to a load at which the bond lets go: the run's limit of steps came first",
-               "stalled": "the path could not be followed further, so no load at which the bond lets go was found"}
+               "stalled": "the path could not be followed further, so no load at which the bond lets go was found",
+               "time": "the path was not followed to a load at which the bond lets go: the time the run was given came first"}
 
 
 def headline(report: dict) -> str:
@@ -466,10 +492,12 @@ def headline(report: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python -m anisotropy_fea.repair_bond <repair.toml> [--out DIR] [--size mm] [--fine mm] [--steps N]`: follow the bond of
-    a repair file until it lets go and print the answer in the file's units; with --out, keep repair-bond.json there, the
-    report with the run in one line as its `headline`. Ends with status 2 and "refused: ..." when the repair cannot be read,
-    modelled or followed, or fails a check of the run."""
+    """`python -m anisotropy_fea.repair_bond <repair.toml> [--out DIR] [--size mm] [--fine mm] [--steps N] [--seconds S]
+    [--most N]`: follow the bond of a repair file until it lets go and print the answer in the file's units; with --out, keep
+    repair-bond.json there, the report with the run in one line as its `headline`. With --seconds the run is read as far
+    as it went in that time, and with --most a slice of more elements is refused (the page gives both; a run from the
+    command line has neither unless asked). Ends with status 2 and "refused: ..." when the repair cannot be read, modelled
+    or followed, or fails a check of the run."""
     import argparse
 
     parser = argparse.ArgumentParser(prog="python -m anisotropy_fea.repair_bond", description="Follow a stepped patch repair's bond until it lets go (ADR-0140).")
@@ -478,12 +506,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--size", type=float, help="the longest element along the slice, mm")
     parser.add_argument("--fine", type=float, help="the element length beside every edge, mm")
     parser.add_argument("--steps", type=int, default=1500, help="the most states the path may have (default 1500)")
+    parser.add_argument("--seconds", type=float, help="the time the run is given; a path not followed to its end by then is read as far as it went")
+    parser.add_argument("--most", type=int, nargs="?", const=MOST_ELEMENTS, help=f"refuse a slice of more elements than this ({MOST_ELEMENTS:,} when no number is given)")
     args = parser.parse_args(argv)
     try:
         case = read_repair_file(args.repair)
         repair, _ = repair_from_dict(case)
         answer = run_bond(repair, element_size_m=None if args.size is None else args.size * MM, fine_m=None if args.fine is None else args.fine * MM,
-                          steps=args.steps, units=case["units"])
+                          steps=args.steps, units=case["units"], seconds=args.seconds, most_elements=args.most)
         report = bond_report(answer, case["units"])
     except (BondRunError, RepairError, ShapeError, OSError) as error:
         print(f"refused: {(str(error).splitlines() or [type(error).__name__])[0]}")

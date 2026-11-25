@@ -188,6 +188,36 @@ def test_a_panel_too_short_round_its_repair_is_refused_before_the_path_is_follow
     assert asked == [1]
 
 
+def test_a_run_out_of_its_time_is_read_as_far_as_it_was_followed_and_says_so(example):
+    """A run given less time than its path takes is not lost (ADR-0140 amendment 4): the path ends at the first state
+    reached after its time, says it ended by "time", names no load at which the bond lets go, and keeps the onset."""
+    short = run_bond(stated()[0], seconds=0.0)
+    assert short.ended == "time" and short.let_go is None and len(short.path.points) == 2
+    assert short.onset.load == pytest.approx(example.onset.load, rel=1e-12)
+    assert short.largest.load == pytest.approx(short.onset.load, rel=1e-2) and short.largest.load < example.let_go.load  # one step from the first state
+    report = bond_report(short, "mm-MPa")
+    assert report["ended"] == "time" and report["let_go"] is None
+    assert headline(report).endswith("the path was not followed to a load at which the bond lets go: the time the run was given came first")
+    assert example.ended == "let_go" and run_bond(stated()[0], seconds=3600.0).ended == "let_go"
+
+
+def test_a_slice_larger_than_the_run_takes_is_refused_before_it_is_meshed(monkeypatch):
+    """With a limit on its elements (the page's, ADR-0140 amendment 4) a slice past it is refused in words that say what
+    makes it large: one far past it before the mesh is made, one a little past it once its elements are counted."""
+    import anisotropy_fea.repair_bond as module
+
+    meshed = []
+    slice_mesh = module.slice_mesh
+    monkeypatch.setattr(module, "slice_mesh", lambda *args, **options: meshed.append(1) or slice_mesh(*args, **options))
+    with pytest.raises(BondRunError, match=r"The slice would have more than 320,000 elements, and the bond's run takes at most 100\. .*lengthen the steps or shorten the panel"):
+        build_bond_model(stated(**{"panel.length": 1.0e6})[0], most_elements=100)
+    assert meshed == []
+    with pytest.raises(BondRunError, match=r"The slice would have 3,045 elements, and the bond's run takes at most 3,000\."):
+        build_bond_model(stated()[0], most_elements=3000)
+    assert meshed == [1]
+    assert len(build_bond_model(stated()[0], most_elements=3045).model.elements) == 3045
+
+
 @needs_ccx
 def test_with_the_bond_whole_the_patch_carries_what_it_carries_in_calculixs_slice():
     """Pairs in place of the adhesive's elements leave the load's path as it was. Midway along every step the patch's force
