@@ -13,10 +13,13 @@ import pytest
 from anisotropy_engine.repair.repair_file import repair_from_dict
 from anisotropy_engine.repair.solid import ply_compliance
 from anisotropy_fea.bond_solver import BondModel
-from anisotropy_fea.ply_damage import PlyDamage, largest_load
+from anisotropy_fea.ply_damage import Held, Holder, PlyDamage, largest_load
 from anisotropy_fea.repair_bond import build_bond_model, run_bond
 from anisotropy_fea.repair_plies import (
+    MESH_STEP,
+    OUTPUT_KEY,
     SHORTEN,
+    STAGES,
     BondRunError,
     build_plies_model,
     headline,
@@ -149,6 +152,107 @@ def test_the_run_prints_its_answer_and_keeps_the_report(tmp_path, capsys) -> Non
     assert "What had failed at" in printed
     report = json.loads((tmp_path / "repair-plies.json").read_text(encoding="utf-8"))
     assert report["headline"].startswith("The slice carries")
+
+
+def test_what_failed_is_given_as_numbers_too_and_its_words_in_the_files_units(answer) -> None:
+    """The page writes its own words from the numbers (ADR-0141 amendment 1); the command's words are in the file's length."""
+    report = plies_report(answer, "mm-MPa")
+    at = report["at_held"]
+    assert at["elements"] == report["model"]["elements"] and at["bond"]["length"] == pytest.approx(report["model"]["bond_length"], rel=1e-12)
+    assert at["bond"]["softening"] + at["bond"]["parted"] <= at["bond"]["length"] * (1 + 1e-12)
+    assert {row["crack"] for row in at["plies"]} <= {"fibre_tension", "fibre_compression", "matrix"}
+    for row in at["plies"]:
+        assert 0 <= row["through"] <= row["elements"] <= at["elements"]
+        assert row["worst"]["kind"] in ("parent", "patch", "cover") and 0 <= row["worst"]["r"] <= SMALL["panel"]["length"] / 2
+    assert report["ended"] == "closed" and report["onset"]["crack"] in ("bond", "fibre", "matrix")
+    inch = plies_report(answer, "psi")
+    assert all(" mm" not in line for line in inch["failed"]) and any(" in " in line for line in inch["failed"])
+    assert inch["at_held"]["bond"]["length"] == pytest.approx(at["bond"]["length"] / 25.4, rel=1e-9)
+    line = headline(report)
+    assert f"carries {report['load']['held']:.4g} N/mm in this model and not {report['load']['not_held']:.4g}" in line
+    assert "per mm" not in line and "strength" not in line
+
+
+def test_a_hold_whose_time_has_come_says_time_and_finds_nothing() -> None:
+    """`Holder.hold` given a time already past ends after one solve, not held, and says "time": no finding about the load."""
+    import time
+
+    built = build_plies_model(repair_from_dict(small())[0])
+    holder = Holder(built.model)
+    late = holder.hold(holder.onset_load * 0.5, holder.begin(), 50, time.perf_counter() - 1.0)
+    assert (late.held, late.why, late.solves) == (False, "time", 1)
+    assert holder.hold(holder.onset_load * 0.5, holder.begin(), 50, time.perf_counter() + 3600.0).held
+
+
+def test_a_run_out_of_its_time_answers_with_the_largest_load_it_held(answer, monkeypatch) -> None:
+    """ADR-0141 amendment 1. The load being tried when the time comes is dropped. Before any load the slice does not hold was
+    found, the answer is a load it holds and no more; after, the bracket as far as it was closed. Before the first softening
+    was held there is nothing to answer, and the run is refused."""
+    import anisotropy_fea.repair_plies as module
+
+    def timed(limit: int):
+        class Timed(Holder):
+            calls = 0
+
+            def hold(self, load, damage, solves=200, until=None):
+                Timed.calls += 1
+                if Timed.calls > limit:
+                    return Held(load, False, damage, self.unit, 0.0, 1, "time")
+                return super().hold(load, damage, solves, until)
+        return Timed
+
+    repair = repair_from_dict(small())[0]
+    monkeypatch.setattr(module, "Holder", timed(2))
+    early = run_plies(repair, seconds=3600.0)
+    assert early.ended == "time" and early.not_held is None and early.spread is None and len(early.levels) == 2
+    assert early.onset == pytest.approx(answer.onset, rel=1e-12) and answer.onset < early.held.load < answer.held.load
+    report = plies_report(early, "mm-MPa")
+    assert report["load"]["not_held"] is None and report["ended"] == "time"
+    assert headline(report).startswith(f"The slice carries at least {report['load']['held']:.4g} N/mm in this model: the run's time came before")
+
+    raised = sum(1 for one, after in zip(answer.levels, answer.levels[1:]) if after.load == pytest.approx(one.load * 1.15, rel=1e-9))
+    monkeypatch.setattr(module, "Holder", timed(raised + 3))  # the first softening, every rise held, the one not held, one more
+    later = run_plies(repair, seconds=3600.0)
+    assert later.ended == "time" and later.not_held is not None and later.held.load <= answer.held.load < later.not_held
+    assert later.spread > answer.spread
+    assert "the run's time came before the two were brought nearer" in headline(plies_report(later, "mm-MPa"))
+
+    monkeypatch.setattr(module, "Holder", timed(0))
+    with pytest.raises(BondRunError, match="The run's time came before the slice had been carried to its first softening"):
+        run_plies(repair, seconds=3600.0)
+
+
+def test_a_slice_larger_than_the_run_takes_is_refused_with_what_makes_it_large() -> None:
+    repair = repair_from_dict(small())[0]
+    elements = len(build_plies_model(repair).model.elements)
+    assert len(build_plies_model(repair, most_elements=elements).model.elements) == elements
+    with pytest.raises(BondRunError, match=rf"The slice would have {elements:,} elements, and this run takes at most {elements - 1:,}\. For a crack "
+                                           r"to soften in them its elements are [0-9.]+ mm long at most, over half the panel's length: shorten the panel"):
+        build_plies_model(repair, units="mm-MPa", most_elements=elements - 1)
+    with pytest.raises(BondRunError, match=r"The slice would have more than [0-9,]+ elements, and this run takes at most 20\."):
+        build_plies_model(repair_from_dict(small(panel={"length": 80000.0, "width": 60.0}))[0], most_elements=20)
+
+
+def test_as_a_job_the_run_writes_its_stage_and_its_outcome(tmp_path) -> None:
+    """ADR-0141 amendment 1: with --result and --progress the command is a job, as a wing's check is (ADR-0119)."""
+    path, result, progress = tmp_path / "repair.json", tmp_path / "outcome.json", tmp_path / "progress.json"
+    path.write_text(json.dumps(SMALL), encoding="utf-8")
+    assert main([str(path), "--out", str(tmp_path / "model"), "--result", str(result), "--progress", str(progress), "--seconds", "600", "--most"]) == 0
+    outcome, last = json.loads(result.read_text(encoding="utf-8")), json.loads(progress.read_text(encoding="utf-8"))
+    assert outcome["status"] == "done" and outcome["message"].startswith("The slice carries") and outcome["result"] == outcome["message"]
+    report = json.loads(Path(outcome["outputs"][OUTPUT_KEY]).read_text(encoding="utf-8"))
+    assert report["headline"] == outcome["message"] and report["ended"] == "closed"
+    assert last == {"stage": None, "done": list(STAGES), "stages": list(STAGES), "outputs": {}, "coupon": None, "attempt": None}
+    # a mesh one step finer, as the page's second run asks
+    assert main([str(path), "--out", str(tmp_path / "finer"), "--finer", "1"]) == 0
+    finer = json.loads((tmp_path / "finer" / "repair-plies.json").read_text(encoding="utf-8"))
+    assert finer["model"]["element_size"] == pytest.approx(MESH_STEP * report["model"]["element_size"], rel=1e-9)
+    assert finer["load"]["held"] == pytest.approx(report["load"]["held"], rel=0.05)
+    # a repair the run refuses ends the job refused, in the run's words
+    path.write_text(json.dumps(small(panel={"length": 34.0})), encoding="utf-8")
+    assert main([str(path), "--out", str(tmp_path / "short"), "--result", str(result), "--progress", str(progress)]) == 2
+    refused = json.loads(result.read_text(encoding="utf-8"))
+    assert refused["status"] == "refused" and "the panel is too short around the repair" in refused["message"] and refused["outputs"] == {}
 
 
 def test_with_the_plies_kept_whole_the_bonds_own_load_lies_in_the_bracket() -> None:

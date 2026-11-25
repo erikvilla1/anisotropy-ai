@@ -28,7 +28,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
-from anisotropy_engine.repair import bond_needs, pick_check, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
+from anisotropy_engine.repair import bond_needs, pick_check, ply_needs, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
@@ -50,7 +50,7 @@ from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
 from .processes import run_tool
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
+                          SolverBusy, UnknownCoupon, REPAIR_PLIES, WING, is_repair_plies, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_plies_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       model_calls_since,
@@ -67,7 +67,7 @@ from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponModelReceipt, ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelProgram, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
-    WingRequest, WingShapeAnswer, RepairAnswer, RepairBondAnswer, RepairChangePreview, RepairChangeRequest, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
+    WingRequest, WingShapeAnswer, RepairAnswer, RepairBondAnswer, RepairChangePreview, RepairChangeRequest, RepairPliesOutput, RepairPliesRequest, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
     RepairSweepAnswer, RepairSweepRequest,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -102,17 +102,19 @@ PAIRING_MINUTES = 10
 ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
 ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
 WING_CHECKS = "/v1/wings/checks"  # a wing's finite element check, a job like a coupon run (ADR-0119)
+REPAIR_PLIES_RUNS = "/v1/repairs/plies"  # a repair carried until its plies and its bond cannot hold the load, a job too (ADR-0141 amendment 1)
 
 
 def job_recorder(app: FastAPI):
     """The receipt of an ended coupon job, written as every run is (ADR-0026): solved with the tool's outcome, or rejected with
-    its message. A wing's check is recorded at its own address (ADR-0119), its description among the inputs."""
+    its message. A wing's check is recorded at its own address (ADR-0119), its description among the inputs, and so is a repair's ply
+    run (ADR-0141 amendment 1)."""
     def record(job: Job, state: str, outcome: dict) -> uuid.UUID | None:
         engine = getattr(app.state, "records", None)
         if engine is None:
             return None
         try:
-            return record_run(engine, actor=job.actor, endpoint=WING_CHECKS if is_wing(job) else COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
+            return record_run(engine, actor=job.actor, endpoint=WING_CHECKS if is_wing(job) else REPAIR_PLIES_RUNS if is_repair_plies(job) else COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
                               api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
                               response={**outcome, "job_id": str(job.id)} if state == "done" else None,
                               error=None if state == "done" else outcome["message"], user_email=job.user_email)
@@ -150,7 +152,7 @@ async def lifespan(app: FastAPI):
         if orphans:
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
-                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command())
+                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command(), plies=repair_plies_command())
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     if settings.assistant.model is not None and settings.assistant.model not in CHECKED_MODELS:  # said, not refused (ADR-0121 amendment 8)
         print(f"the assistant's model {settings.assistant.model} is not one the Assistant check has been run with (CHECKED_MODELS)", flush=True)
@@ -1928,7 +1930,7 @@ def analyze_repair_endpoint(problem: RepairRequest, actor: Actor, request: Reque
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), repair=data, report=report,
-                        views=views, needs=needs, bond_needs=bond_needs(repair))
+                        views=views, needs=needs, bond_needs=bond_needs(repair), ply_needs=ply_needs(repair))
 
 
 def _repair_tool_report(command: list[str] | None, data: dict, options: list[str], report_name: str, what: str, timeout_s: float) -> tuple[str, Any]:
@@ -2044,6 +2046,86 @@ def follow_repair_bond_endpoint(problem: RepairRequest, actor: Actor, request: R
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairBondAnswer(run_id=None if run_id is None else str(run_id), headline=headline, report=report)
+
+
+# What the page shows of a ply run that did not end done, in its own words (ADR-0091 amendment 2): the cause goes to the log.
+PLIES_STOPPED = "The run could not be finished. Start it again; if it keeps failing, contact us."
+PLIES_UNREAD = "The run's result could not be read right now. Try again in a minute."
+REPAIR_PLIES_REPORT = "repair_plies"  # the key the run's tool lists its report under (anisotropy_fea.repair_plies.OUTPUT_KEY)
+
+
+def _repair_plies_job(request: Request, jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    """A repair's ply run by its id when it is the requester's; 404 in the same words as for none, any other job included."""
+    job = _known_job(request, jobs, job_id)
+    if not is_repair_plies(job):
+        raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
+    return job
+
+
+def _repair_plies_output(jobs: CouponJobs, job: Job) -> RepairPliesOutput:
+    """The run as it stands, and once done its report, read here from the job's file (the disk or the store)."""
+    with jobs.lock:
+        state, outcome, progress = job.state, dict(job.outcome or {}), dict(job.progress() or {})
+    message, report, headline = None, None, None
+    if state == "queued":
+        message = progress.get("message")
+    elif state == "refused":
+        message = outcome.get("message")  # the reason the repair cannot be carried, in the engine's or the model's words
+    elif state == "stopped":
+        print(f"repair ply run {job.id} stopped: {outcome.get('message')}", flush=True)
+        message = PLIES_STOPPED
+    elif state == "done":
+        try:
+            report = json.loads(jobs.output_file(job, REPAIR_PLIES_REPORT).read_text(encoding="utf-8"))
+            headline = report.pop("headline", None)
+        except (KeyError, OSError, ValueError, PermissionError, AttributeError) as exc:
+            print(f"repair ply run {job.id}: its report could not be read: {exc}", flush=True)
+            message, report = PLIES_UNREAD, None
+    inputs = job.inputs or {}
+    return RepairPliesOutput(job_id=str(job.id), state=state, repair=inputs.get("repair"), finer=int(inputs.get("finer") or 0),
+                             started_at=job.started_at.isoformat(), finished_at=None if job.finished_at is None else job.finished_at.isoformat(),
+                             stage=progress.get("stage"), stages_done=list(progress.get("done") or []), stages=list(progress.get("stages") or []),
+                             message=message, run_id=None if job.run_id is None else str(job.run_id), headline=headline, report=report)
+
+
+@app.post(REPAIR_PLIES_RUNS, status_code=202, response_model=RepairPliesOutput)
+def start_repair_plies(problem: RepairPliesRequest, actor: Actor, request: Request, response: Response) -> RepairPliesOutput:
+    """A repair carried until its plies and its bond cannot hold the load (ADR-0141), started from the repair's page as a job
+    (amendment 1), since the run takes minutes: the engine reads the description first, so a repair the page could not work is
+    refused in the same words and at once, and one that lacks what the run needs (the plies' four fracture energies, and what
+    following the bond needs) is refused with the list; then the run goes on in the background, through the job queue on the hosted
+    tier. Poll the Location until the state is neither queued nor running; once done the answer holds the run's report in the repair
+    file's units. The run is given nine minutes and 40,000 elements: one that needs longer answers with the largest load it held by
+    then. The same limits as a coupon run apply: one at a time here, and the hosted tier's per-user limits (409, 429). Its receipt is
+    a run record at this address, written when it ends."""
+    data, repair, _ = _repair_read(request, actor, problem)
+    needs = ply_needs(repair)
+    if needs:
+        detail = "To carry the repair until its plies and its bond cannot hold the load it needs: " + "; ".join(need["words"] for need in needs) + "."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
+    jobs = _coupon_jobs(request)
+    try:
+        job = jobs.start_repair_plies(actor, {"kind": REPAIR_PLIES, "repair": data.get("title"), "description": data, "finer": problem.finer},
+                                      user_email=getattr(request.state, "user_email", None))
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except JobRefused as exc:
+        print(f"repair ply run not started: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="The run could not be started right now. Try again in a minute.") from exc
+    response.headers["Location"] = f"{REPAIR_PLIES_RUNS}/{job.id}"
+    if job.state == "queued":
+        response.headers[ENQUEUE_HEADER] = str(job.id)
+    return _repair_plies_output(jobs, job)
+
+
+@app.get(REPAIR_PLIES_RUNS + "/{job_id}", response_model=RepairPliesOutput)
+def repair_plies_run(job_id: uuid.UUID, request: Request) -> RepairPliesOutput:
+    """A repair's ply run as it stands: its state and stage, and once done its report (ADR-0141 amendment 1)."""
+    jobs = _coupon_jobs(request)
+    return _repair_plies_output(jobs, _repair_plies_job(request, jobs, job_id))
 
 
 REPAIR_CHANGES = "/v1/repairs/changes"

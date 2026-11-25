@@ -84,6 +84,11 @@ DOCUMENT_SOURCE = "document_source"  # the report as LaTeX with its figures, kep
 DOCUMENT_TIMEOUT_S = 300.0  # Tectonic on one report takes half a minute on the hosted tier; past this it is stopped
 WING = "wing"  # the kind of a wing's finite element check, in its row's inputs (ADR-0119)
 WING_DESCRIPTION = "wing.json"  # the description as the check's tool reads it, in the job's folder
+REPAIR_PLIES = "repair_plies"  # the kind of a repair carried until its plies and its bond cannot hold the load (ADR-0141 amendment 1)
+REPAIR_DESCRIPTION = "repair.json"  # the repair as that run's tool reads it, in the job's folder
+# What the ply run is given as a job: less time than the queue's per-job limit (12 minutes, worker/solver-queue.ts), so a run that
+# needs more answers with what it found by then and is not stopped from outside; and the most elements a slice may have.
+REPAIR_PLIES_OPTIONS = ["--seconds", "540", "--most", "40000"]
 # The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
 CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
@@ -210,6 +215,13 @@ def repair_bond_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_bond"]
 
 
+def repair_plies_command() -> list[str] | None:
+    """`uv run --project fea python -m anisotropy_fea.repair_plies`, a repair carried until its plies and its bond cannot hold the
+    load, as a job (ADR-0141 amendment 1); None when uv is not on PATH. Like the bond's run it needs neither Gmsh nor CalculiX."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_plies"]
+
+
 def repair_shape_command() -> list[str] | None:
     """`uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape`, a repair's STEP file and the table of its solids
     (ADR-0131, ADR-0135); None when uv is not on PATH."""
@@ -220,6 +232,17 @@ def repair_shape_command() -> list[str] | None:
 def is_wing(job: "Job") -> bool:
     """Whether a job is a wing's finite element check (ADR-0119), as its row's inputs say."""
     return (job.inputs or {}).get("kind") == WING
+
+
+def is_repair_plies(job: "Job") -> bool:
+    """Whether a job is a repair's ply run (ADR-0141 amendment 1), as its row's inputs say."""
+    return (job.inputs or {}).get("kind") == REPAIR_PLIES
+
+
+def is_tool_job(job: "Job") -> bool:
+    """Whether a job is one tool run on a description it carries in its row, naming no coupon: a wing's check or a repair's ply
+    run. Such a job takes no gate and no coupon's folder, and its report is stored under the job's own key."""
+    return is_wing(job) or is_repair_plies(job)
 
 
 def typesetter() -> str | None:
@@ -352,7 +375,7 @@ class CouponJobs:
 
     def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
                  store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None,
-                 role: str | None = None, owners_root: Path | None = None, wing: list[str] | None = None):
+                 role: str | None = None, owners_root: Path | None = None, wing: list[str] | None = None, plies: list[str] | None = None):
         """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
         2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
         the coupons made with no sign-in, .local/fea/ by default, and `owners_root` where each signed-in person's folder of coupons
@@ -360,8 +383,9 @@ class CouponJobs:
         tier's per-user limit: one running job per
         person and at most that many a day (ADR-0056); None means no such limit. `role` is the job queue's (ADR-0056 amendment 3):
         "queue" files jobs for the queue, "solver" runs the queued job it is given; None runs every job here. `wing` is the wing
-        check's command line without its arguments (ADR-0119); None refuses a wing's check."""
-        self.command, self.recorder, self.root, self.studio, self.wing = command, recorder, root, studio, wing
+        check's command line without its arguments (ADR-0119); None refuses a wing's check. `plies` is the same for a repair's ply
+        run (ADR-0141 amendment 1)."""
+        self.command, self.recorder, self.root, self.studio, self.wing, self.plies = command, recorder, root, studio, wing, plies
         self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
         self.owners_root = owners_root or (OWNERS_FEA if local_root is None else local_root.with_name(local_root.name + "-owners"))
         if per_day is not None and table is None:
@@ -546,10 +570,31 @@ class CouponJobs:
         """Start a wing's finite element check (ADR-0119): `inputs` hold the kind, the wing's title and its description, which the
         engine has read already; `project_id` the wing project it is run for, already known to be the requester's (ADR-0122). Like a coupon job it is refused while another runs here, within the per-user limits, and with the
         queue it is filed for a solver: the description travels in the row, so nothing is filed in the store first."""
-        if self.role == "solver":
-            raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
         if inputs.get("kind") != WING or not isinstance(inputs.get("description"), dict):
             raise ValueError("a wing's check starts from its kind and its description")
+        return self._start_tool(actor, inputs, user_email, project_id)
+
+    def start_repair_plies(self, actor: str, inputs: dict, user_email: str | None = None) -> Job:
+        """Start a repair's ply run (ADR-0141 amendment 1): `inputs` hold the kind, the repair's title, its description, which the
+        engine has read already, and `finer`, how many steps finer than its own mesh the run is made on. A job as a wing's check
+        is one: refused while another runs here, within the per-user limits, and filed for a solver with the queue."""
+        if inputs.get("kind") != REPAIR_PLIES or not isinstance(inputs.get("description"), dict) or inputs.get("finer") not in (0, 1, 2):
+            raise ValueError("a repair's ply run starts from its kind, its description and how much finer its mesh is")
+        return self._start_tool(actor, inputs, user_email, None)
+
+    def _tool_of(self, job_or_inputs) -> tuple[list[str] | None, str, str]:
+        """A tool job's command line without its arguments (None where it cannot run here), the module it runs and what to call
+        it in a message."""
+        inputs = job_or_inputs if isinstance(job_or_inputs, dict) else (job_or_inputs.inputs or {})
+        if inputs.get("kind") == REPAIR_PLIES:
+            return self.plies, "anisotropy_fea.repair_plies", "a repair's ply run"
+        return self.wing, "anisotropy_fea.wing_check", "a wing's check"
+
+    def _start_tool(self, actor: str, inputs: dict, user_email: str | None, project_id: uuid.UUID | None) -> Job:
+        """Start a job that is one tool run on the description in its inputs (`is_tool_job`)."""
+        if self.role == "solver":
+            raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
+        command, module, what = self._tool_of(inputs)
         if self.role == "queue":
             self.sweep()
             if self.per_day is not None:
@@ -562,14 +607,14 @@ class CouponJobs:
                 raise JobRefused(f"the job could not be registered in the jobs table, so it was not queued: {str(exc).splitlines()[0]}") from exc
             return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email, project_id=project_id,
                        snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [], "message": "queued"})
-        if self.wing is None:
-            raise JobRefused("uv is not on PATH; a wing's check runs anisotropy_fea.wing_check through `uv run --project fea --extra mesh`")
+        if command is None:
+            raise JobRefused(f"uv is not on PATH; {what} runs {module} through `uv run --project fea`")
         if self.per_day is not None:
             self._within_limits(actor, user_email)
         with self.lock:
             busy = next((job for job in self.jobs.values() if job.state == "running"), None)
             if busy is not None:
-                print(f"wing check refused: {busy.id} is running; one runs at a time", flush=True)
+                print(f"{what} refused: {busy.id} is running; one runs at a time", flush=True)
                 raise JobBusy(busy.id)
             job_id = uuid.uuid4()
             job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email, project_id=project_id)
@@ -584,15 +629,18 @@ class CouponJobs:
                     del self.jobs[job.id]
                 shutil.rmtree(job.folder, ignore_errors=True)
                 raise JobRefused(f"the job could not be registered in the jobs table, so it was not started: {str(exc).splitlines()[0]}") from exc
-        threading.Thread(target=self._run, args=(job, self._wing_args(job)), name=f"wing-check-{job.id}", daemon=True).start()
+        threading.Thread(target=self._run, args=(job, self._tool_args(job)), name=f"{inputs.get('kind')}-{job.id}", daemon=True).start()
         return job
 
-    def _wing_args(self, job: Job) -> list[str]:
-        """The wing check's command line for a job whose folder exists: its description written there first."""
-        description = job.folder / WING_DESCRIPTION
+    def _tool_args(self, job: Job) -> list[str]:
+        """A tool job's command line for a job whose folder exists: its description written there first."""
+        command, _, _ = self._tool_of(job)
+        plies = is_repair_plies(job)
+        description = job.folder / (REPAIR_DESCRIPTION if plies else WING_DESCRIPTION)
         description.write_text(json.dumps(job.inputs["description"]), encoding="utf-8")
-        return [*self.wing, str(description), "--out", str(job.folder / "model"), "--result", str(job.folder / "outcome.json"),
+        args = [*command, str(description), "--out", str(job.folder / "model"), "--result", str(job.folder / "outcome.json"),
                 "--progress", str(job.folder / PROGRESS)]
+        return [*args, *REPAIR_PLIES_OPTIONS, "--finer", str(int(job.inputs.get("finer") or 0))] if plies else args
 
     def _within_limits(self, actor: str, user_email: str | None) -> None:
         """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
@@ -613,7 +661,7 @@ class CouponJobs:
 
     def _tool_name(self, job: Job) -> str:
         """The tool a job runs, as its console and a status name it."""
-        return (self.wing or ["anisotropy_fea.wing_check"])[-1] if is_wing(job) else Path((self.command or ["run_coupon.py"])[-1]).name
+        return self._tool_of(job)[1] if is_tool_job(job) else Path((self.command or ["run_coupon.py"])[-1]).name
 
     def _run(self, job: Job, args: list[str]) -> None:
         result = job.folder / "outcome.json"
@@ -645,7 +693,7 @@ class CouponJobs:
                                                                           f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
                 else:
                     print(f"coupon job {job.id}: the stopped run's files could not be copied to storage: {str(exc).splitlines()[0]}", flush=True)
-        elif state == "done" and self.store is not None and is_wing(job):  # a wing's check names no coupon: its report under the job's own key
+        elif state == "done" and self.store is not None and is_tool_job(job):  # a wing's check or a repair's ply run names no coupon: its report under the job's own key
             try:
                 job.stored = self._store_wing(job, outcome)
             except Exception as exc:  # as above: no result the store does not hold
@@ -923,7 +971,7 @@ class CouponJobs:
 
     def _solve_steps(self, job: Job, source: str, options: list[str]) -> tuple[dict, str | None]:
         """Run the tool with the gate; returns the outcome, and the reason when the job goes back to the queue instead."""
-        if is_wing(job):
+        if is_tool_job(job):
             return self._solve_wing(job), None
         argument = source
         started = time.monotonic()
@@ -972,12 +1020,12 @@ class CouponJobs:
         return outcome, None
 
     def _solve_wing(self, job: Job) -> dict:
-        """A solver's wing check (ADR-0119): no coupons to bring level and no gate, since it names none; the tool run to its end, killable
-        by the per-job timeout like a coupon's."""
-        if self.wing is None:
-            return {"status": "stopped", "message": "uv is not on PATH; a wing's check runs anisotropy_fea.wing_check", "coupon": None, "attempt": None,
-                    "outputs": {}}
-        args, result = self._wing_args(job), job.folder / "outcome.json"
+        """A solver's wing check (ADR-0119) or a repair's ply run (ADR-0141 amendment 1): no coupons to bring level and no gate, since
+        it names none; the tool run to its end, killable by the per-job timeout like a coupon's."""
+        command, module, what = self._tool_of(job)
+        if command is None:
+            return {"status": "stopped", "message": f"uv is not on PATH; {what} runs {module}", "coupon": None, "attempt": None, "outputs": {}}
+        args, result = self._tool_args(job), job.folder / "outcome.json"
         with job.log.open("wb") as log:
             process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email), **OWN_GROUP)
             with self.lock:

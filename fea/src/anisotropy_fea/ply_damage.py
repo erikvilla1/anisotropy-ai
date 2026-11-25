@@ -28,6 +28,7 @@ SI units throughout. A slice's width strain is the load factor times `width_stra
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -231,7 +232,8 @@ class Held:
     displacement: np.ndarray
     movement: float
     solves: int
-    why: str  # "stopped" (the damage stopped growing), "parted" (the model came apart) or "solves" (it was still growing at the limit)
+    why: str  # "stopped" (the damage stopped growing), "parted" (the model came apart), "solves" (it was still growing at the limit)
+    # or "time" (the caller's time came first: nothing is known of whether the model holds this load)
 
 
 class Holder:
@@ -331,13 +333,16 @@ class Holder:
                 largest = max(largest, float(law.index(opening, slip).max()))
         return largest
 
-    def hold(self, load: float, damage: Damage, solves: int = 200) -> Held:
-        """Hold the model under `load` from the given damage until the damage stops growing."""
+    def hold(self, load: float, damage: Damage, solves: int = 200, until: float | None = None) -> Held:
+        """Hold the model under `load` from the given damage until the damage stops growing. `until` is a time by
+        `time.perf_counter`: a hold still turning then ends not held, and says "time", which is no finding about the load."""
         model, plies = self.model, self.plies
         unit = model.unit_load
         for turn in range(solves):
             answer = load * self._answer(damage)
             movement = float(unit @ answer)
+            if until is not None and time.perf_counter() > until:
+                return Held(load, False, damage, answer, movement, turn + 1, "time")
             if abs(movement) > self.parted * abs(load * self.elastic_movement):
                 return Held(load, False, damage, answer, movement, turn + 1, "parted")
             now_open, now_pulled = self._ways(answer, load, damage)
