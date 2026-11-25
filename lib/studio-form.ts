@@ -24,6 +24,9 @@ export type LibraryConstants = { E1: number; E2: number; G12: number; ply_thickn
  * the system's stress unit and the ply thickness in its length unit, as the engine wrote them; null where the library gives none. */
 export type LibraryValues = {
   E1: number; E2: number; G12: number; nu12: number; strengths: Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", number> | null; ply_thickness: number | null;
+  /** G13 and G23, which the library does not give: the tension coupon's estimates as moduli, in the stress unit of the G13 and G23 rows, and
+   * the rule in words (ADR-0111 amendment 5). */
+  G13: number; G23: number; estimates: { G13: number; G23: number }; transverse_rule: string;
 };
 export type FormDefinition = {
   form_version: string; fea_version: string; units: string; row_units: Record<string, string>;
