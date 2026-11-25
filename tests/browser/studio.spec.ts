@@ -523,6 +523,33 @@ test("a library material's G13 and G23 are estimates until the engineer gives th
   expect([sent.library, sent.G13, sent.G23]).toEqual(["im7-8552", 5200, 3400]);
 });
 
+test("editing a library material copies its record into the engineer's own fields and sends those values (ADR-0111 amendment 6)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByTestId("edit-library-values").click();
+  // the record's numbers are now the engineer's own fields, exactly as the engine wrote them, and the library's block is gone
+  await expect(page.getByTestId("material-values")).toHaveCount(0);
+  await expect(page.getByLabel("Own material: name", { exact: true })).toHaveValue("IM7-8552");
+  await expect(page.getByLabel("Own material: E1 (MPa)", { exact: true })).toHaveValue("162095.7439623882");
+  await expect(page.getByLabel("Own material: F1t (MPa)", { exact: true })).toHaveValue("2558.5065363489152");
+  await expect(page.locator("#studio-G13")).toHaveValue("4688.43"); // the estimate the coupon was already built with
+  await expect(page.getByLabel("Own material: source", { exact: true })).toHaveValue(/IM7 \/ 8552 from our library, edited here/);
+  // the engineer changes one of them, and the check is sent their value, with no library id
+  await page.getByLabel("Own material: E1 (MPa)", { exact: true }).fill("150000");
+  await page.getByTestId("build-button").click();
+  await expect.poll(() => calls.checks.length).toBeGreaterThan(0);
+  const edited = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+  expect([edited.library, edited.own_E1, edited.own_name]).toEqual([undefined, 150000, "IM7-8552"]);
+  expect(edited.own_E2).toEqual(8963.18448111887); // the rest still the record's
+  // picking the material again puts the library's own numbers back
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await expect(page.getByTestId("material-values").locator("[data-key=E1] dd")).toHaveText("162.1 GPa");
+});
+
 test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: false }); // the switch off, as on the hosted tier: the product's view

@@ -317,6 +317,8 @@ export function shortHelp(field: FieldDefinition): string {
   return cut ? `${cut.charAt(0).toUpperCase()}${cut.slice(1)}${/[.?!]$/.test(cut) ? "" : "."}` : "";
 }
 
-export const libraryOptions: { id: string; name: string; thickness: number | null }[] = formDefinition.library.map((entry) => ({
+export const libraryOptions: { id: string; name: string; thickness: number | null; source: string }[] = formDefinition.library.map((entry) => ({
   id: String(entry.Id), name: String(entry.Name), thickness: typeof entry["Ply thickness (mm)"] === "number" ? entry["Ply thickness (mm)"] : null,
+  // where the record's numbers come from, so a material copied out of the library to be edited carries its origin (ADR-0111 amendment 6)
+  source: String(entry.Source ?? ""),
 }));

@@ -6,7 +6,7 @@
 import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
-  FORM_VERSION, fieldByKey, labelFor, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf, unitWords, type Checklist,
+  FORM_VERSION, fieldByKey, labelFor, libraryConstantsIn, libraryOptions, libraryValuesIn, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitsOf, unitWords, type Checklist,
   type FieldDefinition, type StudioForm, type StudioValues,
 } from "./studio-form";
 
@@ -159,6 +159,42 @@ export function builtLines(checklist: Checklist | null, units = "mm-MPa"): Built
     return { key: b.row, label, value, reason: b.reason };
   });
 }
+/** A name for the material copied out of a library record: the record's id in capitals, as a name the decks accept (a letter first, then
+ * letters, digits, - and _). An id that starts with a digit, as "7781-5245c" does, takes an M in front. */
+export function ownNameFromLibrary(id: string): string {
+  const cleaned = id.toUpperCase().replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 79);
+  return /^[A-Za-z]/.test(cleaned) ? cleaned : `M${cleaned}`;
+}
+
+/** The chosen library material's values copied into the engineer's own rows (ADR-0111 amendment 6), so a material picked from the library
+ * can be edited rather than only read. Every constant goes across exactly as the engine wrote it, never as the four figures the page
+ * prints, so copying and changing nothing changes no number; G13 and G23 carry the estimates the coupon was already built with, and the
+ * source names the record the numbers came from. The coupon then holds the engineer's own constants, as one typed from the start does: the
+ * library's record is no longer cited, because the numbers are no longer only its own. Null when no library material is chosen. */
+export function ownFromLibrary(form: StudioForm): StudioForm | null {
+  const id = (form.library ?? "").trim();
+  const units = unitsOf(form);
+  const picked = libraryOptions.find((m) => m.id === id);
+  const v = libraryValuesIn(id, units);
+  // the moduli as the rows hold them (MPa, not the GPa the step prints): `library_constants`, written by the engine in every system
+  const c = libraryConstantsIn(id, units);
+  if (!picked || !v || !c) return null;
+  const text = (x: number | null): string => (x === null ? "" : String(x));
+  return {
+    library: "",
+    own_name: ownNameFromLibrary(id),
+    own_E1: text(c.E1), own_E2: text(c.E2), own_G12: text(c.G12), own_nu12: text(v.nu12),
+    ...(v.strengths
+      ? { own_F1t: text(v.strengths.F1t), own_F1c: text(v.strengths.F1c), own_F2t: text(v.strengths.F2t), own_F2c: text(v.strengths.F2c), own_F6: text(v.strengths.F6) }
+      : { own_F1t: "", own_F1c: "", own_F2t: "", own_F2c: "", own_F6: "" }),
+    // the ply thickness the library gives, if any; a record without one leaves the row for the engineer, as picking it does
+    ply_thickness: (form.ply_thickness ?? "").trim() || text(c.ply_thickness),
+    // the values the coupon was already built with: the engineer's own if they gave them, else the estimates, now theirs to change
+    G13: (form.G13 ?? "").trim() || text(v.estimates.G13), G23: (form.G23 ?? "").trim() || text(v.estimates.G23),
+    own_source: `${picked.name} from our library, edited here${picked.source ? ` · ${picked.source}` : ""}`,
+  };
+}
+
 /** One constant of the chosen material as the Material step shows it: its symbol, its value with the unit, and whether it is an estimate. */
 export type ValueLine = { key: string; label: string; value: string; estimate?: boolean };
 
