@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asksPlateEdit, canBecomePlate, plateFromCoupon, readPlateEdit } from "../lib/plate-edits";
+import { asksPlateEdit, canBecomePlate, ownWords, plateFromCoupon, readPlateEdit } from "../lib/plate-edits";
 import { blankForm, type StudioForm } from "../lib/studio-form";
 import { emptyPlate, plateValues, PLATE_TEST, type PlateLists } from "../lib/studio-plate";
 
@@ -160,6 +160,16 @@ test("a tension coupon is carried over as a plate held and loaded as the test ho
   assert.deepEqual(plateValues(bare.lists).supports, [{ region: "Edge-Bottom", dofs: [1, 2, 3, 4, 5, 6] }, { region: "Edge-Top", dofs: [1, 3, 4, 5, 6] },
     { region: "Edge-Top", dofs: [2], value: 0.5 }]);
   assert.equal(bare.form.element_size, ""); // the package chooses it by the plate's size
+  // a coupon whose setup was never built (its own sizes, the tab length still missing) and no pull written: the pull the test is given when
+  // none is written comes across, as the Loads step showed it, and the words say the ends are held along their edges (found by the founder, 2026-11-25)
+  const unbuilt = plateFromCoupon({ ...coupon, length: "150", width: "20" }, null);
+  assert.deepEqual(plateValues(unbuilt.lists).supports, [{ region: "Edge-Bottom", dofs: [1, 2, 3, 4, 5, 6] }, { region: "Edge-Top", dofs: [1, 3, 4, 5, 6] },
+    { region: "Edge-Top", dofs: [2], value: 1 }]);
+  assert.match(ownWords(unbuilt.carried), /Edge-Top: moved 1 mm along y.*No tab length is set, so the ends are held along their edges\.$/);
+  assert.doesNotMatch(ownWords(carried), /No tab length/);
+  // what the check chose is used before the usual one, and a force written with no value carries no pull
+  assert.deepEqual(plateValues(plateFromCoupon(coupon, null, { value: "0.25" }).lists).supports.at(-1), { region: "Edge-Top", dofs: [2], value: 0.25 });
+  assert.deepEqual(plateFromCoupon({ ...coupon, control: "force" }, null).lists.loads, []);
   // a further sentence then changes it as it would any plate
   const edit = readPlateEdit("XSYMM on the left edge", form, lists);
   assert.equal(edit!.lists.supports.length, 4);
