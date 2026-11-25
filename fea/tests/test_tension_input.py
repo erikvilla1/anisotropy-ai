@@ -158,3 +158,24 @@ def test_the_material_steps_estimates_are_the_ones_the_coupon_is_built_with_and_
     one, built = complete_tension({**REFERENCE, "G13": 5200}, DAY)  # one given: the other is still estimated
     assert (one["G13"], one["G23"]) == (5200, estimate.G23) and [b.row for b in built if b.row in ("G13", "G23")] == ["G23"]
 
+
+
+def test_a_coupon_stated_in_inches_is_completed_in_inches(tmp_path):
+    """The screen sends its units when they are not mm-MPa (ADR-0090 amendment 2): Table 2's own inch sizes, our choices converted, so the
+    mesh is the 2 mm one and not 2 mm read as inches (the second site check, 2026-11-25: "switch to inches" sent a 0.0787 in mesh read as
+    0.0787 mm, and the setup check never finished)."""
+    values, built = complete_tension({**REFERENCE, "units": "in-psi"}, DAY)
+    assert (values["width"], values["length"]) == (1.0, 10.0)  # D3039 Table 2's inch-pound values, not 25 mm converted
+    assert (values["tab_length"], values["strain_length"], values["value"], values["element_size"]) == (2.20472, 0.984252, 0.0393701, 0.0787402)
+    assert (values["G13"], values["G23"]) == (679999.0, 433334.0)  # psi
+    assert "units" not in chosen(built), "the engineer's units are kept, not chosen"
+    reasons = {b.row: b.reason for b in built}
+    assert "2.20472 in (56 mm)" in reasons["tab_length"] and reasons["strain_length"].startswith("0.984252 in (25 mm), within")
+    metric, _ = complete_tension({**REFERENCE, "units": "m-Pa"}, DAY)
+    assert (metric["width"], metric["tab_length"], metric["element_size"], metric["value"]) == (0.025, 0.056, 0.002, 0.001)
+    inches, model, _ = setup_checklist(read_values(values_file(tmp_path / "in", {**REFERENCE, "units": "in-psi"})), tmp_path / "none", **TOOLS)
+    assert inches.state == "ready", inches.problems
+    _, mm_model, _ = setup_checklist(read_values(values_file(tmp_path / "mm", REFERENCE)), tmp_path / "none", **TOOLS)
+    # 1.0 x 10 in against 25 x 250 mm, both at 2 mm: a row or two more across the wider coupon (1,764 elements against 1,488), not a
+    # mesh 25 times finer each way
+    assert mm_model.mesh.element_count < model.mesh.element_count < 1.25 * mm_model.mesh.element_count

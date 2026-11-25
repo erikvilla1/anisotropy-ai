@@ -23,6 +23,7 @@ from anisotropy_engine.library import find_dataset, library_material
 from .spec import normalised_angle
 from .standards import astm_d3039
 from .standards.profile import Subject
+from .units import UNIT_LABEL, UNIT_SYSTEMS, from_si
 
 INPUT = "tension"  # the values file's "input" word for the tension screen
 TEST = "unnotched tension"
@@ -120,14 +121,32 @@ def d3039_class(data: dict) -> astm_d3039.Preset | None:
     return astm_d3039.classify(subject)
 
 
+def _in_units(value: float, kind: str, units: str) -> float:
+    """A choice of ours, made in mm and MPa, in the coupon's units: the same value converted, to six significant figures in another system
+    (56 mm is 2.20472 in), so the coupon is the one it would be in mm (ADR-0090 amendment 2)."""
+    if units == UNITS:
+        return value
+    return float(f"{from_si(value * (MM if kind == 'length' else 1e6), kind, units):.6g}")
+
+
+def _length_words(mm: float, units: str) -> str:
+    """A length of ours in words, in the coupon's units with the millimetres it was chosen in: "56 mm", or "2.20472 in (56 mm)"."""
+    if units == UNITS:
+        return f"{mm:g} mm"
+    return f"{_in_units(mm, 'length', units):g} {UNIT_LABEL[units]['length']} ({mm:g} mm)"
+
+
 def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple[Built, ...]]:
     """The values of a tension coupon with every row the engineer was not asked for chosen, and the list of those choices.
 
     `data` is the values file without its "input" key; the rows it holds are kept as they are. Under D3039, each size row left blank comes
     from Table 2 on its own (ADR-0090 amendment 1). A layup in no D3039 Table 2 class, or a coupon under no standard, gets no size: the
-    check then asks for the length, width and tab length by row."""
+    check then asks for the length, width and tab length by row. Every number chosen is in the coupon's units, the ones the screen sent
+    or mm-MPa (ADR-0090 amendment 2): a coupon stated in inches gets Table 2's own inch sizes, and our choices converted."""
     out = dict(data)
     built: list[Built] = []
+    stated = str(out.get("units") or "").strip()
+    units = stated if stated in UNIT_SYSTEMS else UNITS  # a system the form does not know is refused by the check, by its row
 
     def choose(key: str, value: Any, reason: str) -> None:
         if _blank(out.get(key)):
@@ -147,15 +166,15 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     size_given = bool(given)
     preset = d3039_class(out) if under_d3039 and len(given) < len(SIZE_ROWS) else None
     if preset is not None:
-        sizes = {row: value / MM for row, value in preset.si.items() if row in SIZE_ROWS}
-        tab = sizes.get("tab_length", GRIP_LENGTH_MM)
+        sizes = {row: value for row, value in preset.values_in(units).items() if row in SIZE_ROWS}
+        tab = sizes.get("tab_length", _in_units(GRIP_LENGTH_MM, "length", units))
         why = f"{D3039}, Table 2, {preset.label}"
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
-               f"{why}: gripped through emery cloth, with no tab length given; {GRIP_LENGTH_MM:g} mm is the software's choice")
-        grip = "" if "tab_length" in sizes or "tab_length" in given else (f"; the {GRIP_LENGTH_MM:g} mm grip length is the software's choice, "
-                                                                          "since Table 2 gives none for this class")
+               f"{why}: gripped through emery cloth, with no tab length given; {_length_words(GRIP_LENGTH_MM, units)} is the software's choice")
+        grip = "" if "tab_length" in sizes or "tab_length" in given else (f"; the {_length_words(GRIP_LENGTH_MM, units)} grip length is the "
+                                                                          "software's choice, since Table 2 gives none for this class")
         if given:
             yours = " and ".join(SIZE_WORDS[key] for key in given)
             choose("size_from", f"{yours} as you gave, the rest from {why}{grip}; a deviation from {D3039} Table 2 is reported, never refused",
@@ -170,19 +189,20 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
                "no size could be chosen, so the length, width and tab length are asked for under Change settings")
 
     choose("strain_device", "extensometer", f"strain is measured over a gauge length at mid-length ({D3039} §7.3)")
-    choose("strain_length", EXTENSOMETER_MM, f"{EXTENSOMETER_MM:g} mm, within {D3039} §7.3.2's 10 to 50 mm, centred on the coupon")
+    choose("strain_length", _in_units(EXTENSOMETER_MM, "length", units),
+           f"{_length_words(EXTENSOMETER_MM, units)}, within {D3039} §7.3.2's 10 to 50 mm, centred on the coupon")
     choose("grips", "nodal", "every node of each tab is held; the top tab moves")  # the screen shows the value as "Clamped"
     choose("region", "tabs", "the grips hold the whole tab")
     if _blank(out.get("value")):
         choose("control", "displacement", "the top grip moves; the bottom one is held")
-        choose("value", PULL_MM, "the model is linear, so R, the loading at first-ply failure, does not depend on it")
-    choose("element_size", ELEMENT_SIZE_MM, "a structured mesh, with node rows at the tab lines and at the extensometer's ends; the analysis "
+        choose("value", _in_units(PULL_MM, "length", units), "the model is linear, so R, the loading at first-ply failure, does not depend on it")
+    choose("element_size", _in_units(ELEMENT_SIZE_MM, "length", units), "a structured mesh, with node rows at the tab lines and at the extensometer's ends; the analysis "
            "also checks the result on finer meshes")
     record = _record(out)
     if record is not None:  # the library gives no G13 or G23 (only CalculiX's brick and the Abaqus shell's transverse shear read them)
         estimate = transverse_estimates(str(out["library"]).strip())
-        choose("G13", estimate.G13, estimate.reasons["G13"])
-        choose("G23", estimate.G23, estimate.reasons["G23"])
+        choose("G13", _in_units(estimate.G13, "stress", units), estimate.reasons["G13"])
+        choose("G23", _in_units(estimate.G23, "stress", units), estimate.reasons["G23"])
     elif not _blank(out.get("own_G12")):
         choose("G13", out["own_G12"], "not given: G13 = G12, a usual estimate; an in-plane pull does not load it")
         choose("G23", out["own_G12"], "not given: taken equal to G12 so the model builds; an in-plane pull does not load it")

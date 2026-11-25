@@ -26,12 +26,12 @@ from .fields import elements_touching_grips, gauge_failures
 from .mesher import MeshError
 from .recovery import deck_f12_star, element_ply_states, strength_ratios
 from .results import ShellSolution
-from .spec import IN_PLANE_KINDS, CouponSpec, SpecError, mesh_counts
+from .spec import IN_PLANE_KINDS, MOST_ELEMENTS, CouponSpec, SpecError, mesh_counts
 from .units import deck_units_of, from_si
 from .write_abaqus import write_abaqus
 
 FACTORS = (1, 2, 4)  # the spec's mesh, then each element split in two along both axes, then in four
-CAP = 40_000  # elements: a refinement past this is left out of the study and the table says so
+CAP = MOST_ELEMENTS  # elements: a refinement past this is left out of the study and the table says so
 SETTLED = 0.01  # a quantity has settled when the last refinement moves it by less than this fraction of its value
 
 

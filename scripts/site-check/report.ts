@@ -11,7 +11,8 @@ import { monthSpent, MONTH_CAP, type Entry } from "./budget";
 import { countOf, runFailed, SCHEMA, verdictOf, type PageResult, type QuestionResult, type RunResult, type Verdict } from "./record";
 import { runSecrets, scrub, scrubbed } from "./scrub";
 
-type Asked = { run: { site: string; mode: "quick" | "full"; started: string; finished: string; commit: string | null; cap: number; siteSpent: number; stopped: string | null };
+type Asked = { run: { site: string; mode: "quick" | "full"; started: string; finished: string; commit: string | null; expected?: string | null; cap: number;
+  siteSpent: number; stopped: string | null; void?: string | null };
   pages: PageResult[]; questions: QuestionResult[] };
 type Judged = { grades: Record<string, NonNullable<QuestionResult["judge"]>>; spent: number; stopped: string | null };
 
@@ -27,14 +28,24 @@ export function combine(asked: Asked, judged: Judged, ledger: readonly Entry[], 
   const spent = { site: asked.run.siteSpent, judge: judged.spent, month: monthSpent(ledger, now) + asked.run.siteSpent + judged.spent };
   const stopped = [asked.run.stopped, judged.stopped].filter(Boolean).join("; ") || null;
   const askedNow = new Set(questions.filter((q) => q.asked).map((q) => q.id));
+  const setUp = new Set(asked.pages.filter((p) => p.state === "set-up").map((p) => `page:${p.page}`));
+  const failingNow = failing(questions, asked.pages);
+  const before = new Set(failingBefore);
   return { schema: SCHEMA, site: asked.run.site, mode: asked.run.mode, started: asked.run.started, finished: now.toISOString(), commit: asked.run.commit,
-    cap: asked.run.cap, spent, stopped, pages: asked.pages, questions, counts: countOf(questions), failed: runFailed(questions, asked.pages),
-    unresolved: failingBefore.filter((id) => !askedNow.has(id)) };
+    expected: asked.run.expected ?? null, void: asked.run.void ?? null, cap: asked.run.cap, spent, stopped, pages: asked.pages, questions,
+    counts: countOf(questions), failed: runFailed(questions, asked.pages),
+    unresolved: failingBefore.filter((id) => (id.startsWith("page:") ? !setUp.has(id) && !failingNow.includes(id) : !askedNow.has(id))),
+    newlyFailing: failingNow.filter((id) => !before.has(id)) };
 }
 
-/** The questions that fail now and are no known gap, with those that failed before and were not asked again: the next run's `failingBefore`. */
+/** What fails in a run: the questions that are no known gap, and the pages it could not set up (`page:<name>`). */
+function failing(questions: readonly QuestionResult[], pages: readonly RunResult["pages"][number][]): string[] {
+  return [...questions.filter((q) => q.verdict === "fails" && !q.gap).map((q) => q.id), ...pages.filter((p) => p.state === "failed").map((p) => `page:${p.page}`)];
+}
+
+/** What fails now, with what failed before and was not asked or set up again: the next run's `failingBefore`. */
 export function stillFailing(r: RunResult): string[] {
-  return [...new Set([...r.questions.filter((q) => q.verdict === "fails" && !q.gap).map((q) => q.id), ...r.unresolved])].sort();
+  return [...new Set([...failing(r.questions, r.pages), ...r.unresolved])].sort();
 }
 
 const one = (text: string, length = SHOWN_IN_REPORT) => { const flat = text.replace(/\s+/g, " ").trim(); return flat.length > length ? `${flat.slice(0, length - 1)}…` : flat; };
@@ -54,6 +65,9 @@ export function markdown(r: RunResult, runUrl: string | null): string {
     `${r.counts["not-asked"]} not asked.`, "",
     `Spent ${money(r.spent.site + r.spent.judge)} of ${money(r.cap)} (the site's model ${money(r.spent.site)}, the judge ${money(r.spent.judge)}); this month ${money(r.spent.month)} of ${money(MONTH_CAP)}.` +
     (r.stopped ? ` Stopped early: ${r.stopped}.` : ""), ""];
+  if (r.void) lines.push(`**This run tells nothing:** ${r.void}. No issue was opened, added to or closed.`, "");
+  const sentToModel = r.questions.filter((q) => !q.asked && q.reason?.startsWith("the page sent it to a model")).map((q) => q.id);
+  if (sentToModel.length) lines.push(`Sent to a model by the page though their banks say the page answers them, so left for the full run: ${sentToModel.join(", ")}.`, "");
   if (r.unresolved.length) lines.push(`Failed in an earlier run and not asked in this one: ${r.unresolved.join(", ")}.`, "");
   if (runUrl) lines.push(`The report with a picture of each answer that did not hold: the run's "site-check-report" file, ${runUrl}`, "");
   lines.push("| Feature | Asked | Holds | Weak | Fails | Not asked |", "| --- | ---: | ---: | ---: | ---: | ---: |");
@@ -118,6 +132,7 @@ article.fails{border-left:4px solid var(--bad)}article.weak{border-left:4px soli
 article.fails .tag{color:var(--bad)}article.weak .tag{color:var(--weak)}img{max-width:100%;border:1px solid var(--line);border-radius:6px;margin-top:8px}
 pre{white-space:pre-wrap;font-size:13px}code{font-size:13px}.wrap{overflow-x:auto}</style></head><body><main>
 <h1>Site check, ${esc(r.mode)} run</h1><p class="muted">${esc(r.started.slice(0, 16).replace("T", " "))} UTC · ${esc(r.site)}${r.commit ? ` · API ${esc(r.commit.slice(0, 7))}` : ""}</p>
+${r.void ? `<p><strong>This run tells nothing:</strong> ${esc(r.void)}.</p>` : ""}
 <p>Asked ${asked.length}: <strong>${r.counts.holds}</strong> hold, <strong>${r.counts.weak}</strong> weak, <strong>${r.counts.fails}</strong> fail; ${r.counts["not-asked"]} not asked.
 Spent ${money(r.spent.site + r.spent.judge)} of ${money(r.cap)}; this month ${money(r.spent.month)} of ${money(MONTH_CAP)}.${r.stopped ? ` Stopped early: ${esc(r.stopped)}.` : ""}</p>
 <div class="wrap"><table><thead><tr><th>Feature</th><th>Asked</th><th>Holds</th><th>Weak</th><th>Fails</th><th>Not asked</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -159,7 +174,7 @@ function main(): number {
   const turns: Record<string, string> = existsSync(turnsFile) ? JSON.parse(readFileSync(turnsFile, "utf8")) : {};
   for (const q of result.questions) if (q.asked) turns[q.id] = now.toISOString();
   writeFileSync(turnsFile, JSON.stringify(turns, null, 1));
-  writeFileSync(failingFile, JSON.stringify(stillFailing(result), null, 1));
+  if (!result.void) writeFileSync(failingFile, JSON.stringify(stillFailing(result), null, 1)); // a run that tells nothing keeps what failed before
   console.log(markdown(result, runUrl));
   writeFileSync(join(out, "failed"), result.failed ? "yes\n" : "no\n");
   return 0;

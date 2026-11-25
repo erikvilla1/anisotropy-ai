@@ -2193,6 +2193,28 @@ test("a coupon stated in inches and psi is read, labelled and sent in those unit
   await expect(form.getByLabel("Length (mm)", { exact: true })).toHaveCount(0);
 });
 
+test("on the tension screen a switch to inches sends the units with the coupon, and \"show all the rows\" is answered (ADR-0090 amendment 2)", async ({ page }) => {
+  // the second site check (2026-11-25): the screen sent a 0.0787 in element size with no units, read as 0.0787 mm, and the check never
+  // finished; "show all the rows" opened a panel this screen does not have, and the chat said nothing
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // the product's view
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const chat = page.getByLabel("Message the coupon assistant", { exact: true });
+  await chat.fill("switch to inches");
+  await chat.press("Enter");
+  const inInches = () => calls.checks.map((c) => (c as { values: Record<string, unknown> }).values).filter((v) => v.units === "in-psi");
+  await expect.poll(() => inInches().length).toBeGreaterThan(0);
+  const sent = inInches()[0];
+  expect([sent.input, sent.library, sent.element_size]).toEqual(["tension", "im7-8552", undefined]); // the 2 mm mesh, in inches, is the package's to choose
+  await chat.fill("show all the rows");
+  await chat.press("Enter");
+  await expect(page.getByTestId("chat-all-rows").last()).toContainText("Every row is in the model tree on the left");
+});
+
 test("the chat solves a laminate problem with each value in its own unit, and shows the answer in the units picked (ADR-0060)", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));

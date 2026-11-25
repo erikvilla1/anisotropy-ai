@@ -4,9 +4,9 @@ import { Budget, headerCost, modelSlots, monthSpent, runCap, FIRST_GUESS } from 
 import { fixedChecks, fixedVerdict, repairClaims, type Seen } from "../scripts/site-check/grade";
 import { failureText } from "../scripts/site-check/issue";
 import { NumberPool, numbersIn, untraced } from "../scripts/site-check/numbers";
-import { NOT_OFFERED, plan } from "../scripts/site-check/plan";
+import { moves, NOT_OFFERED, plan } from "../scripts/site-check/plan";
 import { combine, html, markdown, stillFailing } from "../scripts/site-check/report";
-import { countOf, runFailed, SCHEMA, verdictOf, type QuestionResult } from "../scripts/site-check/record";
+import { countOf, runFailed, sameCommit, SCHEMA, verdictOf, type QuestionResult } from "../scripts/site-check/record";
 import { scrub, scrubbed } from "../scripts/site-check/scrub";
 import { banks, type Question } from "./assistant-questions/harness";
 
@@ -70,6 +70,11 @@ test("an answer that is on time, in the product's words and the engine's numbers
 test("no answer, an outage, a slow answer, a tool's name, a long heading or a question that offers a change each fail", () => {
   const names = (s: Partial<Seen>, q: Partial<Question> = {}, modelRead = false) => fixedChecks(question(q), seen(s), pool(), modelRead).map((c) => `${c.name}:${c.level}`);
   assert.deepEqual(names({ timedOut: true, shown: "", heading: "" }), ["answered:fails"]);
+  // an answer shown with the page still at work under it (the second run, 2026-11-25: "switch to inches", then "Checking the setup…" for
+  // over 45 s) is that answer, timed from when it was shown, and weak: not "no answer appeared"
+  const busy = fixedChecks(question(), seen({ timedOut: true, busy: "Checking the setup…", seconds: 0.4 }), pool(), false);
+  assert.deepEqual(busy.map((c) => `${c.name}:${c.level}`), ["answered:weak"]);
+  assert.match(busy[0].note, /still at work under its answer .*“Checking the setup…”/);
   assert.deepEqual(names({ shown: "That question could not be answered right now. Try again in a moment." }), ["answered:fails"]);
   assert.deepEqual(names({ seconds: 8 }), ["time:weak"]);
   assert.deepEqual(names({ seconds: 25 }), ["time:fails"]);
@@ -142,12 +147,18 @@ test("a quick run asks only what the page answers itself, a full run the model's
   assert.equal(quick.asked.length + quick.skipped.length, total);
   assert.equal(full.asked.length + full.skipped.length, total);
   assert.ok(quick.asked.every((p) => !p.modelRead) && full.asked.some((p) => p.modelRead));
-  assert.ok(full.skipped.every((s) => s.question.page !== "results" || s.question.picked !== undefined), "every results question is asked unless it needs a click");
+  assert.ok(full.skipped.every((s) => s.question.page !== "results" || s.question.picked !== undefined || s.reason.includes("Ansys file")),
+    "every results question is asked unless it needs a click or is of a page without the Ansys file");
   for (const page of Object.keys(NOT_OFFERED)) assert.ok(full.asked.every((p) => p.question.page !== page), `${page} is a founder's page`);
   // each page's questions together, those that move the page on last
   const pages = full.asked.map((p) => p.question.page);
   assert.deepEqual(pages, [...pages].sort((a, b) => pages.indexOf(a) - pages.indexOf(b)), "grouped by page");
   assert.throws(() => plan("full", ["no-such-bank"], all), /no bank named no-such-bank/);
+  // the site offers the Ansys file to everyone (ADR-0129 amendment 3): a bank's question of a page without it, whose twin with the file
+  // offered is in the same bank, is left out (the second run, 2026-11-25: "download ansys model" failed for offering the file)
+  const ansys = full.skipped.filter((s) => s.reason.includes("Ansys file")).map((s) => `${s.id} ${s.ask}`);
+  assert.deepEqual(ansys, ["model-downloads#3 download ansys model", "model-downloads#6 export the model"]);
+  assert.ok(["model-downloads#1", "model-downloads#2", "model-downloads#5"].every((id) => full.asked.some((p) => p.id === id)), "the twins and the rest are asked");
 });
 
 test("in a full run the model's questions take turns under the cap: those asked longest ago first", () => {
@@ -199,6 +210,36 @@ test("one verdict per question: a fixed check that fails, then the judge; a know
   assert.deepEqual(countOf([result({}), result({ verdict: "weak" })]), { holds: 1, weak: 1, fails: 0, "not-asked": 0 });
 });
 
+test("a run asks the banks of the commit the site runs: a short commit is the same as its full one", () => {
+  assert.ok(sameCommit("29d483b59c897fc0f94bf8df08719aec3854c787", "29d483b"));
+  assert.ok(sameCommit("29D483B", "29d483b59c897fc0f94bf8df08719aec3854c787"));
+  assert.ok(!sameCommit("29d483b59c897fc0f94bf8df08719aec3854c787", "1d6451427d3fa4b427b69bb24c96ab16d482d980"));
+  assert.ok(!sameCommit(null, "29d483b") && !sameCommit("29d483b", "") && !sameCommit(undefined, undefined));
+});
+
+test("a run that tells nothing opens, adds to and closes no issue, and keeps what failed; a failure that stays is told once", () => {
+  const run = { site: "https://anisotropy.dev", mode: "quick" as const, started: "2026-11-25T02:38:00Z", finished: "2026-11-25T03:10:00Z", commit: "29d483b", cap: 1, siteSpent: 0, stopped: null };
+  const judged = { grades: {}, spent: 0, stopped: null };
+  const failingPage = { page: "past", state: "failed" as const, seconds: 3, reason: "the history did not load", picture: null };
+  const asked = { run: { ...run, void: "the site changed while the run asked (29d483b to 1d64514): a deploy landed, and its own run asks again" }, pages: [failingPage],
+    questions: [result({ verdict: "fails", checks: [{ name: "answered", level: "fails", note: "no answer appeared" }] })] };
+  const voided = combine(asked, judged, [], new Date("2026-11-25T03:11:00Z"), []);
+  assert.equal(voided.void, asked.run.void);
+  assert.match(markdown(voided, null), /\*\*This run tells nothing:\*\* the site changed while the run asked \(29d483b to 1d64514\)[\s\S]*No issue was opened, added to or closed/);
+  // the same failures as the run before: nothing new to tell; one more, and it is new
+  const same = combine({ ...asked, run }, judged, [], new Date("2026-11-25T03:11:00Z"), ["which-ply-fails#1", "page:past"]);
+  assert.equal(same.void, null);
+  assert.ok(same.failed);
+  assert.deepEqual(same.newlyFailing, []);
+  assert.deepEqual(stillFailing(same), ["page:past", "which-ply-fails#1"]);
+  const more = combine({ ...asked, run }, judged, [], new Date("2026-11-25T03:11:00Z"), ["which-ply-fails#1"]);
+  assert.deepEqual(more.newlyFailing, ["page:past"]);
+  // a page that failed before and was set up this time is resolved; one not tried this time stays unresolved
+  const later = combine({ run, pages: [{ ...failingPage, state: "set-up" as const }], questions: [result({})] }, judged, [], new Date("2026-11-25T03:11:00Z"), ["page:past", "page:wing"]);
+  assert.deepEqual(later.unresolved, ["page:wing"]);
+  assert.ok(!later.failed);
+});
+
 test("the report joins the judge's grades, keeps what failed before and was not asked again, and is written in plain words", () => {
   const asked = { run: { site: "https://anisotropy.dev", mode: "quick" as const, started: "2026-11-24T19:00:00Z", finished: "2026-11-24T19:20:00Z", commit: "ed4968a90f8233f1918e42cf33897e81fd2a3b4d",
     cap: 1, siteSpent: 0, stopped: null }, pages: [], questions: [result({}), result({ id: "why-answers#2", feature: "why-answers", ask: "why does ply 4 fail", asked: false, reason: "a model reads it on the site: asked in the full run", answer: null })] };
@@ -219,4 +260,13 @@ test("the report joins the judge's grades, keeps what failed before and was not 
   assert.match(page, /prefers-color-scheme:dark/);
   assert.ok(!page.includes("<script"), "the page runs no script");
   assert.match(failureText(r, "https://github.com/o/r/actions/runs/1"), /found 1 answer that fails[\s\S]*which-ply-fails#1 “which ply fails first” \(results\): judge: does not show the failure load/);
+});
+
+test("a question that changes the page's rows has the page set up again after it, so the next is asked of the bank's coupon", () => {
+  // the second run asked "what units are you using?" after "work in metres" and graded "m, Pa and N" as wrong
+  const bank = banks().find((b) => b.feature === "commands-and-units")!;
+  const asked = (words: string) => bank.questions.find((q) => q.ask === words)!;
+  assert.equal(moves(asked("switch to inches")), true);
+  assert.equal(moves(asked("A. Engineer")), true);
+  assert.equal(moves(asked("what units are you using?")), false);
 });

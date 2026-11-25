@@ -31,6 +31,16 @@ test("the screen sends its own rows only, and leaves the rest to the package", (
   assert.deepEqual([changed.element_size, changed.control, changed.value, changed.standard], [1.5, "force", 5000, D3039]);
 });
 
+test("a coupon in inches sends its units, and the inch default element size is left to the package (ADR-0090 amendment 2)", () => {
+  // the second site check (2026-11-25): "switch to inches" sent a 0.0787 in element size with no units, read as 0.0787 mm
+  const inches = { ...blankForm("in-psi"), library: "im7-8552", ply_1: "45", ply_2: "0", ply_3: "-45", ply_4: "90", symmetric: "yes" };
+  const sent = tensionValues(inches);
+  assert.equal(sent.units, "in-psi");
+  assert.equal(sent.element_size, undefined, "the blank form's inch element size is the package's to choose, with its reason");
+  assert.equal(tensionValues({ ...inches, element_size: "0.05" }).element_size, 0.05);
+  assert.equal(tensionValues(reference).units, undefined, "mm-MPa goes unsaid: the package states it under How we built it");
+});
+
 test("an own material sends its constants and no library id; a library material sends none of them", () => {
   const own = tensionValues({ ...reference, library: "", own_name: "X840", own_E1: "80000", own_source: "a sheet", ply_thickness: "0.2" });
   assert.equal(own.library, undefined);
