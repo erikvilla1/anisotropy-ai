@@ -18,8 +18,10 @@ export type Seen = {
   applies: boolean;
   /** From Enter to the answer standing still, in seconds. */
   seconds: number;
-  /** Whether no answer appeared before the robot stopped waiting. */
+  /** Whether the answer had not stood still when the robot stopped waiting. */
   timedOut: boolean;
+  /** What the page said it was still doing then, under an answer it had shown ("Checking the setup…"). */
+  busy?: string;
   /** The calls to the model the question made on the site. */
   modelCalls: number;
   /** Script errors on the page while it was answered. */
@@ -80,9 +82,13 @@ export const OPENS: Readonly<Record<string, string>> = {
 export function fixedChecks(question: Question, seen: Seen, pool: NumberPool | readonly NumberPool[], modelRead: boolean): Check[] {
   const out: Check[] = [];
   const text = [seen.heading, seen.shown, seen.folded].join("\n");
-  if (seen.timedOut || !text.trim()) {
+  if (!text.trim()) {
     out.push({ name: "answered", level: "fails", note: "no answer appeared", criterion: 11 });
     return out;
+  }
+  if (seen.timedOut) { // an answer, but the page had not finished with it: slow work after it, or an answer that keeps changing
+    out.push({ name: "answered", level: "weak", criterion: 11,
+      note: seen.busy ? `the page was still at work under its answer when the robot stopped waiting (“${seen.busy}”)` : "the answer was still changing when the robot stopped waiting" });
   }
   if (OUTAGE.test(seen.shown)) out.push({ name: "answered", level: "fails", note: "the page said it could not answer right now", criterion: 11 });
   const [slow, late] = modelRead || seen.modelCalls > 0 ? SECONDS.model : SECONDS.page;

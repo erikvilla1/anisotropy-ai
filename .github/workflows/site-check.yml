@@ -7,10 +7,13 @@ name: Site check
 # and $20 a month. The founder hears of it only when an answer fails: one issue labelled `site-check`, which closes itself when a later run
 # passes.
 #
-# Two jobs, so each holds only what it needs: `ask` has the Access service token and nothing that can write to the repository; `grade`
-# has the judge's key and may write issues, and never sees the token. Nothing records the browser (no trace, video, network log or
-# storage), and what is written is scrubbed of the run's secrets and of email addresses (scripts/site-check/scrub.ts). It never runs on a
-# pull request.
+# Each job holds only what it needs: `ask` has the Access service token and nothing that can write to the repository; `grade`
+# has the judge's key and may write issues, and never sees the token. A run asks the banks of the commit the site runs (the deployed one
+# after a deploy); it asks nothing when the site runs another, and tells nothing when a deploy lands while it asks (ADR-0138 amendment 2).
+# What one run keeps for the next (the month's spend, the time each question was last asked, the judge's grades, what failed) is the
+# artifact `site-check-store`: a run started by another workflow's run may read the Actions cache but not write it. Nothing records the
+# browser (no trace, video, network log or storage), and what is written is scrubbed of the run's secrets and of email addresses
+# (scripts/site-check/scrub.ts). It never runs on a pull request.
 on:
   workflow_run:
     workflows: [Deploy]
@@ -46,17 +49,38 @@ env:
   STORE: .local/site-check/store
   WORK: .local/site-check/work
   OUT: .local/site-check/report
+  # the commit whose banks are asked: the deployed one after a deploy, else main's
+  BANKS: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
-  ask:
+  store:
     # After a deploy only when it succeeded, for main of this repository, and never for a pull request's preview.
     if: >-
       github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # to find the last run's store
+    outputs:
+      run: ${{ steps.last.outputs.run }}
+    steps:
+      - name: The last run that kept a store
+        id: last
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=site-check-store&per_page=5" \
+            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty' || true)
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  ask:
+    needs: store
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
+      actions: read # to fetch the last run's store
     # Playwright's own image, as in the Tests workflow (ADR-0114 amendment 2): the browser and its system packages are in it.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
@@ -64,6 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.BANKS }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -71,11 +96,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: The month's spend and when each question was last asked
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: needs.store.outputs.run != ''
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
+          name: site-check-store
           path: ${{ env.STORE }}
-          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: site-check-store-
+          run-id: ${{ needs.store.outputs.run }}
+          github-token: ${{ github.token }}
       - name: Ask the questions on anisotropy.dev
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -88,7 +115,8 @@ jobs:
             echo "::error::The site check needs the CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET secrets (docs/walkthroughs/hosted-deploy.md)"
             exit 1
           fi
-          npx tsx scripts/site-check/run.ts --site https://anisotropy.dev --mode "$MODE" --features "$FEATURES" --cap "$CAP" --store "$STORE" --work "$WORK"
+          npx tsx scripts/site-check/run.ts --site https://anisotropy.dev --mode "$MODE" --features "$FEATURES" --cap "$CAP" --store "$STORE" --work "$WORK" \
+            --expect "$BANKS"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: site-check-asked
@@ -96,7 +124,7 @@ jobs:
           retention-days: 3
 
   grade:
-    needs: ask
+    needs: [store, ask]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -106,6 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.BANKS }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -115,11 +144,13 @@ jobs:
       - run: npm ci
       - run: uv sync --project api --locked
       - name: The grades kept from earlier runs, the month's spend and the questions that failed before
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: needs.store.outputs.run != ''
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
+          name: site-check-store
           path: ${{ env.STORE }}
-          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: site-check-store-
+          run-id: ${{ needs.store.outputs.run }}
+          github-token: ${{ github.token }}
       - name: What the robot read
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,10 +176,11 @@ jobs:
         run: npx tsx scripts/site-check/issue.ts --results "$OUT/results.json" --run-url "$RUN_URL"
       - name: Keep the grades and the spend for the next run
         if: always() && steps.report.outcome == 'success'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: ${{ env.STORE }}
-          key: site-check-store-${{ github.run_id }}-${{ github.run_attempt }}
+          name: site-check-store
+          path: ${{ env.STORE }}/
+          retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.report.outcome == 'success'
         with:

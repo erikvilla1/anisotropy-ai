@@ -1,6 +1,7 @@
 /** How the founder hears of a site check that failed (ADR-0138): one GitHub issue, labelled `site-check` and assigned to him, so GitHub
- * emails him. A failed run opens it, or adds a comment to the one already open; the first run that passes closes it with a comment. A run
- * that passes with no issue open says nothing. The issue holds the counts, the questions that failed and why, and the link to the run: the
+ * emails him. A failed run opens it, or adds a comment to the one already open when something fails that did not before; the first run
+ * that passes closes it with a comment. A run that passes with no issue open says nothing, and so does a run that tells nothing (the site
+ * ran another commit than its banks', or changed while it asked). The issue holds the counts, the questions that failed and why, and the link to the run: the
  * bank's questions are public already, and the answers stay on the run's page.
  *
  *   npx tsx scripts/site-check/issue.ts --results <out>/results.json --run-url <link>
@@ -50,12 +51,18 @@ async function main(): Promise<number> {
     console.log("No GITHUB_TOKEN or GITHUB_REPOSITORY: no issue is opened or closed.");
     return 0;
   }
+  if (result.void) { // the site ran another commit, or changed while the run asked: what it found is no one's to act on
+    console.log(`No issue is opened, added to or closed: ${result.void}.`);
+    return 0;
+  }
   const secrets = runSecrets();
   const open = (await github(`/issues?state=open&labels=${LABEL}&per_page=5`)) as { number: number }[];
   const current = open[0]?.number;
   if (result.failed) {
     const text = scrub(failureText(result, runUrl), secrets);
-    if (current) {
+    if (current && !result.newlyFailing.length) {
+      console.log(`Issue #${current} stays open: the answers that fail are those it was told of.`);
+    } else if (current) {
       await github(`/issues/${current}/comments`, { method: "POST", body: { body: text } });
       console.log(`Added the run's failures to issue #${current}.`);
     } else {
