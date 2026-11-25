@@ -98,8 +98,13 @@ def test_the_repairs_sections_are_read_but_kept_out_of_a_coupons_search():
     # amendment 6: the solve of the slice (ADR-0132) added a section to each theory page; the finite element one names `repair_model.py`
     slice_sections = {s.id for s in repair if s.source == "fea"}
     assert {s.id for s in repair} - slice_sections == {"engine:16-stepped-lap-bond", "engine:17-stepped-patch-repair", "engine:18-the-repair-s-plies-as-solids"}
-    # ADR-0140: the bond followed until it lets go added Section 12, which names `repair_bond.py`
-    assert len(slice_sections) == 13 and all(name.startswith(("fea:11-the-repair-s-slice-in-calculix", "fea:12-a-repair-s-bond-followed-to-failure")) for name in slice_sections)
+    # ADR-0140: the bond followed until it lets go added Section 12, which names `repair_bond.py`; ADR-0141: the plies
+    # damaged beside it added Section 13, which names `repair_plies.py`
+    assert len(slice_sections) == 19 and all(name.startswith(("fea:11-the-repair-s-slice-in-calculix",
+                                                              "fea:12-a-repair-s-bond-followed-to-failure",
+                                                              "fea:13-a-repair-s-plies-damaged-beside-its-bond"))
+                                             for name in slice_sections)
+    assert find("how long may an element be for a crack to soften in it?", among=repair)[0][0].id.endswith("13-2-the-band-a-crack-softens-in")
     assert find("how is the path followed past the peak load by the energy the bond spends?", among=repair)[0][0].id.endswith("12-3-the-path")
     assert set(repair) | set(of_subject("repair-references")) | set(of_subject("wing")) | set(of_subject("references")) | set(of_subject()) == set(sections())
     for question in ("how come the 0 ply carries most of the load", "why does the adhesive's shear stress peak at the end of a step?"):

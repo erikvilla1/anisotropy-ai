@@ -63,6 +63,7 @@ What the decision left open, as built:
 - **Which cracks are pulled open** and which pairs of the bond are pressed together is found by solving again until it stops changing, as ADR-0140 does for a damaged bond.
 - **The width strain** is the undamaged laminate's, in proportion to the load, and the load on the panel's end is the whole unit load. The stress the width strain makes is the plies' own and moves with their damage.
 - **The report** holds the levels of load held with the end's movement, so a curve can be drawn, and the mesh study's rows when one was run.
+- **The four energies ride through the page already**, because the flush example states them: `lib/repair-choices.json`, the API's stored answers and the saved-file fixture (`tests/fixtures/repair/example-saved.toml`) all carry them, and the page's writer keeps a key it does not itself offer. The page has no field for them and no button for this run yet; that is the next pull request.
 
 **The example repair** (flush, four steps of 12.5 mm, bondline 0.1 mm; the ply energies are round numbers of our own: 80 N/mm for a fibre break either way, 0.3 N/mm for a matrix crack pulled open, 0.8 N/mm slid). The elements must be under 0.903 mm for the matrix crack slid along the fibres to soften, so the run takes 0.361 mm, a quarter of the elastic slice's 1.5625 mm: 6,322 elements, 489 pairs, 958 solves, 258 s on four cores.
 
