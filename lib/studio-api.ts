@@ -2,7 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
-import type { RepairAnswer, RepairDescription, RepairShape, RepairSolve } from "./repair";
+import type { RepairAnswer, RepairBond, RepairDescription, RepairShape, RepairSolve } from "./repair";
 import type { RepairChange, RepairChangePreview, RepairSweep, RepairSweepAnswer } from "./repair-chat";
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
@@ -702,6 +702,16 @@ export async function solveRepair(apiBaseUrl: string, repair: RepairDescription,
     throw unreadable("the solve of the slice: not a solved slice");
   }
   return payload as unknown as RepairSolve;
+}
+
+/** A repair's bond followed until it lets go (ADR-0140): about ten seconds, waited for. The engine reads the description first; a
+ * repair that lacks the bond's strengths or fracture energies is refused with the list, and a run that fails one of its checks in
+ * the solver's words. It needs no load: the load is what the run finds. */
+export async function followRepairBond(apiBaseUrl: string, repair: RepairDescription, signal?: AbortSignal): Promise<RepairBond> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/bond`, { method: "POST", headers, body: JSON.stringify({ repair }), signal }, "the bond's run");
+  if (!isObject(payload) || typeof payload.headline !== "string" || !isObject(payload.report) || !isObject(payload.report.onset) || !isObject(payload.report.curve)
+    || !isObject(payload.report.model) || !isObject(payload.report.largest)) throw unreadable("the bond's run: not a followed bond");
+  return payload as unknown as RepairBond;
 }
 
 /** A repair's solids for a CAD program (ADR-0131, ADR-0135): its STEP file's text and the table of the solids. */

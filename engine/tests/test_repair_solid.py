@@ -215,9 +215,10 @@ def test_a_repair_file_states_what_the_solve_needs():
     repair, _ = repair_from_dict(stated())
     lamina = library_material("im7-8552").lamina
     assert repair.parent_material.through == tape_through_thickness(lamina, 0.45) and repair.patch_material.through is repair.parent_material.through
-    assert repair.adhesive.poisson_ratio == 0.35 and repair.adhesive.peel_strength_pa is None
-    bare, _ = repair_from_dict(stated(**{"parent.nu23": None, "adhesive.poisson": None}))
+    assert repair.adhesive.poisson_ratio == 0.35 and repair.adhesive.peel_strength_pa == pytest.approx(40e6)
+    bare, _ = repair_from_dict(stated(**{"parent.nu23": None, "adhesive.poisson": None, "adhesive.peel_strength": None}))
     assert bare.parent_material.through is None and bare.adhesive.poisson_ratio is None  # the hand calculation needs neither
+    assert bare.adhesive.peel_strength_pa is None  # nor the peel strength: without it the peel stress is not judged
     five = dict(E3=9000.0, G13=4000.0, G23=3000.0, nu13=0.3, nu23=0.35)
     full, _ = repair_from_dict(stated(**{f"parent.{key}": value for key, value in five.items()}, **{"adhesive.peel_strength": 40.0}))
     assert full.parent_material.through == ThroughThickness(E3=9e9, G13=4e9, G23=3e9, nu13=0.3, nu23=0.35)
@@ -238,10 +239,38 @@ def test_a_repair_file_states_what_the_solve_needs():
     ({"parent.F1t": 900.0}, "does not read: F1t"),  # a library material brings its own strengths
     ({"adhesive.poisson": 0.5}, "Poisson's ratio"),
     ({"adhesive.peel_strength": -1.0}, "peel strength"),
+    ({"adhesive.peel_energy": 0.0}, "peel energy"),
+    ({"adhesive.shear_energy": "2"}, "fracture energy must be a number"),
 ])
 def test_a_repair_file_that_states_them_wrongly_is_refused(changes, words):
     with pytest.raises(RepairError, match=words):
         repair_from_dict(stated(**changes))
+
+
+def test_a_repair_file_states_what_following_its_bond_needs():
+    """The bond followed until it lets go (ADR-0140) needs the adhesive's six numbers whole. A fracture energy is stated in
+    the file's force per length: N/mm in "mm-MPa", which is kJ/m^2."""
+    from anisotropy_engine.repair import bond_needs
+
+    repair, _ = repair_from_dict(stated())
+    assert repair.adhesive.peel_energy_j_m2 == pytest.approx(500.0) and repair.adhesive.shear_energy_j_m2 == pytest.approx(2000.0)
+    assert bond_needs(repair) == []  # and no load: the load is what the run finds
+    inch = stated(**{"adhesive.peel_energy": 2.855, "adhesive.shear_energy": 11.42})  # lb/in
+    inch["units"] = "psi"
+    data = inch
+    for table, keys in (("damage", ("diameter",)), ("steps", ("length",)), ("cover", ("overlap",)), ("adhesive", ("thickness",)), ("panel", ("length", "width"))):
+        for key in keys:
+            data[table][key] = data[table][key] / 25.4
+    for key in ("shear_modulus", "shear_strength", "peel_strength"):
+        data["adhesive"][key] = data["adhesive"][key] * 145.0377
+    data.pop("applied")
+    us, _ = repair_from_dict(data)
+    assert us.adhesive.peel_energy_j_m2 == pytest.approx(500.0, rel=1e-3) and us.adhesive.shear_energy_j_m2 == pytest.approx(2000.0, rel=1e-3)
+    bare, _ = repair_from_dict(stated(**{"parent.nu23": None, "adhesive.peel_strength": None, "adhesive.peel_energy": None, "adhesive.shear_energy": None}))
+    assert [need["path"] for need in bond_needs(bare)] == ["parent.nu23", "adhesive.peel_strength", "adhesive.peel_energy", "adhesive.shear_energy"]
+    assert bond_needs(bare)[-1]["words"] == "the bond's fracture energy in shear"
+    with pytest.raises(ValueError, match="shear energy"):
+        Adhesive(900e6, 0.1e-3, shear_energy_j_m2=-1.0)
 
 
 def test_half_a_set_of_typed_strengths_is_refused():

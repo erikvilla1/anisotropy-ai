@@ -6,7 +6,7 @@ from pathlib import Path
 
 THEORY = Path(__file__).parents[1] / "docs" / "theory.md"
 MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",
-           "wing_model", "repair_model", "repair_files")
+           "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond")
 # The same two patterns as docs/manual/build.py.
 CODE_MARKER = re.compile(r"<!--\s*code:\s*(.+?)\s*-->")
 FUNCTION_REFERENCE = re.compile(r"(?:[Cc]omputed|[Cc]hecked) by ((?:`[\w.]+`(?:,\s*|\s+and\s+)?)+)")
@@ -39,6 +39,15 @@ def test_every_marked_name_resolves_in_the_package():
                     found = True
                     break
             assert found, f"theory.md names {name}, which is not in anisotropy_fea"
+
+
+def test_the_manual_build_searches_the_same_modules():
+    """The manual's build resolves each marked name in its own list of modules: a module this test knows and the build does not
+    passes here and stops the manual (the bond's two modules did, 2026-11-24)."""
+    build = (Path(__file__).parents[2] / "docs" / "manual" / "build.py").read_text(encoding="utf-8")
+    listed = re.search(r"^FEA_MODULES = \((.+?)\)$", build, flags=re.M | re.S)
+    assert listed, "docs/manual/build.py no longer names FEA_MODULES"
+    assert tuple(re.findall(r'"([\w.]+)"', listed.group(1))) == MODULES
 
 
 def test_theory_has_the_sections_the_manual_expects():

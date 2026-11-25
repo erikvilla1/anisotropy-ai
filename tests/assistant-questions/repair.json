@@ -1,12 +1,13 @@
 {
  "feature": "repair",
- "title": "Changing and sweeping a bonded patch repair",
+ "title": "Changing, sweeping and following a bonded patch repair",
  "records": [
   "ADR-0130",
   "ADR-0131",
   "ADR-0132",
   "ADR-0135",
-  "ADR-0136"
+  "ADR-0136",
+  "ADR-0140"
  ],
  "watches": [
   "lib/repair-chat.ts",
@@ -14,7 +15,9 @@
   "engine/src/anisotropy_engine/repair/changes.py",
   "engine/src/anisotropy_engine/repair/sweeps.py",
   "engine/docs/references/bonded-repairs.md",
-  "mcp-server/src/anisotropy_mcp/server.py"
+  "mcp-server/src/anisotropy_mcp/server.py",
+  "lib/repair.ts",
+  "fea/src/anisotropy_fea/repair_bond.py"
  ],
  "questions": [
   {
@@ -754,6 +757,246 @@
    "answer": {
     "kind": "reference"
    }
+  },
+  {
+   "ask": "when does the bond let go?",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The bond lets go at 1,340 N/mm in this model",
+    "says": [
+     "first softens at 184 N/mm",
+     "18.65 mm of the bond's 62.1 mm is softening",
+     "466.1 N/mm",
+     "Not the repair's strength"
+    ],
+    "never": [
+     "the repair's strength is",
+     "fails at",
+     "will fail"
+    ]
+   },
+   "source": "the plan for slice 6, 2026-11-20: the load at which the patch detaches"
+  },
+  {
+   "ask": "whne does the patch debond",
+   "kind": "value",
+   "style": "typo",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The bond lets go at 1,340 N/mm in this model",
+    "says": [
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "where does the bond soften first",
+   "kind": "which",
+   "style": "plain",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The bond first softens at 184 N/mm, 37.38 mm from the middle",
+    "says": [
+     "the adhesive on the ledge of step 2",
+     "pressed together by 14.03 MPa",
+     "lets go at 1,340 N/mm in this model",
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "and where?",
+   "after": [
+    "when does the bond let go?"
+   ],
+   "kind": "which",
+   "style": "fragment",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The bond first softens at 184 N/mm, 37.38 mm from the middle"
+   }
+  },
+  {
+   "ask": "what is the damage initiation load",
+   "kind": "value",
+   "style": "jargon",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "opens": "The bond first softens at 184 N/mm",
+    "says": [
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "does the bond fail before the plies?",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "opens": "No",
+    "heading": "No: a ply reaches a strength first, at 466.1 N/mm",
+    "says": [
+     "Laminate ply 6 (−45°), in the solved slice",
+     "lets go later in this model, at 1,340 N/mm",
+     "first softens at 184 N/mm",
+     "the plies' damage, which neither run follows"
+    ]
+   }
+  },
+  {
+   "ask": "at what load does the patch come off",
+   "kind": "value",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "none",
+    "heading": "The bond is not followed yet",
+    "says": [
+     "Follow the bond to get it"
+    ],
+    "never": [
+     "238.5",
+     "N/mm"
+    ]
+   }
+  },
+  {
+   "ask": "follow the bond",
+   "kind": "command",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "bond",
+    "heading": "Following the bond until it lets go"
+   }
+  },
+  {
+   "ask": "run a progressive failure analysis",
+   "kind": "command",
+   "style": "jargon",
+   "page": "repair-external",
+   "route": "repair-command",
+   "answer": {
+    "kind": "bond",
+    "heading": "Following the bond until it lets go"
+   }
+  },
+  {
+   "ask": "is it strong enough?",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair-bond",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict",
+    "says": [
+     "With the bond followed, it lets go at 1,340 N/mm in this model.",
+     "None of these is the repair's strength"
+    ],
+    "never": [
+     "Yes",
+     "strong enough at"
+    ]
+   }
+  },
+  {
+   "ask": "what is the fracture energy in shear",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "Fracture energy, shear: 2 N/mm",
+    "says": [
+     "As the repair states it."
+    ]
+   }
+  },
+  {
+   "ask": "GIc",
+   "kind": "value",
+   "style": "jargon",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "Fracture energy, peel: 0.5 N/mm"
+   }
+  },
+  {
+   "ask": "set the peel fracture energy to 0.3 N/mm",
+   "kind": "change",
+   "style": "units",
+   "page": "repair",
+   "route": "repair-change",
+   "answer": {
+    "kind": "refused",
+    "heading": "Not a change the chat makes",
+    "never": [
+     "The load set to"
+    ]
+   }
+  },
+  {
+   "ask": "why does the bond soften before it lets go?",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair-bond",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference",
+    "says": [
+     "first softens at 184 N/mm and lets go at 1,340 N/mm in this model"
+    ]
+   },
+   "sections": [
+    "repairs:how-a-bond-softens-and-lets-go"
+   ]
+  },
+  {
+   "ask": "what is fracture energy?",
+   "kind": "what-is",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:fracture-energy"
+   ]
+  },
+  {
+   "ask": "what is a cohesive zone",
+   "kind": "what-is",
+   "style": "jargon",
+   "page": "repair",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:how-a-bond-softens-and-lets-go"
+   ]
   }
  ]
 }

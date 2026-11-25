@@ -30,6 +30,7 @@
 .repair-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: #424242 transparent; }
 .repair-scroll > .studio-table { min-width: 100%; width: max-content; }
 .repair-slice-results > * + * { margin-top: 10px; }
+.studio-panel .wing-figure h4 { margin: 14px 0 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
 .repair-explain p + p { margin-top: 6px; }
 .repair-lines { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; line-height: 1.45; }
 .studio-table tr[data-peak="true"] > * { background: rgba(217, 89, 38, 0.14); }

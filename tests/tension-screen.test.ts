@@ -116,16 +116,34 @@ test("the Material step shows the chosen library material's numbers as the engin
   };
   // IM7/8552 (NCAMP): the mockup's numbers, printed by the one number rule
   assert.deepEqual(shown(reference), {
-    stiffness: ["E1 162.1 GPa", "E2 8.963 GPa", "G12 4.688 GPa", "ν12 0.316", "Ply 0.1829 mm"],
+    stiffness: ["E1 162.1 GPa", "E2 8.963 GPa", "G12 4.688 GPa", "G13 4.688 GPa", "G23 2.988 GPa", "ν12 0.316", "Ply 0.1829 mm"],
     strengths: ["F1t 2559 MPa", "F1c 1731 MPa", "F2t 64.05 MPa", "F2c 285.7 MPa", "F6 91.15 MPa"],
   });
   // in inches the moduli are in Msi and the strengths in psi, as the engine converted them: the page converts nothing
-  assert.deepEqual(shown({ ...reference, units: "in-psi" })?.stiffness, ["E1 23.51 Msi", "E2 1.3 Msi", "G12 0.68 Msi", "ν12 0.316", "Ply 0.0072 in"]);
+  assert.deepEqual(shown({ ...reference, units: "in-psi" })?.stiffness,
+    ["E1 23.51 Msi", "E2 1.3 Msi", "G12 0.68 Msi", "G13 0.68 Msi", "G23 0.4333 Msi", "ν12 0.316", "Ply 0.0072 in"]);
   assert.equal(shown({ ...reference, units: "in-psi" })?.strengths?.[0], "F1t 371100 psi");
   // a record with no ply thickness has no Ply line (the field to type it is below); one with no strengths has no strength column
-  assert.deepEqual(shown({ ...reference, library: "as4-8552" })?.stiffness.map((l) => l.split(" ")[0]), ["E1", "E2", "G12", "ν12"]);
+  assert.deepEqual(shown({ ...reference, library: "as4-8552" })?.stiffness.map((l) => l.split(" ")[0]), ["E1", "E2", "G12", "G13", "G23", "ν12"]);
   assert.equal(shown({ ...reference, library: "as4-8552s-pw" })?.strengths, null);
   // the engineer's own material and no choice show nothing: their numbers are the fields they typed
   assert.equal(libraryValueLines({ ...reference, library: "" }), null);
   assert.equal(libraryValueLines({ ...reference, library: "no-such-material" }), null);
 });
+
+test("G13 and G23 show as the coupon's estimates until the engineer gives their own, which a library material then sends (ADR-0111 amendment 5)", () => {
+  const lines = libraryValueLines(reference)!;
+  // the library gives neither: the estimates the package builds the coupon with (G13 = G12, G23 = E2 / 3 for a tape), marked as estimates
+  assert.deepEqual(lines.stiffness.filter((l) => l.estimate).map((l) => l.key), ["G13", "G23"]);
+  assert.deepEqual(lines.transverse.estimates, { G13: "4688", G23: "2988" }); // the fields' placeholders, in the rows' MPa
+  assert.match(lines.transverse.rule, /G23 = E2 \/ 3/);
+  assert.match(libraryValueLines({ ...reference, library: "hts40-tc250" })!.transverse.rule, /fabric/); // a fabric: G23 = G12
+  // the engineer's own: the two rows give way to the fields, and the values go to the check with the library material
+  assert.deepEqual(libraryValueLines(reference, { ownTransverse: true })!.stiffness.map((l) => l.key), ["E1", "E2", "G12", "nu12", "ply_thickness"]);
+  const sent = tensionValues({ ...reference, G13: "5200", G23: "3400" });
+  assert.equal(sent.library, "im7-8552");
+  assert.deepEqual([sent.G13, sent.G23], [5200, 3400]);
+  assert.equal(tensionValues(reference).G13, undefined, "left blank, the package estimates them");
+  assert.equal(tensionValues({ ...reference, own_E1: "9" }).own_E1, undefined, "other own-material rows still stay out for a library material");
+});
+

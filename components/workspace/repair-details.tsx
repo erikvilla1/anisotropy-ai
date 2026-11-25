@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  CRITERION_WORDS, inSentence, LIMITS, modelWords, PART_WORDS, shown, sliceWords, unitText, type RegionKind, type RepairReport, type SliceReport,
+  bondModelWords, bondWords, CRITERION_WORDS, inSentence, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, modelWords, PART_WORDS, plyBefore, shown, sliceWords, unitText,
+  type BondReport, type RegionKind, type RepairReport, type SliceReport,
 } from "@/lib/repair";
 
 /** The tables of a repair's answers (ADR-0135), for the repair's page and for its report. Every number is the engine's or the
@@ -126,6 +127,44 @@ export function SliceResults({ slice, stale }: { slice: SliceReport; stale: bool
         </div>
       ) : null}
       {checked.length ? <p className="studio-hint">A ply&apos;s strength ratio is the factor on the load of {shown(slice.load)} {force} at which that ply reaches a strength, at its weakest station, with its stresses the mean through its thickness. The six lowest are listed.</p> : null}
+    </div>
+  );
+}
+
+/** A bond followed until it lets go (ADR-0140) in words and a table: the model and its checks, where and at what load the bond first
+ * softens, the load at which it lets go in this model with how much of it is softening and has parted, and each stretch of the
+ * bond at that load. The load is said to be not the repair's strength wherever it is read. */
+export function BondResults({ bond, stale, slice = null }: { bond: BondReport; stale: boolean; slice?: SliceReport | null }) {
+  const u = bond.units, stress = unitText(u.stress), length = unitText(u.length);
+  const words = bondWords(bond);
+  const before = stale ? "" : plyBefore(bond, slice);
+  const state = bond.let_go;
+  const peak = (values: readonly number[]): number => values.reduce((m, v) => (Math.abs(v) > Math.abs(m) ? v : m), 0);
+  return (
+    <div className="repair-slice-results" data-testid="repair-bond-results" data-stale={stale ? "true" : "false"}>
+      {stale ? <p className="studio-alert" role="status" data-testid="repair-bond-stale">This is the bond of the repair as it was when it was followed. The repair has changed since: follow the bond again.</p> : null}
+      <p className="studio-muted" data-testid="repair-bond-model">{bondModelWords(bond)}</p>
+      <ul className="repair-lines" data-testid="repair-bond-lines">
+        <li>{words.softens}</li>
+        <li><strong>{words.letsGo}</strong></li>
+        {words.extent ? <li>{words.extent}</li> : null}
+        {words.after ? <li>{words.after}</li> : null}
+        {before ? <li data-testid="repair-bond-ply-before">{before}</li> : null}
+        <li>{words.law}</li>
+      </ul>
+      <p className="studio-hint" data-testid="repair-bond-not">{LET_GO_IS_NOT_THE_STRENGTH}</p>
+      {state ? (
+        <div className="repair-scroll">
+          <table className="studio-table" data-testid="repair-bond-table">
+            <thead><tr><th>Bond, as it lets go</th><th>Length, {length}</th><th>Softening, {length}</th><th>Parted, {length}</th><th>Largest shear, {stress}</th><th>Largest peel, {stress}</th></tr></thead>
+            <tbody>{state.lines.map((line) => (
+              <tr key={line.name}><th scope="row">{line.name}</th><td>{shown(line.length)}</td><td>{shown(settled(line.softening_length, line.length))}</td>
+                <td>{shown(settled(line.parted_length, line.length))}</td><td>{shown(Math.abs(peak(line.shear)))}</td><td>{shown(Math.max(...line.peel))}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : null}
+      {state ? <p className="studio-hint">A stretch of the bond is softening where it has passed its strength and still carries stress, and has parted where it carries none. A negative peel stress presses the bond together.</p> : null}
     </div>
   );
 }

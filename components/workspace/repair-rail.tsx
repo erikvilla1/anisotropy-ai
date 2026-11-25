@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ADHESIVE_FIELDS, COVER_FIELDS, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_PATCH_FIELDS, EXTERNAL_REPAIR, FLUSH_PATCH_FIELD, kindOf, layupText, materialMode,
+  ADHESIVE_FIELDS, bondNeedsWords, bondWords, COVER_FIELDS, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_PATCH_FIELDS, EXTERNAL_REPAIR, FLUSH_PATCH_FIELD, kindOf, layupText, materialMode,
   needsWords, PANEL_FIELDS, PART_WORDS, REPAIR_KINDS, REPAIR_MATERIALS, REPAIR_UNIT_LABELS, REPAIR_UNIT_WORDS, repairFileName, repairToml, shown,
   STRENGTH_FIELDS, TYPED_MATERIAL_FIELDS, unitsOf, unitText, valueAt, withKind, withLaminateMaterial, withLibraryMaterial, withTypedMaterial,
   type RegionKind, type RepairField, type RepairKind, type RepairShape, type RepairUnitKind, type RepairValue,
@@ -204,9 +204,12 @@ function CoverFields() {
   );
 }
 
-/** The solve of the slice (ADR-0132): what it still needs, the one choice it has, and the button. */
+/** The solve of the slice (ADR-0132): what it still needs, the one choice it has, and the button; and under it the bond followed
+ * until it lets go (ADR-0140): what that still needs, and its button. */
 function SolvePanel() {
-  const { repair, answer, stale, working, problem, solve, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice, apiBaseUrl } = useRepair();
+  const { repair, answer, stale, working, problem, solve, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice, apiBaseUrl,
+    bond, bondStale, following, bondProblem, bondNeeds, followBond } = useRepair();
+  const canFollow = answer !== null && !stale && !problem && bondNeeds !== null && bondNeeds.length === 0;
   const needs = answer && !stale ? answer.needs : [];
   const ready = answer !== null && !stale && !problem && needs.length === 0;
   const hand = problem ? "" : working || stale ? "Working the repair…" : answer?.report.lap.answer ? "Worked by hand." : answer ? "Described; no load is stated." : "";
@@ -234,6 +237,20 @@ function SolvePanel() {
       </div>
       {solveProblem ? <p className="studio-alert" role="alert" data-testid="repair-solve-problem">{solveProblem}</p> : null}
       {solve ? <p className="studio-status" role="status" data-testid="repair-solve-status">{solveStale ? "The slice was solved for the repair as it was; it has changed since." : solve.headline}</p> : null}
+      {bondNeeds !== null ? (
+        <>
+          <p className="studio-hint">Past the adhesive&apos;s elastic limit, the bond can be followed as it softens and parts, until it lets go: about ten seconds. It needs the bond&apos;s two strengths and two fracture energies, on the Adhesive step, and no load.</p>
+          {bondNeeds.length && !stale ? <p className="studio-hint" data-testid="repair-bond-needs">{bondNeedsWords(bondNeeds)}</p> : null}
+          <div className="studio-buttons">
+            <button type="button" className="studio-button" disabled={!canFollow || following || !apiBaseUrl} onClick={() => void followBond()} data-testid="repair-bond-button">
+              {following ? "Following the bond…" : bond ? "Follow the bond again" : "Follow the bond until it lets go"}
+            </button>
+          </div>
+          {bondProblem ? <p className="studio-alert" role="alert" data-testid="repair-bond-problem">{bondProblem}</p> : null}
+          {bond ? <p className="studio-status" role="status" data-testid="repair-bond-status">{bondStale ? "The bond was followed for the repair as it was; it has changed since."
+            : `${bondWords(bond.report).headline}. ${bondWords(bond.report).short}`}</p> : null}
+        </>
+      ) : null}
     </StepPanel>
   );
 }

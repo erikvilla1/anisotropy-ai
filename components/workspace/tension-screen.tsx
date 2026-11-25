@@ -11,7 +11,7 @@ import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, P
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import {
   builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
-  tensionMissing, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
+  tensionMissing, TRANSVERSE_HINTS, TRANSVERSE_KEYS, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { PlatePanel } from "@/components/studio/plate-panel";
@@ -200,7 +200,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <option value={OWN}>My own material…</option>
           </select>
         </div>
-        {own ? null : <MaterialValues form={form} />}
+        {own ? null : <MaterialValues key={form.library ?? ""} form={form} errors={errors} busy={busy} edit={edit} />}
         {own ? (
           <div data-testid="own-material">
             <p className="studio-hint">Your material&apos;s constants and their source. G13 and G23 are optional.</p>
@@ -306,15 +306,28 @@ const missingMaterial = (missing: string[]): boolean => missing.some((m) => !NOT
 
 /** The chosen library material's numbers under the choice (ADR-0111 amendment 4), as the founder's mockup shows them: the stiffness on the
  * left, the strengths on the right, in the coupon's units, as the engine wrote them in the form's definition, so they show the moment the
- * material is picked, before any check. */
-function MaterialValues({ form }: { form: StudioForm }) {
-  const lines = libraryValueLines(form);
+ * material is picked, before any check. G13 and G23 show as the estimates, or as two fields when the engineer gives their own (amendment 5). */
+function MaterialValues({ form, errors, busy, edit }: {
+  form: StudioForm; errors: Record<string, string>; busy: boolean; edit: (rows: StudioForm) => void;
+}) {
+  // G13 and G23 (ADR-0111 amendment 5): the library gives neither, so the estimates show, marked, until the engineer chooses to give their own
+  const given = TRANSVERSE_KEYS.some((key) => (form[key] ?? "").trim());
+  const [ownTransverse, setOwnTransverse] = useState(given);
+  useEffect(() => { if (given) setOwnTransverse(true); }, [given]); // the chat may give them too
+  const lines = libraryValueLines(form, { ownTransverse });
   if (!lines) return null;
   const list = (items: ValueLine[], name: string) => (
     <dl className="ws-tree-values" aria-label={name}>
-      {items.map((line) => <div key={line.key} data-key={line.key}><dt>{line.label}</dt><dd>{line.value}</dd></div>)}
+      {items.map((line) => (
+        <div key={line.key} data-key={line.key}><dt>{line.label}</dt>
+          <dd>{line.value}{line.estimate ? <span className="ws-tree-est" title="An estimate: the library gives no value"> est.</span> : null}</dd></div>
+      ))}
     </dl>
   );
+  const choose = (own: boolean) => {
+    setOwnTransverse(own);
+    if (!own && given) edit({ G13: "", G23: "" }); // back to the estimates
+  };
   return (
     <div data-testid="material-values">
       <p className="ws-tree-caption">From the library</p>
@@ -323,6 +336,18 @@ function MaterialValues({ form }: { form: StudioForm }) {
         {lines.strengths ? list(lines.strengths, "Strengths") : null}
       </div>
       {lines.strengths ? null : <p className="studio-hint">The library gives no strengths for this material.</p>}
+      {ownTransverse ? null : (
+        <p className="studio-hint" data-testid="transverse-note">est.: the library gives no G13 or G23, so {lines.transverse.rule}. The pull of this test
+          hardly loads them.</p>
+      )}
+      <label className="ws-tree-check">
+        <input type="checkbox" checked={ownTransverse} disabled={busy} onChange={(e) => choose(e.target.checked)} data-testid="own-transverse" />
+        Use my own G13 and G23
+      </label>
+      {ownTransverse ? (
+        <FieldGrid form={form} keys={TRANSVERSE_KEYS} errors={errors} disabled={busy} hints={TRANSVERSE_HINTS} placeholders={lines.transverse.estimates}
+          onChange={(key, value) => edit({ [key]: value })} />
+      ) : null}
     </div>
   );
 }

@@ -203,6 +203,13 @@ def repair_model_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_model"]
 
 
+def repair_bond_command() -> list[str] | None:
+    """`uv run --project fea python -m anisotropy_fea.repair_bond`, a repair's bond followed until it lets go (ADR-0140); None when
+    uv is not on PATH. It needs neither Gmsh nor CalculiX: the solve is the fea package's own."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "python", "-m", "anisotropy_fea.repair_bond"]
+
+
 def repair_shape_command() -> list[str] | None:
     """`uv run --project fea --extra mesh python -m anisotropy_fea.repair_shape`, a repair's STEP file and the table of its solids
     (ADR-0131, ADR-0135); None when uv is not on PATH."""

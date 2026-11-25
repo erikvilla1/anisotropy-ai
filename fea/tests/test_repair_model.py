@@ -337,7 +337,8 @@ def test_the_report_is_in_the_files_units(example):
     assert report["model"]["fine_size"] <= 0.1 / FINE_PER_BONDLINE and report["model"]["element_size"] <= 12.5 / 8 * (1 + 1e-9)
     assert report["bond"]["peak_shear"]["value"] == pytest.approx(example.peak_shear.value_pa / 1e6) and report["bond"]["mean_over"] == pytest.approx(0.1)
     assert report["hand"]["peak_shear"] == pytest.approx(12.58, abs=0.01) and report["hand"]["elastic_limit_load"] == pytest.approx(238.5, abs=0.1)
-    assert report["elastic_limit_load"] == pytest.approx(example.elastic_limit_load / 1e3) and report["peel_limit_load"] is None
+    assert report["elastic_limit_load"] == pytest.approx(example.elastic_limit_load / 1e3)
+    assert report["peel_limit_load"] == pytest.approx(example.peel_limit_load / 1e3) and report["peel_limit_load"] > 3 * report["elastic_limit_load"]
     assert report["first"] == {"what": "adhesive", "load": report["elastic_limit_load"]}
     assert report["first_ply"]["load"] == pytest.approx(100.0 * report["first_ply"]["strength_ratio"])
     assert len(report["forces"]["r"]) == len(report["forces"]["patch"]) == len(example.stations_m)
