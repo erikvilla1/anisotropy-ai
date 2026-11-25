@@ -55,6 +55,9 @@ export function plan(mode: Mode, features: readonly string[] = [], from: readonl
       }
       const modelRead = modelRequests(question).length > 0;
       if (mode === "quick" && modelRead) return skip("a model reads it on the site: asked in the full run");
+      if (mode === "quick" && (question.route === "run" || question.page === "results")) { // ADR-0138 amendment 3
+        return skip("it needs an analysis run on the site: a quick run leaves the day's analyses of the check's sign-in to the deploy check, so it is asked in the full run");
+      }
       asked.push({ id, feature: bank.feature, question, modelRead });
     });
   }

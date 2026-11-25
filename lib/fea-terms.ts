@@ -27,7 +27,7 @@ export type FeaTerm = {
 export const FEA_TERMS: FeaTerm[] = [
   { id: "boundary-condition", title: "Boundary condition", names: ["boundary condition", "boundary conditions", "bc", "bcs", "support", "supports", "constraint", "constraints", "restraint", "restraints", "displacement boundary condition", "displacement/rotation", "remote displacement", "displacement constraint"],
     means: "Holds part of the model still, or moves it by a set amount, in the directions you choose.",
-    here: "A coupon's are set by its test: the bottom grip is fixed and the top grip moves along the coupon. Each is drawn on the model and listed under it." },
+    here: "A coupon's boundary conditions are set by its test: the bottom grip is fixed and the top grip moves along the coupon. Each is drawn on the model and listed under it." },
   { id: "load", title: "Load", names: ["load", "loads", "loading", "applied load"],
     means: "What makes the model deform: a force, a pressure, or a set travel of a boundary condition.",
     here: "A coupon is loaded at its top grip, by a travel or a force. The load is drawn as arrows on the model and listed under it." },
