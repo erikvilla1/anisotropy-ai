@@ -13,7 +13,8 @@ export type Answer = { heading: string; shown: string; folded: string; parts: st
 export type Asked = Answer & { seconds: number; timedOut: boolean; interim?: Answer; busy?: string };
 type Probe = { label: string | null; sent: boolean; typing: boolean; busy: string; answers: number; answer: Answer };
 
-/** The chat's state, read in the page. The answers are those after the engineer's message `asked`, the `n`-th or a later one, in the chat
+/** The chat's state, read in the page. The answers are those after the engineer's message `asked`, the `n`-th or a later one (or the
+ * first message after the `n`-th where the page wrote it in its own words), in the chat
  * whose box is labelled `label`; when the page has put another chat in its place (the FEA start setting up a coupon), every answer of
  * the new chat is the answer. */
 function probe(args: { selector: string; asked: string; n: number; label: string }): Probe {
@@ -26,7 +27,9 @@ function probe(args: { selector: string; asked: string; n: number; label: string
   let after: HTMLElement[];
   if (label === args.label) {
     const users = items.filter((el) => el.classList.contains("chat-user"));
-    const mine = users.slice(args.n).find((el) => (el.textContent ?? "").trim() === args.asked.trim());
+    // the engineer's message, or the first written after it was sent where the page writes it in its own words ("run" as "Run the analysis")
+    const fresh = users.slice(args.n);
+    const mine = fresh.find((el) => (el.textContent ?? "").trim() === args.asked.trim()) ?? fresh[0];
     if (!mine) return { label, sent: false, typing: false, busy: "", answers: 0, answer: empty };
     after = items.slice(items.indexOf(mine) + 1);
     const next = after.findIndex((el) => el.classList.contains("chat-user"));

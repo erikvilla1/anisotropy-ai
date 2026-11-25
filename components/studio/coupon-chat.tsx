@@ -681,7 +681,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       : shown.past ? "A past run is shown without them. Choose “Use these inputs” to see them."
       : !applied ? "They are drawn on the model and listed under it once the setup is checked."
       : onPlate ? "Add one by naming a region, for example “fix the left edge” or “10 kN tension on the right edge”."
-      : `A coupon’s are set by its test, as in the test machine. Change the load under ${allTests ? "Boundary conditions and loads" : "Loads"}${allTests ? "; for boundary conditions of your own, choose Plate" : plates ? "; for boundary conditions of your own, choose Plate under Test" : ""}.`;
+      : `A coupon’s boundary conditions and load are set by its test, as in the test machine. Change the load under ${allTests ? "Boundary conditions and loads" : "Loads"}${allTests ? "; for boundary conditions of your own, choose Plate" : plates ? "; for boundary conditions of your own, choose Plate under Test" : ""}.`;
     add({ role: "user", text }, { role: "assistant", kind: "text", title: title ?? (loads ? "Loads" : "Boundary conditions"), body: (
       <div data-testid="chat-applied" data-term={term.id}>
         {lines.length ? <ul className="chat-understood">{lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}

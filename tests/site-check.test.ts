@@ -5,6 +5,7 @@ import { fixedChecks, fixedVerdict, repairClaims, type Seen } from "../scripts/s
 import { failureText } from "../scripts/site-check/issue";
 import { NumberPool, numbersIn, untraced } from "../scripts/site-check/numbers";
 import { moves, NOT_OFFERED, plan } from "../scripts/site-check/plan";
+import { NO_PROJECTS, refusal } from "../scripts/site-check/routes";
 import { combine, html, markdown, stillFailing } from "../scripts/site-check/report";
 import { countOf, runFailed, sameCommit, SCHEMA, verdictOf, type QuestionResult } from "../scripts/site-check/record";
 import { scrub, scrubbed } from "../scripts/site-check/scrub";
@@ -159,6 +160,31 @@ test("a quick run asks only what the page answers itself, a full run the model's
   const ansys = full.skipped.filter((s) => s.reason.includes("Ansys file")).map((s) => `${s.id} ${s.ask}`);
   assert.deepEqual(ansys, ["model-downloads#3 download ansys model", "model-downloads#6 export the model"]);
   assert.ok(["model-downloads#1", "model-downloads#2", "model-downloads#5"].every((id) => full.asked.some((p) => p.id === id)), "the twins and the rest are asked");
+  // an analysis is run in the full run only (ADR-0138 amendment 3): a quick run asks no "run" and sets up no page of results
+  assert.ok(quick.asked.every((p) => p.question.route !== "run" && p.question.page !== "results"));
+  assert.ok(quick.skipped.some((s) => s.question.route === "run" && s.reason.includes("deploy check")));
+  assert.ok(full.asked.some((p) => p.question.route === "run") && full.asked.some((p) => p.question.page === "results"));
+});
+
+test("the robot answers the projects as an API that keeps none, and in a quick run the model's routes and a new analysis unavailable", () => {
+  // 2026-11-25: the wing page opened a wing with spar caps an earlier run had added; the robot's quick runs used up the day's analyses of
+  // the check's sign-in, so the deploy of 2dbcf8f ran no job
+  for (const quick of [true, false]) {
+    assert.equal(refusal("GET", "/api/v1/projects", quick), "projects");
+    assert.equal(refusal("PUT", "/api/v1/projects/0b3c6a1e-1111-4222-8333-944455556666", quick), "projects");
+    assert.equal(refusal("GET", "/api/v1/projects/0b3c6a1e-1111-4222-8333-944455556666", quick), "projects");
+  }
+  assert.equal(refusal("POST", "/api/v1/workspace/result-questions", true), "model");
+  assert.equal(refusal("POST", "/api/v1/coupon-jobs", true), "analysis");
+  assert.equal(refusal("POST", "/api/v1/wings/checks", true), "analysis");
+  for (const path of ["/api/v1/coupon-jobs/check", "/api/v1/coupon-jobs/live", "/api/v1/coupon-jobs/model", "/api/v1/wings/analyze", "/api/v1/repairs/bond"]) {
+    assert.equal(refusal("POST", path, true), null, `${path} is the page's own work, asked in a quick run`);
+  }
+  assert.equal(refusal("GET", "/api/v1/coupon-jobs", true), null, "the list of past analyses is read");
+  for (const path of ["/api/v1/workspace/result-questions", "/api/v1/coupon-jobs", "/api/v1/wings/checks"]) assert.equal(refusal("POST", path, false), null);
+  // what the page reads as "this server keeps no projects" (lib/studio-api.ts, noProjectStore)
+  assert.equal(NO_PROJECTS.status, 503);
+  assert.equal(NO_PROJECTS.headers["X-Anisotropy-Records"], "off");
 });
 
 test("in a full run the model's questions take turns under the cap: those asked longest ago first", () => {
