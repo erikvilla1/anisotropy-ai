@@ -22,6 +22,7 @@ import { NumberPool, untraced } from "./numbers";
 import { setUp, stillOn } from "./pages";
 import { moves, NOT_OFFERED, plan, type Mode, type Planned } from "./plan";
 import { sameCommit, type PageResult, type QuestionResult } from "./record";
+import { MODEL_PATHS, NO_PROJECTS, refusal } from "./routes";
 import { runSecrets, scrub, scrubbed } from "./scrub";
 
 type Args = { site: string; mode: Mode; features: string[]; cap: number; store: string; work: string; dryRun: boolean; expect: string };
@@ -37,8 +38,6 @@ function args(argv: string[]): Args {
     expect: get("expect", "").trim().toLowerCase() };
 }
 
-/** The bank's model questions, the reader paths the page sends them to: a call there costs, whether or not the answer says so. */
-const MODEL_PATHS = /\/v1\/workspace\/(proposals|result-questions|result-answers|questions)$/;
 const ANSWER_LIMIT = { page: 45_000, model: 120_000, run: 300_000 };
 /** How long the page is given to finish what an answer set going (a check, a preview solve) before the next question: a question typed
  * while the site's solvers are busy with the last one is answered "unavailable", which no engineer typing at a person's pace would see. */
@@ -47,13 +46,15 @@ const SETTLE = { quiet: 1_000, most: 90_000 };
  * it (ADR-0056 amendment 10). */
 const DEPLOY_WAIT = { total: 300_000, every: 15_000 };
 
-/** A quick run's refusals: the model's routes the page called, answered "unavailable" by the robot so that nothing is spent on the site. */
-type Refusals = { count: number };
+/** A quick run's refusals: the model's routes and the analyses the page asked for, answered "unavailable" by the robot so that nothing is
+ * spent on the site and the day's analyses are left to the deploy check. */
+type Refusals = { model: number; analysis: number };
 
 /** A context that reaches the site through Access: the token on the site's own requests, a job's file fetched from the bucket's signed
- * link as a browser would (without the token), the actor relabelled `test`. Nothing is recorded. With `refusals`, a quick run's, a call to
- * the model's routes is answered "unavailable" here and never reaches the site, so a quick run spends nothing there whatever the banks say
- * (2026-11-25: the second run spent $0.37 on questions its banks say the page answers itself). */
+ * link as a browser would (without the token), the actor relabelled `test`. Nothing is recorded, and the projects are answered as by an API
+ * that keeps none (`routes.ts`). With `refusals`, a quick run's, a call to the model's routes or one that starts an analysis is answered
+ * "unavailable" here and never reaches the site, so a quick run spends nothing there whatever the banks say (2026-11-25: the second run
+ * spent $0.37 on questions its banks say the page answers itself) and leaves the day's analyses to the deploy check. */
 async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, site: string, refusals?: Refusals): Promise<BrowserContext> {
   const ctx = await browser.newContext({ baseURL: site, viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const id = process.env.CF_ACCESS_CLIENT_ID?.trim(), secret = process.env.CF_ACCESS_CLIENT_SECRET?.trim();
@@ -65,8 +66,10 @@ async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, sit
       const headers: Record<string, string> = { ...sent, ...(id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {}) };
       if (sent["x-anisotropy-actor"]) headers["x-anisotropy-actor"] = "test";
       const path = new URL(route.request().url()).pathname;
-      if (refusals && route.request().method() === "POST" && MODEL_PATHS.test(path)) {
-        refusals.count += 1;
+      const refused = refusal(route.request().method(), path, !!refusals);
+      if (refused === "projects") return await route.fulfill(NO_PROJECTS);
+      if (refused && refusals) {
+        refusals[refused] += 1;
         return await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "not asked in a quick run" }) });
       }
       if (!FILE.test(path)) return await route.continue({ headers });
@@ -166,7 +169,7 @@ async function main(): Promise<number> {
     .map(([page, reason]) => ({ page, state: "not-offered", seconds: null, reason: reason ?? null, picture: null }));
   let stopped: string | null = null;
   let voided: string | null = null;
-  const refusals: Refusals | undefined = a.mode === "quick" ? { count: 0 } : undefined;
+  const refusals: Refusals | undefined = a.mode === "quick" ? { model: 0, analysis: 0 } : undefined;
 
   const browser = await chromium.launch();
   const origin = new URL(a.site).origin;
@@ -244,7 +247,7 @@ async function main(): Promise<number> {
         own.addText(words);
         listening.reset();
         pageErrors.length = 0;
-        if (refusals) refusals.count = 0;
+        if (refusals) Object.assign(refusals, { model: 0, analysis: 0 });
         let seen: Asked;
         try {
           previous = undefined;
@@ -258,9 +261,11 @@ async function main(): Promise<number> {
           ready = await open();
           continue;
         }
-        if (refusals?.count) { // the page sent it to a model, which a quick run does not pay for: the full run asks it
-          result.reason = "the page sent it to a model, though its bank says the page answers it: a quick run spends nothing on the site, so it waits for the full run";
-          console.log(`${p.id} sent to a model by the page: left for the full run`);
+        if (refusals && (refusals.model || refusals.analysis)) { // what a quick run does not ask of the site: the full run asks it
+          result.reason = refusals.model
+            ? "the page sent it to a model, though its bank says the page answers it: a quick run spends nothing on the site, so it waits for the full run"
+            : "the page started an analysis: a quick run leaves the day's analyses of the check's sign-in to the deploy check, so it waits for the full run";
+          console.log(`${p.id} ${refusals.model ? "sent to a model" : "started an analysis"} by the page: left for the full run`);
           if (moves(q)) ready = await open();
           continue;
         }

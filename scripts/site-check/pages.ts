@@ -92,6 +92,11 @@ const SETUPS: Record<string, Setup> = {
     await page.getByTestId("repair-solve-here").click();
     await expect(page.getByTestId("repair-slice-short"), "the slice solved").toContainText("Solved slice:", { timeout: 240_000 });
   },
+  "repair-bond": async (page) => { // the example repair solved, then its bond followed until it lets go, on its own button (ADR-0140)
+    await SETUPS["repair-solved"](page);
+    await page.getByTestId("repair-bond-here").click();
+    await expect(page.getByTestId("repair-bond-short"), "the bond followed").toContainText("Bond followed:", { timeout: 240_000 });
+  },
   "repair-external": async (page) => {
     await SETUPS.repair(page);
     const button = page.getByTestId("repair-example-external");
@@ -116,7 +121,8 @@ export async function setUp(page: Page, which: BankPage): Promise<void> {
 export async function stillOn(page: Page, which: BankPage): Promise<boolean> {
   const path = new URL(page.url()).pathname.replace(/\/$/, "");
   const where: Record<string, string> = { start: "/workspace/fea", blank: "/workspace/fea", setup: "/workspace/fea", ready: "/workspace/fea", results: "/workspace/fea",
-    past: "/workspace/fea/view", wing: "/workspace/wing", "wing-caps": "/workspace/wing", repair: "/workspace/repair", "repair-solved": "/workspace/repair", "repair-external": "/workspace/repair" };
+    past: "/workspace/fea/view", wing: "/workspace/wing", "wing-caps": "/workspace/wing", repair: "/workspace/repair", "repair-solved": "/workspace/repair", "repair-external": "/workspace/repair",
+    "repair-bond": "/workspace/repair" };
   if (where[which] && path !== where[which]) return false;
   const box = page.locator(BOX).filter({ visible: true });
   if (!(await box.count())) return false;
@@ -126,5 +132,6 @@ export async function stillOn(page: Page, which: BankPage): Promise<boolean> {
   if (which === "results") return page.getByTestId("results").isVisible();
   if (which === "past") return page.getByTestId("chat-past").isVisible();
   if (which === "repair-solved") return (await page.getByTestId("repair-slice-short").textContent())?.includes("Solved slice:") ?? false;
+  if (which === "repair-bond") return (await page.getByTestId("repair-bond-short").textContent({ timeout: 5_000 }).catch(() => null))?.includes("Bond followed:") ?? false;
   return true;
 }
