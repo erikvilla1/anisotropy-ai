@@ -2516,6 +2516,8 @@
     "E1": 29.7,
     "E2": 29.7,
     "G12": 5.3,
+    "G13": 5.3,
+    "G23": 5.3,
     "nu12": 0.17,
     "strengths": {
      "F1t": 367.0,
@@ -2524,12 +2526,19 @@
      "F2c": 549.0,
      "F6": 97.1
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 5300.0,
+     "G23": 5300.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 29.7,
     "E2": 29.7,
     "G12": 5.3,
+    "G13": 5.3,
+    "G23": 5.3,
     "nu12": 0.17,
     "strengths": {
      "F1t": 367000000.0,
@@ -2538,12 +2547,19 @@
      "F2c": 549000000.0,
      "F6": 97100000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 5300000000.0,
+     "G23": 5300000000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 4.307620810587214,
     "E2": 4.307620810587214,
     "G12": 0.7687000099701089,
+    "G13": 0.7687000099701089,
+    "G23": 0.7687000099701089,
     "nu12": 0.17,
     "strengths": {
      "F1t": 53228.84974698679,
@@ -2552,12 +2568,19 @@
      "F2c": 79625.71801388486,
      "F6": 14083.164333603316
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 768700.01,
+     "G23": 768700.01
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 4.307620810587214,
     "E2": 4.307620810587214,
     "G12": 0.7687000099701089,
+    "G13": 0.7687000099701089,
+    "G23": 0.7687000099701089,
     "nu12": 0.17,
     "strengths": {
      "F1t": 53.22884974698679,
@@ -2566,7 +2589,12 @@
      "F2c": 79.62571801388486,
      "F6": 14.083164333603317
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 768.70001,
+     "G23": 768.70001
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "7781-ea9396": {
@@ -2574,6 +2602,8 @@
     "E1": 24.959021401269467,
     "E2": 25.303759265927884,
     "G12": 5.2262260282216175,
+    "G13": 5.22623,
+    "G23": 5.22623,
     "nu12": 0.115,
     "strengths": {
      "F1t": 357.1484277861211,
@@ -2582,12 +2612,19 @@
      "F2c": 281.3060975612691,
      "F6": 79.28970887143615
     },
-    "ply_thickness": 0.2159
+    "ply_thickness": 0.2159,
+    "estimates": {
+     "G13": 5226.23,
+     "G23": 5226.23
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 24.959021401269467,
     "E2": 25.303759265927884,
     "G12": 5.2262260282216175,
+    "G13": 5.22623,
+    "G23": 5.22623,
     "nu12": 0.115,
     "strengths": {
      "F1t": 357148427.7861211,
@@ -2596,12 +2633,19 @@
      "F2c": 281306097.5612691,
      "F6": 79289708.87143615
     },
-    "ply_thickness": 0.00021590000000000002
+    "ply_thickness": 0.00021590000000000002,
+    "estimates": {
+     "G13": 5226230000.0,
+     "G23": 5226230000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 3.62,
     "E2": 3.67,
     "G12": 0.758,
+    "G13": 0.7580005760577514,
+    "G23": 0.7580005760577514,
     "nu12": 0.115,
     "strengths": {
      "F1t": 51800.0,
@@ -2610,12 +2654,19 @@
      "F2c": 40800.0,
      "F6": 11500.0
     },
-    "ply_thickness": 0.0085
+    "ply_thickness": 0.0085,
+    "estimates": {
+     "G13": 758000.5761,
+     "G23": 758000.5761
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 3.62,
     "E2": 3.67,
     "G12": 0.758,
+    "G13": 0.7580005760577514,
+    "G23": 0.7580005760577514,
     "nu12": 0.115,
     "strengths": {
      "F1t": 51.8,
@@ -2624,7 +2675,12 @@
      "F2c": 40.8,
      "F6": 11.5
     },
-    "ply_thickness": 0.0085
+    "ply_thickness": 0.0085,
+    "estimates": {
+     "G13": 758.0005761,
+     "G23": 758.0005761
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "agp370-3501-6s": {
@@ -2632,6 +2688,8 @@
     "E1": 77.0,
     "E2": 75.0,
     "G12": 6.5,
+    "G13": 6.5,
+    "G23": 6.5,
     "nu12": 0.06,
     "strengths": {
      "F1t": 963.0,
@@ -2640,12 +2698,19 @@
      "F2c": 900.0,
      "F6": 71.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6500.0,
+     "G23": 6500.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 77.0,
     "E2": 75.0,
     "G12": 6.5,
+    "G13": 6.5,
+    "G23": 6.5,
     "nu12": 0.06,
     "strengths": {
      "F1t": 963000000.0,
@@ -2654,12 +2719,19 @@
      "F2c": 900000000.0,
      "F6": 71000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6500000000.0,
+     "G23": 6500000000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 11.16790580522611,
     "E2": 10.877830329765692,
     "G12": 0.94274529524636,
+    "G13": 0.94274529524636,
+    "G23": 0.94274529524636,
     "nu12": 0.06,
     "strengths": {
      "F1t": 139671.34143419148,
@@ -2668,12 +2740,19 @@
      "F2c": 130533.9639571883,
      "F6": 10297.679378844856
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 942745.2952,
+     "G23": 942745.2952
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 11.16790580522611,
     "E2": 10.877830329765692,
     "G12": 0.94274529524636,
+    "G13": 0.94274529524636,
+    "G23": 0.94274529524636,
     "nu12": 0.06,
     "strengths": {
      "F1t": 139.6713414341915,
@@ -2682,7 +2761,12 @@
      "F2c": 130.53396395718832,
      "F6": 10.297679378844856
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 942.7452952,
+     "G23": 942.7452952
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "as4-3501": {
@@ -2690,6 +2774,8 @@
     "E1": 147.0,
     "E2": 10.3,
     "G12": 7.0,
+    "G13": 7.0,
+    "G23": 3.43333,
     "nu12": 0.27,
     "strengths": {
      "F1t": 2280.0,
@@ -2698,12 +2784,19 @@
      "F2c": 228.0,
      "F6": 76.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 7000.0,
+     "G23": 3433.33
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 147.0,
     "E2": 10.3,
     "G12": 7.0,
+    "G13": 7.0,
+    "G23": 3.43333,
     "nu12": 0.27,
     "strengths": {
      "F1t": 2280000000.0,
@@ -2712,12 +2805,19 @@
      "F2c": 228000000.0,
      "F6": 76000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 7000000000.0,
+     "G23": 3433330000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 21.320547446340758,
     "E2": 1.493888698621155,
     "G12": 1.0152641641114646,
+    "G13": 1.0152641641114646,
+    "G23": 0.49796241608125924,
     "nu12": 0.27,
     "strengths": {
      "F1t": 330686.04202487704,
@@ -2726,12 +2826,19 @@
      "F2c": 33068.6042024877,
      "F6": 11022.868067495901
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 1015264.164,
+     "G23": 497962.4161
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 21.320547446340758,
     "E2": 1.493888698621155,
     "G12": 1.0152641641114646,
+    "G13": 1.0152641641114646,
+    "G23": 0.49796241608125924,
     "nu12": 0.27,
     "strengths": {
      "F1t": 330.68604202487705,
@@ -2740,7 +2847,12 @@
      "F2c": 33.068604202487705,
      "F6": 11.022868067495901
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 1015.264164,
+     "G23": 497.9624161
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "as4-8552": {
@@ -2748,6 +2860,8 @@
     "E1": 131.620916726584,
     "E2": 9.238974772845603,
     "G12": 4.826330105217853,
+    "G13": 4.82633,
+    "G23": 3.07966,
     "nu12": 0.302,
     "strengths": {
      "F1t": 2063.0492772618372,
@@ -2756,12 +2870,19 @@
      "F2c": 267.8613208395908,
      "F6": 91.56237685327582
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 4826.33,
+     "G23": 3079.66
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 131.620916726584,
     "E2": 9.238974772845603,
     "G12": 4.826330105217853,
+    "G13": 4.82633,
+    "G23": 3.07966,
     "nu12": 0.302,
     "strengths": {
      "F1t": 2063049277.261837,
@@ -2770,12 +2891,19 @@
      "F2c": 267861320.83959082,
      "F6": 91562376.85327582
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 4826330000.0,
+     "G23": 3079660000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 19.09,
     "E2": 1.34,
     "G12": 0.7000000000000001,
+    "G13": 0.6999999847394407,
+    "G23": 0.4466669193782162,
     "nu12": 0.302,
     "strengths": {
      "F1t": 299220.0,
@@ -2784,12 +2912,19 @@
      "F2c": 38850.0,
      "F6": 13279.999999999998
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 699999.9847,
+     "G23": 446666.9194
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 19.09,
     "E2": 1.34,
     "G12": 0.7000000000000001,
+    "G13": 0.6999999847394407,
+    "G23": 0.4466669193782162,
     "nu12": 0.302,
     "strengths": {
      "F1t": 299.22,
@@ -2798,7 +2933,12 @@
      "F2c": 38.85,
      "F6": 13.28
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 699.9999847,
+     "G23": 446.6669194
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "as4-8552s-pw": {
@@ -2806,33 +2946,61 @@
     "E1": 66.0517748685529,
     "E2": 66.60335545200637,
     "G12": 4.96422525108122,
+    "G13": 4.96423,
+    "G23": 4.96423,
     "nu12": 0.046,
     "strengths": null,
-    "ply_thickness": 0.19811999999999996
+    "ply_thickness": 0.19811999999999996,
+    "estimates": {
+     "G13": 4964.23,
+     "G23": 4964.23
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 66.0517748685529,
     "E2": 66.60335545200637,
     "G12": 4.96422525108122,
+    "G13": 4.96423,
+    "G23": 4.96423,
     "nu12": 0.046,
     "strengths": null,
-    "ply_thickness": 0.00019811999999999998
+    "ply_thickness": 0.00019811999999999998,
+    "estimates": {
+     "G13": 4964230000.0,
+     "G23": 4964230000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 9.58,
     "E2": 9.66,
     "G12": 0.72,
+    "G13": 0.7200006887724365,
+    "G23": 0.7200006887724365,
     "nu12": 0.046,
     "strengths": null,
-    "ply_thickness": 0.0078
+    "ply_thickness": 0.0078,
+    "estimates": {
+     "G13": 720000.6888,
+     "G23": 720000.6888
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 9.58,
     "E2": 9.66,
     "G12": 0.72,
+    "G13": 0.7200006887724365,
+    "G23": 0.7200006887724365,
     "nu12": 0.046,
     "strengths": null,
-    "ply_thickness": 0.0078
+    "ply_thickness": 0.0078,
+    "estimates": {
+     "G13": 720.0006888,
+     "G23": 720.0006888
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "as4-apc2": {
@@ -2840,6 +3008,8 @@
     "E1": 138.0,
     "E2": 8.7,
     "G12": 5.0,
+    "G13": 5.0,
+    "G23": 2.9,
     "nu12": 0.28,
     "strengths": {
      "F1t": 2060.0,
@@ -2848,12 +3018,19 @@
      "F2c": 196.0,
      "F6": 157.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 5000.0,
+     "G23": 2900.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 138.0,
     "E2": 8.7,
     "G12": 5.0,
+    "G13": 5.0,
+    "G23": 2.9,
     "nu12": 0.28,
     "strengths": {
      "F1t": 2060000000.0,
@@ -2862,12 +3039,19 @@
      "F2c": 196000000.0,
      "F6": 157000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 5000000000.0,
+     "G23": 2900000000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 20.015207806768874,
     "E2": 1.2618283182528203,
     "G12": 0.7251886886510461,
+    "G13": 0.7251886886510461,
+    "G23": 0.42060943941760676,
     "nu12": 0.28,
     "strengths": {
      "F1t": 298777.739724231,
@@ -2876,12 +3060,19 @@
      "F2c": 28427.39659512101,
      "F6": 22770.92482364285
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 725188.6887,
+     "G23": 420609.4394
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 20.015207806768874,
     "E2": 1.2618283182528203,
     "G12": 0.7251886886510461,
+    "G13": 0.7251886886510461,
+    "G23": 0.42060943941760676,
     "nu12": 0.28,
     "strengths": {
      "F1t": 298.777739724231,
@@ -2890,7 +3081,12 @@
      "F2c": 28.42739659512101,
      "F6": 22.77092482364285
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 725.1886887,
+     "G23": 420.6094394
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "hts40-tc250": {
@@ -2898,6 +3094,8 @@
     "E1": 59.70859815883801,
     "E2": 59.157017575384536,
     "G12": 3.585273792447548,
+    "G13": 3.58527,
+    "G23": 3.58527,
     "nu12": 0.04,
     "strengths": {
      "F1t": 871.014688845959,
@@ -2906,12 +3104,19 @@
      "F2c": 620.2523660934256,
      "F6": 68.05125448357171
     },
-    "ply_thickness": 0.2159
+    "ply_thickness": 0.2159,
+    "estimates": {
+     "G13": 3585.27,
+     "G23": 3585.27
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 59.70859815883801,
     "E2": 59.157017575384536,
     "G12": 3.585273792447548,
+    "G13": 3.58527,
+    "G23": 3.58527,
     "nu12": 0.04,
     "strengths": {
      "F1t": 871014688.845959,
@@ -2920,12 +3125,19 @@
      "F2c": 620252366.0934256,
      "F6": 68051254.48357171
     },
-    "ply_thickness": 0.00021590000000000002
+    "ply_thickness": 0.00021590000000000002,
+    "estimates": {
+     "G13": 3585270000.0,
+     "G23": 3585270000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 8.66,
     "E2": 8.58,
     "G12": 0.52,
+    "G13": 0.5199994499519872,
+    "G23": 0.5199994499519872,
     "nu12": 0.04,
     "strengths": {
      "F1t": 126329.99999999999,
@@ -2934,12 +3146,19 @@
      "F2c": 89959.99999999999,
      "F6": 9869.999999999998
     },
-    "ply_thickness": 0.0085
+    "ply_thickness": 0.0085,
+    "estimates": {
+     "G13": 519999.45,
+     "G23": 519999.45
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 8.66,
     "E2": 8.58,
     "G12": 0.52,
+    "G13": 0.5199994499519872,
+    "G23": 0.5199994499519872,
     "nu12": 0.04,
     "strengths": {
      "F1t": 126.33,
@@ -2948,7 +3167,12 @@
      "F2c": 89.96,
      "F6": 9.87
     },
-    "ply_thickness": 0.0085
+    "ply_thickness": 0.0085,
+    "estimates": {
+     "G13": 519.99945,
+     "G23": 519.99945
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "im6g-3501-6": {
@@ -2956,6 +3180,8 @@
     "E1": 169.0,
     "E2": 9.0,
     "G12": 6.5,
+    "G13": 6.5,
+    "G23": 3.0,
     "nu12": 0.31,
     "strengths": {
      "F1t": 2240.0,
@@ -2964,12 +3190,19 @@
      "F2c": 215.0,
      "F6": 73.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6500.0,
+     "G23": 3000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 169.0,
     "E2": 9.0,
     "G12": 6.5,
+    "G13": 6.5,
+    "G23": 3.0,
     "nu12": 0.31,
     "strengths": {
      "F1t": 2240000000.0,
@@ -2978,12 +3211,19 @@
      "F2c": 215000000.0,
      "F6": 73000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6500000000.0,
+     "G23": 3000000000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 24.51137767640536,
     "E2": 1.305339639571883,
     "G12": 0.94274529524636,
+    "G13": 0.94274529524636,
+    "G23": 0.4351132131906277,
     "nu12": 0.31,
     "strengths": {
      "F1t": 324884.53251566866,
@@ -2992,12 +3232,19 @@
      "F2c": 31183.113611994984,
      "F6": 10587.754854305274
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 942745.2952,
+     "G23": 435113.2132
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 24.51137767640536,
     "E2": 1.305339639571883,
     "G12": 0.94274529524636,
+    "G13": 0.94274529524636,
+    "G23": 0.4351132131906277,
     "nu12": 0.31,
     "strengths": {
      "F1t": 324.8845325156687,
@@ -3006,7 +3253,12 @@
      "F2c": 31.183113611994987,
      "F6": 10.587754854305274
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 942.7452952,
+     "G23": 435.1132132
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "im7-8552": {
@@ -3014,6 +3266,8 @@
     "E1": 162.09574396238818,
     "E2": 8.96318448111887,
     "G12": 4.688434959354486,
+    "G13": 4.68843,
+    "G23": 2.98773,
     "nu12": 0.316,
     "strengths": {
      "F1t": 2558.5065363489152,
@@ -3022,12 +3276,19 @@
      "F2c": 285.7187422288969,
      "F6": 91.14869141568573
     },
-    "ply_thickness": 0.18288
+    "ply_thickness": 0.18288,
+    "estimates": {
+     "G13": 4688.43,
+     "G23": 2987.73
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 162.09574396238818,
     "E2": 8.96318448111887,
     "G12": 4.688434959354486,
+    "G13": 4.68843,
+    "G23": 2.98773,
     "nu12": 0.316,
     "strengths": {
      "F1t": 2558506536.348915,
@@ -3036,12 +3297,19 @@
      "F2c": 285718742.22889686,
      "F6": 91148691.41568573
     },
-    "ply_thickness": 0.00018287999999999998
+    "ply_thickness": 0.00018287999999999998,
+    "estimates": {
+     "G13": 4688430000.0,
+     "G23": 2987730000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 23.510000000000005,
     "E2": 1.3,
     "G12": 0.68,
+    "G13": 0.6799992807064449,
+    "G23": 0.433333600148678,
     "nu12": 0.316,
     "strengths": {
      "F1t": 371079.99999999994,
@@ -3050,12 +3318,19 @@
      "F2c": 41440.0,
      "F6": 13220.0
     },
-    "ply_thickness": 0.0072
+    "ply_thickness": 0.0072,
+    "estimates": {
+     "G13": 679999.2807,
+     "G23": 433333.6001
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 23.510000000000005,
     "E2": 1.3,
     "G12": 0.68,
+    "G13": 0.6799992807064449,
+    "G23": 0.433333600148678,
     "nu12": 0.316,
     "strengths": {
      "F1t": 371.08,
@@ -3064,7 +3339,12 @@
      "F2c": 41.44,
      "F6": 13.22
     },
-    "ply_thickness": 0.0072
+    "ply_thickness": 0.0072,
+    "estimates": {
+     "G13": 679.9992807,
+     "G23": 433.3336001
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "im7-977-3": {
@@ -3072,6 +3352,8 @@
     "E1": 190.0,
     "E2": 9.9,
     "G12": 7.8,
+    "G13": 7.8,
+    "G23": 3.3,
     "nu12": 0.35,
     "strengths": {
      "F1t": 3250.0,
@@ -3080,12 +3362,19 @@
      "F2c": 200.0,
      "F6": 75.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 7800.0,
+     "G23": 3300.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 190.0,
     "E2": 9.9,
     "G12": 7.8,
+    "G13": 7.8,
+    "G23": 3.3,
     "nu12": 0.35,
     "strengths": {
      "F1t": 3250000000.0,
@@ -3094,12 +3383,19 @@
      "F2c": 200000000.0,
      "F6": 75000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 7800000000.0,
+     "G23": 3300000000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 27.557170168739752,
     "E2": 1.4358736035290713,
     "G12": 1.131294354295632,
+    "G13": 1.131294354295632,
+    "G23": 0.47862453450969045,
     "nu12": 0.35,
     "strengths": {
      "F1t": 471372.64762318,
@@ -3108,12 +3404,19 @@
      "F2c": 29007.547546041846,
      "F6": 10877.830329765691
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 1131294.354,
+     "G23": 478624.5345
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 27.557170168739752,
     "E2": 1.4358736035290713,
     "G12": 1.131294354295632,
+    "G13": 1.131294354295632,
+    "G23": 0.47862453450969045,
     "nu12": 0.35,
     "strengths": {
      "F1t": 471.37264762318,
@@ -3122,7 +3425,12 @@
      "F2c": 29.00754754604185,
      "F6": 10.877830329765693
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 1131.294354,
+     "G23": 478.6245345
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "im7-bt250e-6": {
@@ -3130,6 +3438,8 @@
     "E1": 155.84219909748447,
     "E2": 8.604657101874116,
     "G12": 4.336802337402899,
+    "G13": 4.3368,
+    "G23": 2.86822,
     "nu12": 0.309,
     "strengths": {
      "F1t": 2453.0512235499054,
@@ -3138,12 +3448,19 @@
      "F2c": 189.79198400904545,
      "F6": 69.52673254430975
     },
-    "ply_thickness": 0.14731999999999998
+    "ply_thickness": 0.14731999999999998,
+    "estimates": {
+     "G13": 4336.8,
+     "G23": 2868.22
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 155.84219909748447,
     "E2": 8.604657101874116,
     "G12": 4.336802337402899,
+    "G13": 4.3368,
+    "G23": 2.86822,
     "nu12": 0.309,
     "strengths": {
      "F1t": 2453051223.5499053,
@@ -3152,12 +3469,19 @@
      "F2c": 189791984.00904545,
      "F6": 69526732.54430975
     },
-    "ply_thickness": 0.00014732
+    "ply_thickness": 0.00014732,
+    "estimates": {
+     "G13": 4336800000.0,
+     "G23": 2868220000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 22.603,
     "E2": 1.2480000000000002,
     "G12": 0.629,
+    "G13": 0.6289996609883713,
+    "G23": 0.4160001401125407,
     "nu12": 0.309,
     "strengths": {
      "F1t": 355785.0,
@@ -3166,12 +3490,19 @@
      "F2c": 27526.999999999996,
      "F6": 10084.0
     },
-    "ply_thickness": 0.0058
+    "ply_thickness": 0.0058,
+    "estimates": {
+     "G13": 628999.661,
+     "G23": 416000.1401
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 22.603,
     "E2": 1.2480000000000002,
     "G12": 0.629,
+    "G13": 0.6289996609883713,
+    "G23": 0.4160001401125407,
     "nu12": 0.309,
     "strengths": {
      "F1t": 355.785,
@@ -3180,7 +3511,12 @@
      "F2c": 27.527,
      "F6": 10.084000000000001
     },
-    "ply_thickness": 0.0058
+    "ply_thickness": 0.0058,
+    "estimates": {
+     "G13": 628.999661,
+     "G23": 416.0001401
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "ims65-ep2190": {
@@ -3188,6 +3524,8 @@
     "E1": 151.96045074143066,
     "E2": 8.652920402926293,
     "G12": 4.173396589554809,
+    "G13": 4.173399999999999,
+    "G23": 2.88431,
     "nu12": 0.3299,
     "strengths": {
      "F1t": 2866.8400824994046,
@@ -3196,12 +3534,19 @@
      "F2c": 284.82242378078496,
      "F6": 73.29127002637968
     },
-    "ply_thickness": 0.14223999999999998
+    "ply_thickness": 0.14223999999999998,
+    "estimates": {
+     "G13": 4173.4,
+     "G23": 2884.31
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 151.96045074143066,
     "E2": 8.652920402926293,
     "G12": 4.173396589554809,
+    "G13": 4.173399999999999,
+    "G23": 2.88431,
     "nu12": 0.3299,
     "strengths": {
      "F1t": 2866840082.4994044,
@@ -3210,12 +3555,19 @@
      "F2c": 284822423.78078496,
      "F6": 73291270.02637967
     },
-    "ply_thickness": 0.00014224
+    "ply_thickness": 0.00014224,
+    "estimates": {
+     "G13": 4173400000.0,
+     "G23": 2884310000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 22.04,
     "E2": 1.255,
     "G12": 0.6053,
+    "G13": 0.6053004946432551,
+    "G23": 0.41833379731261977,
     "nu12": 0.3299,
     "strengths": {
      "F1t": 415800.0,
@@ -3224,12 +3576,19 @@
      "F2c": 41310.0,
      "F6": 10630.0
     },
-    "ply_thickness": 0.0056
+    "ply_thickness": 0.0056,
+    "estimates": {
+     "G13": 605300.4946,
+     "G23": 418333.7973
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 22.04,
     "E2": 1.255,
     "G12": 0.6053,
+    "G13": 0.6053004946432551,
+    "G23": 0.41833379731261977,
     "nu12": 0.3299,
     "strengths": {
      "F1t": 415.8,
@@ -3238,7 +3597,12 @@
      "F2c": 41.31,
      "F6": 10.63
     },
-    "ply_thickness": 0.0056
+    "ply_thickness": 0.0056,
+    "estimates": {
+     "G13": 605.3004946,
+     "G23": 418.3337973
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "m10e-3783": {
@@ -3246,6 +3610,8 @@
     "E1": 24.5,
     "E2": 23.8,
     "G12": 4.7,
+    "G13": 4.7,
+    "G23": 4.7,
     "nu12": 0.11,
     "strengths": {
      "F1t": 433.0,
@@ -3254,12 +3620,19 @@
      "F2c": 335.0,
      "F6": 84.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 4700.0,
+     "G23": 4700.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 24.5,
     "E2": 23.8,
     "G12": 4.7,
+    "G13": 4.7,
+    "G23": 4.7,
     "nu12": 0.11,
     "strengths": {
      "F1t": 433000000.0,
@@ -3268,12 +3641,19 @@
      "F2c": 335000000.0,
      "F6": 84000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 4700000000.0,
+     "G23": 4700000000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 3.5534245743901263,
     "E2": 3.4518981579789796,
     "G12": 0.6816773673319834,
+    "G13": 0.6816773673319834,
+    "G23": 0.6816773673319834,
     "nu12": 0.11,
     "strengths": {
      "F1t": 62801.340437180595,
@@ -3282,12 +3662,19 @@
      "F2c": 48587.64213962009,
      "F6": 12183.169969337576
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 681677.3673,
+     "G23": 681677.3673
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 3.5534245743901263,
     "E2": 3.4518981579789796,
     "G12": 0.6816773673319834,
+    "G13": 0.6816773673319834,
+    "G23": 0.6816773673319834,
     "nu12": 0.11,
     "strengths": {
      "F1t": 62.8013404371806,
@@ -3296,7 +3683,12 @@
      "F2c": 48.587642139620094,
      "F6": 12.183169969337575
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 681.6773673,
+     "G23": 681.6773673
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "t1100gc-tc380": {
@@ -3304,6 +3696,8 @@
     "E1": 158.37257502407724,
     "E2": 7.660075352710049,
     "G12": 3.957590686278639,
+    "G13": 3.95759,
+    "G23": 2.55336,
     "nu12": 0.3132,
     "strengths": {
      "F1t": 3277.0781414429216,
@@ -3312,12 +3706,19 @@
      "F2c": 202.22323140862798,
      "F6": 76.9454913917589
     },
-    "ply_thickness": 0.12191999999999999
+    "ply_thickness": 0.12191999999999999,
+    "estimates": {
+     "G13": 3957.59,
+     "G23": 2553.36
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 158.37257502407724,
     "E2": 7.660075352710049,
     "G12": 3.957590686278639,
+    "G13": 3.95759,
+    "G23": 2.55336,
     "nu12": 0.3132,
     "strengths": {
      "F1t": 3277078141.4429216,
@@ -3326,12 +3727,19 @@
      "F2c": 202223231.408628,
      "F6": 76945491.3917589
     },
-    "ply_thickness": 0.00012191999999999998
+    "ply_thickness": 0.00012191999999999998,
+    "estimates": {
+     "G13": 3957590000.0,
+     "G23": 2553360000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 22.97,
     "E2": 1.111,
     "G12": 0.574,
+    "G13": 0.5739999004636988,
+    "G23": 0.37033355801080703,
     "nu12": 0.3132,
     "strengths": {
      "F1t": 475299.99999999994,
@@ -3340,12 +3748,19 @@
      "F2c": 29329.999999999996,
      "F6": 11160.0
     },
-    "ply_thickness": 0.0048
+    "ply_thickness": 0.0048,
+    "estimates": {
+     "G13": 573999.9005,
+     "G23": 370333.558
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 22.97,
     "E2": 1.111,
     "G12": 0.574,
+    "G13": 0.5739999004636988,
+    "G23": 0.37033355801080703,
     "nu12": 0.3132,
     "strengths": {
      "F1t": 475.3,
@@ -3354,7 +3769,12 @@
      "F2c": 29.33,
      "F6": 11.16
     },
-    "ply_thickness": 0.0048
+    "ply_thickness": 0.0048,
+    "estimates": {
+     "G13": 573.9999005,
+     "G23": 370.333558
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "t650-5320-1": {
@@ -3362,6 +3782,8 @@
     "E1": 138.4260421749412,
     "E2": 9.176921957207089,
     "G12": 4.9504357364948826,
+    "G13": 4.95044,
+    "G23": 3.05897,
     "nu12": 0.326,
     "strengths": {
      "F1t": 2061.5600096865123,
@@ -3370,12 +3792,19 @@
      "F2c": 274.0734971607355,
      "F6": 93.08611821506604
     },
-    "ply_thickness": 0.1397
+    "ply_thickness": 0.1397,
+    "estimates": {
+     "G13": 4950.44,
+     "G23": 3058.97
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "m-Pa": {
     "E1": 138.4260421749412,
     "E2": 9.176921957207089,
     "G12": 4.9504357364948826,
+    "G13": 4.95044,
+    "G23": 3.05897,
     "nu12": 0.326,
     "strengths": {
      "F1t": 2061560009.6865125,
@@ -3384,12 +3813,19 @@
      "F2c": 274073497.1607355,
      "F6": 93086118.21506603
     },
-    "ply_thickness": 0.00013969999999999998
+    "ply_thickness": 0.00013969999999999998,
+    "estimates": {
+     "G13": 4950440000.0,
+     "G23": 3058970000.0
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-psi": {
     "E1": 20.077,
     "E2": 1.331,
     "G12": 0.718,
+    "G13": 0.718000618369137,
+    "G23": 0.4436660885845781,
     "nu12": 0.326,
     "strengths": {
      "F1t": 299004.0,
@@ -3398,12 +3834,19 @@
      "F2c": 39751.0,
      "F6": 13500.999999999998
     },
-    "ply_thickness": 0.0055
+    "ply_thickness": 0.0055,
+    "estimates": {
+     "G13": 718000.6184,
+     "G23": 443666.0886
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    },
    "in-ksi": {
     "E1": 20.077,
     "E2": 1.331,
     "G12": 0.718,
+    "G13": 0.718000618369137,
+    "G23": 0.4436660885845781,
     "nu12": 0.326,
     "strengths": {
      "F1t": 299.004,
@@ -3412,7 +3855,12 @@
      "F2c": 39.751,
      "F6": 13.501
     },
-    "ply_thickness": 0.0055
+    "ply_thickness": 0.0055,
+    "estimates": {
+     "G13": 718.0006184,
+     "G23": 443.6660886
+    },
+    "transverse_rule": "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape"
    }
   },
   "t650-5320-1-pw": {
@@ -3420,6 +3868,8 @@
     "E1": 68.87862535875192,
     "E2": 68.47183467845498,
     "G12": 5.067646610478746,
+    "G13": 5.06765,
+    "G23": 5.06765,
     "nu12": 0.053,
     "strengths": {
      "F1t": 861.1551859167282,
@@ -3428,12 +3878,19 @@
      "F2c": 691.9923157288425,
      "F6": 101.00819434491648
     },
-    "ply_thickness": 0.19558
+    "ply_thickness": 0.19558,
+    "estimates": {
+     "G13": 5067.65,
+     "G23": 5067.65
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 68.87862535875192,
     "E2": 68.47183467845498,
     "G12": 5.067646610478746,
+    "G13": 5.06765,
+    "G23": 5.06765,
     "nu12": 0.053,
     "strengths": {
      "F1t": 861155185.9167283,
@@ -3442,12 +3899,19 @@
      "F2c": 691992315.7288425,
      "F6": 101008194.34491648
     },
-    "ply_thickness": 0.00019558
+    "ply_thickness": 0.00019558,
+    "estimates": {
+     "G13": 5067650000.0,
+     "G23": 5067650000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 9.99,
     "E2": 9.931,
     "G12": 0.7350000000000001,
+    "G13": 0.7350004916084948,
+    "G23": 0.7350004916084948,
     "nu12": 0.053,
     "strengths": {
      "F1t": 124900.0,
@@ -3456,12 +3920,19 @@
      "F2c": 100365.0,
      "F6": 14649.999999999998
     },
-    "ply_thickness": 0.0077
+    "ply_thickness": 0.0077,
+    "estimates": {
+     "G13": 735000.4916,
+     "G23": 735000.4916
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 9.99,
     "E2": 9.931,
     "G12": 0.7350000000000001,
+    "G13": 0.7350004916084948,
+    "G23": 0.7350004916084948,
     "nu12": 0.053,
     "strengths": {
      "F1t": 124.9,
@@ -3470,7 +3941,12 @@
      "F2c": 100.365,
      "F6": 14.65
     },
-    "ply_thickness": 0.0077
+    "ply_thickness": 0.0077,
+    "estimates": {
+     "G13": 735.0004916,
+     "G23": 735.0004916
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   },
   "x840-z60-pw": {
@@ -3478,6 +3954,8 @@
     "E1": 80.0,
     "E2": 80.0,
     "G12": 6.48,
+    "G13": 6.48,
+    "G23": 6.48,
     "nu12": 0.06,
     "strengths": {
      "F1t": 993.0,
@@ -3486,12 +3964,19 @@
      "F2c": 896.0,
      "F6": 71.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6480.0,
+     "G23": 6480.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "m-Pa": {
     "E1": 80.0,
     "E2": 80.0,
     "G12": 6.48,
+    "G13": 6.48,
+    "G23": 6.48,
     "nu12": 0.06,
     "strengths": {
      "F1t": 993000000.0,
@@ -3500,12 +3985,19 @@
      "F2c": 896000000.0,
      "F6": 71000000.0
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 6480000000.0,
+     "G23": 6480000000.0
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-psi": {
     "E1": 11.603019018416738,
     "E2": 11.603019018416738,
     "G12": 0.9398445404917558,
+    "G13": 0.9398445404917558,
+    "G23": 0.9398445404917558,
     "nu12": 0.06,
     "strengths": {
      "F1t": 144022.47356609776,
@@ -3514,12 +4006,19 @@
      "F2c": 129953.81300626746,
      "F6": 10297.679378844856
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 939844.5405,
+     "G23": 939844.5405
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    },
    "in-ksi": {
     "E1": 11.603019018416738,
     "E2": 11.603019018416738,
     "G12": 0.9398445404917558,
+    "G13": 0.9398445404917558,
+    "G23": 0.9398445404917558,
     "nu12": 0.06,
     "strengths": {
      "F1t": 144.02247356609777,
@@ -3528,7 +4027,12 @@
      "F2c": 129.95381300626747,
      "F6": 10.297679378844856
     },
-    "ply_thickness": null
+    "ply_thickness": null,
+    "estimates": {
+     "G13": 939.8445405,
+     "G23": 939.8445405
+    },
+    "transverse_rule": "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric"
    }
   }
  },

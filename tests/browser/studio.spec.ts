@@ -484,6 +484,45 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
   expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
 });
 
+test("a library material's G13 and G23 are estimates until the engineer gives their own, which then reach the check (ADR-0111 amendment 5)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const values = page.getByTestId("material-values");
+  const own = page.getByTestId("own-transverse");
+  await expect(own).not.toBeChecked();
+  await expect(page.locator("#studio-G13")).toHaveCount(0);
+  await own.check();
+  // the estimate rows give way to two fields whose placeholders are the estimates, in the rows' unit
+  await expect(values.locator("[data-key=G13], [data-key=G23]")).toHaveCount(0);
+  await expect(page.getByTestId("transverse-note")).toHaveCount(0);
+  await expect(page.locator("#studio-G13")).toHaveAttribute("placeholder", "4688");
+  await expect(page.locator("#studio-G23")).toHaveAttribute("placeholder", "2988");
+  await page.locator("#studio-G13").fill("5200");
+  // unticked, the fields empty and the estimates come back
+  await own.uncheck();
+  await expect(page.locator("#studio-G13")).toHaveCount(0);
+  await expect(values.locator("[data-key=G13] dd")).toHaveText("4.688 GPa est.");
+  await own.check();
+  await expect(page.locator("#studio-G13")).toHaveValue("");
+  // a new material starts from its own estimates
+  await page.locator("#studio-G13").fill("5200");
+  await page.getByLabel("Material", { exact: true }).selectOption("hts40-tc250");
+  await expect(page.getByTestId("own-transverse")).not.toBeChecked();
+  await expect(values.locator("[data-key=G23] dd")).toHaveText("3.585 GPa est."); // a fabric: G23 = G12
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByTestId("own-transverse").check();
+  await page.locator("#studio-G13").fill("5200");
+  await page.locator("#studio-G23").fill("3400");
+  await page.getByTestId("build-button").click();
+  await expect.poll(() => calls.checks.length).toBeGreaterThan(0);
+  const sent = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+  expect([sent.library, sent.G13, sent.G23]).toEqual(["im7-8552", 5200, 3400]);
+});
+
 test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls, { allTests: false }); // the switch off, as on the hosted tier: the product's view
@@ -515,9 +554,10 @@ test("the tension screen takes the material and the layup, builds the model, say
   await expect(page.getByTestId("library-ply-thickness")).toHaveCount(0); // IM7/8552's record gives one
   // the chosen material's numbers show under the choice the moment it is picked, before any check (ADR-0111 amendment 4)
   const values = page.getByTestId("material-values");
-  await expect(values.getByRole("definition")).toHaveText(["162.1 GPa", "8.963 GPa", "4.688 GPa", "0.316", "0.1829 mm",
-    "2559 MPa", "1731 MPa", "64.05 MPa", "285.7 MPa", "91.15 MPa"]);
-  await expect(values.getByRole("term")).toHaveText(["E1", "E2", "G12", "ν12", "Ply", "F1t", "F1c", "F2t", "F2c", "F6"]);
+  await expect(values.getByRole("definition")).toHaveText(["162.1 GPa", "8.963 GPa", "4.688 GPa", "4.688 GPa est.", "2.988 GPa est.", "0.316",
+    "0.1829 mm", "2559 MPa", "1731 MPa", "64.05 MPa", "285.7 MPa", "91.15 MPa"]);
+  await expect(values.getByRole("term")).toHaveText(["E1", "E2", "G12", "G13", "G23", "ν12", "Ply", "F1t", "F1c", "F2t", "F2c", "F6"]);
+  await expect(page.getByTestId("transverse-note")).toContainText("G13 = G12 and G23 = E2 / 3, the usual estimates for a tape");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await expect(page.getByTestId("tension-missing")).toHaveCount(0);
