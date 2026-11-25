@@ -46,6 +46,7 @@ POST /v1/coupon-jobs/check             {"values": {...}}  -> the setup checklist
 POST /v1/imported-models?units=mm-MPa  <the .inp file>   -> a model brought in as a file: refused, read or solved (ADR-0105); nothing kept
 GET  /v1/coupon-jobs                   the jobs, newest first (behind the sign-in, the requester's own: ADR-0104)
 GET  /v1/coupon-jobs/{job_id}/files/{key}  one file by key (fields, explanation, checklist, preview while it runs; every key once done)
+GET  /v1/coupon-jobs/{job_id}/qa       the run's quality checks and its verdict, to the job's owner only (ADR-0137); unchecked until it is done
 GET  /v1/projects                      the requester's workspace projects, last changed first (ADR-0062 part 6; 503 with run records off)
 PUT  /v1/projects/{id}                 {"kind": "fea", "name": "...", "content": {...}, "form_version": "0.6", "units": "mm-MPa"}  -> 201 created, 200 replaced
 GET  /v1/projects/{id}                 the project with the jobs started for it

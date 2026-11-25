@@ -51,8 +51,8 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
-                      sweep_stale, update_job)
+from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, insert_qa_checks, jobs_started_since, list_jobs,
+                      naming_lock, qa_rows, queue_position, running_job_of, sweep_stale, update_job)
 from .storage import ObjectStore, content_type, input_key, job_output_key, owner_key, store_file, store_folder, store_job, sync
 
 REPO = Path(__file__).resolve().parents[3]
@@ -65,6 +65,7 @@ RUNNER = FEA / "tools" / "run_coupon.py"
 STUDIO = FEA / "tools" / "studio_tool.py"
 STATES = ("running", "done", "stopped", "refused")  # what the tool and this process know; the jobs table adds `queued` (migration 0008)
 LOG_TAIL = 40  # lines of the job's console a status shows
+MAX_QA_BYTES = 3_000_000  # a QA file larger than the record could keep (200 checks of 3 x 4000 characters) is not read (ADR-0137)
 CHECK_TIMEOUT_S = 120.0  # a check is one `uv run` start and a model build; a Gmsh mesh takes longest
 PROGRESS = "progress.json"
 GATE = "gate"  # the file the tool waits for once it has named the coupon (--gate)
@@ -670,9 +671,42 @@ class CouponJobs:
                            timings=job.all_timings(), claimed_at=job.claimed_at, answer=answer_of_outcome(outcome) if state == "done" else None, **row)
             except (SQLAlchemyError, LookupError) as exc:
                 outcome = {**outcome, "message": f"{outcome.get('message')}; its row in the jobs table could not be updated: {str(exc).splitlines()[0]}"}
+            else:
+                if state == "done" and not is_wing(job):
+                    self._record_qa(job, outcome, finished_at)
         with self.lock:
             job.outcome, job.run_id, job.finished_at = outcome, run_id, finished_at
             job.state = state
+
+    def qa_file(self, job: Job, outcome: dict | None = None) -> dict | None:
+        """The QA file a done run's tool wrote (ADR-0137): only from the job's own folder or the coupons' folder of the job's owner
+        (ADR-0106), never from another person's or anywhere else, and only a file of a QA record's size; None when the run wrote none
+        or it cannot be read."""
+        try:
+            outputs = ((outcome if outcome is not None else job.outcome) or {}).get("outputs") or {}
+            text = outputs.get("qa") if isinstance(outputs, dict) else None
+            if not isinstance(text, str):
+                return None
+            path = repository_path(text).resolve()
+            roots = [self.root_of(job.user_email).resolve(), *([job.folder.resolve()] if job.folder is not None else [])]
+            if not any(path.is_relative_to(root) for root in roots) or not path.is_file() or path.stat().st_size > MAX_QA_BYTES:
+                return None
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # a path or a file that is not one, however it fails: no checks, never a job left running
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _record_qa(self, job: Job, outcome: dict, recorded_at: dt.datetime) -> None:
+        """A done job's checks into the QA record, once (ADR-0137). A record that cannot be written leaves the job as it ended, with no
+        checks, which the page reads as not checked; the reason goes to the log. Nothing here may keep the job from ending."""
+        try:
+            qa = self.qa_file(job, outcome)
+            if qa is None:
+                print(f"coupon job {job.id}: no QA file to record", flush=True)
+                return
+            insert_qa_checks(self.table, job.id, qa_rows(qa), recorded_at)
+        except Exception as exc:  # the record's own refusals, the database's, or anything else: logged, and the job ends as it did
+            print(f"coupon job {job.id}: its QA record was not written: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else ''}", flush=True)
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
         """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder,

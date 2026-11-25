@@ -22,6 +22,7 @@ export const FAILED_WORDS: Record<string, string> = {
   "the tow calculation": "The tow calculation could not be run",
   "starting the analysis": "The analysis could not be started",
   "the analysis's progress": "The analysis's progress could not be read",
+  "the quality checks": "The quality checks could not be read",
   "the analyses": "The analyses could not be loaded",
   "the projects": "Your projects could not be loaded",
   "saving the project": "The project could not be saved",

@@ -145,6 +145,12 @@
 @keyframes studio-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .studio-stepper li[data-state=current] .studio-step-mark { animation: none; } }
 .studio-run .studio-muted, .studio-run .studio-ok, .studio-run .studio-problem { margin: 6px 0 0; }
+/* a done run's quality checks (ADR-0137): one line, the checks folded under it */
+.studio-qa { margin: 6px 0 0; }
+.studio-qa summary { cursor: pointer; }
+.studio-qa ul { margin: 4px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted, #9aa4ad); display: flex; flex-direction: column; gap: 2px; }
+.studio-qa li[data-verdict=block] { color: #f6bba9; }
+.studio-qa li[data-verdict=warn] { color: #e7c77a; }
 .studio-downloads a { display: inline-flex; align-items: center; gap: 6px; }
 .studio-details-more { margin-top: 8px; }
 .studio-details > summary h4 { display: inline; margin: 0; }
