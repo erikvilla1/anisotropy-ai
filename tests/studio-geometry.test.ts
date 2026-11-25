@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, fieldAttribute, gripOf, meanHeight, nodeMeans, plateMesh, quadsToTriangles, setBox, suggestedScale, vertexColors } from "../lib/studio-geometry";
+import { boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, fieldAttribute, gripOf, meanHeight, nodeMeans, onMesh, plateMesh, quadsToTriangles, setBox, suggestedScale, vertexColors } from "../lib/studio-geometry";
 
 const preview = JSON.parse(readFileSync("tests/fixtures/studio/preview.json", "utf8"));
 const fieldsFile = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8"));
@@ -130,4 +130,11 @@ test("a clamped tab is drawn as its grip and in the grip's grey, a held edge as 
   const values = fieldAttribute(mesh, "node", nodes.map((_, k) => k), -1, [0], -3);
   mesh.vertexElement.forEach((e, i) => assert.equal(values[i], e === 0 ? -3 : mesh.vertexNode[i]));
   assert.deepEqual([...fieldAttribute(mesh, "element", [7, 8, 9], -1)].slice(0, 4), [7, 7, 7, 7]); // nothing held: as before
+});
+
+test("a region keeps only the node numbers on the mesh drawn, so a region read for another mesh draws no node that is not there", () => {
+  const whole = { nodes: [0, 5], label: "Edge-Left" };
+  assert.equal(onMesh(whole, 6), whole); // nothing to drop: the same object, so nothing is drawn again
+  assert.deepEqual(onMesh({ nodes: [0, 5, 6, 288, -1, 1.5], label: "Face" }, 6), { nodes: [0, 5], label: "Face" });
+  assert.equal(setBox(square.nodes, onMesh({ nodes: [288] }, square.nodes.length).nodes), null);
 });
