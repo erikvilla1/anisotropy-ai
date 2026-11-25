@@ -290,8 +290,9 @@ def too_many_elements(spec, units: str, limit: int = MOST_ELEMENTS) -> str | Non
     g = spec.geometry
     fits = from_si(math.sqrt(g.length * g.width / limit), "length", units)  # square elements over the whole coupon, at the limit
     step = 10 ** math.floor(math.log10(fits) - 1)  # two significant figures, rounded up, so the size named fits
+    size = float(f"{math.ceil(fits / step) * step:.2g}")  # printed plainly: a size of 100 or more reads "160", never "1.6e+02"
     return (f"the mesh would have {estimate:,} elements; our solver takes at most {limit:,} in one model: use an element size of "
-            f"{math.ceil(fits / step) * step:.2g} {UNIT_LABEL[units]['length']} or more")
+            f"{size:g} {UNIT_LABEL[units]['length']} or more")
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,

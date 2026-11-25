@@ -44,6 +44,8 @@ Nothing is guessed: a missing value, an unknown key or an unknown unit system is
 
 from __future__ import annotations
 
+import re
+
 from ..lamina import Lamina, Strengths
 from ..library import library_material
 from ..units import UNIT_SYSTEMS
@@ -206,15 +208,29 @@ def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
     load = None
     if "applied" in data:
         load = si(_keys(data["applied"], "applied", {"load"})["load"], "N")
-    repair = Repair(
-        parent_material=_material(parent, "parent", si), parent_angles=parent["layup"], damage_diameter_m=si(damage["diameter"], "length"),
-        steps=steps["count"], step_length_m=si(steps["length"], "length"), plies_per_step=steps.get("plies", 1), adhesive=adhesive,
-        panel_length_m=si(panel["length"], "length"), panel_width_m=si(panel["width"], "length"), patch_material=patch_material,
-        patch_angles=patch_angles, cover_angles=cover_angles, cover_overlap_m=cover_overlap, kind=kind, patch_overlap_m=patch_overlap,
-        patch_shape=patch_shape,
-    )
-    check_regions(repair)
+    parent_material = _material(parent, "parent", si)
+    try:
+        repair = Repair(
+            parent_material=parent_material, parent_angles=parent["layup"], damage_diameter_m=si(damage["diameter"], "length"),
+            steps=steps["count"], step_length_m=si(steps["length"], "length"), plies_per_step=steps.get("plies", 1), adhesive=adhesive,
+            panel_length_m=si(panel["length"], "length"), panel_width_m=si(panel["width"], "length"), patch_material=patch_material,
+            patch_angles=patch_angles, cover_angles=cover_angles, cover_overlap_m=cover_overlap, kind=kind, patch_overlap_m=patch_overlap,
+            patch_shape=patch_shape,
+        )
+        check_regions(repair)
+    except RepairError as error:
+        raise RepairError(_lengths_as_written(str(error), system)) from error
     return repair, load
+
+
+METRES = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?(?:e[-+]?\d+)?) m\b")
+
+
+def _lengths_as_written(words: str, system: dict) -> str:
+    """A refusal's lengths in the file's unit (ADR-0131 amendment 2). The repair's own checks work in SI and say their sizes in metres
+    (ADR-0002); an engineer who wrote 60 mm, or 2.4 in, reads the refusal in the unit they wrote."""
+    scale, unit = system["length"]
+    return METRES.sub(lambda found: f"{float(found.group(1)) / scale:.4g} {unit}", words)
 
 
 def repair_report(repair: Repair, units: str, load_n_per_m: float | None = None) -> dict:

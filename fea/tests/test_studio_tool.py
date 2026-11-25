@@ -340,6 +340,13 @@ def test_a_mesh_past_the_limit_is_refused_before_meshing_and_the_file_for_anothe
     count = int(mesh["message"].split(" elements;")[0].rsplit(" ", 1)[1].replace(",", ""))
     assert mesh["state"] == "fail" and count > 40_000 and mesh["message"].endswith("our solver takes at most 40,000 in one model: use an element size "
                                                                                   "of 0.4 mm or more"), mesh
+    # a size of 100 or more is printed plainly, "160 mm", never "1.6e+02 mm": a coupon 100 m long, which once ran the check out of memory
+    huge = {**fine, "element_size": 2.0, "length": 100000.0, "width": 10000.0, "tab_length": 5000.0}
+    big = tmp_path / "huge"
+    done = run_tool("--root", str(tmp_path / "root"), "check", str(values_file(tmp_path / "huge-values", **huge)), "--out", str(big))
+    mesh = next(item for item in json.loads((big / "checklist.json").read_text(encoding="utf-8"))["items"] if item["id"] == "mesh")
+    assert mesh["state"] == "fail" and mesh["message"] == ("the mesh would have 250,000,000 elements; our solver takes at most 40,000 in one model: "
+                                                           "use an element size of 160 mm or more"), mesh
     model = tmp_path / "model"
     written = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path / "model-values", **fine)), "--program", "abaqus",
                        "--out", str(model))

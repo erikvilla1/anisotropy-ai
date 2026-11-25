@@ -48,6 +48,7 @@ from .result_questions import model_view, question_guard, question_schema
 from .theory import find as find_theory, repair_sections, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
+from .processes import run_tool
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
@@ -1771,8 +1772,7 @@ def wing_shape_endpoint(problem: WingRequest, actor: Actor, request: Request, re
         wing_json, step_path, parts_path = Path(folder) / "wing.json", Path(folder) / "wing.step", Path(folder) / "parts.json"
         wing_json.write_text(json.dumps(data), encoding="utf-8")
         try:
-            done = subprocess.run([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", cwd=FEA, timeout=WING_SHAPE_TIMEOUT_S, check=False)
+            done = run_tool([*command, str(wing_json), str(step_path), "--parts", str(parts_path)], cwd=FEA, timeout_s=WING_SHAPE_TIMEOUT_S)
         except subprocess.TimeoutExpired as exc:
             run_id = _record(request, actor, problem, error="the shape took longer than the time allowed")
             raise HTTPException(status_code=504, detail="The shape took too long to build", headers=_run_header(run_id)) from exc
@@ -1896,7 +1896,7 @@ def _repair_read(request: Request, actor: str, problem: RepairRequest):
 def _repair_tool(request: Request, actor: str, problem: RepairRequest, command: list[str], folder: Path, what: str, timeout_s: float) -> subprocess.CompletedProcess:
     """One of the fea package's repair tools run to its end in a process of its own (ADR-0051, ADR-0135); 504 when it outlasts its time."""
     try:
-        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+        return run_tool(command, cwd=FEA, timeout_s=timeout_s)
     except subprocess.TimeoutExpired as exc:
         run_id = _record(request, actor, problem, error=f"{what} took longer than the time allowed")
         raise HTTPException(status_code=504, detail=f"{what[0].upper()}{what[1:]} took too long", headers=_run_header(run_id)) from exc
@@ -1942,8 +1942,7 @@ def _repair_tool_report(command: list[str] | None, data: dict, options: list[str
         stated, out = Path(folder) / "repair.json", Path(folder) / "model"
         stated.write_text(json.dumps(data), encoding="utf-8")
         try:
-            done = subprocess.run([*command, str(stated), "--out", str(out), *options], capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", cwd=FEA, timeout=timeout_s, check=False)
+            done = run_tool([*command, str(stated), "--out", str(out), *options], cwd=FEA, timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             return "slow", None
         refusal = next((line.strip()[len("refused:"):].strip() for line in reversed(done.stdout.splitlines()) if line.strip().startswith("refused:")), "")

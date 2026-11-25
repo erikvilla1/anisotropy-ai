@@ -539,6 +539,33 @@ def test_a_file_that_does_not_state_an_external_repair_is_refused_in_words(chang
         repair_from_dict(case)
 
 
+def test_a_refusal_states_its_lengths_in_the_files_unit():
+    """ADR-0131 amendment 2: the repair's checks work in SI; an engineer who wrote millimetres or inches reads the refusal in them."""
+    def refusal(path: Path, change) -> str:
+        case = load(path)
+        case.pop("expected", None)
+        change(case)
+        with pytest.raises(RepairError) as refused:
+            repair_from_dict(case)
+        return str(refused.value)
+
+    def in_inches(case: dict) -> None:
+        case["units"] = "psi"
+        for table, key in (("damage", "diameter"), ("steps", "length"), ("cover", "overlap"), ("panel", "length"), ("panel", "width"), ("adhesive", "thickness")):
+            case[table][key] /= 25.4
+        case["panel"]["length"] = 2.0
+
+    assert refusal(EXAMPLE, lambda case: case["panel"].update(length=60.0)) == (
+        "The repair is 125 mm across, so the panel must be longer and wider than that (it is 60 mm by 200 mm)")
+    assert refusal(EXAMPLE, lambda case: case["adhesive"].update(thickness=0.5)) == (
+        "The bondline (0.5 mm) must be thinner than the plies of one step (0.1829 mm)")
+    assert refusal(EXAMPLE, in_inches) == "The repair is 4.921 in across, so the panel must be longer and wider than that (it is 2 in by 7.874 in)"
+    assert refusal(EXTERNAL_EXAMPLE, lambda case: case["panel"].update(width=80.0)) == (
+        "The patch is 105 mm across, so the panel must be longer and wider than that (it is 300 mm by 80 mm)")
+    assert refusal(EXTERNAL_EXAMPLE, lambda case: (case["patch"].update(shape="strip"), case["panel"].update(length=90.0))) == (
+        "A strip patch 105 mm long over a hole of 25 mm needs a panel longer than the patch and wider than the hole (it is 90 mm by 200 mm)")
+
+
 def test_a_flush_file_takes_no_patch_overlap_or_shape():
     case = load(WITH_COVER)
     case.pop("expected")
