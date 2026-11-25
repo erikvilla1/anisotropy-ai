@@ -6,9 +6,10 @@
 
 It connects with the owner's address (DATABASE_URL_UNPOOLED, else DATABASE_URL, as the migrations do), creates the role
 `cost_reader` with a new random password, or gives it a new one if it exists (the old one stops working), and lets it read the three
-views `model_costs_by_person`, `model_costs_by_feature` and `model_costs_by_day` and nothing else: not the `model_calls` table
-itself, not the runs, jobs or projects, and no writing (its sessions are read-only too). The role is made in SQL, not in Neon's
-console, because a role made there joins `neon_superuser` and can read and write every table.
+views `model_costs_by_person`, `model_costs_by_feature` and `model_costs_by_day`, and the guards' weekly counts
+`assistant_guards_by_feature` (ADR-0139), and nothing else: not the `model_calls` table itself, not the runs, jobs or projects, and no
+writing (its sessions are read-only too). The role is made in SQL, not in Neon's console, because a role made there joins
+`neon_superuser` and can read and write every table.
 
 It prints the reader's address once. Paste it into the project's cloud environment as COST_READER_DATABASE_URL (Project settings,
 Cloud environment, the gear); never into a chat, a file in the repository or a GitHub log, which on this public repository anyone
@@ -27,7 +28,7 @@ from sqlalchemy.engine import make_url
 
 from anisotropy_api.settings import database_url_for_migrations
 
-VIEWS = ("model_costs_by_person", "model_costs_by_feature", "model_costs_by_day")
+VIEWS = ("model_costs_by_person", "model_costs_by_feature", "model_costs_by_day", "assistant_guards_by_feature")
 ROLE = "cost_reader"
 NAME = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
