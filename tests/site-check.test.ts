@@ -23,12 +23,14 @@ test("a secret, an address, a signed link, a session token or a header line neve
     "token eyJhbGciOiJSUzI1NiJ9.eyJlbWFpbCI6InNvbWVvbmUifQ.c2lnbmF0dXJlLXNpZ25hdHVyZQ in a sentence",
     "a key sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdef in the text",
     "the run's own id my-client-id.access and value s3cr3t-value",
+    // the shape a crash printed on the first live run (2026-11-24): the bucket's account host and a signed query
+    "GET https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/anisotropy-outputs/jobs/j1/fields.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2F20261124&X-Amz-Signature=cafe0123",
   ].join("\n");
   const out = scrub(text, ["my-client-id.access", "s3cr3t-value"]);
-  for (const leaked of ["someone@example.com", "abc123secretvalue", "X-Amz-Signature", "deadbeef", "eyJhbGci", "sk-ant-api03", "my-client-id.access", "s3cr3t-value"]) {
+  for (const leaked of ["someone@example.com", "abc123secretvalue", "X-Amz-Signature", "deadbeef", "eyJhbGci", "sk-ant-api03", "my-client-id.access", "s3cr3t-value", "0123456789abcdef0123456789abcdef.r2", "cloudflarestorage", "AKIDEXAMPLE", "cafe0123"]) {
     assert.ok(!out.includes(leaked), `${leaked} is hidden: ${out}`);
   }
-  assert.ok(out.includes("https://bucket.r2.cloudflarestorage.com/runs/x/fields.json was read"), "the address stays, its query goes");
+  assert.ok(out.includes("https://[storage]/runs/x/fields.json was read"), "the path stays; the bucket's host and the query go");
   // a commit is public, and the chat's words stay as they are
   assert.equal(scrub("the API on 0123456789abcdef0123456789abcdef01234567"), "the API on 0123456789abcdef0123456789abcdef01234567");
   assert.equal(scrub("Ply 4 (90°) fails first at 1.031 × the applied load"), "Ply 4 (90°) fails first at 1.031 × the applied load");
