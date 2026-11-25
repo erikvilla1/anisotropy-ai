@@ -64,3 +64,13 @@ Where a page's state on the live site differs from the bank's example of it by d
 - An answer the founder finds poor on the live site that a full run asked within the four days before and passed.
 - A month whose spend passes $20, or a run that passes $1.
 - Any secret, email address or signed link found in a run's log, summary, artifact or issue: the run's output is taken down and the robot stops until it is fixed.
+
+## Amendment 1, 2026-11-24 (the first live run: the version check asked through the page, no crash on a closed page, every printed line scrubbed)
+
+**Context.** The first run on anisotropy.dev (Site check run 45492884547, after the deploy of 07ac0fe) set up no page. The robot read the site's version with Playwright's own request context, which does not pass through the context's route and so carried no Access headers: Access answered with its sign-in page, and reading that as JSON ("Unexpected token '<'") marked every page as not set up. A page was then closed while a job's file was being fetched, the route's handler failed ("Request context disposed"), and Node printed the error, with the bucket's signed link to that file, into the run's public log. The link had expired (600 s) when it was found; it also named the bucket's account host. By the rule of "How we will know it was wrong", the run's logs were deleted the same hour (204 from GitHub), its upload step had not run, and no run has followed.
+
+**Options.** (a) Add the token's headers to the request context too: the token would then travel on a second path, which is what the safety rule keeps to one. Rejected. (b) Ask the version from the page, by its own `fetch`, so it passes the route as the page's requests do; catch every failure inside the route's handler and drop the request; scrub every line the robot prints, and print an uncaught error scrubbed rather than let Node print it. Chosen.
+
+**Decision.** (b), under the founder's rule that the robot "needs to be safe". `run.ts` asks `/api/version` by `page.evaluate(fetch)`; the route's handler aborts a request it cannot finish and prints nothing; `console.log`, `console.error` and `console.warn` pass through `scrub` with the run's secrets, and `unhandledRejection` and `uncaughtException` go through the same. `scrub.ts` also hides the bucket's host (`*.r2.cloudflarestorage.com` becomes `[storage]`), so a link's path may be printed but never its account or its query.
+
+**Evidence.** `npx tsx --test tests/site-check.test.ts`: 16 passed, the scrubbing test now holding the shape the crash printed (host, `X-Amz-Credential`, `X-Amz-Signature`). `npx tsc --noEmit -p .`: clean. That the version check passes Access on the live site is UNVERIFIED until the next run.
