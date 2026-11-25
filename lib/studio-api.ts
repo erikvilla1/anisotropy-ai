@@ -98,10 +98,13 @@ export type Fields = {
      * absent on a result solved before it. */
     held_elements?: number[] };
   nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][]; rotation?: number[][]; moment_reaction?: number[][];
-    averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
+    averages: { strain: (number | null)[][]; section_force: (number | null)[][]; laminate_stress?: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
       failure_index: Record<string, (number | null)[]>; curvature?: (number | null)[][]; moment?: (number | null)[][]; shear_force?: (number | null)[][] };
     averages_note: string };
   element: { strain: number[][]; section_force: number[][]; centroids: number[][];
+    /** The stress of the whole laminate, the section force over its thickness, in the model's axes x, y and xy (ADR-0111 amendment 7);
+     * absent from a job solved before it. */
+    laminate_stress?: number[][];
     curvature?: number[][]; moment?: number[][]; shear_force?: number[][]; shear_strain?: number[][];
     ply: {
       stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][];

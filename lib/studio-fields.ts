@@ -64,6 +64,13 @@ export function fieldOptions(fields: Fields): FieldOption[] {
     { id: "N_y", label: "Section force Ny", unit: lab.force_per_length, group: "Section force", signed: true },
     { id: "N_xy", label: "Section force Nxy", unit: lab.force_per_length, group: "Section force", signed: true },
   );
+  if (fields.element.laminate_stress) { // the stress of the whole laminate, no ply to choose (ADR-0111 amendment 7); absent on an older job
+    options.push(
+      { id: "S_x", label: "Laminate stress σx", unit: lab.stress, group: "Laminate stress", signed: true },
+      { id: "S_y", label: "Laminate stress σy", unit: lab.stress, group: "Laminate stress", signed: true },
+      { id: "S_xy", label: "Laminate shear stress τxy", unit: lab.stress, group: "Laminate stress", signed: true },
+    );
+  }
   if (shell) {
     options.push(
       { id: "kappa_x", label: "Curvature κx", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
@@ -160,6 +167,10 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
     case "N_x": case "N_y": case "N_xy": {
       const i = ["N_x", "N_y", "N_xy"].indexOf(option.id);
       return choice.averaged ? nodal(column(n.averages.section_force, i)) : element(column(e.section_force, i));
+    }
+    case "S_x": case "S_y": case "S_xy": {
+      const i = ["S_x", "S_y", "S_xy"].indexOf(option.id);
+      return choice.averaged && n.averages.laminate_stress ? nodal(column(n.averages.laminate_stress, i)) : element(column(e.laminate_stress, i));
     }
     case "kappa_x": case "kappa_y": case "kappa_xy": {
       const i = ["kappa_x", "kappa_y", "kappa_xy"].indexOf(option.id);
@@ -268,6 +279,7 @@ export function elementReadout(fields: Fields, element: number, choice: FieldCho
     ["εx, εy, γxy", e.strain[element].map(print).join(", ")],
     [`Nx, Ny, Nxy (${lab.force_per_length})`, e.section_force[element].map(print).join(", ")],
   ];
+  if (e.laminate_stress) rows.push([`Laminate σx, σy, τxy (${lab.stress})`, e.laminate_stress[element].map(print).join(", ")]);
   if (e.curvature && e.moment && e.shear_force) {
     rows.push([`κx, κy, κxy (${lab.per_length ?? `1/${lab.length}`})`, e.curvature[element].map(print).join(", ")]);
     rows.push([`Mx, My, Mxy (${lab.moment ?? lab.force})`, e.moment[element].map(print).join(", ")]);
