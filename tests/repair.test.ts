@@ -120,6 +120,9 @@ test("the report lists what the description states, grouped as the page's steps,
   assert.equal(rows["Repair: Kind"], "Flush, in a stepped cut");
   assert.equal(rows["Laminate: Ply material"], "IM7 / 8552");
   assert.equal(rows["Laminate: ν23"], "0.45");
+  // the ply's four fracture energies (ADR-0141), as the file states them
+  assert.deepEqual(["fibre break, pulled", "fibre break, pressed", "matrix crack, opened", "matrix crack, slid"].map((name) => rows[`Laminate: Energy of a ${name}`]),
+    ["80 N/mm", "80 N/mm", "0.3 N/mm", "0.8 N/mm"]);
   assert.equal(rows["Laminate: Plies, bottom ply first"], "[45/0/−45/90/90/−45/0/45], 8 plies");
   assert.equal(rows["Damage and steps: Step length"], "12.5 mm");
   assert.equal(rows["Damage and steps: Plies in each step"], undefined); // left out of the file, so left out of the report
@@ -141,7 +144,8 @@ test("two descriptions are the same repair value for value, and the limits are s
   assert.ok(sameRepair(EXAMPLE_REPAIR, JSON.parse(JSON.stringify(EXAMPLE_REPAIR))));
   assert.ok(!sameRepair(EXAMPLE_REPAIR, withValue(EXAMPLE_REPAIR, "applied.load", 120)));
   assert.ok(!sameRepair(null, EXAMPLE_REPAIR));
-  assert.equal(LIMITS.length, 6);
+  assert.equal(LIMITS.length, 7);
+  assert.ok(LIMITS.some((line) => /Plies parting from each other and crushing across the fibres are not followed/.test(line) && /the load it carries in this model is not the repair's strength/.test(line)));
   assert.ok(LIMITS.some((line) => /not where the repair fails/.test(line)));
   assert.ok(LIMITS.some((line) => /the load at which the bond lets go is not the repair's strength/.test(line)));
 });

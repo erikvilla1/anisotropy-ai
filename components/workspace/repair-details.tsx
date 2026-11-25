@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  bondModelWords, bondWords, CRITERION_WORDS, inSentence, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, modelWords, PART_WORDS, plyBefore, shown, sliceWords, unitText,
-  type BondReport, type RegionKind, type RepairReport, type SliceReport,
+  bondModelWords, bondWords, CARRIES_IS_NOT_THE_STRENGTH, CRITERION_WORDS, inSentence, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, modelWords, PART_WORDS, pliesModelWords,
+  pliesWords, plyBefore, shown, sliceWords, unitText, type BondReport, type PliesReport, type RegionKind, type RepairReport, type SliceReport,
 } from "@/lib/repair";
 
 /** The tables of a repair's answers (ADR-0135), for the repair's page and for its report. Every number is the engine's or the
@@ -165,6 +165,42 @@ export function BondResults({ bond, stale, slice = null }: { bond: BondReport; s
         </div>
       ) : null}
       {state ? <p className="studio-hint">A stretch of the bond is softening where it has passed its strength and still carries stress, and has parted where it carries none. A negative peel stress presses the bond together.</p> : null}
+    </div>
+  );
+}
+
+/** A repair carried until its plies and its bond cannot hold the load (ADR-0141) in words and a table: the model and its check, what
+ * first softens, the load the slice holds and the one it does not, what had failed at the largest load held, how far the load
+ * moves on a finer mesh when a second run was made, and every load held on the way. The load is said to be not the repair's strength
+ * wherever it is read. */
+export function PliesResults({ plies, finer = null, stale }: { plies: PliesReport; finer?: PliesReport | null; stale: boolean }) {
+  const force = unitText(plies.units.force), length = unitText(plies.units.length);
+  const words = pliesWords(plies, stale ? null : finer);
+  return (
+    <div className="repair-slice-results" data-testid="repair-plies-results" data-stale={stale ? "true" : "false"}>
+      {stale ? <p className="studio-alert" role="status" data-testid="repair-plies-stale">This is the repair as it was when it was carried. It has changed since: carry it again.</p> : null}
+      <p className="studio-muted" data-testid="repair-plies-model">{pliesModelWords(plies)}</p>
+      <ul className="repair-lines" data-testid="repair-plies-lines">
+        <li>{words.softens}</li>
+        <li><strong>{words.headline}. {words.bracket}</strong></li>
+        <li data-testid="repair-plies-failed">At the largest load held:
+          <ul>{words.failed.map((line) => <li key={line}>{line}</li>)}</ul>
+        </li>
+        {words.gives ? <li>{words.gives}</li> : null}
+        <li data-testid="repair-plies-mesh">{words.mesh}</li>
+      </ul>
+      <p className="studio-hint" data-testid="repair-plies-not">{CARRIES_IS_NOT_THE_STRENGTH}</p>
+      <div className="repair-scroll">
+        <table className="studio-table" data-testid="repair-plies-table">
+          <thead><tr><th>Load held, {force}</th><th>The panel&apos;s end moved, {length}</th><th>Bond past its strength, {length}</th><th>Bond parted, {length}</th>
+            <th>Elements cracked along the fibres</th><th>Elements broken across the fibres</th></tr></thead>
+          <tbody>{plies.levels.map((level) => (
+            <tr key={level.load}><th scope="row">{shown(level.load)}</th><td>{shown(level.end_movement)}</td><td>{shown(settled(level.bond_softening, plies.model.bond_length))}</td>
+              <td>{shown(settled(level.bond_parted, plies.model.bond_length))}</td><td>{level.matrix_cracked.toLocaleString("en-US")}</td><td>{level.fibre_broken.toLocaleString("en-US")}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <p className="studio-hint">Each row is a load the slice was held under until its damage stopped growing. An element of ply is counted once any of it has begun to crack; of {plies.at_held.elements.toLocaleString("en-US")} elements of ply in all.</p>
     </div>
   );
 }

@@ -133,6 +133,21 @@ def test_the_answer_holds_a_load_it_does_not_hold_and_what_failed(answer) -> Non
     assert [one.load for one in answer.levels] == sorted(one.load for one in answer.levels)
 
 
+def test_the_panels_end_moves_as_one_and_no_further_than_its_plies_let_it(answer) -> None:
+    """The load on the panel's end is each ply's share far from a repair, in the whole laminate. Left on the plies' faces,
+    the share of a 90 degree ply that has cracked through is held by nothing: its face moves metres, and the movement of
+    the end, and with it the run's test of whether the slice has come apart, reads that and not the slice. So the end is
+    held to one movement. At every load held it has then moved as far as the load takes the whole laminate, and a little
+    further for what has cracked."""
+    built = answer.built
+    assert len(built.end) > 4 and np.all(built.end % 2 == 0)
+    assert np.allclose(built.model.nodes[built.end // 2, 0], built.model.nodes[:, 0].max())
+    whole = answer.levels[0].end_movement_m / answer.levels[0].load  # nothing has softened yet at the first load held
+    assert any((level.matrix >= 1).any() for level in answer.levels)  # some ply has cracked through on the way
+    for level in answer.levels:
+        assert whole * level.load * (1 - 1e-6) <= level.end_movement_m < 1.5 * whole * level.load
+
+
 def test_the_report_is_in_the_files_units_and_says_what_a_crack_can_soften_in(answer) -> None:
     report = plies_report(answer, "mm-MPa")
     assert report["units"]["system"] == "mm-MPa" and report["units"]["length"] == "mm" and report["units"]["stress"] == "MPa"

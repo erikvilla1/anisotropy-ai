@@ -242,11 +242,16 @@ class Holder:
     element and pair then takes the damage of the strains found; the damage never falls. Where the damage stops, the state
     is one the model can rest in under that load; where it never stops, the model cannot carry the load."""
 
-    def __init__(self, model: BondModel, *, tolerance: float = 1e-3, parted: float = 50.0) -> None:
+    def __init__(self, model: BondModel, *, tolerance: float = 1e-3, parted: float = 50.0, tied: np.ndarray | None = None) -> None:
         if model.plies is None:
             raise BondError("Holding a load is for a model whose solids damage")
         self.model, self.plies, self.tolerance, self.parted = model, model.plies, tolerance, parted
-        self.free = np.setdiff1d(np.arange(model.size), model.fixed)
+        # `tied` are movements that stay one movement (a loaded end that moves as one): the first stands for them all in the
+        # equations, and takes the sum of their loads. A load shared out among them by the whole model's stiffness would
+        # otherwise stay on a ply after it has broken, with nothing left to hold it.
+        self.moving = np.setdiff1d(np.arange(model.size), model.fixed)
+        tied = np.zeros(0, dtype=int) if tied is None else np.setdiff1d(np.asarray(tied, dtype=int), model.fixed)
+        self.free = np.setdiff1d(self.moving, tied[1:])
         self.solves = 0
         # What the turns share. An element's stiffness matrix is its nine stiffnesses, each times a matrix of the element's
         # shape alone (kept, six of them: the stiffness is symmetric); and every entry's place in the model's matrix is
@@ -259,6 +264,8 @@ class Holder:
         self._pieces = pieces
         position = np.full(model.size, -1)
         position[self.free] = np.arange(len(self.free))
+        position[tied[1:]] = position[tied[:1]]
+        self._position = position[self.moving]
         dofs = _element_dofs(model.elements)
         rows, cols = position[np.repeat(dofs, 16, axis=1).ravel()], position[np.tile(dofs, (1, 16)).ravel()]
         ux, uy, ox, oy = 2 * model.under, 2 * model.under + 1, 2 * model.over, 2 * model.over + 1
@@ -310,9 +317,9 @@ class Holder:
             values.append(np.concatenate([shear, shear, -shear, -shear, peel, peel, -peel, -peel])[self._bond_in])
         data = np.bincount(self._slot, weights=np.concatenate(values), minlength=self._entries)
         matrix = sp.csc_matrix((data, self._indices, self._indptr), shape=(self._size, self._size))
-        free = self.free
         answer = np.zeros(model.size)
-        answer[free] = spla.splu(matrix, **FACTOR).solve(load[free])
+        solved = spla.splu(matrix, **FACTOR).solve(np.bincount(self._position, weights=load[self.moving], minlength=self._size))
+        answer[self.moving] = solved[self._position]
         self.solves += 1
         return answer
 
@@ -362,11 +369,12 @@ class Holder:
 
 
 def largest_load(model: BondModel, *, rise: float = 1.15, within: float = 0.005, solves: int = 200, tolerance: float = 1e-3,
-                 most: int = 60) -> tuple[list[Held], Held, Holder]:
+                 most: int = 60, tied: np.ndarray | None = None) -> tuple[list[Held], Held, Holder]:
     """The largest load the model holds. The load is raised from first softening by `rise` at a time for as long as the model
     holds it, and the largest is then closed in on until the load held and the load not held are `within` of each other.
-    Returns every load held, in order, the smallest load found that the model does not hold, and the holder."""
-    holder = Holder(model, tolerance=tolerance)
+    Returns every load held, in order, the smallest load found that the model does not hold, and the holder. `tied` are
+    movements that stay one movement, as `Holder` takes them."""
+    holder = Holder(model, tolerance=tolerance, tied=tied)
     damage = holder.begin()
     first = holder.hold(holder.onset_load / (1 + tolerance), damage, solves)
     if not first.held:

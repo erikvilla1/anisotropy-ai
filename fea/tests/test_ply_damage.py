@@ -189,6 +189,31 @@ def test_the_cross_ply_strip_carries_a_load_between_the_two_hand_bounds() -> Non
     assert failed.load > held[-1].load
 
 
+def test_a_strip_whose_end_moves_as_one_carries_what_its_plies_carry_at_the_fibres_strain() -> None:
+    """The load on a strip's end is shared out among its plies as the whole laminate carries it. Once a 90 degree ply has
+    cracked, the share left on its face is held by nothing, so the end is tied to move as one and each ply takes what its
+    stiffness gives it. Every column of the strip is then the same and the largest load is worked by hand: the 0 degree
+    plies at the strain their fibres break at, and the 90 degree plies as far down their softening line as that strain
+    takes them. No Poisson's ratio here, so the plies do not press on each other, and no elastic grip."""
+    count, length, ply = 40, 20e-3, 0.2e-3
+    model, _, alone, whole = strip(grip=0, nu=0.0, count=count, length=length, ply=ply)
+    end = 2 * np.flatnonzero(np.isclose(model.nodes[:, 0], length))
+    close = 1e-5  # how near to damaging further a state may be and still count as at rest
+    held, failed, _ = largest_load(model, within=0.002, tolerance=close, tied=end)
+    band = length / count
+    breaks, cracks, parted = F1T / E1, F2T / E2, 2 * G2T / (F2T * band)  # the strains: fibres break, matrix cracks, the crack carries nothing
+    assert cracks < breaks < parted
+    cracked = F2T * (parted - breaks) / (parted - cracks)  # a 90 degree ply's stress at the fibres' strain
+    by_hand = 2 * ply * (F1T + cracked)
+    assert held[-1].load <= by_hand * (1 + 2 * close) and by_hand <= failed.load
+    assert failed.load <= held[-1].load * 1.002 * (1 + 1e-9)
+    assert alone < by_hand < whole
+    last = held[-1]
+    assert np.ptp(last.displacement[end]) < 1e-9 * breaks * length  # one movement
+    assert last.movement == pytest.approx(last.displacement[end[0]], rel=1e-9)
+    assert last.movement <= breaks * length * (1 + 2 * close)  # and no further than the fibres' strain takes it
+
+
 def test_damage_grows_and_never_falls_while_a_load_is_held() -> None:
     model = strip(count=20, grip=3, energies=(G1T, G1C, 2000.0, G6))[0]
     holder = Holder(model)

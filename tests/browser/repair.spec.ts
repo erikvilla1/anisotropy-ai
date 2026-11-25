@@ -9,6 +9,9 @@ const read = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${
 const ANSWER = read("example-answer"), EXTERNAL = read("external-answer"), SOLVE = read("example-solve");
 // the bond followed until it lets go (ADR-0140): the solver's own run of the flush example
 const BOND = read("example-bond");
+// the repair carried until its plies and its bond cannot hold the load (ADR-0141): the solver's own run of the flush example, as the
+// job's answer once it is done, and the same on a mesh one step finer
+const PLIES = read("example-plies"), PLIES_FINER = read("example-plies-finer");
 // the chat's (ADR-0136): the engine's previews of two changes, its sweep of the step length to a load, and what the solved slice of
 // that sweep's pick says of it, as the API puts the two together
 const STEP_CHANGE = read("example-step-change"), LENGTH_CHANGE = read("example-change"), SWEEP = { ...read("example-sweep"), check: read("example-sweep-check") };
@@ -22,13 +25,20 @@ const SHAPE = { run_id: null, step: "ISO-10303-21;\nEND-ISO-10303-21;\n", parts:
   parts: [{ name: "Laminate ply 1 (45°)", kind: "parent", angle: 45, volume: 10972.8 }, { name: "Patch ply 1 (90°)", kind: "patch", angle: 90, volume: 89.77 },
     { name: "Adhesive on the floor", kind: "adhesive", angle: null, volume: 49.09 }], volumes: { parent: 85089, patch: 2678.8, cover: 2244.3, adhesive: 1241.5 } } };
 
-type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?: string; cut_faces?: string };
+type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?: string; cut_faces?: string; finer?: number };
 type Reply = { status: number; body: unknown };
 const solves: Sent[] = []; // what "Solve the slice" sent, in the test that runs
 const shapes: Sent[] = []; // what Download STEP sent
 const bonds: Sent[] = []; // what "Follow the bond" sent
 /** What following the bond answers in a test: by default the solver's run of the flush example. */
 const follow: { bond(body: Sent): Reply } = { bond: () => ({ status: 200, body: BOND }) };
+const carries: Sent[] = []; // what "Carry the repair" sent
+/** A ply run in a test: each job is looked at `looks` times while it is under way (queued, then raising the load) before it is done,
+ * by default with the solver's run of the flush example on the mesh asked for; `start` may refuse. */
+const carry: { looks: number; seen: Record<string, number>; start(body: Sent): Reply; done(id: string): unknown } = {
+  looks: 2, seen: {}, start: (body) => ({ status: 202, body: { ...(body.finer ? PLIES_FINER : PLIES), state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null } }),
+  done: (id) => (id === PLIES_FINER.job_id ? PLIES_FINER : PLIES),
+};
 type Asked = Sent & { change?: Record<string, unknown>; sweep?: Record<string, unknown>; question?: string; about?: string };
 const changes: Asked[] = []; // what the chat sent for a preview
 const sweeps: Asked[] = []; // what the chat sent for a sweep
@@ -46,6 +56,10 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
   shapes.length = 0;
   bonds.length = 0;
   follow.bond = () => ({ status: 200, body: BOND });
+  carries.length = 0;
+  carry.looks = 2; carry.seen = {};
+  carry.start = (body) => ({ status: 202, body: { ...(body.finer ? PLIES_FINER : PLIES), state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null } });
+  carry.done = (id) => (id === PLIES_FINER.job_id ? PLIES_FINER : PLIES);
   changes.length = 0;
   sweeps.length = 0;
   searched.length = 0;
@@ -61,6 +75,14 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
     if (path.endsWith("/v1/repairs/solve")) { solves.push(body); return reply(solve(body)); }
     if (path.endsWith("/v1/repairs/shape")) { shapes.push(body); return reply({ status: 200, body: SHAPE }); }
     if (path.endsWith("/v1/repairs/bond")) { bonds.push(body); return reply(follow.bond(body)); }
+    if (path.endsWith("/v1/repairs/plies")) { carries.push(body); return reply(carry.start(body)); }
+    if (/\/v1\/repairs\/plies\/[^/]+$/.test(path)) {
+      const id = path.split("/").pop()!;
+      const seen = (carry.seen[id] = (carry.seen[id] ?? 0) + 1);
+      const done = carry.done(id) as Record<string, unknown>;
+      if (seen > carry.looks) return reply({ status: 200, body: done });
+      return reply({ status: 200, body: { ...done, state: seen === 1 ? "queued" : "running", stage: seen === 1 ? null : "raise", stages_done: seen === 1 ? [] : ["build", "soften"], finished_at: null, headline: null, report: null } });
+    }
     if (path.endsWith("/v1/repairs/changes")) { changes.push(body); return reply(chat.change(body)); }
     if (path.endsWith("/v1/repairs/sweeps")) { sweeps.push(body); return reply(chat.sweep(body)); }
     if (path.endsWith("/v1/workspace/theory-sections")) { searched.push(body); return reply({ status: 200, body: { run_id: null, sections: chat.sections } }); }

@@ -106,6 +106,13 @@ class RepairPliesModel:
     def repair(self) -> Repair:
         return self.built.repair
 
+    @property
+    def end(self) -> np.ndarray:
+        """The movements along the load of the nodes on the panel's end. The run holds them to one movement: the end moves
+        as one, and each ply there takes the share of the load its stiffness gives it, with its damage."""
+        along = self.model.nodes[:, 0]
+        return 2 * np.flatnonzero(np.isclose(along, along.max(), rtol=0.0, atol=1e-9 * along.max()))
+
     def place(self, element: int) -> dict:
         """Where an element is: the kind of part, its ply and angle, and its distance from the repair's middle (m)."""
         middle = self.model.nodes[self.model.elements[element]][:4, 0].mean()
@@ -256,7 +263,7 @@ def run_plies(repair: Repair, *, element_size_m: float | None = None, fine_m: fl
     stage("build")
     built = build_plies_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units, most_elements=most_elements)
     try:
-        holder = Holder(built.model)
+        holder = Holder(built.model, tied=built.end)
     except BondError as error:
         raise BondRunError(str(error)) from error
     check_far_field(built.built, holder.unit, 1.0)

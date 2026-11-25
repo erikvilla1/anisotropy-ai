@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ADHESIVE_FIELDS, bondNeedsWords, bondWords, COVER_FIELDS, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_PATCH_FIELDS, EXTERNAL_REPAIR, FLUSH_PATCH_FIELD, kindOf, layupText, materialMode,
-  needsWords, PANEL_FIELDS, PART_WORDS, REPAIR_KINDS, REPAIR_MATERIALS, REPAIR_UNIT_LABELS, REPAIR_UNIT_WORDS, repairFileName, repairToml, shown,
+  ADHESIVE_FIELDS, bondNeedsWords, bondWords, COVER_FIELDS, DAMAGE_FIELDS, ENERGY_FIELDS, EXAMPLE_REPAIR, EXTERNAL_PATCH_FIELDS, EXTERNAL_REPAIR, FLUSH_PATCH_FIELD, kindOf, layupText,
+  materialMode, needsWords, PANEL_FIELDS, PART_WORDS, pliesFinerLine, pliesLine, pliesNeedsWords, REPAIR_KINDS, REPAIR_MATERIALS, REPAIR_UNIT_LABELS, REPAIR_UNIT_WORDS, repairFileName, repairToml, shown,
   STRENGTH_FIELDS, TYPED_MATERIAL_FIELDS, unitsOf, unitText, valueAt, withKind, withLaminateMaterial, withLibraryMaterial, withTypedMaterial,
   type RegionKind, type RepairField, type RepairKind, type RepairShape, type RepairUnitKind, type RepairValue,
 } from "@/lib/repair";
@@ -12,7 +12,7 @@ import { shapeRepair, StudioError } from "@/lib/studio-api";
 import { readNumber, readNumbers } from "@/lib/wing";
 import { REPAIR_HREF } from "@/lib/workspaces";
 import { StepPanel } from "./panels/step-panel";
-import { useRepair } from "./repair-context";
+import { pliesUnderWay, useRepair } from "./repair-context";
 
 function idOf(path: string): string { return `repair-${path.replace(/[._]/g, "-")}`; }
 
@@ -165,6 +165,13 @@ function MaterialFields({ table }: { table: "parent" | "patch" }) {
         <RepairNumber field={{ path: `${table}.nu23`, label: "ν23, across the fibres", optional: true,
           hint: "For the solve of the slice. A unidirectional ply's constants through the thickness follow from it; a fabric states all five in its repair file." }} />
       ) : null}
+      {mode !== "laminate" ? (
+        <fieldset className="wing-fieldset" data-testid={`repair-${table}-energies`}>
+          <legend>Ply fracture energies, {units.energy}</legend>
+          <p className="studio-hint">All four or none: the energy to part a unit area of each crack a ply can hold. With them, and the ply&apos;s strengths, the repair can be carried until its plies and its bond cannot hold the load.</p>
+          <div className="wing-grid">{ENERGY_FIELDS.map((f) => <RepairNumber key={f.key} field={field(f.key, f.label, "energy", true)} />)}</div>
+        </fieldset>
+      ) : null}
     </>
   );
 }
@@ -204,11 +211,16 @@ function CoverFields() {
   );
 }
 
-/** The solve of the slice (ADR-0132): what it still needs, the one choice it has, and the button; and under it the bond followed
- * until it lets go (ADR-0140): what that still needs, and its button. */
+/** The solve of the slice (ADR-0132): what it still needs, the one choice it has, and the button; under it the bond followed
+ * until it lets go (ADR-0140): what that still needs, and its button; and under that the repair carried until its plies and its
+ * bond cannot hold the load (ADR-0141): a job the page starts and follows, with a second run on a finer mesh once it is done. */
 function SolvePanel() {
   const { repair, answer, stale, working, problem, solve, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice, apiBaseUrl,
-    bond, bondStale, following, bondProblem, bondNeeds, followBond } = useRepair();
+    bond, bondStale, following, bondProblem, bondNeeds, followBond, plies, pliesFiner, pliesStale, carrying, pliesProblem, pliesNeeds, carryPlies } = useRepair();
+  const canCarry = answer !== null && !stale && !problem && pliesNeeds !== null && pliesNeeds.length === 0;
+  const carried = plies ? pliesLine(plies, pliesStale) : null;
+  const finerSaid = plies && pliesFiner && !pliesStale ? pliesFinerLine(plies, pliesFiner) : null;
+  const canCheck = canCarry && plies !== null && plies.state === "done" && plies.report !== null && !pliesStale && !pliesUnderWay(pliesFiner);
   const canFollow = answer !== null && !stale && !problem && bondNeeds !== null && bondNeeds.length === 0;
   const needs = answer && !stale ? answer.needs : [];
   const ready = answer !== null && !stale && !problem && needs.length === 0;
@@ -249,6 +261,25 @@ function SolvePanel() {
           {bondProblem ? <p className="studio-alert" role="alert" data-testid="repair-bond-problem">{bondProblem}</p> : null}
           {bond ? <p className="studio-status" role="status" data-testid="repair-bond-status">{bondStale ? "The bond was followed for the repair as it was; it has changed since."
             : `${bondWords(bond.report).headline}. ${bondWords(bond.report).short}`}</p> : null}
+        </>
+      ) : null}
+      {pliesNeeds !== null ? (
+        <>
+          <p className="studio-hint">With the plies able to crack and break as well, the repair can be carried until its plies and its bond cannot hold the load: a few minutes, nine at most, and it goes on if you leave the page. It needs what following the bond needs and, for each ply material, its five strengths and four fracture energies.</p>
+          {pliesNeeds.length && !stale ? <p className="studio-hint" data-testid="repair-plies-needs">{pliesNeedsWords(pliesNeeds)}</p> : null}
+          <div className="studio-buttons">
+            <button type="button" className="studio-button" disabled={!canCarry || carrying || pliesUnderWay(plies) || !apiBaseUrl} onClick={() => void carryPlies()} data-testid="repair-plies-button">
+              {carrying || pliesUnderWay(plies) ? "Carrying the repair…" : plies ? "Carry the repair again" : "Carry the repair until it cannot hold the load"}
+            </button>
+            {canCheck ? (
+              <button type="button" className="studio-button" disabled={carrying} onClick={() => void carryPlies(1)} data-testid="repair-plies-finer-button">
+                {pliesFiner ? "Carry it on the finer mesh again" : "Carry it on a finer mesh"}
+              </button>
+            ) : null}
+          </div>
+          {pliesProblem ? <p className="studio-alert" role="alert" data-testid="repair-plies-problem">{pliesProblem}</p> : null}
+          {carried ? <p className={carried.alert ? "studio-alert" : "studio-status"} role={carried.alert ? "alert" : "status"} data-testid="repair-plies-status" data-state={plies?.state}>{carried.text}</p> : null}
+          {finerSaid ? <p className={finerSaid.alert ? "studio-alert" : "studio-status"} role={finerSaid.alert ? "alert" : "status"} data-testid="repair-plies-finer-status" data-state={pliesFiner?.state}>{finerSaid.text}</p> : null}
         </>
       ) : null}
     </StepPanel>
