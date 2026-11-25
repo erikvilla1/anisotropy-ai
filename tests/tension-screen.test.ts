@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blankForm, exampleForm, fieldByKey } from "../lib/studio-form";
+import { blankForm, exampleForm, fieldByKey, libraryConstantsIn, libraryValuesIn } from "../lib/studio-form";
 import { bannedIn } from "../lib/studio-copy";
 import {
-  builtLines, D3039, fixRowWords, libraryValueLines, needsPlyThickness, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel, tensionMissing, tensionReady, tensionValues,
+  builtLines, D3039, fixRowWords, libraryValueLines, needsPlyThickness, ownFromLibrary, ownNameFromLibrary, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel,
+  tensionMissing, tensionReady, tensionValues,
   underD3039, valuesInUse,
 } from "../lib/tension-screen";
 import { missingIn, nextStep } from "../lib/studio-chat";
@@ -157,3 +158,35 @@ test("G13 and G23 show as the coupon's estimates until the engineer gives their 
   assert.equal(tensionValues({ ...reference, own_E1: "9" }).own_E1, undefined, "other own-material rows still stay out for a library material");
 });
 
+
+test("editing a library material copies its record into the engineer's own rows, changing no number (ADR-0111 amendment 6)", () => {
+  const copied = ownFromLibrary(reference)!;
+  // the record is no longer cited: the coupon carries the engineer's own constants, named after it and saying where they came from
+  assert.equal(copied.library, "");
+  assert.equal(copied.own_name, "IM7-8552");
+  assert.match(copied.own_source!, /IM7 \/ 8552 from our library, edited here/);
+  // every constant goes across exactly as the engine wrote it, in the row's own unit (MPa, not the GPa the step prints)
+  const constants = libraryConstantsIn("im7-8552", "mm-MPa")!;
+  const values = libraryValuesIn("im7-8552", "mm-MPa")!;
+  assert.equal(Number(copied.own_E1), constants.E1);
+  assert.equal(Number(copied.own_E2), constants.E2);
+  assert.equal(Number(copied.own_G12), constants.G12);
+  assert.equal(Number(copied.own_nu12), values.nu12);
+  assert.equal(Number(copied.ply_thickness), constants.ply_thickness);
+  assert.deepEqual([copied.own_F1t, copied.own_F1c, copied.own_F2t, copied.own_F2c, copied.own_F6].map(Number),
+    [values.strengths!.F1t, values.strengths!.F1c, values.strengths!.F2t, values.strengths!.F2c, values.strengths!.F6]);
+  // G13 and G23 carry the estimates the coupon was already built with, now the engineer's to change
+  assert.deepEqual([copied.G13, copied.G23].map(Number), [values.estimates.G13, values.estimates.G23]);
+  // what the check is sent: the own constants, no library id, and every number as it stood
+  const sent = tensionValues({ ...reference, ...copied });
+  assert.equal(sent.library, undefined);
+  assert.equal(sent.own_E1, constants.E1);
+  assert.equal(sent.own_F1t, values.strengths!.F1t);
+  assert.equal(sent.G13, values.estimates.G13);
+  // the engineer's own G13 is kept rather than overwritten by the estimate
+  assert.equal(ownFromLibrary({ ...reference, G13: "5200" })!.G13, "5200");
+  // a record whose id starts with a digit still gives a name a deck accepts (a letter first)
+  assert.equal(ownNameFromLibrary("7781-5245c"), "M7781-5245C");
+  assert.equal(ownFromLibrary({ ...reference, library: "" }), null);
+  assert.equal(ownFromLibrary({ ...reference, library: "no-such-material" }), null);
+});

@@ -66,6 +66,36 @@ def test_the_skins_mid_surface_lies_half_the_skins_thickness_inside_the_airfoil(
     assert section.upper[0, 0] == pytest.approx(half, rel=1e-3)  # the nose moves aft by half the thickness
 
 
+@pytest.mark.parametrize("changes", [{"geometry.airfoil": "naca-6409"}, {"geometry.airfoil": "naca-6412"}, {"geometry.airfoil": "naca-0006"},
+                                     {"geometry.chord": 0.1}])
+def test_a_skin_thicker_than_the_nose_is_round_meets_at_a_point_there_and_still_lies_at_its_depth_under_both_surfaces(changes):
+    """Moved inward by more than the nose's radius, the outline folds over itself; the fold is cut off where it crosses."""
+    assert not mid_surface_section(example()).nose_closed  # the example's nose is rounder than its skin is thick
+    wing = example(**changes)
+    section = mid_surface_section(wing)
+    assert section.nose_closed and section.upper[0] == pytest.approx(section.lower[0])
+    half = reference_depth(wing)
+    c = wing.geometry.chord_m
+    x = (1 - np.cos(np.linspace(0.0, math.pi, 20001))) / 2
+    oml = outline(wing, x)
+    surfaces = np.vstack([np.c_[x * c, oml[:, 0]], np.c_[x * c, oml[:, 1]]])
+    for curve in (section.upper, section.lower):
+        depths = [np.min(np.linalg.norm(surfaces - p, axis=1)) for p in curve[:-1]]
+        assert min(depths) > 0.95 * half and max(depths) < 1.01 * half  # no point of it nearer either surface than the depth
+    assert section.upper[0, 0] > half  # the point lies aft of where a round nose would put it
+
+
+@needs_gmsh
+@pytest.mark.parametrize("airfoil", ["naca-6409", "naca-6412"])
+def test_a_wing_whose_skin_meets_at_the_nose_is_meshed_without_slivers(airfoil):
+    """Before the fold was cut off, the first of these had elements without area between the folded faces and the second's mesh
+    did not finish."""
+    mesh = build_wing_shape(example(**{"geometry.airfoil": airfoil}), element_size_m=0.04).mesh
+    p = mesh.nodes[mesh.elements]
+    areas = np.linalg.norm(np.cross(p[:, 2] - p[:, 0], p[:, 3] - p[:, 1]), axis=1) / 2
+    assert areas.min() > 0.02 * 0.04**2 and len(mesh.elements) == pytest.approx(2350, abs=30)
+
+
 def test_the_mid_surfaces_meet_aft_where_the_airfoil_is_as_thin_as_the_skin():
     wing = example()
     section = mid_surface_section(wing)

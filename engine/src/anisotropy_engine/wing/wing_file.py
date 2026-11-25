@@ -24,6 +24,7 @@ or a key the format does not know is refused by name.
 | design rules: ply drop ratio, most plies ending at one place | run-out per thickness dropped, and a count | the same |
 """
 
+import contextlib
 import dataclasses
 import math
 import re
@@ -31,6 +32,7 @@ import tomllib
 from pathlib import Path
 
 import numpy as np
+from pydantic import ValidationError
 
 from ..lamina import Lamina, Strengths, strain_limits_from_strengths
 from ..layup_rules import RuleLimits, ply_drop_rules
@@ -55,6 +57,58 @@ WING_UNITS = {
            "deflection": (INCH, "in")},
 }
 STRENGTHS = ("F1t", "F1c", "F2t", "F2c", "F6")
+
+
+# Where each record's values sit in a wing file, and the keys whose names differ there. The records name their values with the SI
+# unit they hold (`half_span_m`), the file without it (`half_span`).
+RECORD_PLACES = {"Wing": ("The wing file", {"name": "title"}), "WingGeometry": ("[geometry]", {}), "Airfoil": ("[geometry.airfoil]", {}),
+                 "Aerodynamics": ("[aerodynamics]", {"lift_curve_slope_per_rad": "lift_curve_slope"}), "Lamina": ("[material]", {}),
+                 "Strengths": ("[material]", {}), "WingMaterial": ("[material]", {}), "FlightEnvelope": ("[envelope]", {}),
+                 "Speeds": ("[envelope.speeds]", {}), "GustSpeeds": ("[envelope.gust]", {}),
+                 "GustLoadFactors": ("[envelope.gust]", {}), "Aileron": ("[envelope.aileron]", {})}
+SI_ENDING = re.compile(r"_(m_s|m2|m|N|Pa|deg|kg_m3)$")
+
+
+def plain_refusal(error: ValidationError, where: str | None = None) -> str:
+    """A record's refusal in an engineer's words (ADR-0118 amendment 2). The validation library's own text names our classes, repeats
+    the values in SI and ends on a web address; the page, the chat and a job's outcome show a refusal as it is worded here. A sentence
+    the record wrote itself is kept; any other is the value by its key in the file and what it must be."""
+    place, renamed = RECORD_PLACES.get(error.title, ("The wing file", {}))
+    place = where or place
+    said = []
+    for found in error.errors():
+        if found["type"] == "value_error":
+            words = found["msg"].removeprefix("Value error, ")
+            said.append(f"{place}: {words}" if where else words)
+            continue
+        field = next((part for part in found["loc"] if isinstance(part, str)), "")
+        key = renamed.get(field, SI_ENDING.sub("", field))
+        must = found["msg"].removeprefix("Input should be ").split(", unable to parse")[0].replace("a valid number", "a number")
+        said.append(" ".join(part for part in (place, key, "must be", must.replace("a valid string", "text")) if part))
+    return "; ".join(dict.fromkeys(said))
+
+
+@contextlib.contextmanager
+def _in_words(where: str | None = None):
+    """What is built inside refuses in `plain_refusal`'s words; `where` names the table for a record that sits in several."""
+    try:
+        yield
+    except ValidationError as error:
+        raise ValueError(plain_refusal(error, where)) from error
+
+
+def _stated(value, where: str) -> float:
+    """A value the file must give as a number, refused by its place otherwise."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where} must be a number, got {value!r}")
+    return float(value)
+
+
+def _stack(value, where: str) -> tuple:
+    """A half stack: a list of ply angles."""
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"{where} half_stack is a list of ply angles in degrees, got {value!r}")
+    return tuple(value)
 
 
 def _table(data: dict, name: str, required: set[str], optional: set[str] = frozenset()) -> dict:
@@ -161,24 +215,27 @@ def _zones(value, name: str) -> tuple[Zone, ...]:
         for key in ("start", "end"):
             if isinstance(zone[key], bool) or not isinstance(zone[key], (int, float)):
                 raise ValueError(f"[{name}] zone {k}: {key} is a fraction of the half span, a number from 0 to 1")
-        zones.append(Zone(start=zone["start"], end=zone["end"], half_stack_deg=tuple(zone["half_stack"])))
+        with _in_words(f"[{name}] zone {k}"):
+            zones.append(Zone(start=zone["start"], end=zone["end"], half_stack_deg=_stack(zone["half_stack"], f"[{name}] zone {k}")))
     return tuple(zones)
 
 
 def _layup(table: dict, material: WingMaterial, si, name: str) -> Layup:
     _keys(table, f"[{name}]", {"half_stack"}, LAYUP_KEYS)
-    core, density = _core(table, si, name)
-    return Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
-                 core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core,
-                 zones=_zones(table["zones"], name) if "zones" in table else ())
+    with _in_words(f"[{name}]"):
+        core, density = _core(table, si, name)
+        return Layup(material=material, half_stack_deg=_stack(table["half_stack"], f"[{name}]"),
+                     core_thickness_m=si(table.get("core_thickness", 0.0), "thickness"), core_density_kg_m3=density, core=core,
+                     zones=_zones(table["zones"], name) if "zones" in table else ())
 
 
 def _spar_caps(table: dict, material: WingMaterial, si) -> SparCaps:
     """[spar_caps]: a strip of each skin centred on each web, its width per spar and its own half stack, solid (ADR-0125)."""
     _keys(table, "[spar_caps]", {"front_width", "rear_width", "half_stack"}, {"zones"})
-    layup = Layup(material=material, half_stack_deg=tuple(table["half_stack"]),
-                  zones=_zones(table["zones"], "spar_caps") if "zones" in table else ())
-    return SparCaps(front_width_m=si(table["front_width"], "length"), rear_width_m=si(table["rear_width"], "length"), layup=layup)
+    with _in_words("[spar_caps]"):
+        layup = Layup(material=material, half_stack_deg=_stack(table["half_stack"], "[spar_caps]"),
+                      zones=_zones(table["zones"], "spar_caps") if "zones" in table else ())
+        return SparCaps(front_width_m=si(table["front_width"], "length"), rear_width_m=si(table["rear_width"], "length"), layup=layup)
 
 
 def _design_rules(table: dict) -> RuleLimits:
@@ -212,7 +269,13 @@ def _design_rules(table: dict) -> RuleLimits:
 
 
 def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
-    """The wing and its envelope in SI from a wing file's contents."""
+    """The wing and its envelope in SI from a wing file's contents. What the file does not allow is refused in an engineer's words
+    (`plain_refusal`), whichever record refuses it."""
+    with _in_words():
+        return _wing_from_dict(data)
+
+
+def _wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     _keys(data, "The wing file", {"title", "units", "geometry", "material", "skin", "spar", "aerodynamics", "envelope"},
           {"source", "rib", "design_rules", "spar_caps"})
     if data["units"] not in WING_UNITS:
@@ -251,6 +314,8 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     if env["speed_unit"] not in SPEED_UNITS:
         raise ValueError(f"[envelope] speed_unit must be one of {tuple(SPEED_UNITS)}")
     speed = SPEED_UNITS[env["speed_unit"]]
+    if not isinstance(env["altitudes"], list):
+        raise ValueError("[envelope] altitudes is a list of altitudes")
     speeds_table = env.get("speeds", {})
     _keys(speeds_table, "[envelope.speeds]", set(), set(Speeds.model_fields))
     gust = None
@@ -258,9 +323,10 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
         table = env["gust"]
         if "cruise_gust_speed" in table or "dive_gust_speed" in table:
             _keys(table, "[envelope.gust]", {"cruise_gust_speed", "dive_gust_speed", "lift_curve_slope_per_rad", "wing_area"})
-            gust = GustSpeeds(cruise_gust_speed_m_s=table["cruise_gust_speed"] * speed, dive_gust_speed_m_s=table["dive_gust_speed"] * speed,
+            gust = GustSpeeds(cruise_gust_speed_m_s=_stated(table["cruise_gust_speed"], "[envelope.gust] cruise_gust_speed") * speed,
+                              dive_gust_speed_m_s=_stated(table["dive_gust_speed"], "[envelope.gust] dive_gust_speed") * speed,
                               lift_curve_slope_per_rad=table["lift_curve_slope_per_rad"],
-                              wing_area_m2=table["wing_area"] * system["length"][0] ** 2)
+                              wing_area_m2=_stated(table["wing_area"], "[envelope.gust] wing_area") * system["length"][0] ** 2)
         else:
             _keys(table, "[envelope.gust]", set(GustLoadFactors.model_fields))
             gust = GustLoadFactors(**table)
@@ -285,7 +351,7 @@ def wing_from_dict(data: dict) -> tuple[Wing, FlightEnvelope]:
     envelope = FlightEnvelope(
         gross_weight_N=si(env["gross_weight"], "force"), positive_load_factor=env["positive_load_factor"],
         negative_load_factor=env["negative_load_factor"], airspeed=env["airspeed"],
-        speeds=Speeds(**{name: value * speed for name, value in speeds_table.items()}),
+        speeds=Speeds(**{name: _stated(value, f"[envelope.speeds] {name}") * speed for name, value in speeds_table.items()}),
         altitudes_m=tuple(si(altitude, "altitude") for altitude in env["altitudes"]),
         ultimate_factor=env["ultimate_factor"], proof_factor=env.get("proof_factor"), criterion=env["criterion"],
         f12_star=env.get("f12_star"), gust=gust, aileron=aileron)

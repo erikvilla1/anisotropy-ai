@@ -174,6 +174,10 @@ class Layup(BaseModel):
         return tuple((start, end, self.with_stack(stack)) for start, end, stack in merged)
 
 
+MOST_RIBS = 1_000  # ADR-0118 amendment 2: every rib is a station of the hand calculation, a part of the shape and a row of the mesh;
+# a spacing typed in the wrong unit asks for millions of them, which no wing has and no answer comes back from
+
+
 class WingGeometry(BaseModel):
     """A straight wing of constant chord, one side, with two spars. Spar positions are fractions of the chord."""
 
@@ -196,6 +200,9 @@ class WingGeometry(BaseModel):
                 raise ValueError(f"The airfoil has no height at {position} of the chord")
         if self.rib_spacing_m is not None and self.rib_spacing_m > self.half_span_m:
             raise ValueError("The rib spacing is longer than the half span")
+        if self.rib_spacing_m is not None and self.half_span_m / self.rib_spacing_m > MOST_RIBS:
+            raise ValueError(f"The half span is {self.half_span_m / self.rib_spacing_m:,.0f} rib spacings long; a wing takes at most "
+                             f"{MOST_RIBS:,} ribs: use a longer rib spacing, and check the units of both")
         return self
 
     @property

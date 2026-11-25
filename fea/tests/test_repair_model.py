@@ -15,7 +15,8 @@ import pytest
 from anisotropy_engine.repair import areas, far_field, regions, repair_from_dict
 from anisotropy_fea.calculix import find_ccx
 from anisotropy_fea.repair_model import (
-    ADHESIVE_LAYERS, FINE_PER_BONDLINE, BondLine, SliceModelError, build_slice_model, headline, is_cut_face, main, read_results, slice_report, solve_slice,
+    ADHESIVE_LAYERS, EQUILIBRIUM_TOLERANCE, FAR_FIELD_TOLERANCE, FINE_PER_BONDLINE, MOST_ELEMENTS, BondLine, SliceModelError, build_slice_model, headline,
+    is_cut_face, main, matched_results, read_results, slice_report, solve_slice,
 )
 from anisotropy_fea.repair_shape import ShapeError, slice_mesh
 
@@ -160,6 +161,22 @@ def test_what_a_solve_lacks_is_refused_in_words():
         rows = "\n".join(f" {e} 1 1. 0. 0. 0. 0. 0." for e in range(1, 4))
         read_results(model, f" stresses (elem, integ.pnt.,sxx,syy,szz,sxy,sxz,syz) for set EALL and time  0.1E+01\n\n{rows}\n\n"
                             f" strains (elem, integ.pnt.,exx,eyy,ezz,exy,exz,eyz) for set EALL and time  0.1E+01\n\n{rows}\n")
+
+
+def test_a_slice_larger_than_a_solve_takes_is_refused_before_it_is_solved_and_a_file_for_another_program_is_not():
+    """ADR-0132 amendment 2: steps 0.2 mm long, or a panel 10 m long, ran until the time allowed ended and the page said only that."""
+    short_steps, load = stated(**{"steps.length": 0.2})
+    words = ("The slice would have 123,830 elements, and a solve takes at most 40,000. Its elements are an eighth of a step long over "
+             "half the panel's length: lengthen the steps or shorten the panel")
+    with pytest.raises(SliceModelError) as refused:
+        build_slice_model(short_steps, load, most_elements=MOST_ELEMENTS)
+    assert str(refused.value) == words
+    with pytest.raises(SliceModelError, match="The slice would have 68,424 elements"):
+        build_slice_model(stated(**{"panel.length": 10000.0})[0], load, most_elements=MOST_ELEMENTS)
+    with pytest.raises(SliceModelError, match="The slice would have more than 1,200,000 elements"):  # said before a mesh that large is laid out
+        build_slice_model(stated(**{"steps.length": 0.001, "adhesive.thickness": 0.0001})[0], load, most_elements=MOST_ELEMENTS)
+    assert len(build_slice_model(stated(**{"panel.length": 2000.0})[0], load, most_elements=MOST_ELEMENTS).elements) == 17224
+    assert len(build_slice_model(stated(**{"panel.length": 10000.0})[0], load).elements) == 68424  # the model itself, for a file, has no limit
 
 
 # ------------------------------------------------------------------------------------------------------ the solve
@@ -347,6 +364,24 @@ def test_the_report_is_in_the_files_units(example):
     assert psi["bond"]["peak_shear"]["value"] == pytest.approx(example.peak_shear.value_pa / 6894.757293168, rel=1e-9)
     with pytest.raises(SliceModelError, match="units"):
         slice_report(example, "furlongs")
+
+
+@needs_ccx
+def test_a_nearly_incompressible_adhesive_is_solved_and_its_check_still_refuses_another_material():
+    """ADR-0132 amendment 2. At a Poisson's ratio of 0.499 the adhesive's stress is the difference of terms hundreds of times its
+    size, and the digits CalculiX prints of a strain moved it by more than a millionth of the largest stress: a right solve was
+    refused. Measured against the terms, the check passes it, and still refuses a stress that is not the stiffness times the strain."""
+    soft, nearly = solve_slice(*stated(**{"adhesive.poisson": 0.49})), solve_slice(*stated(**{"adhesive.poisson": 0.499}))
+    for answer in (soft, nearly):
+        assert answer.equilibrium_error < EQUILIBRIUM_TOLERANCE and answer.far_field_error < FAR_FIELD_TOLERANCE
+    assert nearly.peak_shear.value_pa == pytest.approx(soft.peak_shear.value_pa, rel=0.01) and nearly.peak_peel.value_pa == pytest.approx(soft.peak_peel.value_pa, rel=0.01)
+    for answer, part, off in ((nearly, "parent", 1e-5), (nearly, "patch", 1e-5), (soft, "adhesive", 1e-4)):  # a material that much stiffer than the engine's
+        model, results = answer.model, answer.results
+        wrong = results.stress.copy()
+        wrong[np.array([found.kind == part for found in model.mesh.regions])[model.mesh.region]] *= 1 + off
+        with pytest.raises(SliceModelError, match="not the engine's stiffness times its strains"):
+            matched_results(model, results.strain, wrong)
+        matched_results(model, results.strain, results.stress)
 
 
 @needs_ccx

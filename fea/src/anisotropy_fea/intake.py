@@ -1275,6 +1275,17 @@ def check_form(form: FormInput) -> Values:
     if partitions is not None and seeds is not None and len(seeds) != len(partitions) + 1:
         problems.append(f"Your Abaqus mesh: rows per segment: {len(seeds)} counts for {len(partitions)} partition lines; one count per segment, "
                         f"one more than the lines")
+
+    # What the mesh needs of the length (ADR-0046 amendment 9). `mesh_data` lays the rows out before the spec's own rules are read, so a
+    # coupon too short for its strain measurement has to be refused here: its partition line falls outside the coupon and the layout ends
+    # in a ValueError, with no checklist for the engineer to read. The spec holds the same rule (`spec.py`, the gauge length must fit
+    # between the grips); this reads it early. A mesh too large is refused from the spec's counts (ADR-0086 amendment 1).
+    if not bending and not plate and strain_length is not None and length is not None and length > 0:
+        free = length - 2 * (tab_length or 0.0)  # the gauge section between the tabs, as spec.py reads it
+        if free > 0 and strain_length >= free:
+            problems.append(f"{L('length')} and {L('strain_length')}: the {strain_length:g} {lab['length']} {strain_device or 'strain measurement'} "
+                            f"must fit between the tabs, {free:g} {lab['length']} apart; lengthen the coupon, shorten the tabs, or measure over a "
+                            f"shorter length")
     grips, region = word("grips"), word("region")
 
     names = {spec_key: forms.text_of(cells.get(key)) for key, spec_key in NAME_KEYS.items() if cells.get(key) is not None}

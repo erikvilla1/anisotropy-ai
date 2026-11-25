@@ -1,7 +1,9 @@
 """The wing calculation (ADR-0115): airfoil, atmosphere, load cases, span loads, section and the checks, against closed
 forms, the engine's own laminate functions and each other. The constructed wing worked by hand is test_wing_validation.py."""
 
+import copy
 import math
+import re
 import tomllib
 from pathlib import Path
 
@@ -515,6 +517,60 @@ def test_a_wing_in_us_units_is_the_same_wing():
 def test_a_wing_file_that_is_wrong_is_refused_by_name(changes, message):
     with pytest.raises(ValueError, match=message):
         wing_from_dict(example(**changes))
+
+
+@pytest.mark.parametrize("changes, words", [
+    ({"geometry.rib_spacing": 3.0}, "The rib spacing is longer than the half span"),
+    ({"geometry.chord": 0.0}, "[geometry] chord must be greater than 0"),
+    ({"geometry.front_spar": "a quarter"}, "[geometry] front_spar must be a number"),
+    ({"skin.half_stack": []}, "[skin]: A layup needs at least one ply in its half stack"),
+    ({"skin.core_thickness": -1.0}, "[skin] core_thickness must be greater than or equal to 0"),
+    ({"spar.half_stack": 45.0}, "[spar] half_stack is a list of ply angles in degrees, got 45.0"),
+    ({"aerodynamics.lift_curve_slope": 0.0}, "[aerodynamics] lift_curve_slope must be greater than 0"),
+    ({"envelope.gross_weight": -5.0}, "[envelope] gross_weight must be greater than 0"),
+    ({"envelope.criterion": "puck"}, "[envelope] criterion must be 'max_stress', 'max_strain', 'tsai_hill' or 'tsai_wu'"),
+    ({"envelope.speeds.cruise": "fast"}, "[envelope.speeds] cruise must be a number, got 'fast'"),
+    ({"envelope.gust.wing_area": 0.0}, "[envelope.gust] wing_area must be greater than 0"),
+    ({"envelope.aileron.span_end": 0.5}, "The aileron's span must end outboard of where it starts"),
+    ({"title": 7}, "The wing file title must be text"),
+])
+def test_a_wing_file_is_refused_in_an_engineers_words_whichever_record_refuses_it(changes, words):
+    """ADR-0118 amendment 2: the page, the chat and a job's outcome show a refusal as it is worded here."""
+    with pytest.raises(ValueError) as refused:
+        wing_from_dict(example(**changes))
+    assert str(refused.value) == words
+
+
+def test_no_refusal_of_a_wing_file_is_in_the_validation_librarys_words():
+    """Every value of the example made zero, negative, text, empty and absent in turn: whatever refuses it says so in a sentence of
+    ours, never as the validation library prints it (its class names, the values in SI and a web address)."""
+    def leaves(table: dict, path: tuple = ()):
+        for key, value in table.items():
+            yield from leaves(value, (*path, key)) if isinstance(value, dict) else [((*path, key), value)]
+
+    base, refusals = example(), 0
+    for path, value in leaves(base):
+        tries = [0.0, -1.0, "abc", None] if isinstance(value, (int, float)) else [[], ["a"], 3.0] if isinstance(value, list) else ["", 7]
+        for tried in tries:
+            data = copy.deepcopy(base)
+            table = data
+            for name in path[:-1]:
+                table = table[name]
+            table[path[-1]] = tried
+            try:
+                wing_from_dict(data)
+            except ValueError as refused:
+                refusals += 1
+                assert not re.search(r"validation error|pydantic|input_value|_m\b|_N\b", str(refused)), f"{'.'.join(path)} = {tried!r}: {refused}"
+    assert refusals > 100
+
+
+def test_a_rib_spacing_that_asks_for_more_ribs_than_a_wing_has_is_refused():
+    """ADR-0118 amendment 2: a spacing typed in the wrong unit asked for millions of ribs, and the page waited for an answer that never came."""
+    with pytest.raises(ValueError, match="The half span is 4,000 rib spacings long; a wing takes at most 1,000 ribs"):
+        wing_from_dict(example(**{"geometry.rib_spacing": 0.0005}))
+    wing, _ = wing_from_dict(example(**{"geometry.rib_spacing": 0.002}))
+    assert len(wing.geometry.rib_stations_m) == 1001
 
 
 def test_a_core_comes_from_the_library_or_is_typed_in_the_stress_unit():

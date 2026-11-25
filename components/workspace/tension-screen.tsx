@@ -10,7 +10,7 @@ import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, 
 import { buildValues, fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import {
-  builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
+  builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, ownFromLibrary, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
   tensionMissing, TRANSVERSE_HINTS, TRANSVERSE_KEYS, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
@@ -64,6 +64,15 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     if (value === OWN) { setOwnPicked(true); edit({ library: "" }); return; }
     setOwnPicked(false);
     edit({ library: value, ...Object.fromEntries(OWN_MATERIAL_KEYS.map((key) => [key, ""])) });
+  }
+
+  /** The chosen library record copied into the own-material rows, so every constant can be changed (ADR-0111 amendment 6). Picking a
+   * material from the list again puts the library's own numbers back. */
+  function editLibraryValues() {
+    const rows = ownFromLibrary(form);
+    if (!rows) return;
+    setOwnPicked(true);
+    edit(rows);
   }
 
   function applyLayup(text = layup) {
@@ -200,7 +209,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <option value={OWN}>My own material…</option>
           </select>
         </div>
-        {own ? null : <MaterialValues key={form.library ?? ""} form={form} errors={errors} busy={busy} edit={edit} />}
+        {own ? null : <MaterialValues key={form.library ?? ""} form={form} errors={errors} busy={busy} edit={edit} editValues={editLibraryValues} />}
         {own ? (
           <div data-testid="own-material">
             <p className="studio-hint">Your material&apos;s constants and their source. G13 and G23 are optional.</p>
@@ -307,8 +316,8 @@ const missingMaterial = (missing: string[]): boolean => missing.some((m) => !NOT
 /** The chosen library material's numbers under the choice (ADR-0111 amendment 4), as the founder's mockup shows them: the stiffness on the
  * left, the strengths on the right, in the coupon's units, as the engine wrote them in the form's definition, so they show the moment the
  * material is picked, before any check. G13 and G23 show as the estimates, or as two fields when the engineer gives their own (amendment 5). */
-function MaterialValues({ form, errors, busy, edit }: {
-  form: StudioForm; errors: Record<string, string>; busy: boolean; edit: (rows: StudioForm) => void;
+function MaterialValues({ form, errors, busy, edit, editValues }: {
+  form: StudioForm; errors: Record<string, string>; busy: boolean; edit: (rows: StudioForm) => void; editValues: () => void;
 }) {
   // G13 and G23 (ADR-0111 amendment 5): the library gives neither, so the estimates show, marked, until the engineer chooses to give their own
   const given = TRANSVERSE_KEYS.some((key) => (form[key] ?? "").trim());
@@ -348,6 +357,13 @@ function MaterialValues({ form, errors, busy, edit }: {
         <FieldGrid form={form} keys={TRANSVERSE_KEYS} errors={errors} disabled={busy} hints={TRANSVERSE_HINTS} placeholders={lines.transverse.estimates}
           onChange={(key, value) => edit({ [key]: value })} />
       ) : null}
+      {/* every constant, not only G13 and G23, is the engineer's to change (ADR-0111 amendment 6): the record's numbers are copied into the
+          own-material rows exactly as they stand, and the coupon carries them as its own from then on */}
+      <p className="studio-hint" data-testid="edit-values-note">Need different numbers? Editing copies this record into your own material, exactly as it
+        stands, and the coupon then carries your values instead of the library&rsquo;s.</p>
+      <button type="button" className="studio-text-button" disabled={busy} onClick={editValues} data-testid="edit-library-values">
+        Edit these values
+      </button>
     </div>
   );
 }

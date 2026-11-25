@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .coupon_jobs import FEA
+from .processes import OWN_GROUP, run_tool, stop_tool
 
 LIVE_TIMEOUT_S = 30.0  # a live solve answers in about a second; a fine Gmsh mesh in a few
 LIVE_WAIT_S = 20.0  # how long a request waits for a free worker, which covers a worker's own start
@@ -87,7 +88,7 @@ class _Worker:
 
     def __init__(self, command: list[str]):
         self.process = subprocess.Popen([*command, "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                                        encoding="utf-8", errors="replace", cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                                        encoding="utf-8", errors="replace", cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, **OWN_GROUP)
         self.lines: queue.Queue[str | None] = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
         self.ready = False
@@ -123,10 +124,7 @@ class _Worker:
         return json.loads(self._line(timeout_s, "answer"))
 
     def stop(self) -> None:
-        try:
-            self.process.kill()
-        except OSError:
-            pass
+        stop_tool(self.process)  # uv, the tool and a solve under way (ADR-0051 amendment 1)
 
 
 class LiveSolver:
@@ -284,8 +282,7 @@ class LiveSolver:
 
     def _run_once(self, arguments: list[str]) -> None:
         try:
-            done = subprocess.run([*self.command, *arguments], capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=self.timeout_s, check=False)
+            done = run_tool([*self.command, *arguments], cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout_s=self.timeout_s)
         except subprocess.TimeoutExpired:
             raise LiveTimedOut(f"the live solver did not answer in {self.timeout_s:g} s") from None
         except OSError as exc:
