@@ -1,8 +1,8 @@
 # ADR-0140: A repair's bond is followed to failure in a plane solver of our own: a traction-separation law across the bondline, the path followed by the energy the bond spends, checked against exact fracture answers and MOOSE
 
-- Status: Proposed; the route, the page, the report and the chat since amendment 1
+- Status: Proposed; the route, the page, the report and the chat since amendment 1; the load's name on the page since amendment 2
 - Date: 2026-11-24
-- Decided by: Founder, 2026-11-24 ("let's keep workigin what we were doing earlier on this thread", read as the plan's sixth slice; the plan's route for it, our own bond element with MOOSE as the check, was put to him on 2026-11-20) | Drafted by: Claude Code
+- Decided by: Founder, 2026-11-24 ("let's keep workigin what we were doing earlier on this thread", read as the plan's sixth slice; the plan's route for it, our own bond element with MOOSE as the check, was put to him on 2026-11-20) ; Founder, 2026-11-24 (chose "Load at which the bond lets go" on the card asking what the page calls the load where the bond lets go) | Drafted by: Claude Code
 - Related: [ADR-0130](ADR-0130-a-bonded-repairs-hand-calculation-is-the-stepped-lap-as-a-shear-lag-model-in-the-engine-the-patchs-force-at-every-step-boundary-the-adhesives-elastic-limit-and-the-long-overlap-strength-of-a-yielding-adhesive.md), [ADR-0131](ADR-0131-a-stepped-patch-repair-is-one-description-of-a-few-numbers-in-the-engine-its-slice-is-a-set-of-rectangles-and-the-hand-calculation-the-mesh-and-the-step-file-are-all-made-from-them.md), [ADR-0132](ADR-0132-a-repairs-slice-is-solved-in-calculix-as-a-plane-of-eight-node-elements-held-flat-with-the-laminates-far-field-width-strain-and-its-bondline-and-plies-are-read-back-as-means-by-the-engine.md), [ADR-0133](ADR-0133-the-public-record-states-no-result-of-a-run-in-abaqus-or-ansys-and-names-no-licence-the-numbers-of-such-comparisons-are-kept-privately.md), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md), `fea/src/anisotropy_fea/repair_model.py`, `engine/src/anisotropy_engine/repair/step_lap.py`
 - Area: fea, engine, api, website, assistant
 
@@ -138,3 +138,13 @@ No evidence yet: the slice of a real repair run to failure, its time on the host
 What the page calls the load is still the founder's to say (the Decision's item 5).
 
 **Evidence.** `tests/browser/repair.spec.ts` (15 pass, two of them the bond's), `tests/repair.test.ts` and `tests/repair-chat.test.ts` (50 pass with the bank's check), `api/tests/test_repairs_api.py` (27 pass, 3 skipped without a database; one runs the real solver and holds the route's answer to the kept run), 16 questions in `tests/assistant-questions/repair.json`. The repair's chat is read by fixed patterns and no model answers there, so no real-model run was made.
+
+## Amendment 2, 2026-11-24 (the load's name on the page; confirmed by the founder)
+
+**Context.** The Decision's item 5 and amendment 1 left the name of the largest load to the founder. The page, the report and the chat were built with "the load at which the bond lets go in this model".
+
+**Options.** (a) "Load at which the bond lets go", as built. (b) "Debond load": shorter, and the word papers on bonded joints use; less plain to a reader who is not one of their authors. (c) "Bond failure load": reads closest to a strength while the plies are not yet checked for damage.
+
+**Decision.** (a). The founder chose "Load at which the bond lets go" on the card of 2026-11-24. The words "in this model" and the note that it is not the repair's strength stay beside it, as the Decision's item 5 requires. Nothing in the code changes.
+
+**Evidence.** The wording is held by `tests/repair.test.ts`, `tests/repair-chat.test.ts` and `tests/browser/repair.spec.ts`, which passed on this branch's checks. No evidence yet of how a user reads it.
