@@ -17,7 +17,7 @@ from anisotropy_fea.equivalence import deck_equivalence
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.intake import FIELDS, FORM_VERSION, IntakeError, read_values
 from anisotropy_fea.spec import load_spec
-from anisotropy_fea.tension_input import complete_tension, d3039_class
+from anisotropy_fea.tension_input import complete_tension, d3039_class, transverse_estimates
 from anisotropy_fea.write_abaqus import write_abaqus
 
 from test_checks import TOOLS
@@ -142,3 +142,19 @@ def test_no_reason_the_screen_shows_names_a_tool_a_file_or_the_team(given):
     banned = ("abaqus", "calculix", "prepomax", "spooles", ".toml", ".py", "ours", "our engine", "the team", "studio's", "change a choice")
     for choice in built:
         assert not [word for word in banned if word in choice.reason.lower()], (choice.row, choice.reason)
+
+
+def test_the_material_steps_estimates_are_the_ones_the_coupon_is_built_with_and_given_values_are_kept():
+    """The Material step shows G13 and G23 before any check from the same function the coupon is built with (ADR-0111 amendment 5); values
+    the engineer gives for a library material are kept and not chosen again."""
+    estimate = transverse_estimates("im7-8552")
+    values, built = complete_tension(REFERENCE, DAY)
+    assert (values["G13"], values["G23"]) == (estimate.G13, estimate.G23)
+    assert {b.row: b.reason for b in built if b.row in ("G13", "G23")} == estimate.reasons
+    assert "E2 / 3" in estimate.rule
+    given, built = complete_tension({**REFERENCE, "G13": 5200, "G23": 3400}, DAY)
+    assert (given["G13"], given["G23"]) == (5200, 3400)
+    assert not {"G13", "G23"} & {b.row for b in built}
+    one, built = complete_tension({**REFERENCE, "G13": 5200}, DAY)  # one given: the other is still estimated
+    assert (one["G13"], one["G23"]) == (5200, estimate.G23) and [b.row for b in built if b.row in ("G13", "G23")] == ["G23"]
+

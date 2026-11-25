@@ -63,14 +63,22 @@ STRENGTH_ROLES = ("F1t", "F1c", "F2t", "F2c", "F6")
 def library_values() -> dict:
     """Each library material's constants as the Material step shows them under the choice (ADR-0111 amendment 4), in every system: the
     moduli in GPa or Msi, nu12, the five strengths in the system's stress unit (null when the library gives none) and the ply thickness
-    in its length unit (null when the library gives none), so the page converts nothing."""
+    in its length unit (null when the library gives none), so the page converts nothing. G13 and G23, which the library does not give,
+    are the tension coupon's estimates (`tension_input.transverse_estimates`), as moduli for the list and in the stress unit of the
+    rows the engineer may type their own in, with the rule in words (ADR-0111 amendment 5)."""
     out = {}
     for lib in library_records():
         la, s, t = lib.lamina, lib.lamina.strengths, lib.ply_thickness_m
+        est = tension_input.transverse_estimates(lib.material_id)
         out[lib.material_id] = {units: {"E1": from_si(la.E1, "modulus", units), "E2": from_si(la.E2, "modulus", units),
-                                        "G12": from_si(la.G12, "modulus", units), "nu12": la.nu12,
+                                        "G12": from_si(la.G12, "modulus", units),
+                                        "G13": from_si(est.G13 * 1e6, "modulus", units), "G23": from_si(est.G23 * 1e6, "modulus", units),
+                                        "nu12": la.nu12,
                                         "strengths": None if s is None else {role: from_si(getattr(s, role), "stress", units) for role in STRENGTH_ROLES},
-                                        "ply_thickness": None if t is None else from_si(t, "length", units)} for units in UNIT_SYSTEMS}
+                                        "ply_thickness": None if t is None else from_si(t, "length", units),
+                                        "estimates": {"G13": clean(from_si(est.G13 * 1e6, "stress", units)),
+                                                      "G23": clean(from_si(est.G23 * 1e6, "stress", units))},
+                                        "transverse_rule": est.rule} for units in UNIT_SYSTEMS}
     return out
 
 

@@ -95,11 +95,21 @@ export const tensionReady = (form: StudioForm): boolean => tensionMissing(form).
 
 /** The values file the screen sends: its own rows only, numbers parsed, blanks left out, and `"input": "tension"` so the fea package
  * chooses the rest. A library material sends no own constants; an own material sends no library id. */
+/** The engineer's own G13 and G23, typed for a library material too when they have measured them (ADR-0111 amendment 5). */
+export const TRANSVERSE_KEYS = ["G13", "G23"];
+/** The rows of the own material a library material sends too, when given: the ply thickness the library may lack, and G13 and G23. */
+const LIBRARY_TOO = ["ply_thickness", ...TRANSVERSE_KEYS];
+/** The hints under the G13 and G23 fields of a library material: a blank field keeps the estimate shown. */
+export const TRANSVERSE_HINTS: Record<string, string> = {
+  G13: "Shear in the plane of the fibres and the thickness. Leave blank for the estimate.",
+  G23: "Shear across the fibres, through the thickness. Leave blank for the estimate.",
+};
+
 export function tensionValues(form: StudioForm): StudioValues {
   const values: StudioValues = { form_version: FORM_VERSION, input: TENSION_INPUT };
   const own = isOwnMaterial(form);
   for (const key of TENSION_KEYS) {
-    if (own ? key === "library" : OWN_MATERIAL_KEYS.includes(key) && key !== "ply_thickness") continue;
+    if (own ? key === "library" : OWN_MATERIAL_KEYS.includes(key) && !LIBRARY_TOO.includes(key)) continue;
     if (key === "standard" && !(form.test ?? "").trim()) continue; // a new form: the package chooses D3039
     const text = (form[key] ?? "").trim();
     if (!text) continue;
@@ -149,29 +159,33 @@ export function builtLines(checklist: Checklist | null, units = "mm-MPa"): Built
     return { key: b.row, label, value, reason: b.reason };
   });
 }
-/** One constant of the chosen material as the Material step shows it: its symbol and its value with the unit. */
-export type ValueLine = { key: string; label: string; value: string };
+/** One constant of the chosen material as the Material step shows it: its symbol, its value with the unit, and whether it is an estimate. */
+export type ValueLine = { key: string; label: string; value: string; estimate?: boolean };
 
 /** The chosen library material's constants, shown under the choice in the Material step (ADR-0111 amendment 4), as the engine wrote them
  * in the coupon's system (`library_values`): the stiffness column (E1, E2, G12, nu12, and the ply thickness when the library gives one)
  * and the strength column, null for a material the library gives no strengths for. Null for the engineer's own material, whose values
  * are the fields they typed, and before a material is chosen. The page converts nothing; it only prints by the one number rule. */
-export function libraryValueLines(form: StudioForm): { stiffness: ValueLine[]; strengths: ValueLine[] | null } | null {
+export function libraryValueLines(form: StudioForm, { ownTransverse = false }: { ownTransverse?: boolean } = {}): {
+  stiffness: ValueLine[]; strengths: ValueLine[] | null; transverse: { estimates: Record<string, string>; rule: string };
+} | null {
   if (isOwnMaterial(form)) return null;
   const units = unitsOf(form);
   const v = libraryValuesIn(form.library, units);
   if (!v) return null;
   const lab = unitLabels(units);
   const n = (x: number) => formatNumber(x, { zeros: false });
-  const line = (key: string, label: string, value: string): ValueLine => ({ key, label, value });
+  const line = (key: string, label: string, value: string, estimate = false): ValueLine => ({ key, label, value, ...(estimate ? { estimate } : {}) });
+  // G13 and G23 the library does not give: the estimates, marked, unless the engineer gives their own in the fields (ADR-0111 amendment 5)
+  const transverse = ownTransverse ? [] : [line("G13", "G13", `${n(v.G13)} ${lab.modulus}`, true), line("G23", "G23", `${n(v.G23)} ${lab.modulus}`, true)];
   const stiffness = [
     line("E1", "E1", `${n(v.E1)} ${lab.modulus}`), line("E2", "E2", `${n(v.E2)} ${lab.modulus}`), line("G12", "G12", `${n(v.G12)} ${lab.modulus}`),
-    line("nu12", "ν12", n(v.nu12)),
+    ...transverse, line("nu12", "ν12", n(v.nu12)),
     ...(v.ply_thickness === null ? [] : [line("ply_thickness", "Ply", `${n(v.ply_thickness)} ${lab.length}`)]),
   ];
   const strengths = v.strengths
     ? (["F1t", "F1c", "F2t", "F2c", "F6"] as const).map((role) => line(role, role, `${n(v.strengths![role])} ${lab.stress}`)) : null;
-  return { stiffness, strengths };
+  return { stiffness, strengths, transverse: { estimates: { G13: n(v.estimates.G13), G23: n(v.estimates.G23) }, rule: v.transverse_rule } };
 }
 
 const sentenceCase = (text: string): string => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);

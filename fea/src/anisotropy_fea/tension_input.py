@@ -1,7 +1,8 @@
 """The tension coupon from its material and layup: the standard and our rules choose the rest, and say so (ADR-0090).
 
 The studio's tension screen asks the engineer for two things, the material and the layup, and offers four to change (their own
-material constants, the pull or force, the coupon's size and tabs, the element size). Every other row of the form is chosen here,
+material constants, the pull or force, the coupon's size and tabs, the element size), and G13 and G23 for a library material, which
+the library does not give (ADR-0111 amendment 5). Every other row of the form is chosen here,
 each with the reason it was chosen, so the values file the setup check reads is complete and the page can show "How we built it".
 A row the engineer gave is never changed. Nothing is chosen silently (ADR-0003): each choice is in the list this returns, which the
 checklist, the job's result and the package carry.
@@ -50,6 +51,35 @@ class Built:
 
 def _blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+@dataclass(frozen=True)
+class Transverse:
+    """G13 and G23 estimated for a library material, in MPa to 0.01 MPa, each with why, and the rule in one line for the page."""
+
+    G13: float
+    G23: float
+    reasons: dict[str, str]
+    rule: str
+
+
+def transverse_estimates(material_id: str) -> Transverse:
+    """G13 and G23 for a library material, which the library does not give: G13 = G12, and for a tape G23 = E2 / 3, for a fabric
+    G23 = G12. Only CalculiX's brick and the shell's transverse shear read them; an in-plane pull of a symmetric layup does not load them.
+    The tension coupon writes them where the engineer gives none, and the Material step shows them as estimates before any check
+    (ADR-0111 amendment 5)."""
+    lamina = library_material(material_id).lamina
+    g12, e2 = lamina.G12 / 1e6, lamina.E2 / 1e6  # Pa to MPa, written to 0.01 MPa
+    record = find_dataset(material_id, None)
+    if str(record.get("architecture") or "").lower().startswith("unidirectional"):
+        return Transverse(round(g12, 2), round(e2 / 3.0, 2), {
+            "G13": "not in the library: G13 = G12, a usual estimate; an in-plane pull does not load it",
+            "G23": "not in the library: G23 = E2 / 3, a usual estimate for a tape; an in-plane pull does not load it"},
+            "G13 = G12 and G23 = E2 / 3, the usual estimates for a tape")
+    return Transverse(round(g12, 2), round(g12, 2), {
+        "G13": "not in the library: G13 = G12, a usual estimate; an in-plane pull does not load it",
+        "G23": "not in the library, and no estimate holds for a fabric: taken equal to G12 so the model builds; an in-plane pull does not load it"},
+        "G13 = G12, the usual estimate, and G23 = G12 so the model builds, as no estimate holds for a fabric")
 
 
 def _angles(data: dict) -> list[float] | None:
@@ -150,15 +180,9 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
            "also checks the result on finer meshes")
     record = _record(out)
     if record is not None:  # the library gives no G13 or G23 (only CalculiX's brick and the Abaqus shell's transverse shear read them)
-        lamina = library_material(str(out["library"]).strip()).lamina
-        g12, e2 = lamina.G12 / 1e6, lamina.E2 / 1e6  # Pa to MPa, written to 0.01 MPa
-        tape = str(record.get("architecture") or "").lower().startswith("unidirectional")
-        choose("G13", round(g12, 2), "not in the library: G13 = G12, a usual estimate; an in-plane pull does not load it")
-        if tape:
-            choose("G23", round(e2 / 3.0, 2), "not in the library: G23 = E2 / 3, a usual estimate for a tape; an in-plane pull does not load it")
-        else:
-            choose("G23", round(g12, 2), "not in the library, and no estimate holds for a fabric: taken equal to G12 so the model builds; an "
-                                          "in-plane pull does not load it")
+        estimate = transverse_estimates(str(out["library"]).strip())
+        choose("G13", estimate.G13, estimate.reasons["G13"])
+        choose("G23", estimate.G23, estimate.reasons["G23"])
     elif not _blank(out.get("own_G12")):
         choose("G13", out["own_G12"], "not given: G13 = G12, a usual estimate; an in-plane pull does not load it")
         choose("G23", out["own_G12"], "not given: taken equal to G12 so the model builds; an in-plane pull does not load it")
@@ -170,4 +194,4 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     return out, tuple(built)
 
 
-__all__ = ["Built", "INPUT", "complete_tension", "d3039_class"]
+__all__ = ["Built", "INPUT", "complete_tension", "Transverse", "d3039_class", "transverse_estimates"]
