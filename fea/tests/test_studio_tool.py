@@ -328,6 +328,25 @@ def test_model_of_a_blocked_setup_writes_the_checklist_alone(tmp_path):
     assert refused.returncode != 0 and "invalid choice" in refused.stderr
 
 
+def test_a_mesh_past_the_limit_is_refused_before_meshing_and_the_file_for_another_program_is_still_written(tmp_path):
+    """Our kernel builds at most 40,000 elements in one model, judged from the counts before meshing (ADR-0086 amendment 1: a million
+    elements took 12 GB on 2026-11-25): the check names an element size that fits, and nothing is solved. The file for Abaqus or Ansys is
+    not held to it, since it runs on the engineer's own machine (the founder, 2026-11-24)."""
+    fine = {"element_size": 0.38, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None}
+    out = tmp_path / "live"
+    done = run_tool("--root", str(tmp_path / "root"), "live", str(values_file(tmp_path / "live-values", **fine)), "--out", str(out))
+    assert done.returncode == 0 and done.stdout.startswith("blocked: nothing solved"), done.stdout + done.stderr
+    mesh = next(item for item in json.loads((out / "checklist.json").read_text(encoding="utf-8"))["items"] if item["id"] == "mesh")
+    count = int(mesh["message"].split(" elements;")[0].rsplit(" ", 1)[1].replace(",", ""))
+    assert mesh["state"] == "fail" and count > 40_000 and mesh["message"].endswith("our solver takes at most 40,000 in one model: use an element size "
+                                                                                  "of 0.4 mm or more"), mesh
+    model = tmp_path / "model"
+    written = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path / "model-values", **fine)), "--program", "abaqus",
+                       "--out", str(model))
+    assert written.returncode == 0 and written.stdout.startswith("written: "), written.stdout + written.stderr
+    assert json.loads((model / "model.json").read_text(encoding="utf-8"))["elements"] == count  # the count the check judged, before meshing
+
+
 def test_serve_writes_a_model_for_a_request_that_names_a_program(tmp_path):
     worker = subprocess.Popen([sys.executable, str(STUDIO), "--root", str(tmp_path / "root"), "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL, text=True, encoding="utf-8")

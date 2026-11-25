@@ -11,6 +11,7 @@ tools refuse. A failed or missing item blocks the run; a warning does not.
 from __future__ import annotations
 
 import dataclasses
+import math
 import re
 import shutil
 from collections.abc import Callable
@@ -30,7 +31,7 @@ from .intake import FIELDS, STRENGTH_KEYS, FormInput, IntakeError, Values, check
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import BENDING_KINDS, PLATE_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
+from .spec import BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, SpecError, element_estimate, full_angles, is_isotropic, layup_text, spec_plies
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
@@ -279,10 +280,25 @@ def material_source(spec) -> str:
     return f"your own constants, from {spec.material.source}" if spec.material.source else "constants given in the setup"
 
 
+def too_many_elements(spec, units: str, limit: int = MOST_ELEMENTS) -> str | None:
+    """Why the spec's mesh is not built, when it would have more elements than our kernel takes in one model (ADR-0086 amendment 1): the
+    count, the limit, and an element size that fits, in the coupon's units. None when it fits. Judged from the counts, before meshing:
+    a mesh of a million elements took 12 GB on 2026-11-25 before it was stopped."""
+    estimate = element_estimate(spec)
+    if estimate <= limit:
+        return None
+    g = spec.geometry
+    fits = from_si(math.sqrt(g.length * g.width / limit), "length", units)  # square elements over the whole coupon, at the limit
+    step = 10 ** math.floor(math.log10(fits) - 1)  # two significant figures, rounded up, so the size named fits
+    return (f"the mesh would have {estimate:,} elements; our solver takes at most {limit:,} in one model: use an element size of "
+            f"{math.ceil(fits / step) * step:.2g} {UNIT_LABEL[units]['length']} or more")
+
+
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
                     tectonic: Callable[[], str | None] = find_tectonic, gmsh: Callable[[], str | None] = gmsh_available,
-                    ) -> tuple[Checklist, FEModel | None, QualityField | None]:
-    """Every item judged as far as the inputs allow. Returns the checklist, and the model and its mesh quality when the inputs build one."""
+                    element_limit: int | None = MOST_ELEMENTS) -> tuple[Checklist, FEModel | None, QualityField | None]:
+    """Every item judged as far as the inputs allow. Returns the checklist, and the model and its mesh quality when the inputs build one.
+    A mesh past `element_limit` elements is not built (ADR-0086 amendment 1); None, for the file written for Abaqus or Ansys, builds any."""
     root = Path(root) if root is not None else paths.LOCAL
     notes = _Notes()
     problems: list[str] = []
@@ -313,7 +329,11 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             item_id = ITEM_OF_LABEL.get(concerned[0], "geometry") if concerned else "geometry"
             notes.note(item_id, "fail", str(exc).split(": the spec refuses the inputs: ", 1)[-1], concerned)
     plies = None
-    if spec is not None:
+    too_many = too_many_elements(spec, units, element_limit) if spec is not None and element_limit is not None else None
+    if too_many is not None:  # refused before meshing: the mesh alone would take the solver's memory
+        problems.append(too_many)
+        notes.note("mesh", "fail", too_many, (row("element_size"),))
+    elif spec is not None:
         try:
             model = build_model(spec)
             plies = spec_plies(spec)  # the engine's plies: it refuses a lamina whose compliance is not positive
@@ -544,6 +564,8 @@ def plate_shape(form: FormInput, root: Path | str | None = None) -> tuple[FEMode
         if values.kind not in PLATE_KINDS:
             return None
         spec = spec_from_values(values, designation_for(values, Path(root) if root is not None else paths.LOCAL), form.path.name)
+        if element_estimate(spec) > MOST_ELEMENTS:  # the checklist says why; the shape is not drawn (ADR-0086 amendment 1)
+            return None
         return build_model(spec), missing
     except (IntakeError, SpecError, MeshError, ValueError):
         return None
