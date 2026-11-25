@@ -72,5 +72,9 @@ export function plan(mode: Mode, features: readonly string[] = [], from: readonl
   return { asked: asked.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map(({ p }) => p), skipped };
 }
 
-/** Whether a question's route may move the page on, so the page is checked and set up again after it. */
-export const moves = (question: Question): boolean => MOVES.has(question.route);
+/** Routes whose answer changes the page's rows at once ("switch to inches", a name): a later question would be asked of another coupon
+ * than its bank's, so the page is set up again after it (the second run asked "what units are you using?" after "work in metres"). */
+const CHANGES: ReadonlySet<string> = new Set(["patterns", "name"]);
+
+/** Whether a question's route may move the page on or change its rows, so the page is checked and set up again after it. */
+export const moves = (question: Question): boolean => MOVES.has(question.route) || CHANGES.has(question.route);

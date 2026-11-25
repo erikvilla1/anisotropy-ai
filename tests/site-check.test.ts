@@ -4,7 +4,7 @@ import { Budget, headerCost, modelSlots, monthSpent, runCap, FIRST_GUESS } from 
 import { fixedChecks, fixedVerdict, repairClaims, type Seen } from "../scripts/site-check/grade";
 import { failureText } from "../scripts/site-check/issue";
 import { NumberPool, numbersIn, untraced } from "../scripts/site-check/numbers";
-import { NOT_OFFERED, plan } from "../scripts/site-check/plan";
+import { moves, NOT_OFFERED, plan } from "../scripts/site-check/plan";
 import { combine, html, markdown, stillFailing } from "../scripts/site-check/report";
 import { countOf, runFailed, sameCommit, SCHEMA, verdictOf, type QuestionResult } from "../scripts/site-check/record";
 import { scrub, scrubbed } from "../scripts/site-check/scrub";
@@ -260,4 +260,13 @@ test("the report joins the judge's grades, keeps what failed before and was not 
   assert.match(page, /prefers-color-scheme:dark/);
   assert.ok(!page.includes("<script"), "the page runs no script");
   assert.match(failureText(r, "https://github.com/o/r/actions/runs/1"), /found 1 answer that fails[\s\S]*which-ply-fails#1 “which ply fails first” \(results\): judge: does not show the failure load/);
+});
+
+test("a question that changes the page's rows has the page set up again after it, so the next is asked of the bank's coupon", () => {
+  // the second run asked "what units are you using?" after "work in metres" and graded "m, Pa and N" as wrong
+  const bank = banks().find((b) => b.feature === "commands-and-units")!;
+  const asked = (words: string) => bank.questions.find((q) => q.ask === words)!;
+  assert.equal(moves(asked("switch to inches")), true);
+  assert.equal(moves(asked("A. Engineer")), true);
+  assert.equal(moves(asked("what units are you using?")), false);
 });

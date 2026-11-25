@@ -54,7 +54,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   // a plate's tabs are optional; it needs something held and a load (ADR-0101 amendment 1)
   const missing = [...tensionMissing(form).filter((m) => !(isPlate && m === fieldByKey.tab_length?.label)), ...(isPlate ? plateMissing(plate) : [])];
   const checklist = checked?.checklist ?? null;
-  const built = builtLines(checklist);
+  const built = builtLines(checklist, unitsOf(form)); // labelled in the coupon's units, as its values are (ADR-0090 amendment 2)
   const problems = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
   const available = downloadable(job, false); // the product's view: the customer's files (D4), once the run has ended (ADR-0064 amendment 2)
   // an outage the live preview met is said here, once; the assistant leaves it to the rail on this screen (audit fea-run-48)
