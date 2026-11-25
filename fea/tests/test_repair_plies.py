@@ -13,7 +13,7 @@ import pytest
 from anisotropy_engine.repair.repair_file import repair_from_dict
 from anisotropy_engine.repair.solid import ply_compliance
 from anisotropy_fea.bond_solver import BondModel
-from anisotropy_fea.ply_damage import Held, Holder, PlyDamage, largest_load
+from anisotropy_fea.ply_damage import Damage, Held, Holder, PlyDamage, largest_load
 from anisotropy_fea.repair_bond import build_bond_model, run_bond
 from anisotropy_fea.repair_plies import (
     MESH_STEP,
@@ -133,17 +133,38 @@ def test_the_answer_holds_a_load_it_does_not_hold_and_what_failed(answer) -> Non
     assert [one.load for one in answer.levels] == sorted(one.load for one in answer.levels)
 
 
-def test_the_panels_end_moves_as_one_and_no_further_than_its_plies_let_it(answer) -> None:
+def test_the_panels_end_moves_as_one_so_a_ply_cracked_through_there_leaves_no_load_on_nothing(answer) -> None:
     """The load on the panel's end is each ply's share far from a repair, in the whole laminate. Left on the plies' faces,
-    the share of a 90 degree ply that has cracked through is held by nothing: its face moves metres, and the movement of
-    the end, and with it the run's test of whether the slice has come apart, reads that and not the slice. So the end is
-    held to one movement. At every load held it has then moved as far as the load takes the whole laminate, and a little
-    further for what has cracked."""
+    the share of a 90 degree ply that has cracked through is held by nothing: its face runs away, and the movement of the
+    end, and with it the run's test of whether the slice has come apart, reads that and not the slice. So the end is held to
+    one movement. Here the 90 degree plies' elements at the end are cracked through by hand, at half the load of first
+    softening. With the end free the run would call the slice parted; with it tied the end moves as one, barely further
+    than the whole laminate's, and the load is held."""
     built = answer.built
+    model = built.model
     assert len(built.end) > 4 and np.all(built.end % 2 == 0)
-    assert np.allclose(built.model.nodes[built.end // 2, 0], built.model.nodes[:, 0].max())
+    assert np.allclose(model.nodes[built.end // 2, 0], model.nodes[:, 0].max())
+    at_end = np.isclose(model.nodes[model.elements][:, :, 0].max(axis=1), model.nodes[:, 0].max())
+    cracked = at_end & (np.abs(built.angle_deg) == 90.0) & (np.array(built.kind) == "parent")
+    assert cracked.any() and not cracked[at_end].all()  # some plies at the end are cracked, and some still carry
+    found = {}
+    for name, tied in (("free", None), ("tied", built.end)):
+        holder = Holder(model, tied=tied)
+        whole = holder.begin()
+        fibre_tension, fibre_compression, matrix = (one.copy() for one in whole.plies)
+        matrix[cracked] = 1.0
+        load = 0.5 * holder.onset_load
+        held = holder.hold(load, Damage(whole.bond, (fibre_tension, fibre_compression, matrix)), solves=1)
+        found[name] = held, held.displacement[built.end] / (load * holder.elastic_movement)
+    held, moved = found["free"]  # the fault: the cracked plies' faces move thousands of times what the laminate does
+    assert held.why == "parted" and moved.max() > 1000.0 and moved.min() < 1.1
+    held, moved = found["tied"]
+    assert held.held and held.why == "stopped"
+    assert np.ptp(moved) < 1e-9 and 1.0 < moved[0] < 1.02  # one movement, a little more than the whole laminate's
+    assert held.movement == pytest.approx(moved[0] * load * Holder(model, tied=built.end).elastic_movement, rel=1e-9)
+    # and through the run itself: at every load held the end has moved as far as the load takes the whole laminate, and a
+    # little further for what has softened
     whole = answer.levels[0].end_movement_m / answer.levels[0].load  # nothing has softened yet at the first load held
-    assert any((level.matrix >= 1).any() for level in answer.levels)  # some ply has cracked through on the way
     for level in answer.levels:
         assert whole * level.load * (1 - 1e-6) <= level.end_movement_m < 1.5 * whole * level.load
 

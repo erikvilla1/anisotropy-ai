@@ -322,7 +322,7 @@ export function HeldCurve({ plies }: { plies: PliesReport }) {
         {last ? (
           <g data-mark="held">
             <circle cx={X(last.end_movement)} cy={Y(last.load)} r={4.5} fill={CATEGORICAL[0]} className="repair-dot" />
-            <text x={X(last.end_movement) - 9} y={Y(last.load) + 16} textAnchor="end" className="wing-label wing-label-small">
+            <text x={WIDTH - RIGHT} y={Y(notHeld ?? last.load) - 7} textAnchor="end" className="wing-label wing-label-small">
               {notHeld !== null ? `holds ${shown(last.load)}, not ${shown(notHeld)} ${force} (dashed)` : `holds ${shown(last.load)} ${force}; no load it cannot hold was found`}</text>
           </g>
         ) : null}

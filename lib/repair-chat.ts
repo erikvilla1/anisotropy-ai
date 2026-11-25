@@ -38,9 +38,10 @@ export type RepairAsk =
   /** A sweep: read whole, or not; `assumed` says what the page took when the message named no quantity. */
   | { route: "repair-sweep"; sweep: RepairSweep | null; problem: string | null; asks: boolean; assumed?: boolean }
   /** `onset` says a question of the bond's failure asks where or when it starts, not when the bond lets go; `failed` that a question of
-   * the load the repair carries asks what had failed by then. */
+   * the load the repair carries asks what had failed by then, and `crack` that it asks, yes or no, whether fibres break or the matrix
+   * cracks. */
   | { route: "repair-result"; topic: RepairTopic; field?: RepairField; panel?: string; load?: { value: number; unit?: string }; onset?: boolean; plies?: "yes-no" | "which";
-      failed?: boolean }
+      failed?: boolean; crack?: "fibre" | "matrix" }
   /** A question of why, how or what a thing is: the reference pages answer it, beside the repair's own number on what it names. */
   | { route: "repair-reference"; topic: RepairTopic | null }
   | { route: "repair-command"; command: "solve" | "bond" | "plies" | "report" | "shape" | "undo" }
@@ -365,7 +366,7 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
   if (changed) return changed;
   if (/\b(?:follow|run|start|do|trace|take|load)\b.*\b(?:bond|de-?bond(?:ing)?|dis-?bond(?:ing)?|progressive (?:failure|damage)|to failure|until it (?:lets go|fails|comes off))\b|^progressive (?:failure|damage)(?: analysis)?$/.test(text)
     && !ASKING.test(text) && !BONDLINE.test(text)) return { route: "repair-command", command: "bond" };
-  if (/^(?:please\s+)?carry (?:it|the repair|this|the slice)\b|\b(?:run|start|do|follow|carry)\b.*\b(?:ply damage|pl(?:y|ies)'? damag\w*|damage in the plies|plies (?:crack|break|fail)\w*)\b|\buntil it (?:cannot|can't|can not|no longer) (?:hold|carry|carries|holds)\b/.test(text)
+  if (/^(?:please\s+)?carry (?:it|the repair|this|the slice)\b|\b(?:run|start|do|follow|carry)\b.*\b(?:ply damage|pl(?:y|ies)'? damag\w*|damage in the plies|plies (?:crack|break|fail)\w*|hashin(?: damage)?)\b|\buntil it (?:cannot|can't|can not|no longer) (?:hold|carry|carries|holds)\b/.test(text)
     && !ASKING.test(text)) return { route: "repair-command", command: "plies" };
   if (/^(?:please\s+)?(?:re-?)?solve\b|\b(?:run|start|do)\s+(?:the\s+)?(?:slice|solve|finite element|fe|fea)\b|\bsolve (?:the |this |a )?(?:slice|repair|section|model)\b/.test(text)
     && !/^(?:what|why|how|does|is)\b/.test(text)) return { route: "repair-command", command: "solve" };
@@ -391,7 +392,11 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
     return { route: "repair-result", topic, ...(BOND_STARTS.test(text) ? { onset: true } : {}) };
   }
   if ((topic === "forces" && /\b(?:patch|laminate|cover)\b/.test(text)) || topic === "ply" || topic === "first" || topic === "peel") return { route: "repair-result", topic };
-  if (topic === "carries") return { route: "repair-result", topic, ...(PLIES_FAIL.test(text) ? { failed: true } : {}) };
+  if (topic === "carries") {
+    if (!PLIES_FAIL.test(text)) return { route: "repair-result", topic };
+    const crack = /\bfib(?:er|re)s?\b/.test(text) ? "fibre" : /\bmatrix\b|\bcrack(?:s|ed|ing)?\b/.test(text) ? "matrix" : null;
+    return { route: "repair-result", topic, failed: true, ...(crack && /^(?:does|do|did|is|are|will|would|has|have|can)\b/.test(text) ? { crack } : {}) };
+  }
   if (VERDICT.test(text) && !(stated && /\b(?:shear|peel) strength\b/.test(text))) return { route: "repair-result", topic: "verdict", ...load };
   if (stated && (topic === null || topic === "size" || topic === "shear")) return { route: "repair-result", topic: "stated", ...stated };
   if (topic) return { route: "repair-result", topic };
@@ -480,15 +485,20 @@ const pliesPanel = (needs: readonly SolveNeed[]): string => (needs.some((n) => n
   : needs.some((n) => n.path.startsWith("parent.")) ? "repair-laminate" : bondPanel(needs));
 const CARRY_FIRST = "Carry the repair until it cannot hold the load to get it: a few minutes.";
 
-/** What had failed at the largest load a carried repair held, as a heading: the run's own counts. */
-function failedHeading(plies: PliesReport): string {
-  const at = plies.at_held, force = unitText(plies.units.force), length = unitText(plies.units.length);
-  const parts = [
-    ...(Math.abs(at.bond.softening) > 1e-9 * at.bond.length ? [`${shown(at.bond.softening)} ${length} of the bond past its strength`] : []),
-    ...(Math.abs(at.bond.parted) > 1e-9 * at.bond.length ? [`${shown(at.bond.parted)} ${length} of it parted`] : []),
-    ...at.plies.map((row) => `${row.elements.toLocaleString("en-US")} elements of ply ${row.crack === "matrix" ? "cracked along the fibres" : row.crack === "fibre_tension" ? "broken across the fibres" : "crushed along the fibres"}`),
-  ];
-  return parts.length ? `At ${shown(plies.load.held)} ${force}, the largest load held: ${parts.join(", ")}` : `Nothing had failed at ${shown(plies.load.held)} ${force}, the largest load held`;
+/** What had failed at the largest load a carried repair held, as a heading short enough to be one: which of the bond and the plies
+ * has begun to fail, the counts being the lines under it. A question of yes or no (`crack`: do fibres break, does the matrix crack)
+ * opens with the yes or the no and its count. */
+function failedHeading(plies: PliesReport, crack?: "fibre" | "matrix"): string {
+  const at = plies.at_held, at_load = `at ${shown(plies.load.held)} ${unitText(plies.units.force)}`;
+  if (crack) {
+    const count = at.plies.filter((row) => (row.crack === "matrix") === (crack === "matrix")).reduce((sum, row) => sum + row.elements, 0);
+    const what = crack === "matrix" ? "the matrix is cracked" : "fibres are broken";
+    return count ? `Yes: ${what} in ${count.toLocaleString("en-US")} ${count === 1 ? "element" : "elements"} ${at_load}` : `No: ${crack === "matrix" ? "no matrix is cracked" : "no fibres are broken"} ${at_load}`;
+  }
+  const parted = Math.abs(at.bond.parted) > 1e-9 * at.bond.length, softening = Math.abs(at.bond.softening) > 1e-9 * at.bond.length;
+  if (at.plies.length) return parted ? `${capital(at_load)} the bond and the plies have begun to fail` : `${capital(at_load)} plies have cracked and no bond has parted`;
+  if (parted) return `${capital(at_load)} bond has parted and no ply has failed`;
+  return softening ? `${capital(at_load)} the bond is softening and nothing has parted` : `Nothing had failed ${at_load}, the largest load held`;
 }
 
 /** A question of the load the repair carries with its plies damaging (ADR-0141), or of what had failed by then: from the run the page
@@ -505,7 +515,7 @@ function carriesAnswer(ask: Extract<RepairAsk, { route: "repair-result" }>, held
   }
   const words = pliesWords(plies, held.pliesFiner ?? null);
   const data = { held: plies.load.held, not_held: plies.load.not_held, onset: plies.onset.load };
-  if (ask.failed) return said("result", failedHeading(plies), [...words.failed, ...(words.gives ? [words.gives] : []), `${words.headline}. ${CARRIES_IS_NOT_THE_STRENGTH}`], data, "repair-solve");
+  if (ask.failed) return said("result", failedHeading(plies, ask.crack), [...words.failed, ...(words.gives ? [words.gives] : []), `${words.headline}. ${CARRIES_IS_NOT_THE_STRENGTH}`], data, "repair-solve");
   return said("result", words.headline, [words.bracket, words.softens, ...(words.gives ? [words.gives] : []), ...(held.pliesFiner ? [words.mesh] : []), CARRIES_IS_NOT_THE_STRENGTH],
     data, "repair-solve");
 }
@@ -516,8 +526,8 @@ function carriedBondOrPlies(asked: "yes-no" | "which", plies: PliesReport, finer
   const words = pliesWords(plies, finer), at = plies.at_held, yes = asked === "yes-no";
   const parted = Math.abs(at.bond.parted) > 1e-9 * at.bond.length;
   if (!at.plies.length && !parted) return null;
-  const heading = at.plies.length && !parted ? `${yes ? "No: the" : "The"} plies give first in this model; no part of the bond has parted`
-    : !at.plies.length ? `${yes ? "Yes: the" : "The"} bond gives first in this model; no ply has begun to fail` : "The bond and the plies have both begun to fail at the largest load held";
+  const heading = at.plies.length && !parted ? `${yes ? "No: the" : "The"} plies give first in this model; no bond has parted`
+    : !at.plies.length ? `${yes ? "Yes: the" : "The"} bond gives first in this model; no ply has failed` : "The bond and the plies have both begun to fail";
   return said("result", heading, [`${words.headline}. ${words.bracket}`, words.softens, ...words.failed, CARRIES_IS_NOT_THE_STRENGTH],
     { held: plies.load.held, not_held: plies.load.not_held, onset: plies.onset.load }, "repair-solve");
 }

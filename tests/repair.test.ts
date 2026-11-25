@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ADHESIVE_FIELDS, answerWords, bondModelWords, bondNeedsWords, bondWords, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_REPAIR, inSentence, kindOf, layupText, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, materialMode, modelWords, needsWords, NOT_THE_STRENGTH, peakPlace, plyBefore,
+  ADHESIVE_FIELDS, answerWords, bondModelWords, bondNeedsWords, bondWords, CARRIES_IS_NOT_THE_STRENGTH, DAMAGE_FIELDS, ENERGY_FIELDS, EXAMPLE_REPAIR, EXTERNAL_REPAIR, inSentence, kindOf, layupText, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, materialMode, modelWords, needsWords, NOT_THE_STRENGTH, peakPlace, PLIES_NO_ANSWER, pliesFinerLine, pliesLine,
+  pliesModelWords, pliesNeedsWords, pliesProgress, pliesWords, plyBefore, plyName,
   REPAIR_MATERIALS, REPAIR_UNIT_LABELS, repairFileName, repairToml, sameRepair, sentence, sliceWords, statedGroups, unitsOf, valueAt, withKind, withLaminateMaterial, withLibraryMaterial,
-  withTypedMaterial, withValue, type RepairAnswer, type RepairBond, type RepairSolve,
+  withTypedMaterial, withValue, type RepairAnswer, type RepairBond, type RepairPliesJob, type RepairSolve,
 } from "../lib/repair";
 
 // The repair page's own words and its repair file (ADR-0135). Every number comes from the engine or the solver, in the answers
@@ -13,6 +14,7 @@ const read = <T>(name: string): T => JSON.parse(readFileSync(`tests/fixtures/rep
 const ANSWER = read<RepairAnswer>("example-answer"), EXTERNAL = read<RepairAnswer>("external-answer");
 const SOLVE = read<RepairSolve>("example-solve"), EXTERNAL_SOLVE = read<RepairSolve>("external-solve");
 const BOND = read<RepairBond>("example-bond"), EXTERNAL_BOND = read<RepairBond>("external-bond");
+const PLIES = read<RepairPliesJob>("example-plies"), PLIES_FINER = read<RepairPliesJob>("example-plies-finer");
 
 test("each example saves as the repair file the engine reads back as the example (api/tests/test_repairs_api.py reads the same files)", () => {
   assert.equal(repairToml(EXAMPLE_REPAIR), readFileSync("tests/fixtures/repair/example-saved.toml", "utf-8"));
@@ -195,4 +197,97 @@ test("the bond followed until it lets go, in the page's words: the load in this 
   // a fracture energy is stated as a force per length, the load's unit in every system
   assert.deepEqual(ADHESIVE_FIELDS.slice(5).map((f) => [f.path, f.unit, f.optional]), [["adhesive.peel_energy", "energy", true], ["adhesive.shear_energy", "energy", true]]);
   for (const system of ["mm-MPa", "SI", "US", "psi"] as const) assert.equal(REPAIR_UNIT_LABELS[system].energy, REPAIR_UNIT_LABELS[system].load);
+});
+
+test("the repair carried until it cannot hold the load, in the page's words: what it carries in this model and what it does not, what had failed, never a strength (ADR-0141)", () => {
+  const report = PLIES.report!, words = pliesWords(report);
+  assert.equal(words.headline, "The slice carries 1,208 N/mm in this model");
+  assert.equal(words.bracket, "It holds 1,208 N/mm and does not hold 1,213 N/mm.");
+  assert.equal(words.short, `It does not carry 1,213 N/mm. ${CARRIES_IS_NOT_THE_STRENGTH}`);
+  assert.equal(words.card, "it carries 1,208 N/mm in this model and not 1,213 N/mm. Not the repair's strength.");
+  assert.equal(words.softens, "The first softening is at 184.4 N/mm: the bond.");
+  assert.deepEqual(words.failed, [
+    "16.52 mm of the bond's 62.1 mm is past its strength and still carrying, and none has parted.",
+    "13 of the 6,322 elements of ply are broken across the fibres, 0 of them through; the worst is in laminate ply 2 (0°), 34.14 mm from the middle.",
+    "4,570 of the 6,322 elements of ply are cracked along the fibres, 42 of them through; the worst is in laminate ply 4 (90°), 13.69 mm from the middle.",
+  ]);
+  assert.equal(words.gives, "What gives is the plies: no part of the bond has parted at that load.");
+  assert.equal(words.mesh, "This is one mesh. Carry it on a finer one to see how far the load moves with the mesh.");
+  assert.match(pliesModelWords(report), /^Carried as 6,322 eight-node plane elements held flat, none longer than 0\.361 mm \(a crack can soften in an element up to 0\.903 mm\), with the bond as 489 pairs of points, through 17 loads held and 953 solves, in 260 s\. /);
+  assert.doesNotMatch(pliesModelWords(report), /anisotropy_fea|solver|moose|calculix/i); // the page names no tool (ADR-0091)
+  for (const text of [words.headline, words.bracket, words.short, words.card, words.softens, words.gives, words.mesh, ...words.failed]) {
+    assert.doesNotMatch(text.replace(CARRIES_IS_NOT_THE_STRENGTH, "").replace("Not the repair's strength.", ""), /strength of the repair|the repair fails|failure load|margin|passes|ultimate|\bstrength\b(?! and still)/i);
+  }
+  // the run's own numbers: the loads held rise to the largest, the end moves a little more than the undamaged laminate's would and
+  // never away from it, and the counts at the largest load are the last level's
+  const levels = report.levels, last = levels.at(-1)!;
+  assert.equal(last.load, report.load.held);
+  assert.equal(last.end_movement, report.load.end_movement);
+  assert.ok(levels.every((l, i) => i === 0 || l.load > levels[i - 1].load));
+  const elastic = levels[0].end_movement / levels[0].load; // before anything softens
+  assert.ok(levels.every((l) => l.end_movement >= elastic * l.load * (1 - 1e-6) && l.end_movement < 1.1 * elastic * l.load));
+  assert.equal(report.at_held.plies.find((row) => row.crack === "matrix")!.elements, last.matrix_cracked);
+  assert.equal(report.at_held.plies.find((row) => row.crack === "fibre_tension")!.elements, last.fibre_broken);
+  assert.ok(report.load.not_held! > report.load.held && (report.load.not_held! - report.load.held) / report.load.held <= 0.005);
+  assert.ok(report.model.element_size <= 0.4 * report.model.longest_element * (1 + 1e-9));
+  // a second run on a finer mesh says how far the load moved, and flags a move above 2 %
+  const finer = PLIES_FINER.report!;
+  assert.equal(PLIES_FINER.finer, 1);
+  assert.equal(pliesWords(report, finer).mesh, "On a mesh a fifth finer (7,458 elements against 6,322) it carries 1,212 N/mm: the load moves 0.35 % between the two meshes.");
+  assert.match(pliesWords(report, { ...finer, load: { ...finer.load, held: 1100 } }).mesh, /it carries 1,100 N\/mm: the load moves 8\.9 % between the two meshes\. That is more than 2 %: read the load with it in mind\.$/);
+  // what first softens is named by its ply when it is a ply
+  const place = { kind: "parent" as const, ply: 4, angle: 90, r: 51.2 };
+  assert.equal(plyName({ kind: "patch", ply: 3, angle: -45, r: 1 }), "Patch ply 3 (−45°)");
+  assert.equal(pliesWords({ ...report, onset: { load: 150, what: "a ply", crack: "matrix", place } }).softens, "The first softening is at 150 N/mm: a crack along the fibres in laminate ply 4 (90°), 51.2 mm from the middle.");
+  assert.equal(pliesWords({ ...report, onset: { load: 150, what: "a ply", crack: "fibre", place: { ...place, ply: 2, angle: 0 } } }).softens, "The first softening is at 150 N/mm: a break across the fibres in laminate ply 2 (0°), 51.2 mm from the middle.");
+  // what gives is read from the counts: the bond alone, both, or nothing yet
+  const bondOnly = pliesWords({ ...report, at_held: { ...report.at_held, bond: { ...report.at_held.bond, parted: 2.5 }, plies: [] } });
+  assert.equal(bondOnly.gives, "What gives is the bond: no ply has begun to fail at that load.");
+  assert.deepEqual(bondOnly.failed, ["16.52 mm of the bond's 62.1 mm is past its strength and still carrying, and 2.5 mm has parted."]);
+  assert.equal(pliesWords({ ...report, at_held: { ...report.at_held, bond: { ...report.at_held.bond, parted: 2.5 } } }).gives, "The bond and the plies have both begun to fail at that load.");
+  const nothing = pliesWords({ ...report, at_held: { ...report.at_held, bond: { ...report.at_held.bond, softening: 0, parted: 0 }, plies: [] } });
+  assert.deepEqual([nothing.failed, nothing.gives], [["Nothing had failed yet at that load: the slice came apart within one step of it."], ""]);
+  // a run whose time came first: the load it holds is a floor and is said as one, and a search cut short says so beside its two loads
+  const open = pliesWords({ ...report, load: { ...report.load, not_held: null, spread: null }, ended: "time" });
+  assert.equal(open.headline, "The slice carries at least 1,208 N/mm in this model");
+  assert.equal(open.bracket, "The run reached the time it is given before it found a load the slice cannot hold: it holds this load, and how much more this run does not say. A shorter panel makes a model it finishes.");
+  assert.equal(open.card, "it carries at least 1,208 N/mm in this model; the run's time came before a load it cannot hold was found. Not the repair's strength.");
+  assert.equal(pliesWords({ ...report, ended: "time" }).bracket, "It holds 1,208 N/mm and does not hold 1,213 N/mm. The run reached the time it is given before the two were brought nearer.");
+  assert.equal(pliesWords({ ...report, ended: "levels" }).short, `It does not carry 1,213 N/mm. The run reached its limit of loads tried before the two were brought nearer. ${CARRIES_IS_NOT_THE_STRENGTH}`);
+});
+
+test("a ply run is a job: one line while it is under way, when it ends without an answer, when the repair has changed, and when it is done (ADR-0141 amendment 1)", () => {
+  const queued: RepairPliesJob = { ...PLIES, state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null };
+  const running: RepairPliesJob = { ...queued, state: "running", stage: "raise", stages_done: ["build", "soften"] };
+  assert.deepEqual(PLIES.stages, ["build", "soften", "raise", "close"]);
+  assert.deepEqual([PLIES.state, PLIES.finer, PLIES.stages_done], ["done", 0, PLIES.stages]);
+  assert.equal(pliesProgress(queued), "Waiting to start…");
+  assert.deepEqual(PLIES.stages.map((stage) => pliesProgress({ ...running, stage })), [
+    "Carrying the repair: building the model…", "Carrying the repair: carrying it to its first softening…", "Carrying the repair: raising the load…",
+    "Carrying the repair: closing in on the largest load it holds…",
+  ]);
+  assert.equal(pliesProgress({ ...running, stage: null }), "Carrying the repair…");
+  assert.equal(pliesProgress(PLIES), "");
+  assert.deepEqual(pliesLine(running, false), { alert: false, text: "Carrying the repair: raising the load…" });
+  assert.deepEqual(pliesLine(PLIES, false), { alert: false, text: `The slice carries 1,208 N/mm in this model. It does not carry 1,213 N/mm. ${CARRIES_IS_NOT_THE_STRENGTH}` });
+  assert.deepEqual(pliesLine(PLIES, true), { alert: false, text: "The repair was carried as it was; it has changed since." });
+  // refused or stopped: the service's own sentence, and one of the page's when it gave none
+  const refused: RepairPliesJob = { ...queued, state: "refused", message: "The slice would have 52,000 elements, more than the 40,000 a run is given: a shorter panel makes a model it carries" };
+  assert.deepEqual(pliesLine(refused, false), { alert: true, text: refused.message });
+  assert.deepEqual(pliesLine({ ...queued, state: "stopped", message: null }, false), { alert: true, text: PLIES_NO_ANSWER });
+  assert.deepEqual(pliesLine({ ...PLIES, report: null }, false), { alert: true, text: PLIES_NO_ANSWER });
+  // the second run, on a finer mesh
+  assert.deepEqual(pliesFinerLine(PLIES, { ...queued, finer: 1 }), { alert: false, text: "On the finer mesh: waiting to start…" });
+  assert.deepEqual(pliesFinerLine(PLIES, { ...running, finer: 1, stage: "close" }), { alert: false, text: "On the finer mesh: closing in on the largest load it holds…" });
+  assert.deepEqual(pliesFinerLine(PLIES, { ...running, finer: 1, stage: null }), { alert: false, text: "On the finer mesh: carrying the repair…" });
+  assert.deepEqual(pliesFinerLine(PLIES, { ...refused, finer: 1 }), { alert: true, text: `The run on the finer mesh ended without an answer. ${refused.message}` });
+  assert.deepEqual(pliesFinerLine(PLIES, { ...queued, state: "stopped", finer: 1 }), { alert: true, text: "The run on the finer mesh ended without an answer. Start it again." });
+  assert.deepEqual(pliesFinerLine(PLIES, PLIES_FINER), { alert: false, text: "On a mesh a fifth finer (7,458 elements against 6,322) it carries 1,212 N/mm: the load moves 0.35 % between the two meshes." });
+  // what a run still needs, in the page's words for its fields: the example needs nothing, the patch on top states no fracture energies
+  assert.deepEqual(ANSWER.ply_needs, []);
+  assert.equal(pliesNeedsWords([]), "");
+  assert.equal(pliesNeedsWords(EXTERNAL.ply_needs!), "To carry the repair until it cannot hold the load, it still needs the laminate ply's four fracture energies.");
+  assert.equal(pliesNeedsWords([{ path: "patch.F1t", words: "the patch ply's strengths" }, { path: "patch.fibre_tension_energy", words: "x" }, { path: "adhesive.peel_energy", words: "the bond's fracture energy in peel" }]),
+    "To carry the repair until it cannot hold the load, it still needs the patch ply's five strengths; the patch ply's four fracture energies; the bond's fracture energy in peel.");
+  assert.deepEqual(ENERGY_FIELDS.map((f) => f.key), ["fibre_tension_energy", "fibre_compression_energy", "matrix_tension_energy", "matrix_shear_energy"]);
 });
