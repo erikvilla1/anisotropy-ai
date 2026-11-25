@@ -28,8 +28,13 @@ def running(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    stat = Path(f"/proc/{pid}/stat")
-    return not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
+    try:  # a process collected between the two lines is gone: the read then says so, where there is a /proc at all
+        text = Path(f"/proc/{pid}/stat").read_text()
+    except FileNotFoundError:
+        return Path("/proc").is_dir() is False
+    except ProcessLookupError:
+        return False
+    return text.rsplit(")", 1)[1].split()[0] != "Z"
 
 
 def ended(pid: int, within_s: float = 10.0) -> bool:
