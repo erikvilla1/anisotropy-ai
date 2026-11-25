@@ -115,6 +115,13 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
+      if (values.input === "tension" && "length" in values && !("tab_length" in values)) { // the engineer's own size with no tab length: nothing is built
+        const checklist = { ...fixture("checklist", "studio-standards"), built: TENSION_BUILT.filter((b: { row: string }) => !["length", "width", "tab_length"].includes(b.row)) };
+        checklist.state = "blocked";
+        checklist.items = checklist.items.map((item: { id: string }) => item.id === "geometry"
+          ? { ...item, state: "missing", message: "Tab length (mm): required for the tabs the grips hold", rows: ["Tab length (mm)"] } : item);
+        return json(route, { run_id: null, state: "blocked", designation: null, checklist, preview: null });
+      }
       if (values.input === "tension") { // the tension screen (ADR-0090): the package chooses the rest and lists its choices, played here
         dir = "studio-standards";
         return json(route, { run_id: "run-7", state: "ready", designation: "IM78552-UNT-L1", checklist: { ...fixture("checklist", "studio-standards"), built: TENSION_BUILT },
@@ -902,6 +909,39 @@ test.describe("the model tree", () => {
     await expect(page.getByTestId("panel-test").locator(".ws-panel-note")).toHaveText("Plate, held and loaded where you say");
     await expect(page.getByTestId("plate-words-supports")).toContainText("Tab-Bottom holds x, y, z, tilt about x, tilt about y, rotation about z");
     await expect(page.getByTestId("plate-words-supports")).toContainText("Tab-Top holds y at 1");
+    await expect(page.getByTestId("own-kept")).toContainText("Kept from the test: Tab-Bottom: fixed (encastre)");
+    await expect(page.getByTestId("own-kept")).not.toContainText("No tab length");
+    expect(browserErrors).toEqual([]);
+  });
+
+  test("a coupon whose own size still lacks a tab length is carried over with the test's pull, held along its end edges, and the step says what was kept", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+    await mockApi(page, calls, { allTests: false, plates: true });
+    await page.goto("/workspace/fea?for=coupon");
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+    await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+    await page.locator("#studio-length").fill("150");
+    await page.locator("#studio-width").fill("20");
+    await page.locator("#studio-width").blur();
+    await expect(page.getByTestId("panel-loads").locator(".ws-panel-note")).toContainText("1 mm pull"); // shown, though nothing is built
+    await page.getByTestId("panel-conditions").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+    await page.getByTestId("own-conditions").getByRole("button", { name: "Apply my own boundary conditions" }).click();
+    await expect(page.getByTestId("panel-test").locator(".ws-panel-note")).toHaveText("Plate, held and loaded where you say");
+    // the pull the Loads step showed came across as the moved end, so nothing is "still needed"
+    await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Bottom holds x, y, z, tilt about x, tilt about y, rotation about z");
+    await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Top holds y at 1");
+    await expect(page.getByTestId("own-kept")).toContainText("Kept from the test: Edge-Bottom: fixed (encastre)");
+    await expect(page.getByTestId("own-kept")).toContainText("Edge-Top: moved 1 mm along y");
+    await expect(page.getByTestId("own-kept")).toContainText("No tab length is set, so the ends are held along their edges.");
+    await expect(page.getByTestId("tension-screen")).not.toContainText("Still needed");
+    // the coupon was checked once more before it was carried over, and nothing was built: its own size, no tab length
+    const asked = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+    expect([asked.input, asked.length, asked.width, asked.tab_length]).toEqual(["tension", 150, 20, undefined]);
+    await page.screenshot({ path: ".local/website/screenshots/own-conditions-unbuilt.png" });
     expect(browserErrors).toEqual([]);
   });
 

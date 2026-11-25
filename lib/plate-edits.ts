@@ -12,7 +12,7 @@
  */
 import type { Preview } from "./studio-api";
 import { heldWords } from "./studio-copy";
-import { NO_STANDARD, fieldByKey, isIsotropic, unitLabels, unitsOf, withTest, type StudioForm } from "./studio-form";
+import { NO_STANDARD, fieldByKey, formDefinition, isIsotropic, unitLabels, unitsOf, withTest, type StudioForm } from "./studio-form";
 import { DOF_WORDS, PLATE_TEST, regionOptions, type PlateLists, type PlateLoad, type PlateSupport } from "./studio-plate";
 import { tensionReady } from "./tension-screen";
 
@@ -345,6 +345,13 @@ export const canBecomePlate = (form: StudioForm): boolean =>
  * the bottom end fixed, the top end free to move along the coupon, and the pull the rows state. `carried` says each in a line. A form
  * that is no coupon yet (no material or no layup, and no model built) carries nothing: it is a plate to hold and load from nothing.
  */
+function usual_pull(form: StudioForm, chosen: Record<string, string>): { control: string; value: number; dof: number; set: string } | null {
+  const usual = formDefinition.tension && formDefinition.tension.units === unitsOf(form) ? formDefinition.tension : null;
+  const control = (form.control ?? "").trim() || usual?.control || "displacement";
+  const value = Number(chosen.value ?? (usual && control === usual.control ? usual.value : NaN));
+  return Number.isFinite(value) && value !== 0 ? { control, value, dof: 2, set: "Grip-Top" } : null;
+}
+
 export function plateFromCoupon(form: StudioForm, built: Built | null, chosen: Record<string, string> = {}): { form: StudioForm; lists: PlateLists; carried: string[] } {
   const next: StudioForm = { ...withTest(form, PLATE_TEST).form, standard: NO_STANDARD, specimen: "" };
   const same = built && built.units === unitsOf(form) ? built : null;
@@ -370,7 +377,10 @@ export function plateFromCoupon(form: StudioForm, built: Built | null, chosen: R
     supports.push({ region: region("Grip-Bottom"), dofs: [1, 2, 3, 4, 5, 6], value: "" }, { region: region("Grip-Top"), dofs: [1, 3, 4, 5, 6], value: "" });
   }
   const pull = same?.loaded && /^Grip-/.test(same.loaded.set) ? { control: same.loaded.control, value: same.loaded.value, dof: same.loaded.dof, set: same.loaded.set }
-    : (form.value ?? "").trim() && Number.isFinite(Number(form.value)) ? { control: (form.control ?? "").trim() || "displacement", value: Number(form.value), dof: 2, set: "Grip-Top" } : null;
+    : (form.value ?? "").trim() && Number.isFinite(Number(form.value)) ? { control: (form.control ?? "").trim() || "displacement", value: Number(form.value), dof: 2, set: "Grip-Top" }
+    // no pull written and no model built (a row of the coupon still missing, or no answer): the pull the test is given when none is
+    // written, which the Loads step already shows ("1 mm pull"), so what the engineer saw is what comes across
+    : usual_pull(form, chosen);
   if (pull && pull.value) {
     const on = region(pull.set);
     if (pull.control === "force") loads.push({ region: on, kind: "force", dof: pull.dof, total: written(pull.value) });
@@ -392,4 +402,5 @@ export function plateFromCoupon(form: StudioForm, built: Built | null, chosen: R
 /** What the chat says once a tension coupon is carried over, under what was changed: whose the boundary conditions now are, and what
  * was kept of the test's. */
 export const ownWords = (carried: string[]): string => "These are now your own boundary conditions, so the model no longer follows the tension test standard."
-  + (carried.length ? ` Kept from the test: ${carried.join("; ")}.` : "");
+  + (carried.length ? ` Kept from the test: ${carried.join("; ")}.` : "")
+  + (carried.some((line) => /^Edge-/.test(line)) ? " No tab length is set, so the ends are held along their edges." : "");

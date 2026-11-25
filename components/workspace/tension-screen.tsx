@@ -9,7 +9,7 @@ import { appliedOf } from "@/lib/applied";
 import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tab, tabState, type TabId } from "@/lib/model-tree";
 import { fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
-import { canBecomePlate, plateFromCoupon } from "@/lib/plate-edits";
+import { canBecomePlate, ownWords, plateFromCoupon } from "@/lib/plate-edits";
 import {
   builtLines, D3039, isOwnMaterial, libraryValueLines, LOAD_KEYS, MESH_KEYS, needsPlyThickness, ownFromLibrary, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS,
   plateTreeValues, tensionMissing, tensionReady, TRANSVERSE_HINTS, TRANSVERSE_KEYS, valuesInUse, tensionValues, underD3039, type BuiltLine, type ValueLine,
@@ -52,8 +52,10 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   /** The kind of model: the tension coupon, its test choosing its boundary conditions, or a plate held and loaded where the engineer says. */
   // a plate's element size follows its own size: the blank form's figure, a coupon's, is left for the software to choose (amendment 8)
   const usualSize = String(fieldByKey.element_size?.defaults?.[unitsOf(form)] ?? fieldByKey.element_size?.default ?? "");
-  const pickKind = (kind: "tension" | "plate") => edit(kind === "plate"
-    ? { ...withTest(form, PLATE_TEST).form, ...(form.element_size === usualSize ? { element_size: "" } : {}) } : { test: TENSION, standard: D3039 });
+  // what came across from the test when the button carried a coupon over, said in the step until another kind is picked (the chat says it in its card)
+  const [kept, setKept] = useState("");
+  const pickKind = (kind: "tension" | "plate") => { setKept(""); edit(kind === "plate"
+    ? { ...withTest(form, PLATE_TEST).form, ...(form.element_size === usualSize ? { element_size: "" } : {}) } : { test: TENSION, standard: D3039 }); };
   /** Boundary conditions of the engineer's own, from a tension coupon (ADR-0089 amendment 8): the coupon becomes a plate held and loaded
    * as the test holds and loads it, from the model the setup built (checked first when it was not yet), ready to be changed. */
   async function ownConditions() {
@@ -65,7 +67,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
     const over = plateFromCoupon(form, built, chosen);
     versions.attribute("you", "Boundary conditions of my own");
     setForm(over.form); setPlate(over.lists); runner.clearChecked(); setErrors({});
-    setMessage("");
+    setMessage(""); setKept(ownWords(over.carried));
   }
   const own = ownPicked || isOwnMaterial(form) && Boolean(form.own_name);
   // a plate's tabs are optional; it needs something held and a load (ADR-0101 amendment 1)
@@ -202,7 +204,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
         note={sizeLine(form, inUse) ?? (underD3039(form) ? "from the standard" : "your own size")}>
         {isPlate ? (
           <>
-            <p className="studio-hint">Length along x, width along y. A hole is drilled at the centre; tabs, when given, are regions at both ends.</p>
+            <p className="studio-hint">Length along y, bottom to top; width along x, left to right. A hole is drilled at the centre; tabs, when given, are regions at both ends.</p>
             <FieldGrid form={form} keys={PLATE_SIZE_KEYS} errors={errors} disabled={busy} onChange={(key, value) => edit({ [key]: value })} />
             <p className="studio-hint">Its regions: the four edges, the face, the hole&apos;s ring and the tabs, and any box you draw here.</p>
             <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="regions" />
@@ -253,7 +255,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
             <button type="submit" className="studio-text-button" disabled={busy}>Use</button>
           </span>
           {layupError ? <span className="chat-error" role="alert">{layupError}</span> : null}
-          <span className="studio-hint">{isPlate ? "0° runs along the plate's length, x." : "0° runs along the load."}</span>
+          <span className="studio-hint">{isPlate ? "0° runs along the plate's length, y." : "0° runs along the load."}</span>
         </form>
         {warned("layup")}
       </StepPanel>
@@ -270,6 +272,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
         ) : isPlate ? null : <p className="studio-hint">Drawn on the model and listed here once it is built.</p>}
         {isPlate ? (
           <>
+            {kept ? <p className="studio-hint" data-testid="own-kept">{kept}</p> : null}
             <p className="studio-hint" data-testid="tree-plate-how">Click an edge or the face on the model, or say it: “fix the left edge”, “XSYMM on the bottom edge”. Or add one here.</p>
             <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} part="supports" />
           </>
