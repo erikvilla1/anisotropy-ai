@@ -1,13 +1,14 @@
 {
  "feature": "repair",
- "title": "Changing, sweeping and following a bonded patch repair",
+ "title": "Changing, sweeping, following and carrying a bonded patch repair",
  "records": [
   "ADR-0130",
   "ADR-0131",
   "ADR-0132",
   "ADR-0135",
   "ADR-0136",
-  "ADR-0140"
+  "ADR-0140",
+  "ADR-0141"
  ],
  "watches": [
   "lib/repair-chat.ts",
@@ -17,7 +18,8 @@
   "engine/docs/references/bonded-repairs.md",
   "mcp-server/src/anisotropy_mcp/server.py",
   "lib/repair.ts",
-  "fea/src/anisotropy_fea/repair_bond.py"
+  "fea/src/anisotropy_fea/repair_bond.py",
+  "fea/src/anisotropy_fea/repair_plies.py"
  ],
  "questions": [
   {
@@ -997,6 +999,284 @@
    "sections": [
     "repairs:how-a-bond-softens-and-lets-go"
    ]
+  },
+  {
+   "ask": "what is the largest load it carries",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The slice carries 1,208 N/mm in this model",
+    "says": [
+     "It holds 1,208 N/mm and does not hold 1,213 N/mm.",
+     "The first softening is at 184.4 N/mm: the bond.",
+     "What gives is the plies",
+     "it carries 1,212 N/mm: the load moves 0.35 % between the two meshes",
+     "Not the repair's strength"
+    ],
+    "never": [
+     "the repair's strength is",
+     "fails at",
+     "will fail"
+    ]
+   },
+   "source": "the plan for slice 7, started on the founder's word 2026-11-24: the load the repair carries with its plies damaging"
+  },
+  {
+   "ask": "whats teh max load",
+   "kind": "value",
+   "style": "typo",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The slice carries 1,208 N/mm in this model",
+    "says": [
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "ultimate load?",
+   "kind": "value",
+   "style": "jargon",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The slice carries 1,208 N/mm in this model",
+    "says": [
+     "does not hold 1,213 N/mm",
+     "Not the repair's strength"
+    ],
+    "never": [
+     "ultimate"
+    ]
+   }
+  },
+  {
+   "ask": "how much load can the repair take",
+   "kind": "value",
+   "style": "loose",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "The slice carries 1,208 N/mm in this model"
+   }
+  },
+  {
+   "ask": "and what had failed by then?",
+   "after": [
+    "what is the largest load it carries"
+   ],
+   "kind": "which",
+   "style": "fragment",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "At 1,208 N/mm plies have cracked and no bond has parted",
+    "says": [
+     "none has parted",
+     "the worst is in laminate ply 2 (0°), 34.14 mm from the middle",
+     "the worst is in laminate ply 4 (90°), 13.69 mm from the middle",
+     "What gives is the plies",
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "which plies crack",
+   "kind": "which",
+   "style": "terse",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "At 1,208 N/mm plies have cracked and no bond has parted",
+    "says": [
+     "4,570 of the 6,322 elements of ply are cracked along the fibres, 42 of them through",
+     "laminate ply 4 (90°)"
+    ]
+   }
+  },
+  {
+   "ask": "do the fibres break",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "opens": "Yes",
+    "heading": "Yes: fibres are broken in 13 elements at 1,208 N/mm",
+    "says": [
+     "0 of them through",
+     "laminate ply 2 (0°)"
+    ]
+   }
+  },
+  {
+   "ask": "does the bond fail before the plies?",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "opens": "No",
+    "heading": "No: the plies give first in this model; no bond has parted",
+    "says": [
+     "It holds 1,208 N/mm and does not hold 1,213 N/mm.",
+     "16.52 mm of the bond's 62.1 mm is past its strength and still carrying, and none has parted.",
+     "Not the repair's strength"
+    ]
+   }
+  },
+  {
+   "ask": "is it strong enough?",
+   "kind": "yes-no",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "verdict",
+    "heading": "This page gives no strength or verdict",
+    "says": [
+     "With the bond followed, it lets go at 1,340 N/mm in this model.",
+     "With the plies damaging as well, it carries 1,208 N/mm in this model and not 1,213 N/mm.",
+     "None of these is the repair's strength: plies parting from each other are not followed"
+    ],
+    "never": [
+     "Yes",
+     "strong enough at"
+    ]
+   }
+  },
+  {
+   "ask": "what is the elastic limit load",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-result",
+   "answer": {
+    "kind": "result",
+    "heading": "238.5 N/mm by hand",
+    "says": [
+     "Solved as a slice: 260.8 N/mm.",
+     "Not the repair's strength"
+    ],
+    "never": [
+     "1,208"
+    ]
+   }
+  },
+  {
+   "ask": "why do the 90 degree plies crack first?",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference",
+    "says": [
+     "it carries 1,208 N/mm in this model and not 1,213 N/mm"
+    ]
+   },
+   "sections": [
+    "repairs:how-the-plies-damage-and-what-the-load-a-repair-carries-means"
+   ]
+  },
+  {
+   "ask": "why does the largest load move with the mesh",
+   "kind": "why",
+   "style": "plain",
+   "page": "repair-plies",
+   "route": "repair-reference",
+   "answer": {
+    "kind": "reference"
+   },
+   "sections": [
+    "repairs:how-the-plies-damage-and-what-the-load-a-repair-carries-means"
+   ]
+  },
+  {
+   "ask": "what is the largest load it carries",
+   "kind": "value",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-result",
+   "answer": {
+    "kind": "none",
+    "heading": "The repair is not carried to that load yet",
+    "says": [
+     "Carry the repair until it cannot hold the load to get it: a few minutes."
+    ],
+    "never": [
+     "238.5",
+     "N/mm"
+    ]
+   }
+  },
+  {
+   "ask": "carry it until it cannot hold the load",
+   "kind": "command",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "plies",
+    "heading": "Carrying the repair until it cannot hold the load",
+    "says": [
+     "A few minutes, nine at most; it goes on if you leave the page."
+    ]
+   }
+  },
+  {
+   "ask": "run a Hashin damage analysis",
+   "kind": "command",
+   "style": "jargon",
+   "page": "repair",
+   "route": "repair-command",
+   "answer": {
+    "kind": "plies",
+    "heading": "Carrying the repair until it cannot hold the load",
+    "never": [
+     "Hashin",
+     "Abaqus"
+    ]
+   }
+  },
+  {
+   "ask": "what load does it carry before it fails",
+   "kind": "value",
+   "style": "loose",
+   "page": "repair-external",
+   "route": "repair-result",
+   "answer": {
+    "kind": "none",
+    "heading": "The repair is not carried to that load yet",
+    "says": [
+     "it still needs the laminate ply's four fracture energies"
+    ]
+   }
+  },
+  {
+   "ask": "carry the repair",
+   "kind": "command",
+   "style": "terse",
+   "page": "repair-external",
+   "route": "repair-command",
+   "answer": {
+    "kind": "none",
+    "heading": "The repair cannot be carried yet",
+    "says": [
+     "it still needs the laminate ply's four fracture energies"
+    ]
+   }
   }
  ]
 }

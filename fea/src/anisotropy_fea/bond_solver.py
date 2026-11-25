@@ -90,16 +90,22 @@ class BondLaw:
         and the damage it had."""
         opening, slip = np.asarray(opening, dtype=float), np.asarray(slip, dtype=float)
         kn, ks = self.peel_stiffness, self.shear_stiffness
-        parted = np.maximum(opening, 0.0)
-        size = np.sqrt(parted**2 + slip**2)
-        safe = np.where(size > 0, size, 1.0)
-        cn = np.where(size > 0, parted / safe, 0.0)
-        cs = np.where(size > 0, np.abs(slip) / safe, 1.0)
-        onset = 1.0 / np.sqrt((kn * cn / self.peel_strength) ** 2 + (ks * cs / self.shear_strength) ** 2)
-        final = 2.0 / (onset * (kn * cn**2 / self.peel_energy + ks * cs**2 / self.shear_energy))
-        now = np.where(size > onset, final * (size - onset) / (safe * (final - onset)), 0.0)
-        d = np.clip(np.maximum(now, damage), 0.0, 1.0)
+        d = softening(kn, ks, self.peel_strength, self.shear_strength, self.peel_energy, self.shear_energy, opening, slip, damage)
         return np.where(opening > 0, (1 - d) * kn * opening, kn * opening), (1 - d) * ks * slip, d
+
+
+def softening(kn, ks, peel_strength, shear_strength, peel_energy, shear_energy, opening, slip, damage) -> np.ndarray:
+    """The damage of the two-line law after an opening and a slip (m), from the damage before: the law of `BondLaw`, with
+    its six numbers given one by one so that each point may have its own (a ply's matrix crack, `ply_damage`)."""
+    parted = np.maximum(opening, 0.0)
+    size = np.sqrt(parted**2 + slip**2)
+    safe = np.where(size > 0, size, 1.0)
+    cn = np.where(size > 0, parted / safe, 0.0)
+    cs = np.where(size > 0, np.abs(slip) / safe, 1.0)
+    onset = 1.0 / np.sqrt((kn * cn / peel_strength) ** 2 + (ks * cs / shear_strength) ** 2)
+    final = 2.0 / (onset * (kn * cn**2 / peel_energy + ks * cs**2 / shear_energy))
+    now = np.where(size > onset, final * (size - onset) / (safe * (final - onset)), 0.0)
+    return np.clip(np.maximum(now, damage), 0.0, 1.0)
 
 
 # The solids' matrix is symmetric and the bond's tangent nearly so: the ordering made for such a matrix halves the work.
@@ -226,22 +232,27 @@ class BondModel:
     under: np.ndarray
     over: np.ndarray
     weight: np.ndarray
-    law: BondLaw
+    law: BondLaw | None
     fixed: np.ndarray
     unit_load: np.ndarray
     damage: np.ndarray | None = None
+    plies: object | None = None  # a `ply_damage.PlyDamage`: the solids' own damage. With it the model may have no bond
     matrix: sp.csr_matrix = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.nodes, self.elements = np.asarray(self.nodes, dtype=float), np.asarray(self.elements, dtype=int)
         self.under, self.over, self.weight = np.asarray(self.under, dtype=int), np.asarray(self.over, dtype=int), np.asarray(self.weight, dtype=float)
-        if not (len(self.under) == len(self.over) == len(self.weight)) or len(self.under) == 0:
+        if not (len(self.under) == len(self.over) == len(self.weight)) or (len(self.under) == 0 and self.plies is None):
             raise BondError("A bond needs pairs of nodes, each with its weight")
+        if len(self.under) and self.law is None:
+            raise BondError("A bond's pairs need its law")
         if np.any(self.weight <= 0):
             raise BondError("Every pair of a bond must stand for some length of it")
         self.fixed = np.unique(np.asarray(self.fixed, dtype=int))
         self.damage = np.zeros(len(self.weight)) if self.damage is None else np.asarray(self.damage, dtype=float).copy()
         self.matrix = solid_stiffness(self.nodes, self.elements, np.asarray(self.stiffness, dtype=float))
+        if self.plies is not None:
+            self.plies.setup(self.nodes, self.elements)
 
     @property
     def size(self) -> int:
@@ -255,6 +266,9 @@ class BondModel:
     def bond_forces(self, displacement: np.ndarray, damage: np.ndarray, tangent: bool = True, position: np.ndarray | None = None):
         """The bond's forces on the nodes, its tangent stiffness (None unless asked) and the damage after this state. With
         `position`, each degree of freedom's row in a smaller matrix (-1 for one left out), the tangent is that matrix."""
+        if len(self.weight) == 0:  # solids alone
+            size = self.size if position is None else int(position.max()) + 1
+            return np.zeros(self.size), (sp.csr_matrix((size, size)) if tangent else None), damage
         opening, slip = self.jumps(displacement)
         tn, ts, after = self.law.traction(opening, slip, damage)
         ux, uy, ox, oy = 2 * self.under, 2 * self.under + 1, 2 * self.over, 2 * self.over + 1

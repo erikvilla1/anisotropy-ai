@@ -8,14 +8,15 @@ import {
   previewPlace, previewRows, readRepairAsk, repairAnswer, sweepHeading, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSaid, type RepairSweepAnswer,
 } from "@/lib/repair-chat";
-import { bondWords, kindOf, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, sameRepair, sliceWords, type RepairDescription } from "@/lib/repair";
+import { bondWords, CARRIES_IS_NOT_THE_STRENGTH, kindOf, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, PLIES_NO_ANSWER, pliesProgress, pliesWords, sameRepair, sliceWords,
+  type RepairDescription } from "@/lib/repair";
 import { bannedIn } from "@/lib/studio-copy";
 import { REPAIR_HREF } from "@/lib/workspaces";
-import { useRepair } from "./repair-context";
+import { pliesUnderWay, useRepair } from "./repair-context";
 import { showPanel } from "./panels/step-panel";
 
 const PANEL_TITLES: Record<string, string> = {
-  "repair-damage": "the steps", "repair-patch": "Patch", "repair-cover": "Cover plies", "repair-adhesive": "Adhesive", "repair-loads": "Panel and load",
+  "repair-laminate": "Laminate", "repair-damage": "the steps", "repair-patch": "Patch", "repair-cover": "Cover plies", "repair-adhesive": "Adhesive", "repair-loads": "Panel and load",
   "repair-solve": "Solve", "repair-report": "Report and shape",
 };
 
@@ -36,11 +37,12 @@ type Said = Extract<Entry, { role: "assistant" }>;
 /** The repair's chat (ADR-0136), under the answer in words: a change is read from the message and previewed by the engine on a copy of
  * the repair, which changes only when the engineer taps Apply, and an applied change can be undone; a sweep is worked by hand at every
  * value, and its pick, solved as a slice, is applied the same way; a question about the result is answered from the report and the
- * solved slice the page holds, and one about the bond letting go from the bond followed (ADR-0140), which the chat can start; a
- * question of why, how or what a thing is from our reference pages. No model reads a message here:
+ * solved slice the page holds, one about the bond letting go from the bond followed (ADR-0140) and one about the load the repair
+ * carries from the run with its plies damaging (ADR-0141), both of which the chat can start; a question of why, how or what a thing is from our reference pages. No model reads a message here:
  * what the patterns cannot read is said plainly, with examples. */
 export function RepairChat() {
-  const { apiBaseUrl, repair, answer, replace, solve, solveStale, solveSlice, cutFaces, bond, bondStale, bondNeeds, followBond } = useRepair();
+  const { apiBaseUrl, repair, answer, replace, solve, solveStale, solveSlice, cutFaces, bond, bondStale, bondNeeds, followBond,
+    plies, pliesFiner, pliesStale, pliesNeeds, carryPlies } = useRepair();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const next = useRef(1);
@@ -64,6 +66,11 @@ export function RepairChat() {
     void followBond().then(() => { if (id !== undefined) update(id, { solved: true }); });
   }
 
+  function startPlies(id?: number) {
+    showPanel("repair-solve");
+    void carryPlies().then(() => { if (id !== undefined) update(id, { solved: true }); }); // started: the run itself goes on as a job
+  }
+
   function undo(): Said | null {
     const last = [...entries].reverse().find((e): e is Said => e.role === "assistant" && e.outcome === "applied" && !!e.from);
     if (!last?.from) return null;
@@ -79,7 +86,9 @@ export function RepairChat() {
     const ask: RepairAsk = readRepairAsk(message, kindOf(repair), last.current); // a fragment leans on the message before it
     last.current = ask;
     const held: RepairHeld = { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [],
-      bond: bond && !bondStale ? bond.report : null, bondStale: !!bond && bondStale, bondNeeds };
+      bond: bond && !bondStale ? bond.report : null, bondStale: !!bond && bondStale, bondNeeds,
+      plies: plies?.state === "done" && !pliesStale ? plies.report : null, pliesFiner: pliesFiner?.state === "done" && !pliesStale ? pliesFiner.report : null,
+      pliesStale: !!plies && pliesStale, pliesNeeds, pliesRunning: pliesUnderWay(plies) && !pliesStale ? pliesProgress(plies as NonNullable<typeof plies>) : null };
     let said = repairAnswer(ask, held);
     const id = next.current + 1;
     next.current += 2;
@@ -104,6 +113,8 @@ export function RepairChat() {
       startSolve(id);
     } else if (said.kind === "bond") {
       startBond(id);
+    } else if (said.kind === "plies") {
+      startPlies(id);
     }
   }
 
@@ -125,7 +136,7 @@ export function RepairChat() {
                 <div>
                   <Answer entry={e} stale={!!e.from && !e.outcome && !sameRepair(e.from, repair)} current={sameRepair(repair, e.preview?.repair ?? e.sweep?.picked ?? repair)}
                     onApply={(next) => apply(e, next)} onDismiss={() => update(e.id, { outcome: "dismissed" })}
-                    onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} onFollow={() => startBond()} />
+                    onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} onFollow={() => startBond()} onCarry={() => startPlies()} />
                 </div>
               </div>
             ))}
@@ -144,9 +155,9 @@ export function RepairChat() {
   );
 }
 
-type Handlers = { onApply(next: RepairDescription | null | undefined): void; onDismiss(): void; onUndo(): void; onSolve(): void; onFollow(): void };
+type Handlers = { onApply(next: RepairDescription | null | undefined): void; onDismiss(): void; onUndo(): void; onSolve(): void; onFollow(): void; onCarry(): void };
 
-function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, onFollow }: { entry: Said; stale: boolean; current: boolean } & Handlers) {
+function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, onFollow, onCarry }: { entry: Said; stale: boolean; current: boolean } & Handlers) {
   const { said } = entry;
   if (said.kind === "preview" || said.kind === "sweep") {
     if (entry.problem) return <><h4>{said.kind === "sweep" ? "Not swept" : "Not previewed"}</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{entry.problem}</p></>;
@@ -160,6 +171,7 @@ function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, on
   }
   if (said.kind === "solve") return <Solved entry={entry} />;
   if (said.kind === "bond") return <Followed entry={entry} />;
+  if (said.kind === "plies") return <Carried entry={entry} />;
   // a section is shown only in the product's own words (ADR-0091): one that names a tool of ours is left out, and its equations and tables
   const references = (entry.references ?? []).filter((s) => !bannedIn(`${s.title}\n${s.text}`).length && prose(s.text).length);
   const reference = said.kind === "reference";
@@ -181,6 +193,7 @@ function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, on
       <div className="chat-actions">
         {said.offer === "solve" ? <button type="button" className="studio-button" onClick={onSolve} data-testid="repair-chat-solve">Solve the slice</button> : null}
         {said.offer === "bond" ? <button type="button" className="studio-button" onClick={onFollow} data-testid="repair-chat-bond">Follow the bond</button> : null}
+        {said.offer === "plies" ? <button type="button" className="studio-button" onClick={onCarry} data-testid="repair-chat-plies">Carry the repair</button> : null}
         {said.offer === "report" ? <Link className="studio-button" href={`${REPAIR_HREF}/report`} target="_blank" rel="noopener">Open the report</Link> : null}
         {said.panel ? <button type="button" className="studio-text-button" onClick={() => showPanel(said.panel!)}>Open {PANEL_TITLES[said.panel] ?? "the step"}</button> : null}
       </div>
@@ -219,6 +232,27 @@ function Followed({ entry }: { entry: Said }) {
       <p>{words.softens}</p>
       {words.extent ? <p>{words.extent}</p> : <p>{words.short}</p>}
       {bond.report.let_go ? <p className="chat-note">{LET_GO_IS_NOT_THE_STRENGTH}</p> : null}
+    </div>
+  );
+}
+
+/** A run with the plies damaging started from the chat: a job, so the answer follows it as the page does, says what it is doing while
+ * it is under way, and is then worded from the run the page holds, or gives the reason it has none. */
+function Carried({ entry }: { entry: Said }) {
+  const { plies, pliesStale, carrying, pliesProblem } = useRepair();
+  if (pliesProblem) return <><h4>Not carried</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{pliesProblem}</p></>;
+  if (!entry.solved || carrying || !plies) return <><h4>{entry.said.heading}</h4><p className="chat-typing">{entry.said.lines[0]}</p></>;
+  if (pliesStale) return <><h4>The repair changed since</h4><p>Carry it again for the repair as it stands.</p></>;
+  if (pliesUnderWay(plies)) return <><h4>{entry.said.heading}</h4><p className="chat-typing" data-testid="repair-chat-carrying">{pliesProgress(plies)}</p><p className="chat-note">{entry.said.lines[0]}</p></>;
+  if (plies.state !== "done" || !plies.report) return <><h4>Not carried</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{plies.message ?? PLIES_NO_ANSWER}</p></>;
+  const words = pliesWords(plies.report);
+  return (
+    <div data-testid="repair-chat-carried">
+      <h4>{words.headline}</h4>
+      <p>{words.bracket}</p>
+      <p>{words.softens}</p>
+      {words.gives ? <p>{words.gives}</p> : null}
+      <p className="chat-note">{CARRIES_IS_NOT_THE_STRENGTH}</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
  * The studio's calls to the API (ADR-0051, ADR-0050 amendment 1). Every answer's shape is checked at runtime before it is shown:
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
-import type { RepairAnswer, RepairBond, RepairDescription, RepairShape, RepairSolve } from "./repair";
+import type { RepairAnswer, RepairBond, RepairDescription, RepairPliesJob, RepairShape, RepairSolve } from "./repair";
 import type { RepairChange, RepairChangePreview, RepairSweep, RepairSweepAnswer } from "./repair-chat";
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
@@ -705,6 +705,26 @@ export async function followRepairBond(apiBaseUrl: string, repair: RepairDescrip
   if (!isObject(payload) || typeof payload.headline !== "string" || !isObject(payload.report) || !isObject(payload.report.onset) || !isObject(payload.report.curve)
     || !isObject(payload.report.model) || !isObject(payload.report.largest)) throw unreadable("the bond's run: not a followed bond");
   return payload as unknown as RepairBond;
+}
+
+function readRepairPlies(payload: unknown): RepairPliesJob {
+  if (!isObject(payload) || typeof payload.job_id !== "string" || typeof payload.state !== "string"
+    || !["queued", "running", "done", "stopped", "refused"].includes(payload.state)) throw unreadable("the repair's run: not a run's status");
+  const report = payload.report;
+  if (payload.state === "done" && report !== null && (!isObject(report) || !isObject(report.load) || !isObject(report.onset) || !isObject(report.model)
+    || !isObject(report.at_held) || !Array.isArray(report.levels))) throw unreadable("the repair's run: not a run's report");
+  return payload as unknown as RepairPliesJob;
+}
+
+/** Start carrying a repair until its plies and its bond cannot hold the load (ADR-0141 amendment 1): a job, since it takes minutes.
+ * The engine reads the description first; a repair that lacks the plies' fracture energies is refused with the list. `finer` asks
+ * for a mesh that many steps finer than the run's own. Poll it with `getRepairPlies` until it is neither queued nor running. */
+export async function startRepairPlies(apiBaseUrl: string, repair: RepairDescription, finer = 0, signal?: AbortSignal): Promise<RepairPliesJob> {
+  return readRepairPlies(await call(`${base(apiBaseUrl)}/v1/repairs/plies`, { method: "POST", headers, body: JSON.stringify({ repair, finer }), signal }, "starting the repair's run"));
+}
+
+export async function getRepairPlies(apiBaseUrl: string, jobId: string, signal?: AbortSignal): Promise<RepairPliesJob> {
+  return readRepairPlies(await call(`${base(apiBaseUrl)}/v1/repairs/plies/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the repair's run", JOB_GONE));
 }
 
 /** A repair's solids for a CAD program (ADR-0131, ADR-0135): its STEP file's text and the table of the solids. */

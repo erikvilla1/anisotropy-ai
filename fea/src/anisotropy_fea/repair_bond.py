@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path as FilePath
 
 import numpy as np
@@ -33,7 +33,7 @@ from anisotropy_engine.repair import FarField, Repair, RepairError, adhesive_sti
 from anisotropy_engine.units import UNIT_SYSTEMS
 
 from .bond_solver import FACTOR, BondError, BondLaw, BondModel, Path, element_strains, follow, solid_stiffness, stress_load
-from .repair_model import HOLDS, SliceModel, SliceResults, _eight_node, _stress_in_slice_axes, _without_cut_faces, held_nodes, region_stiffness
+from .repair_model import HOLDS, MOST_ELEMENTS, SliceModel, SliceResults, _eight_node, _stress_in_slice_axes, _without_cut_faces, held_nodes, region_stiffness
 from .repair_shape import MM, REFUSED, SliceMesh, read_repair_file, slice_mesh
 from .wing_shape import ShapeError
 
@@ -86,13 +86,29 @@ class RepairBondModel:
         return float(np.min(np.diff(self.mesh.r_lines_m)))
 
 
-def bond_law(repair: Repair) -> BondLaw:
-    """The bond's six numbers from the repair's adhesive. Refused when one is missing or when they cannot make a law."""
+def unit_system(units: str) -> dict:
+    """A unit system of the engine's units.py by its name, for a refusal's numbers; refused when it is not one."""
+    if units not in UNIT_SYSTEMS:
+        raise BondRunError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
+    return UNIT_SYSTEMS[units]
+
+
+def bond_law(repair: Repair, units: str = "SI") -> BondLaw:
+    """The bond's six numbers from the repair's adhesive. Refused when one is missing or when they cannot make a law; a
+    fracture energy that is too small is refused with the least it may be in `units`, the repair file's (a fracture energy
+    is in the system's force per length, as the file states it)."""
     needs = [need for need in bond_needs(repair) if need["path"].startswith("adhesive.")]
     if needs:
         raise BondRunError("To follow the bond until it lets go the repair needs " + "; ".join(need["words"] for need in needs))
     adhesive = repair.adhesive
     solid = adhesive_stiffness(adhesive)
+    force, label = unit_system(units)["N"]
+    for name, stiffness, strength, energy in (("peel", float(solid[2, 2]), adhesive.peel_strength_pa, adhesive.peel_energy_j_m2),
+                                              ("shear", float(solid[4, 4]), adhesive.shear_strength_pa, adhesive.shear_energy_j_m2)):
+        least = strength**2 / (2 * stiffness / adhesive.thickness_m)  # the energy the bond holds when it reaches its strength
+        if not energy > least:
+            raise BondRunError(f"The bond's {name} energy is under the energy it holds when it reaches its {name} strength: "
+                               f"it must be above {least / force:.4g} {'J/m^2' if units == 'SI' else label}")
     try:
         return BondLaw(peel_stiffness=float(solid[2, 2]) / adhesive.thickness_m, shear_stiffness=float(solid[4, 4]) / adhesive.thickness_m,
                        peel_strength=adhesive.peel_strength_pa, shear_strength=adhesive.shear_strength_pa,
@@ -101,21 +117,35 @@ def bond_law(repair: Repair) -> BondLaw:
         raise BondRunError(str(error)) from error
 
 
-def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, hold: str = "bottom") -> RepairBondModel:
+def _too_many(elements: int, most: int, at_least: bool = False) -> BondRunError:
+    """The refusal of a slice larger than a run from the page takes, with what makes it large (ADR-0140 amendment 4)."""
+    return BondRunError(f"The slice would have {'more than ' if at_least else ''}{elements:,} elements, and the bond's run takes at most {most:,}. "
+                        "Its elements are an eighth of a step long over half the panel's length: lengthen the steps or shorten the panel")
+
+
+def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, hold: str = "bottom",
+                     units: str = "SI", most_elements: int | None = None) -> RepairBondModel:
     """The model of a repair's slice with its bond as pairs. `element_size_m` is the longest element along the slice and
     `fine_m` the length of the elements beside every step's end, cut and edge (a quarter of the bondline's thickness unless
     said), as in `build_slice_model`. With `hold="everywhere"` no node moves through the thickness: not a repair, the stepped
-    lap's own assumptions, used to check the model against the lap's closed form."""
+    lap's own assumptions, used to check the model against the lap's closed form. `units` is the system a refusal states its
+    numbers in. With `most_elements`, a slice with more elements than that is refused, one far larger before it is meshed, as
+    `build_slice_model` refuses it."""
     if hold not in HOLDS:
         raise BondRunError(f"hold must be one of {', '.join(HOLDS)}, got {hold!r}")
     needs = bond_needs(repair)
     if needs:
         raise BondRunError("To follow the bond until it lets go the repair needs " + "; ".join(need["words"] for need in needs))
-    law = bond_law(repair)
+    law = bond_law(repair, units)
     try:
         far = far_field(repair, 1.0)
         if fine_m is None:
             fine_m = repair.adhesive.thickness_m / FINE_PER_BONDLINE
+        if most_elements is not None:  # no element along the slice is longer than the element size, so it has at least this many columns
+            longest = repair.step_length_m / 8 if element_size_m is None else element_size_m
+            columns = repair.panel_length_m / 2 / longest if longest > 0 else 0
+            if columns > most_elements:
+                raise _too_many(int(columns), most_elements, at_least=True)
         whole = _without_cut_faces(repair, slice_mesh(repair, element_size_m, fine_m=fine_m, adhesive_layers=1))
         solid = [region_stiffness(repair, part) for part in whole.regions]
     except (RepairError, ShapeError) as error:
@@ -126,27 +156,42 @@ def build_bond_model(repair: Repair, *, element_size_m: float | None = None, fin
     kind_at = {(int(c), int(k)): str(kind) for c, k, kind in zip(column, layer, kinds)}
     length = np.diff(whole.r_lines_m)
 
-    # every flat bond: the adhesive's elements with the patch (or a cover ply) on them and the laminate under them
+    # every flat bond: the adhesive between the laminate under it and the patch (or a cover ply) on it. The grid gives a
+    # bondline thicker than a ply more than one element through its thickness, so a bond is the whole stack of adhesive
+    # elements in a column, as thick as the bondline: its lowest element's bottom nodes pair with its highest's top nodes.
+    at = {(int(c), int(k)): e for e, (c, k) in enumerate(zip(column, layer))}
+    height = np.diff(whole.z_lines_m)
+    bondline = repair.adhesive.thickness_m
     weight: dict[tuple[int, int], float] = {}
     owner: dict[tuple[int, int], int] = {}
     found = []
     for index, part in enumerate(whole.regions):
-        rows = np.flatnonzero((whole.region == index) & (kinds == "adhesive"))
-        inside = [e for e in rows if kind_at.get((int(column[e]), int(layer[e]) + 1)) in ("patch", "cover")
-                  and kind_at.get((int(column[e]), int(layer[e]) - 1)) == "parent"]
+        inside = []
+        for low in np.flatnonzero((whole.region == index) & (kinds == "adhesive")):
+            c, k = int(column[low]), int(layer[low])
+            if kind_at.get((c, k - 1)) != "parent":
+                continue
+            top = k
+            while kind_at.get((c, top + 1)) == "adhesive":
+                top += 1
+            if kind_at.get((c, top + 1)) in ("patch", "cover") and abs(float(height[k:top + 1].sum()) - bondline) <= 1e-6 * bondline:
+                inside.append((low, at[(c, top)]))
         if not inside:
             continue
         found.append((index, part))
-        for e in sorted(inside, key=lambda e: column[e]):
-            q, size = elements[e], float(length[column[e]])
-            for under, over, share in ((q[0], q[3], 1 / 6), (q[4], q[6], 4 / 6), (q[1], q[2], 1 / 6)):
+        for low, high in sorted(inside, key=lambda pair: column[pair[0]]):
+            under_nodes, over_nodes, size = elements[low], elements[high], float(length[column[low]])
+            for under, over, share in ((under_nodes[0], over_nodes[3], 1 / 6), (under_nodes[4], over_nodes[6], 4 / 6), (under_nodes[1], over_nodes[2], 1 / 6)):
                 key = (int(under), int(over))
                 weight[key] = weight.get(key, 0.0) + share * size
                 owner.setdefault(key, index)
     if not weight:
-        raise BondRunError("The repair has no flat bondline to follow")
+        raise BondRunError("No part of the repair's bondline lies flat between the patch and the laminate, so there is no bond to follow: "
+                           "check the patch's plies, the steps and the overlap")
 
     keep = kinds != "adhesive"
+    if most_elements is not None and int(keep.sum()) > most_elements:
+        raise _too_many(int(keep.sum()), most_elements)
     used = np.unique(elements[keep])
     renumber = np.full(len(nodes), -1)
     renumber[used] = np.arange(len(used))
@@ -211,20 +256,27 @@ def elastic_slice(model: SliceModel) -> SliceResults:
     return SliceResults(strain, stress, time.perf_counter() - started, len(free), "anisotropy_fea.bond_solver")
 
 
-def follow_bond(built: RepairBondModel, *, steps: int = 1500, stop=None, **options) -> tuple[Path, float]:
+def follow_bond(built: RepairBondModel, *, steps: int = 1500, stop=None, seconds: float | None = None, **options) -> tuple[Path, float]:
     """The model's path and the seconds it took. Unless another `stop` is given the path ends once the load has fallen a
-    tenth below the largest it reached: past the load at which the bond lets go, and far enough to say so."""
-    largest = [0.0]
+    tenth below the largest it reached: past the load at which the bond lets go, and far enough to say so. With `seconds`
+    it ends too at the first state reached after that long, and the path then says it `ended` by "time" (ADR-0140
+    amendment 4): what was followed is kept and read, and whoever reads it says the run was cut short."""
+    largest, late = [0.0], [False]
+    started = time.perf_counter()
 
     def fallen(point, _points) -> bool:
         largest[0] = max(largest[0], point.load)
-        return point.load < (1 - RUN_ON) * largest[0]
+        if point.load < (1 - RUN_ON) * largest[0]:
+            return True
+        late[0] = seconds is not None and time.perf_counter() - started > seconds
+        return late[0]
 
-    started = time.perf_counter()
     try:
         path = follow(built.model, steps=steps, stop=fallen if stop is None else stop, **options)
     except BondError as error:
         raise BondRunError(str(error)) from error
+    if late[0]:
+        path = replace(path, ended="time")
     return path, time.perf_counter() - started
 
 
@@ -297,29 +349,42 @@ def _force_along(built: RepairBondModel, load: float, displacement: np.ndarray) 
     return np.bincount(mesh.cell[:, 0], weights=stress * height, minlength=len(mesh.r_lines_m) - 1)
 
 
+def far_field_error(built: RepairBondModel, displacement: np.ndarray, load: float) -> float:
+    """How far the laminate's strain along the load, midway between the repair and the panel's end, is from the laminate
+    theory's far from a repair, as a fraction of it, in an elastic state: `displacement` at `load`."""
+    repair, mesh, model = built.repair, built.mesh, built.model
+    stations = (mesh.r_lines_m[:-1] + mesh.r_lines_m[1:]) / 2
+    kinds = np.array([part.kind for part in mesh.regions])[mesh.region]
+    outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
+    midway = int(np.argmin(np.abs(stations - (outer + repair.panel_length_m / 2) / 2)))
+    there = (mesh.cell[:, 0] == midway) & (kinds == "parent")
+    strain = element_strains(model.nodes, model.elements, displacement)[there, 0]
+    far = built.far.strain_x * load
+    return float(np.max(np.abs(strain - far))) / abs(far)
+
+
+def check_far_field(built: RepairBondModel, displacement: np.ndarray, load: float) -> float:
+    """`far_field_error`, refused when the strain there is not yet the laminate's: the panel is too short round the repair
+    for a slice whose end carries the laminate's own stresses."""
+    error = far_field_error(built, displacement, load)
+    if not error < FAR_FIELD_TOLERANCE:
+        raise BondRunError(f"Midway between the repair and the panel's end the strain is not yet the laminate's far from a repair (off by "
+                           f"{error:.1%}): the panel is too short around the repair for this model; give a longer panel")
+    return error
+
+
 def bond_answer(built: RepairBondModel, path: Path, seconds: float = 0.0) -> BondAnswer:
     """Read a followed path: the onset, the load at which the bond lets go, and the run's two checks. Refused when the
     strain midway between the repair and the panel's end is not the laminate theory's while the bond is whole, or when the
     plies' forces do not add up to the load at every station of the last state read."""
-    repair, mesh, model = built.repair, built.mesh, built.model
+    model = built.model
     first = path.points[0]
     scale = path.onset_load / first.load  # the first state is elastic, a little under the onset: the onset's is it, scaled
     onset = _state(built, path.onset_load, scale * first.displacement, first.damage, 0.0)
     opening, slip = model.jumps(scale * first.displacement)
     onset_pair = int(np.argmax(np.where(first.damage > 0, 0.0, built.law.index(opening, slip))))
 
-    column = mesh.cell[:, 0]
-    stations = (mesh.r_lines_m[:-1] + mesh.r_lines_m[1:]) / 2
-    kinds = np.array([part.kind for part in mesh.regions])[mesh.region]
-    outer = repair.patch_radius_m if repair.external else repair.cover_radius_m
-    midway = int(np.argmin(np.abs(stations - (outer + repair.panel_length_m / 2) / 2)))
-    there = (column == midway) & (kinds == "parent")
-    strain = element_strains(model.nodes, model.elements, scale * first.displacement)[there, 0]
-    far = built.far.strain_x * path.onset_load
-    far_error = float(np.max(np.abs(strain - far))) / abs(far)
-    if not far_error < FAR_FIELD_TOLERANCE:
-        raise BondRunError(f"Midway between the repair and the panel's end the strain is not yet the laminate's far from a repair (off by "
-                           f"{far_error:.1%}): the panel is too short around the repair for this model; give a longer panel")
+    far_error = check_far_field(built, scale * first.displacement, path.onset_load)
 
     fell = path.first_peak(LET_GO_FALL)
     read = fell if fell is not None else path.peak
@@ -336,11 +401,20 @@ def bond_answer(built: RepairBondModel, path: Path, seconds: float = 0.0) -> Bon
                       state(path.points[-1]), "let_go" if fell is not None else path.ended, loads, movements, far_error, equilibrium)
 
 
-def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, steps: int = 1500) -> BondAnswer:
-    """Build the repair's bond model, follow its path and read the answer: `build_bond_model`, `follow_bond`, `bond_answer`."""
-    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m)
-    path, seconds = follow_bond(built, steps=steps)
-    return bond_answer(built, path, seconds)
+def run_bond(repair: Repair, *, element_size_m: float | None = None, fine_m: float | None = None, steps: int = 1500,
+             units: str = "SI", seconds: float | None = None, most_elements: int | None = None) -> BondAnswer:
+    """Build the repair's bond model, follow its path and read the answer: `build_bond_model`, `follow_bond`, `bond_answer`.
+    The far-field check is made on the first, elastic state before the path is followed, so a panel too short round its
+    repair is refused in the time of one solve, not after the whole path. `seconds` is the time the whole run is given,
+    the model's building included: a path not followed to its end by then is read as far as it went, and `most_elements`
+    refuses a slice larger than that before anything is solved (ADR-0140 amendment 4)."""
+    started = time.perf_counter()
+    built = build_bond_model(repair, element_size_m=element_size_m, fine_m=fine_m, units=units, most_elements=most_elements)
+    elastic, _ = follow_bond(built, steps=1)
+    check_far_field(built, elastic.points[0].displacement, elastic.points[0].load)
+    left = None if seconds is None else max(0.0, seconds - (time.perf_counter() - started))
+    path, taken = follow_bond(built, steps=steps, seconds=left)
+    return bond_answer(built, path, taken)
 
 
 def bond_report(answer: BondAnswer, units: str) -> dict:
@@ -348,9 +422,7 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
     two checks, the onset, the load at which the bond lets go with the bond's state there, and the curve: at every state
     of the path the load, the movement of the panel's end, the length of bond past its strength (softening or parted) and
     the length parted. A fracture energy is in the system's force per length, as the repair file states it."""
-    if units not in UNIT_SYSTEMS:
-        raise BondRunError(f"units must be one of {', '.join(UNIT_SYSTEMS)}, got {units!r}")
-    system = UNIT_SYSTEMS[units]
+    system = unit_system(units)
     length, stress, force = system["length"][0], system["stress"][0], system["N"][0]
     built, path, law = answer.built, answer.path, answer.built.law
     model = built.model
@@ -404,7 +476,8 @@ def bond_report(answer: BondAnswer, units: str) -> dict:
 
 ENDED_WORDS = {"gone": "the whole bond parted and the load never fell",
                "steps": "the path was not followed to a load at which the bond lets go: the run's limit of steps came first",
-               "stalled": "the path could not be followed further, so no load at which the bond lets go was found"}
+               "stalled": "the path could not be followed further, so no load at which the bond lets go was found",
+               "time": "the path was not followed to a load at which the bond lets go: the time the run was given came first"}
 
 
 def headline(report: dict) -> str:
@@ -419,10 +492,12 @@ def headline(report: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python -m anisotropy_fea.repair_bond <repair.toml> [--out DIR] [--size mm] [--fine mm] [--steps N]`: follow the bond of
-    a repair file until it lets go and print the answer in the file's units; with --out, keep repair-bond.json there, the
-    report with the run in one line as its `headline`. Ends with status 2 and "refused: ..." when the repair cannot be read,
-    modelled or followed, or fails a check of the run."""
+    """`python -m anisotropy_fea.repair_bond <repair.toml> [--out DIR] [--size mm] [--fine mm] [--steps N] [--seconds S]
+    [--most N]`: follow the bond of a repair file until it lets go and print the answer in the file's units; with --out, keep
+    repair-bond.json there, the report with the run in one line as its `headline`. With --seconds the run is read as far
+    as it went in that time, and with --most a slice of more elements is refused (the page gives both; a run from the
+    command line has neither unless asked). Ends with status 2 and "refused: ..." when the repair cannot be read, modelled
+    or followed, or fails a check of the run."""
     import argparse
 
     parser = argparse.ArgumentParser(prog="python -m anisotropy_fea.repair_bond", description="Follow a stepped patch repair's bond until it lets go (ADR-0140).")
@@ -431,12 +506,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--size", type=float, help="the longest element along the slice, mm")
     parser.add_argument("--fine", type=float, help="the element length beside every edge, mm")
     parser.add_argument("--steps", type=int, default=1500, help="the most states the path may have (default 1500)")
+    parser.add_argument("--seconds", type=float, help="the time the run is given; a path not followed to its end by then is read as far as it went")
+    parser.add_argument("--most", type=int, nargs="?", const=MOST_ELEMENTS, help=f"refuse a slice of more elements than this ({MOST_ELEMENTS:,} when no number is given)")
     args = parser.parse_args(argv)
     try:
         case = read_repair_file(args.repair)
         repair, _ = repair_from_dict(case)
         answer = run_bond(repair, element_size_m=None if args.size is None else args.size * MM, fine_m=None if args.fine is None else args.fine * MM,
-                          steps=args.steps)
+                          steps=args.steps, units=case["units"], seconds=args.seconds, most_elements=args.most)
         report = bond_report(answer, case["units"])
     except (BondRunError, RepairError, ShapeError, OSError) as error:
         print(f"refused: {(str(error).splitlines() or [type(error).__name__])[0]}")

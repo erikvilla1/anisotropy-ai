@@ -9,6 +9,9 @@ const read = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${
 const ANSWER = read("example-answer"), EXTERNAL = read("external-answer"), SOLVE = read("example-solve");
 // the bond followed until it lets go (ADR-0140): the solver's own run of the flush example
 const BOND = read("example-bond");
+// the repair carried until its plies and its bond cannot hold the load (ADR-0141): the solver's own run of the flush example, as the
+// job's answer once it is done, and the same on a mesh one step finer
+const PLIES = read("example-plies"), PLIES_FINER = read("example-plies-finer");
 // the chat's (ADR-0136): the engine's previews of two changes, its sweep of the step length to a load, and what the solved slice of
 // that sweep's pick says of it, as the API puts the two together
 const STEP_CHANGE = read("example-step-change"), LENGTH_CHANGE = read("example-change"), SWEEP = { ...read("example-sweep"), check: read("example-sweep-check") };
@@ -22,13 +25,20 @@ const SHAPE = { run_id: null, step: "ISO-10303-21;\nEND-ISO-10303-21;\n", parts:
   parts: [{ name: "Laminate ply 1 (45°)", kind: "parent", angle: 45, volume: 10972.8 }, { name: "Patch ply 1 (90°)", kind: "patch", angle: 90, volume: 89.77 },
     { name: "Adhesive on the floor", kind: "adhesive", angle: null, volume: 49.09 }], volumes: { parent: 85089, patch: 2678.8, cover: 2244.3, adhesive: 1241.5 } } };
 
-type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?: string; cut_faces?: string };
+type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?: string; cut_faces?: string; finer?: number };
 type Reply = { status: number; body: unknown };
 const solves: Sent[] = []; // what "Solve the slice" sent, in the test that runs
 const shapes: Sent[] = []; // what Download STEP sent
 const bonds: Sent[] = []; // what "Follow the bond" sent
 /** What following the bond answers in a test: by default the solver's run of the flush example. */
 const follow: { bond(body: Sent): Reply } = { bond: () => ({ status: 200, body: BOND }) };
+const carries: Sent[] = []; // what "Carry the repair" sent
+/** A ply run in a test: each job is looked at `looks` times while it is under way (queued, then raising the load) before it is done,
+ * by default with the solver's run of the flush example on the mesh asked for; `start` may refuse. */
+const carry: { looks: number; seen: Record<string, number>; start(body: Sent): Reply; done(id: string): unknown } = {
+  looks: 2, seen: {}, start: (body) => ({ status: 202, body: { ...(body.finer ? PLIES_FINER : PLIES), state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null } }),
+  done: (id) => (id === PLIES_FINER.job_id ? PLIES_FINER : PLIES),
+};
 type Asked = Sent & { change?: Record<string, unknown>; sweep?: Record<string, unknown>; question?: string; about?: string };
 const changes: Asked[] = []; // what the chat sent for a preview
 const sweeps: Asked[] = []; // what the chat sent for a sweep
@@ -46,6 +56,10 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
   shapes.length = 0;
   bonds.length = 0;
   follow.bond = () => ({ status: 200, body: BOND });
+  carries.length = 0;
+  carry.looks = 2; carry.seen = {};
+  carry.start = (body) => ({ status: 202, body: { ...(body.finer ? PLIES_FINER : PLIES), state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null } });
+  carry.done = (id) => (id === PLIES_FINER.job_id ? PLIES_FINER : PLIES);
   changes.length = 0;
   sweeps.length = 0;
   searched.length = 0;
@@ -61,6 +75,14 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
     if (path.endsWith("/v1/repairs/solve")) { solves.push(body); return reply(solve(body)); }
     if (path.endsWith("/v1/repairs/shape")) { shapes.push(body); return reply({ status: 200, body: SHAPE }); }
     if (path.endsWith("/v1/repairs/bond")) { bonds.push(body); return reply(follow.bond(body)); }
+    if (path.endsWith("/v1/repairs/plies")) { carries.push(body); return reply(carry.start(body)); }
+    if (/\/v1\/repairs\/plies\/[^/]+$/.test(path)) {
+      const id = path.split("/").pop()!;
+      const seen = (carry.seen[id] = (carry.seen[id] ?? 0) + 1);
+      const done = carry.done(id) as Record<string, unknown>;
+      if (seen > carry.looks) return reply({ status: 200, body: done });
+      return reply({ status: 200, body: { ...done, state: seen === 1 ? "queued" : "running", stage: seen === 1 ? null : "raise", stages_done: seen === 1 ? [] : ["build", "soften"], finished_at: null, headline: null, report: null } });
+    }
     if (path.endsWith("/v1/repairs/changes")) { changes.push(body); return reply(chat.change(body)); }
     if (path.endsWith("/v1/repairs/sweeps")) { sweeps.push(body); return reply(chat.sweep(body)); }
     if (path.endsWith("/v1/workspace/theory-sections")) { searched.push(body); return reply({ status: 200, body: { run_id: null, sections: chat.sections } }); }
@@ -106,7 +128,7 @@ test("a patch repair is picked at the FEA start, opens on the example and shows 
   await expect(page.getByTestId("repair-lap").locator("tr[data-peak=true] th")).toHaveText("Ledge of step 1");
   await expect(page.getByTestId("repair-lap")).not.toContainText("× 10"); // a zero of the arithmetic prints as 0
   await expect(page.getByTestId("repair-sizes")).toContainText("Plies removed, plies left");
-  await expect(page.getByTestId("repair-limits").locator("li")).toHaveCount(6);
+  await expect(page.getByTestId("repair-limits").locator("li")).toHaveCount(7);
 });
 
 test("the words for a patch repair open its page from the FEA start, and a question about one offers it", async ({ page }) => {
@@ -335,6 +357,148 @@ test("a bond that cannot be followed says what it needs or why, and the chat sta
   await expect(page.getByTestId("repair-bond-here")).toHaveCount(0);
 });
 
+test("the repair is carried until it cannot hold the load as a job: its stage while it runs, then the two loads on the card, in the details, the report and the chat, never as a strength (ADR-0141)", async ({ page }) => {
+  const sent = await playRepairs(page);
+  await page.goto("/workspace/repair");
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  await expect(page.getByTestId("repair-plies-short")).toHaveCount(0); // nothing is said of a run that was not made
+  await expect(page.getByTestId("repair-plies-needs")).toHaveCount(0);
+  carry.looks = 1e9; // under way until the test lets it end
+  await page.getByTestId("repair-plies-here").click();
+  // the job is started with the description alone, and the page says what it is doing while it looks again
+  await expect(page.getByTestId("repair-plies-short")).toHaveText("Carrying the repair: raising the load…");
+  expect(carries).toHaveLength(1);
+  expect(carries[0].repair).toEqual(ANSWER.repair);
+  expect(Object.keys(carries[0]).sort()).toEqual(["finer", "repair"]);
+  expect(carries[0].finer).toBe(0);
+  await expect(page.getByTestId("repair-plies-here")).toBeDisabled();
+  await expect(page.getByTestId("repair-plies-here")).toHaveText("Carrying the repair…");
+  const waiting = await ask(page, "what is the largest load it carries");
+  await expect(waiting.getByTestId("repair-chat-heading")).toHaveText("The repair is being carried now");
+  // it goes on over a reload: the job is kept with the repair, and looked at again
+  await page.reload();
+  await expect(page.getByTestId("repair-plies-short")).toHaveText("Carrying the repair: raising the load…");
+  expect(carries).toHaveLength(1); // not started twice
+  carry.looks = 0;
+  await expect(page.getByTestId("repair-plies-short")).toHaveText("Carried with the plies damaging: it carries 1,208 N/mm in this model and not 1,213 N/mm. Not the repair's strength.");
+  await expect(page.getByTestId("repair-plies-here")).toHaveCount(0); // carried for this repair: nothing to carry again here
+  await expect(page.getByTestId("repair-plies-status")).toHaveText("The slice carries 1,208 N/mm in this model. It does not carry 1,213 N/mm. Not the repair's strength: plies parting from each other are not followed, and the load follows the fracture energies stated.");
+  await expect(page.getByTestId("repair-plies-button")).toHaveText("Carry the repair again");
+  // the details: the model, the two loads, what had failed, every load held, and that this is one mesh
+  await page.getByTestId("details-toggle").click();
+  const section = page.getByTestId("repair-plies-section");
+  await expect(section.getByRole("heading", { level: 3 })).toHaveText("The repair carried until it cannot hold the load");
+  await expect(page.getByTestId("repair-plies-model")).toContainText("Carried as 6,322 eight-node plane elements held flat, none longer than 0.361 mm (a crack can soften in an element up to 0.903 mm), with the bond as 489 pairs of points");
+  const lines = page.getByTestId("repair-plies-lines");
+  await expect(lines).toContainText("The first softening is at 184.4 N/mm: the bond.");
+  await expect(lines).toContainText("The slice carries 1,208 N/mm in this model. It holds 1,208 N/mm and does not hold 1,213 N/mm.");
+  await expect(page.getByTestId("repair-plies-failed").locator("li")).toHaveText([
+    "16.52 mm of the bond's 62.1 mm is past its strength and still carrying, and none has parted.",
+    "13 of the 6,322 elements of ply are broken across the fibres, 0 of them through; the worst is in laminate ply 2 (0°), 34.14 mm from the middle.",
+    "4,570 of the 6,322 elements of ply are cracked along the fibres, 42 of them through; the worst is in laminate ply 4 (90°), 13.69 mm from the middle.",
+  ]);
+  await expect(lines).toContainText("What gives is the plies: no part of the bond has parted at that load.");
+  await expect(page.getByTestId("repair-plies-mesh")).toHaveText("This is one mesh. Carry it on a finer one to see how far the load moves with the mesh.");
+  await expect(page.getByTestId("repair-plies-not")).toHaveText("Not the repair's strength: plies parting from each other are not followed, and the load follows the fracture energies stated.");
+  const rows = page.getByTestId("repair-plies-table").locator("tbody tr");
+  await expect(rows).toHaveCount(PLIES.report.levels.length);
+  await expect(rows.last().locator("th, td")).toHaveText(["1,208", "2.079", "16.52", "0", "4,570", "13"]);
+  // the curve: every load held as a point of one line, the first softening and the largest load named, the load not held dashed
+  const curve = page.getByTestId("repair-held-curve");
+  expect((await curve.locator("polyline[data-series=held]").getAttribute("points"))!.trim().split(" ")).toHaveLength(PLIES.report.levels.length + 1);
+  await expect(curve.locator("[data-mark=level]")).toHaveCount(PLIES.report.levels.length);
+  await expect(curve.locator("[data-mark=onset] text")).toHaveText("first softens, 184.4 N/mm");
+  await expect(curve.locator("[data-mark=held] text")).toHaveText("holds 1,208, not 1,213 N/mm (dashed)");
+  await expect(curve.locator("[data-mark=not-held]")).toHaveCount(1);
+  await curve.hover();
+  await expect(page.getByTestId("repair-held-curve-key")).toContainText(/Held at [\d,.]+ N\/mm: the panel's end has moved [\d.]+ mm/);
+  expect(bannedIn(await section.innerText())).toEqual([]); // no tool and no machinery named (ADR-0091)
+  await page.getByTestId("details-toggle").click();
+  // a second run, on a finer mesh, is asked for under Solve and says how far the load moved
+  const solvePanel = page.locator("#panel-repair-solve"); // the chat's answer above may have opened it already
+  if (!(await solvePanel.evaluate((panel) => (panel as HTMLDetailsElement).open))) await solvePanel.locator("> summary").click();
+  carry.looks = 1;
+  await page.getByTestId("repair-plies-finer-button").click();
+  await expect(page.getByTestId("repair-plies-finer-status")).toHaveText("On a mesh a fifth finer (7,458 elements against 6,322) it carries 1,212 N/mm: the load moves 0.35 % between the two meshes.");
+  expect(carries).toHaveLength(2);
+  expect(carries[1].finer).toBe(1);
+  await expect(page.getByTestId("repair-plies-finer-button")).toHaveText("Carry it on the finer mesh again");
+  await page.getByTestId("details-toggle").click();
+  await expect(page.getByTestId("repair-plies-mesh")).toContainText("the load moves 0.35 % between the two meshes");
+  await page.getByTestId("details-toggle").click();
+  // the chat answers from the run: the load with what it does not carry, what had failed, a yes or no, and still no verdict
+  const most = await ask(page, "what is the largest load it carries");
+  await expect(most.getByTestId("repair-chat-heading")).toHaveText("The slice carries 1,208 N/mm in this model");
+  await expect(most).toContainText("It holds 1,208 N/mm and does not hold 1,213 N/mm.");
+  await expect(most).toContainText("the load moves 0.35 % between the two meshes");
+  await expect(most).toContainText("Not the repair's strength");
+  const fibres = await ask(page, "do the fibres break");
+  await expect(fibres.getByTestId("repair-chat-heading")).toHaveText("Yes: fibres are broken in 13 elements at 1,208 N/mm");
+  const first = await ask(page, "does the bond fail before the plies?");
+  await expect(first.getByTestId("repair-chat-heading")).toHaveText("No: the plies give first in this model; no bond has parted");
+  const verdict = await ask(page, "is it strong enough?");
+  await expect(verdict.getByTestId("repair-chat-heading")).toHaveText("This page gives no strength or verdict");
+  await expect(verdict).toContainText("With the plies damaging as well, it carries 1,208 N/mm in this model and not 1,213 N/mm.");
+  // the report has it as its own section, with the finer mesh beside it
+  await page.goto("/workspace/repair/report");
+  await expect(page.getByTestId("repair-report")).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("repair-report-plies-line")).toHaveText("Carried with the plies damaging: it carries 1,208 N/mm in this model and not 1,213 N/mm. Not the repair's strength.");
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText(["Summary", "1. The repair as stated", "2. The repair as measured", "3. The bondline by hand", "4. The repair carried until it cannot hold the load", "5. What these numbers are not"]);
+  const printed = page.getByTestId("repair-report-plies");
+  await expect(printed.getByTestId("repair-held-curve")).toBeVisible();
+  await expect(printed.getByTestId("repair-plies-mesh")).toContainText("On a mesh a fifth finer (7,458 elements against 6,322) it carries 1,212 N/mm");
+  await expect(page.getByTestId("repair-report-stated")).toContainText("Energy of a fibre break, pulled");
+  await expect(page.getByTestId("repair-limits")).toContainText("the load it carries in this model is not the repair's strength");
+  expect(bannedIn(await page.locator("main").innerText())).toEqual([]);
+  await page.getByTestId("repair-report-back").click();
+  // a change makes it a run of the repair as it was: said on the card and in the chat, and carried again from the chat
+  await page.getByTestId("repair-applied-load").fill("120");
+  await expect.poll(() => (sent.at(-1)?.repair?.applied as Record<string, unknown>).load).toBe(120);
+  await expect(page.getByTestId("repair-plies-short")).toHaveText("The repair was carried as it was. Carry it again for this one.");
+  await expect(page.getByTestId("repair-plies-here")).toHaveText("Carry the repair again");
+  await expect(page.getByTestId("repair-plies-finer-button")).toHaveCount(0); // a finer mesh is offered for a run of this repair only
+  const stale = await ask(page, "what is the largest load it carries");
+  await expect(stale.getByTestId("repair-chat-heading")).toHaveText("The repair is not carried to that load yet");
+  await expect(stale).toContainText("It was carried as it was: carry it again for the repair as it stands.");
+  carry.looks = 0;
+  await stale.getByTestId("repair-chat-plies").click();
+  await expect.poll(() => carries.length).toBe(3);
+  expect((carries[2].repair?.applied as Record<string, unknown>).load).toBe(120);
+  await expect(page.getByTestId("repair-plies-short")).toContainText("Carried with the plies damaging:");
+});
+
+test("a ply run that is refused or stopped says why, a repair that lacks what it needs says what, and the chat starts one by its words (ADR-0141)", async ({ page }) => {
+  await playRepairs(page);
+  const queued = { ...PLIES, state: "queued", stage: null, stages_done: [], finished_at: null, headline: null, report: null };
+  // refused at the door: the service's own sentence, and the page as it was
+  carry.start = () => ({ status: 422, body: { detail: "The slice would have 52,000 elements, more than the 40,000 a run is given: a shorter panel makes a model it carries" } });
+  await page.goto("/workspace/repair");
+  await page.getByTestId("repair-plies-here").click();
+  await expect(page.getByTestId("repair-plies-problem-here")).toContainText("The slice would have 52,000 elements, more than the 40,000 a run is given");
+  await expect(page.getByTestId("repair-plies-short")).toHaveCount(0);
+  // stopped on the way: the job's own message, as an alert, and the run can be started again
+  carry.start = () => ({ status: 202, body: queued });
+  carry.done = () => ({ ...queued, state: "stopped", finished_at: PLIES.finished_at, message: "The run was stopped at the time it is given (540 s) before it held any load. A shorter panel makes a model it finishes." });
+  carry.looks = 0;
+  await page.getByTestId("repair-plies-here").click();
+  await expect(page.getByTestId("repair-plies-short")).toHaveText("The run was stopped at the time it is given (540 s) before it held any load. A shorter panel makes a model it finishes.");
+  await expect(page.getByTestId("repair-plies-short")).toHaveAttribute("role", "alert");
+  await expect(page.getByTestId("repair-plies-here")).toHaveText("Carry the repair again");
+  // the chat starts one by its words and shows it when it is done
+  carry.done = (id) => (id === PLIES_FINER.job_id ? PLIES_FINER : PLIES);
+  carry.seen = {};
+  carry.looks = 1;
+  const started = await ask(page, "carry it until it cannot hold the load");
+  await expect(started.getByTestId("repair-chat-carried")).toContainText("The slice carries 1,208 N/mm in this model");
+  await expect(started.getByTestId("repair-chat-carried")).toContainText("It holds 1,208 N/mm and does not hold 1,213 N/mm.");
+  await expect(started.getByTestId("repair-chat-carried")).toContainText("Not the repair's strength");
+  // the fields are the repair file's: four energies for a typed or a library ply, all or none
+  await page.locator("#panel-repair-laminate > summary").click();
+  const energies = page.getByTestId("repair-parent-energies");
+  await expect(energies.locator("input")).toHaveCount(4);
+  await expect(energies.locator("input").first()).toHaveValue("80");
+});
+
 test("the other kind of repair, a patch bonded on top, has its own steps and its own answer", async ({ page }) => {
   const sent = await playRepairs(page);
   await page.goto("/workspace/repair");
@@ -416,7 +580,7 @@ test("the report lays the repair out for paper: what is stated, the slice, the h
   await expect(report.getByTestId("repair-lap").locator("tbody tr")).toHaveCount(5);
   await expect(report.getByTestId("repair-bond-chart").locator("polyline[data-series=peel]").first()).toBeVisible();
   await expect(report.getByTestId("repair-plies").locator("tbody tr")).toHaveCount(6);
-  await expect(report.getByTestId("repair-limits").locator("li")).toHaveCount(6);
+  await expect(report.getByTestId("repair-limits").locator("li")).toHaveCount(7);
   await expect(report.getByTestId("repair-report-bond")).toHaveCount(0); // the bond was not followed, so the report has no section for it
   await expect(report.getByTestId("repair-report-print")).toBeEnabled();
   // on paper: the page's own buttons and the site's header are not printed, and the sheet is white
