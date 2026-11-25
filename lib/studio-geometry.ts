@@ -177,6 +177,14 @@ export function bounds(nodes: number[][]): { min: Vec2; max: Vec2; size: Vec2 } 
   return { min, max, size: [max[0] - min[0], max[1] - min[1]] };
 }
 
+/** A region as it can be drawn on a mesh of `count` nodes: its node numbers that are on the mesh. A number past the end belongs to
+ * another mesh (regions read from a setup changed since the results shown); drawing it would read a node that is not there. The same
+ * object comes back when every number is on the mesh. */
+export function onMesh<T extends { nodes: number[] }>(region: T, count: number): T {
+  const on = (i: number) => Number.isInteger(i) && i >= 0 && i < count;
+  return region.nodes.every(on) ? region : { ...region, nodes: region.nodes.filter(on) };
+}
+
 /** The outline of a node set as the bounding box of its nodes: how a held or loaded tab is framed. */
 export function setBox(nodes: number[][], indices: number[]): { min: Vec2; max: Vec2 } | null {
   if (!indices.length) return null;

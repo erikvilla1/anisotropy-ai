@@ -9,13 +9,24 @@ const PREVIEW_WORDS: Record<number, string> = { 1: "x", 2: "y", 3: "z", 4: "rota
 
 type Mesh = { quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]> };
 
+/** Whether two meshes are one: as many elements, the first and the last on the same corner nodes. Results solved for a setup changed
+ * since (a coupon carried over to boundary conditions of the engineer's own, another element size) are another mesh. */
+function sameElements(a: number[][], b: number[][]): boolean {
+  return a.length === b.length && String(a[0]) === String(b[0]) && String(a[a.length - 1]) === String(b[b.length - 1]);
+}
+
 /** The nodes a region covers: a node set, or the corner nodes of an element set (a pressure on an area region). `mesh` is the one drawn,
- * the results' when they are shown; the preview's mesh is the fall-back. */
+ * the results' when they are shown; the preview's mesh is the fall-back, but only while it is the mesh drawn: the preview numbers its own
+ * nodes, so a region the drawn mesh does not have covers none of it. (A coupon's results stayed on the page while its setup became a
+ * plate with a face under pressure: the plate's node numbers, past the end of the coupon's mesh, blanked the page.) */
 export function nodesOf(preview: Pick<Preview, "mesh">, set: string, mesh: Partial<Mesh> = {}): number[] {
-  const nodeSet = mesh.node_sets?.[set] ?? preview.mesh.node_sets[set];
+  const own = !mesh.quads || sameElements(mesh.quads, preview.mesh.quads); // the preview's numbering holds on the mesh drawn
+  const nodeSet = mesh.node_sets?.[set] ?? (own ? preview.mesh.node_sets[set] : undefined);
   if (nodeSet) return nodeSet;
-  const quads = mesh.element_sets?.[set] ? mesh.quads ?? preview.mesh.quads : preview.mesh.quads;
-  const elements = mesh.element_sets?.[set] ?? preview.mesh.element_sets[set];
+  const drawn = mesh.element_sets?.[set];
+  if (!drawn && !own) return [];
+  const quads = drawn ? mesh.quads ?? preview.mesh.quads : preview.mesh.quads;
+  const elements = drawn ?? preview.mesh.element_sets[set];
   if (!elements) return [];
   return [...new Set(elements.flatMap((e) => quads[e] ?? []))];
 }

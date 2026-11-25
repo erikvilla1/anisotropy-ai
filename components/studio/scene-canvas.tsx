@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { bounds, deformedHeights, deformedPositions, elementEdges, elementLoop, fieldAttribute, gripOf, meanHeight, plateMesh, sampleNodes, setBox } from "@/lib/studio-geometry";
+import { bounds, deformedHeights, deformedPositions, elementEdges, elementLoop, fieldAttribute, gripOf, meanHeight, onMesh, plateMesh, sampleNodes, setBox } from "@/lib/studio-geometry";
 import { HELD, LOADED, overlayColors, type Palette } from "@/lib/studio-colors";
 import { applyScale, fieldMaterial, IN_GRIP, NO_VALUE, type FieldScale } from "./field-material";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
@@ -274,8 +274,16 @@ type Layer = "mesh" | "conditions" | "loads";
 const LAYER_WORDS: Record<Layer, string> = { mesh: "Mesh", conditions: "Boundary conditions", loads: "Loads" };
 
 export function SceneCanvas(props: SceneProps) {
-  const { nodes, quads, thickness, field = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], proposed = null, about = [],
+  const { nodes, quads, thickness, field = null, displacement = null, scale = 1, about = [],
     highlight = null, picked = null, wireframe = true, onPick, emphasis = null, palette = "classic" } = props;
+  // every region is drawn on this mesh's own nodes: a node number past its end (a region numbered for another mesh) is left out, so a
+  // mismatch above the scene draws less and never throws
+  const count = nodes.length;
+  const held = useMemo(() => (props.held ?? []).map((m) => onMesh(m, count)), [props.held, count]);
+  const loaded = useMemo(() => (props.loaded ? onMesh(props.loaded, count) : null), [props.loaded, count]);
+  const loads = useMemo(() => (props.loads ?? []).map((l) => onMesh(l, count)), [props.loads, count]);
+  const proposed = useMemo(() => (props.proposed ? { held: props.proposed.held.map((m) => onMesh(m, count)), loads: props.proposed.loads.map((l) => onMesh(l, count)) } : null),
+    [props.proposed, count]);
   const triad = useRef<SVGSVGElement>(null);
   const canvas = useCanvasSlots(); // in the FEA workspace's layout the model is framed clear of the panels, its tools in the View menu (ADR-0134 amendment 1)
   const overlay = overlayColors(field ? palette : "green"); // before a run the part is grey: the outlines of before

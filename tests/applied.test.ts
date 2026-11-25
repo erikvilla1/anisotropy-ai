@@ -38,6 +38,24 @@ test("a region's nodes come from the mesh drawn, its node set or its elements' c
   assert.deepEqual(nodesOf(plate, "Edge-Left", { node_sets: { "Edge-Left": [1, 2] } }), [1, 2]); // the results' own mesh first
 });
 
+test("a region the mesh drawn does not have covers none of it when that mesh is not the preview's", () => {
+  // a coupon's results stay on the page while its setup becomes a plate: the plate's preview numbers its own nodes, and the page went blank
+  const plate = fixture("studio-plate"), coupon = fixture("studio");
+  const drawn = { quads: coupon.mesh.quads, node_sets: coupon.mesh.node_sets, element_sets: coupon.mesh.element_sets };
+  assert.notEqual(drawn.quads.length, plate.mesh.quads.length);
+  assert.deepEqual(nodesOf(plate, "Edge-Bottom", drawn), []);
+  assert.deepEqual(nodesOf(plate, "Face", drawn), []); // an element set: no corners read from the other mesh either
+  assert.deepEqual(nodesOf(plate, "Edge-Left", drawn), coupon.mesh.node_sets["Edge-Left"]); // a region the drawn mesh has is drawn from it
+  const count = coupon.mesh.nodes.length, scene = sceneInputs(plate, drawn);
+  for (const region of [...scene.held, ...scene.loads]) assert.ok(region.nodes.every((n) => n < count), region.label);
+  assert.deepEqual(scene.loads.map((l) => l.nodes), [[]]); // the pressure on the face: not drawn on a mesh with no such face
+  const pressed = proposedInputs(plate, { supports: [], loads: [{ region: "Face", kind: "pressure", dof: null, value: "2", unit: "MPa" }] }, drawn);
+  assert.deepEqual(pressed?.loads.map((l) => l.nodes), [[]]);
+  // the same mesh, its sets not written with the results: the preview's sets still stand
+  assert.deepEqual(nodesOf(plate, "Edge-Left", { quads: plate.mesh.quads }), plate.mesh.node_sets["Edge-Left"]);
+  assert.ok(nodesOf(plate, "Face", { quads: plate.mesh.quads }).length > 0);
+});
+
 test("what the assistant proposes on a plate is drawn with its directions, a pressure pressing down along -z (ADR-0110)", () => {
   const plate = fixture("studio-plate");
   const drawn = proposedInputs(plate, {
