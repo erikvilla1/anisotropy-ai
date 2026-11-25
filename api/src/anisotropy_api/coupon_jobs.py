@@ -51,6 +51,7 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from .processes import OWN_GROUP, run_tool, stop_tool
 from .records import (EVERYONE, claim_coupon, claim_job, coupon_owners, coupons_of, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
                       sweep_stale, update_job)
 from .storage import ObjectStore, content_type, input_key, job_output_key, owner_key, store_file, store_folder, store_job, sync
@@ -884,8 +885,8 @@ class CouponJobs:
                 return job
             job.stop_reason = reason
             process = job.process
-        if process is not None and process.poll() is None:
-            process.kill()
+        if process is not None:
+            stop_tool(process)  # uv, the tool and the solver it started (ADR-0051 amendment 1)
         return job
 
     def _solve(self, job: Job, source: str, options: list[str]) -> None:
@@ -906,8 +907,8 @@ class CouponJobs:
             try:
                 outcome, requeued = self._solve_steps(job, source, options)
             except Exception as exc:  # the store, the database or the disk failed around the tool: the job ends with the reason
-                if job.process is not None and job.process.poll() is None:
-                    job.process.kill()
+                if job.process is not None:
+                    stop_tool(job.process)
                 outcome, requeued = {"status": "stopped", "message": f"the solver could not run the job: {str(exc).splitlines()[0]}", "coupon": None,
                                      "attempt": None, "outputs": {}}, None
             if requeued is not None:
@@ -946,7 +947,7 @@ class CouponJobs:
         with job.log.open("wb") as log:
             # The tool starts outside the naming lock: its Python start-up and the setup check owe nothing to other solvers. It holds
             # before it names the coupon; the lock then covers one sync and the naming, up to the second hold (ADR-0056 amendment 6).
-            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email))
+            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email), **OWN_GROUP)
             with self.lock:
                 job.process = process
             first = self._first_hold(job, process)
@@ -978,7 +979,7 @@ class CouponJobs:
                     "outputs": {}}
         args, result = self._wing_args(job), job.folder / "outcome.json"
         with job.log.open("wb") as log:
-            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email))
+            process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env=self._tool_env(job.user_email), **OWN_GROUP)
             with self.lock:
                 job.process = process
             process.wait()
@@ -1103,8 +1104,7 @@ class CouponJobs:
         if self.studio is None:
             raise JobRefused("uv is not on PATH; the studio's questions run fea/tools/studio_tool.py through `uv run --project fea`")
         try:
-            return subprocess.run([*self.studio, *EVERY_TEST[every], *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FEA,
-                                  env=self._tool_env(user_email), timeout=timeout_s, check=False)
+            return run_tool([*self.studio, *EVERY_TEST[every], *args], cwd=FEA, env=self._tool_env(user_email), timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             raise CheckTimedOut(f"the studio tool did not answer in {timeout_s:g} s") from None
         except OSError as exc:

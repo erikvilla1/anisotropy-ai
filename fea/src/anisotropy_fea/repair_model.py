@@ -76,7 +76,8 @@ CUT_FACES = ("open", "bonded")
 CHECKED_CRITERIA = ("max_stress", "tsai_hill")  # the two the slice's plies are checked by; both need only the five ply strengths
 EQUILIBRIUM_TOLERANCE = 1e-4  # of the load: how far the forces at a station may be from adding up to it
 FAR_FIELD_TOLERANCE = 0.01  # of the far-field strain: how far the strain midway to the panel's end may be from it
-MATCH_TOLERANCE = 1e-6  # of the largest stress: how far CalculiX's stress may be from the engine's stiffness times CalculiX's strain
+MATCH_TOLERANCE = 1e-6  # of the largest product of a stiffness and a strain in a kind of part: how far CalculiX's stress may be from the engine's stiffness times CalculiX's strain
+MOST_ELEMENTS = 40_000  # ADR-0132 amendment 2: the most a solve from the page takes, as a coupon's mesh (ADR-0086 amendment 1); about half a minute of CalculiX
 REPORT = "repair-solve.json"
 STOPPED = 3  # the exit status when the solver could not solve the deck; a repair that is refused ends with repair_shape.REFUSED
 
@@ -242,13 +243,20 @@ def _deck(repair: Repair, mesh: SliceMesh, nodes: np.ndarray, elements: np.ndarr
     return "\n".join(out) + "\n"
 
 
+def _too_many(elements: int, most: int, at_least: bool = False) -> SliceModelError:
+    """The refusal of a slice larger than a solve takes, with what makes it large (ADR-0132 amendment 2)."""
+    return SliceModelError(f"The slice would have {'more than ' if at_least else ''}{elements:,} elements, and a solve takes at most {most:,}. Its "
+                           "elements are an eighth of a step long over half the panel's length: lengthen the steps or shorten the panel")
+
+
 def build_slice_model(repair: Repair, load_n_per_m: float, *, element_size_m: float | None = None, fine_m: float | None = None,
-                      hold: str = "bottom", cut_faces: str = "open") -> SliceModel:
+                      hold: str = "bottom", cut_faces: str = "open", most_elements: int | None = None) -> SliceModel:
     """The model of a repair's slice under a load per unit width (N/m, tension positive). `element_size_m` is the longest
     element along the slice (an eighth of the step length unless said) and `fine_m` the length of the elements beside every
     edge (an eighth of the bondline's thickness unless said). The adhesive on the cut faces carries nothing (`cut_faces =
     "open"`) or is bonded. Refused when the repair lacks what a solve needs: the adhesive's Poisson's ratio, a material's
-    constants through the thickness, a load."""
+    constants through the thickness, a load. With `most_elements`, refused too when the slice has more elements than that, a
+    slice far larger before it is meshed: a solve passes the limit, a file written for another program does not."""
     if hold not in HOLDS:
         raise SliceModelError(f"hold must be one of {', '.join(HOLDS)}, got {hold!r}")
     if cut_faces not in CUT_FACES:
@@ -259,9 +267,16 @@ def build_slice_model(repair: Repair, load_n_per_m: float, *, element_size_m: fl
         far = far_field(repair, float(load_n_per_m))
         if fine_m is None:
             fine_m = repair.adhesive.thickness_m / FINE_PER_BONDLINE
+        if most_elements is not None:  # no element along the slice is longer than the element size, so it has at least this many columns
+            longest = repair.step_length_m / 8 if element_size_m is None else element_size_m
+            columns = repair.panel_length_m / 2 / longest if isinstance(longest, (int, float)) and longest > 0 else 0
+            if columns > most_elements:
+                raise _too_many(math.floor(columns), most_elements, at_least=True)
         mesh = slice_mesh(repair, element_size_m, fine_m=fine_m, adhesive_layers=ADHESIVE_LAYERS)
         if cut_faces == "open":
             mesh = _without_cut_faces(repair, mesh)
+        if most_elements is not None and len(mesh.quads) > most_elements:
+            raise _too_many(len(mesh.quads), most_elements)
         stiffness = tuple(region_stiffness(repair, part) for part in mesh.regions)
     except (RepairError, ShapeError) as error:
         raise SliceModelError(str(error)) from error
@@ -295,14 +310,24 @@ def read_results(model: SliceModel, dat_text: str, seconds: float = 0.0, equatio
 def matched_results(model: SliceModel, strain: np.ndarray, stress: np.ndarray, seconds: float = 0.0, equations: int | None = None,
                     solver: str | None = None, *, tolerance: float = MATCH_TOLERANCE, program: str = "CalculiX") -> SliceResults:
     """A program's element means as the slice's results, refused when its stress is not the engine's stiffness times its own
-    strain within `tolerance` of the largest stress. `strain` and `stress` are in SI, one row for each element, as
-    `SliceResults` holds them."""
+    strain within `tolerance`. `strain` and `stress` are in SI, one row for each element, as `SliceResults` holds them.
+
+    Each kind of part (the laminate, the patch, the cover plies, the adhesive) is measured against its own largest product of
+    a stiffness and a strain, the terms a stress is the sum of, not all of them against the model's largest stress (ADR-0132
+    amendment 2). For a ply the two are alike. In an adhesive that is nearly incompressible the terms are hundreds of times
+    the stress they add up to, so the last digit a program prints of a strain moves the stress by more than the tolerance;
+    measured against the largest stress, a right solve of such an adhesive was refused."""
     if strain.shape != (len(model.elements), 3) or stress.shape != (len(model.elements), 4) or not (np.isfinite(strain).all() and np.isfinite(stress).all()):
         raise SliceModelError(f"{program} did not give every element's three strains and four stresses")
-    ours = _stress_in_slice_axes(model, strain)
-    off = float(np.max(np.abs(ours[:, [0, 1, 2, 4]] - stress))) / float(np.max(np.abs(stress)))
+    gap = np.abs(_stress_in_slice_axes(model, strain)[:, [0, 1, 2, 4]] - stress)
+    terms = _stress_in_slice_axes(model, strain, absolute=True)[:, [0, 1, 2, 4]]
+    kinds = np.array([part.kind for part in model.mesh.regions])[model.mesh.region]
+    off = 0.0
+    for kind in sorted(set(kinds)):
+        largest_gap, largest_term = float(np.max(gap[kinds == kind])), float(np.max(terms[kinds == kind]))
+        off = max(off, largest_gap / largest_term if largest_term > 0 else (0.0 if largest_gap == 0 else math.inf))
     if not off < tolerance:
-        raise SliceModelError(f"{program}'s stresses are not the engine's stiffness times its strains (off by {off:.2e} of the largest stress)")
+        raise SliceModelError(f"{program}'s stresses are not the engine's stiffness times its strains (off by {off:.2e} of the largest term)")
     return SliceResults(strain, stress, float(seconds), equations, solver)
 
 
@@ -314,13 +339,14 @@ def _strain_in_slice_axes(model: SliceModel, strain: np.ndarray) -> np.ndarray:
     return full
 
 
-def _stress_in_slice_axes(model: SliceModel, strain: np.ndarray) -> np.ndarray:
-    """Every element's six stresses in the slice's axes (Pa), by the engine's stiffness of its rectangle."""
+def _stress_in_slice_axes(model: SliceModel, strain: np.ndarray, absolute: bool = False) -> np.ndarray:
+    """Every element's six stresses in the slice's axes (Pa), by the engine's stiffness of its rectangle. With `absolute`, the
+    sum of the sizes of the terms each stress adds up, which is what rounding a strain is measured against."""
     full = _strain_in_slice_axes(model, strain)
     stress = np.zeros_like(full)
     for index, matrix in enumerate(model.stiffness):
         rows = model.mesh.region == index
-        stress[rows] = full[rows] @ matrix.T
+        stress[rows] = np.abs(full[rows]) @ np.abs(matrix).T if absolute else full[rows] @ matrix.T
     return stress
 
 
@@ -681,7 +707,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SliceModelError("The file states no load ([applied] load), so the slice is not solved")
         started = time.monotonic()
         model = build_slice_model(repair, load, cut_faces=args.cut_faces, element_size_m=None if args.size is None else args.size * MM,
-                                  fine_m=None if args.fine is None else args.fine * MM)
+                                  fine_m=None if args.fine is None else args.fine * MM, most_elements=MOST_ELEMENTS)
         try:
             results = run_slice_model(model, args.out, threads=args.threads)
         except SliceModelError as error:  # the solver, not the repair: its words go to stderr, and the status says which it was

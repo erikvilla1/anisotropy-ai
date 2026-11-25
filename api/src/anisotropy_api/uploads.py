@@ -30,6 +30,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from .coupon_jobs import FEA, REPO, CouponJobs, Job, repository_path
+from .processes import run_tool
 from .storage import ObjectStore
 
 TOOL = FEA / "tools" / "abaqus_upload.py"
@@ -151,8 +152,7 @@ class Uploads:
             raise ToolFailed("uv is not on PATH; a bundle is judged by fea/tools/abaqus_upload.py through `uv run --project fea`")
         env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
         try:
-            done = subprocess.run([*command, *args, "--json", str(answer)], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                  cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"}, timeout=timeout_s, check=False)
+            done = run_tool([*command, *args, "--json", str(answer)], cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"}, timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             raise ToolFailed(f"the bundle's command did not answer in {timeout_s:g} s") from None
         except OSError as exc:
@@ -178,8 +178,8 @@ class Uploads:
             fresh = Path(folder) / release["name"]
             env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
             try:
-                done = subprocess.run([*self.command, "connector", "--out", str(fresh)], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                      cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"}, timeout=CHECK_TIMEOUT_S, check=False)
+                done = run_tool([*self.command, "connector", "--out", str(fresh)], cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"},
+                                timeout_s=CHECK_TIMEOUT_S)
             except (subprocess.TimeoutExpired, OSError) as exc:
                 raise ToolFailed(f"the connector's zip could not be written: {exc}") from exc
             if done.returncode != 0 or not fresh.is_file():
