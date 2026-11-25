@@ -13,6 +13,7 @@ import { workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
 import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
+import { ownWords, plateFromCoupon, readPlateEdit } from "@/lib/plate-edits";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, extremeWords, questionFrom, RESULT_COLUMNS,
   resultOffer, resultUnit, thresholdVerdict, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
@@ -44,7 +45,7 @@ import { resultsOnPage } from "./use-imported-model";
 import { runWhen } from "@/lib/run-history";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
-import { tensionValues } from "@/lib/tension-screen";
+import { tensionReady, valuesInUse, workspaceValues } from "@/lib/tension-screen";
 import { ANALYSIS_UNAVAILABLE, checkText, customerText, importProblemWords, runHeadline, runProblem, setWords, stepOfStage, verificationOf } from "@/lib/studio-copy";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
@@ -168,8 +169,8 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
   // a plate goes with its supports and loads, every row sent, on the full form and on the model tree alike (ADR-0089 amendment 7)
-  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current && rows.test !== PLATE_TEST ? tensionValues(rows)
-    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined));
+  // on the tree the package chooses what a plate's engineer is not asked for (amendment 8); the full form is asked for every row
+  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => workspaceValues(rows, lists, !simpleRef.current);
   /** Whether a plate's regions are offered to a message: every test is, or a plate is, and the coupon is one. */
   const platesRef = useRef(plates);
   platesRef.current = plates;
@@ -679,9 +680,10 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const onPlate = formRef.current.test === PLATE_TEST && !shown.readOnly;
     const note = shown.imported ? "They are the file’s own, so nothing is changed by talking."
       : shown.past ? "A past run is shown without them. Choose “Use these inputs” to see them."
-      : !applied ? "They are drawn on the model and listed under it once the setup is checked."
       : onPlate ? "Add one by naming a region, for example “fix the left edge” or “10 kN tension on the right edge”."
-      : `A coupon’s are set by its test, as in the test machine. Change the load under ${allTests ? "Boundary conditions and loads" : "Loads"}${allTests ? "; for boundary conditions of your own, choose Plate" : plates ? "; for boundary conditions of your own, choose Plate under Test" : ""}.`;
+      : `${applied ? "The test sets these, as the test machine does." : "The test sets them: they are drawn on the model and listed under it once the setup is checked."} ${
+        allTests ? "For boundary conditions of your own, choose Plate." : plates
+          ? "For one of your own, name the edge or the face: “fix the left edge”, “0.1 MPa on the face”." : "Change the load under Loads."}`;
     add({ role: "user", text }, { role: "assistant", kind: "text", title: title ?? (loads ? "Loads" : "Boundary conditions"), body: (
       <div data-testid="chat-applied" data-term={term.id}>
         {lines.length ? <ul className="chat-understood">{lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}
@@ -725,6 +727,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const routed = routeMessage(text, {
       form: formRef.current, readOnly: shown.readOnly, results: !!shown.fields, facts: !!factsOf(shown.explanation), api: !!apiBaseUrl,
       modelReads: !!model?.proposes, onPlate: onPlateNow, ready: checked?.state === "ready", about: about.current, thread: thread.current, sections: !!onSwitch,
+      plates: allTests || plates, plate: plateRef.current, here: here().map((r) => r.name),
       step: current && current.role === "assistant" && current.kind === "ask" ? current.step : null,
     });
     switch (routed.route) {
@@ -745,6 +748,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       case "element": answerElement(text, routed.element, shown.fields!); return;
       case "read-only": void readOfImported(text); return;
       case "ready": add({ role: "user", text }); void check(formRef.current, undefined, true); return;
+      case "plate-edit": void editPlateBy(text); return;
       case "setup-fixed": answerSetup(text, routed.term); return;
       case "run": void run(); return;
       case "check": add({ role: "user", text }); void check(formRef.current); return;
@@ -834,6 +838,47 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     else reveal(Object.keys(rows));
     if (onPlate && next.test === PLATE_TEST) void check(next, lists);
     else proceed(next);
+  }
+
+  /** A boundary condition or a load on an edge or a face, said so the page's own patterns read all of it (ADR-0101 amendment 4): applied
+   * at once, with no model to wait for and nothing to tick, the tab that holds it opened, and the setup checked so the model shows it. On
+   * a tension coupon the coupon is first carried over to boundary conditions of the engineer's own (ADR-0089 amendment 8): the test's
+   * grips and its pull become the first entries, read from the model the setup built (checked here when it was not yet), and the card
+   * says the model no longer follows the test standard. */
+  async function editPlateBy(text: string) {
+    add({ role: "user", text });
+    let rows = formRef.current, lists = plateRef.current;
+    let carried: string[] | null = null;
+    if (rows.test !== PLATE_TEST) {
+      let built = checked?.preview ?? null, chosen = valuesInUse(checked?.checklist ?? null);
+      if (!built && apiBaseUrl && tensionReady(rows)) { // the coupon as the test builds it: its size, what each grip holds, the pull
+        setReading(true);
+        try { const answer = await runner.check(valuesOf(rows)); built = answer.preview ?? null; chosen = valuesInUse(answer.checklist); }
+        catch { /* carried over from the rows alone */ } finally { setReading(false); }
+      }
+      const over = plateFromCoupon(rows, built, chosen);
+      rows = over.form; lists = over.lists; carried = over.carried;
+    }
+    const edit = readPlateEdit(text, rows, lists, here().map((r) => r.name));
+    if (!edit || !edit.done.length) { // read, and nothing to change: said with why, and the setup is left as it was
+      add({ role: "assistant", kind: "text", tone: "problem", title: "Not applied",
+        body: <ul className="chat-understood" data-testid="chat-plate-notes">{(edit?.notes.length ? edit.notes : ["Name the edge or the face and what holds or loads it."]).map((n) => <li key={n}>{n}</li>)}</ul> });
+      return;
+    }
+    add({ role: "assistant", kind: "text", title: "Got it", body: (
+      <div data-testid="chat-plate-edit">
+        <ul className="chat-understood">{edit.done.map((line) => <li key={line}><Check size={13} /> {line}</li>)}</ul>
+        {edit.notes.length ? <ul className="chat-understood" data-testid="chat-plate-notes">{edit.notes.map((n) => <li key={n}>{n}</li>)}</ul> : null}
+        {carried ? <p className="chat-note" data-testid="chat-plate-carried">{ownWords(carried)}</p> : null}
+      </div>
+    ) });
+    versions.attribute("assistant", text);
+    if (rows !== formRef.current) setForm(rows);
+    setPlate(edit.lists);
+    setProposed(null);
+    clearRun();
+    revealTab(allTests ? "loads" : edit.tab);
+    void check(rows, edit.lists);
   }
 
   /** The plate's own regions the clicked element belongs to, on the mesh the page shows: what "here" means in a message (ADR-0101). */
@@ -1364,8 +1409,9 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
-  const onPlateNow = (allTests || plates) && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
-  const hereNow = onPlateNow ? here() : [];
+  const plateNow = (allTests || plates) && form.test === PLATE_TEST; // the page reads a plain sentence itself (ADR-0101 amendment 4)
+  const onPlateNow = plateNow && !!model?.proposes; // looser words are read by a model only
+  const hereNow = plateNow ? here() : [];
   return (
     <section className="chat-pane" aria-label="FEA assistant" data-testid="coupon-chat">
       <div className="chat-pane-top">
@@ -1382,12 +1428,12 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
         {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
-      {onPlateNow && picked !== null && hereNow.length ? (
+      {plateNow && picked !== null && hereNow.length ? (
         <p className="chat-note chat-here" data-testid="chat-here">“Here” is the element you clicked: {hereNow.map((r) => r.name).join(", ")}.</p>
       ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : shown.past ? "Ask about this run’s results, e.g. “which ply fails first?”" : onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
+          placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : shown.past ? "Ask about this run’s results, e.g. “which ply fails first?”" : plateNow ? "Hold or load a region, e.g. “fix the left edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
           <span className="chat-note">Enter to send · “check” · “run” · “start over”</span>

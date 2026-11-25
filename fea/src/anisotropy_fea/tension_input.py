@@ -26,6 +26,9 @@ from .standards.profile import Subject
 from .units import UNIT_LABEL, UNIT_SYSTEMS, from_si
 
 INPUT = "tension"  # the values file's "input" word for the tension screen
+PLATE_INPUT = "plate"  # the same for a plate set up on the model tree: its size and what holds and loads it are the engineer's (ADR-0089 amendment 8)
+PLATE_TEST = "plate"
+PLATE_LONG, PLATE_SHORT, PLATE_MOST = 50, 12, 20_000  # the element size chosen for a plate: elements along its longer side, across its shorter, and at most
 TEST = "unnotched tension"
 UNITS = "mm-MPa"
 D3039 = astm_d3039.DESIGNATION
@@ -214,4 +217,63 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     return out, tuple(built)
 
 
-__all__ = ["Built", "INPUT", "complete_tension", "Transverse", "d3039_class", "transverse_estimates"]
+def _plate_element_size(length: Any, width: Any) -> float | None:
+    """The element size chosen for a plate, in the plate's own units, to two significant figures: PLATE_LONG elements along the longer
+    side or PLATE_SHORT across the shorter, whichever is finer, and coarser where that would pass PLATE_MOST elements. None when the size
+    is not two positive numbers (the check names the row)."""
+    try:
+        long, short = max(float(length), float(width)), min(float(length), float(width))
+    except (TypeError, ValueError):
+        return None
+    if not short > 0.0:
+        return None
+    size = min(long / PLATE_LONG, short / PLATE_SHORT)
+    size = max(size, (long * short / PLATE_MOST) ** 0.5)
+    return float(f"{size:.2g}")
+
+
+def complete_plate(data: dict, today: date | None = None) -> tuple[dict, tuple[Built, ...]]:
+    """The values of a plate set up on the model tree with the rows the engineer is not asked for chosen, and the list of those choices
+    (ADR-0089 amendment 8). The engineer gives the material, the layup, the size and what holds and loads it; chosen here, each with its
+    reason, are who set it up and when, where the size comes from, the element size, G13 and G23 for a library material, and the
+    criteria. A row the engineer gave is never changed, and nothing about the supports or the loads is chosen: a plate with none is
+    refused by the check, by name."""
+    out = dict(data)
+    built: list[Built] = []
+    stated = str(out.get("units") or "").strip()
+    units = stated if stated in UNIT_SYSTEMS else UNITS
+
+    def choose(key: str, value: Any, reason: str) -> None:
+        if _blank(out.get(key)):
+            out[key] = value
+            built.append(Built(key, value, reason))
+
+    choose("test", PLATE_TEST, "a plate, held and loaded where the engineer says")
+    choose("units", UNITS, "results and files use these units")
+    choose("filled_by", "workspace", "the plate was set up in the workspace")
+    choose("date", (today or date.today()).isoformat(), "the day the plate was set up")
+    choose("size_from", "the dimensions you gave", "a plate follows no test standard: its size is the engineer's")
+    size = _plate_element_size(out.get("length"), out.get("width"))
+    if size is not None:
+        choose("element_size", size, f"about {PLATE_LONG} elements along the longer side or {PLATE_SHORT} across the shorter, whichever is finer, "
+               f"and at most about {PLATE_MOST:,} elements")
+    record = _record(out)
+    bends = "it matters where the plate bends and is thick for its span"
+    if record is not None:
+        estimate = transverse_estimates(str(out["library"]).strip())
+        tape = str(record.get("architecture") or "").lower().startswith("unidirectional")  # as `transverse_estimates` tells a tape
+        choose("G13", _in_units(estimate.G13, "stress", units), f"not in the library: G13 = G12, a usual estimate; {bends}")
+        choose("G23", _in_units(estimate.G23, "stress", units), ("not in the library: G23 = E2 / 3, a usual estimate for a tape; " if tape
+               else "not in the library, and no estimate holds for a fabric: taken equal to G12 so the model builds; ") + bends)
+    elif not _blank(out.get("own_G12")):
+        choose("G13", out["own_G12"], f"not given: G13 = G12, a usual estimate; {bends}")
+        choose("G23", out["own_G12"], f"not given: taken equal to G12 so the model builds; {bends}")
+    strengths = ("own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6")
+    if record is None and any(_blank(out.get(key)) for key in strengths):
+        choose("criteria", "none", "not all five strengths are given, so no first-ply failure criterion can be judged")
+    else:
+        choose("criteria", "all", "all criteria the material's strengths allow")
+    return out, tuple(built)
+
+
+__all__ = ["Built", "INPUT", "PLATE_INPUT", "complete_plate", "complete_tension", "Transverse", "d3039_class", "transverse_estimates"]

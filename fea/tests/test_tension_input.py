@@ -10,14 +10,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from anisotropy_fea import paths
+from anisotropy_fea import enabled, paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.equivalence import deck_equivalence
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.intake import FIELDS, FORM_VERSION, IntakeError, read_values
 from anisotropy_fea.spec import load_spec
-from anisotropy_fea.tension_input import complete_tension, d3039_class, transverse_estimates
+from anisotropy_fea.tension_input import complete_plate, complete_tension, d3039_class, transverse_estimates
 from anisotropy_fea.write_abaqus import write_abaqus
 
 from test_checks import TOOLS
@@ -179,3 +179,81 @@ def test_a_coupon_stated_in_inches_is_completed_in_inches(tmp_path):
     # 1.0 x 10 in against 25 x 250 mm, both at 2 mm: a row or two more across the wider coupon (1,764 elements against 1,488), not a
     # mesh 25 times finer each way
     assert mm_model.mesh.element_count < model.mesh.element_count < 1.25 * mm_model.mesh.element_count
+
+
+# ------------------------------------------------- a plate set up on the model tree (ADR-0089 amendment 8): the same completion, a plate's rows
+
+PLATE = {"test": "plate", **REFERENCE, "length": 250, "width": 25, "tab_length": 56}
+GRIPS = {"supports": [{"region": "Tab-Bottom", "dofs": [1, 2, 3, 4, 5, 6]}, {"region": "Tab-Top", "dofs": [1, 3, 4, 5, 6]},
+                      {"region": "Tab-Top", "dofs": [2], "value": 1.0}], "loads": []}
+
+
+def test_a_plate_on_the_model_tree_is_given_the_rows_its_engineer_is_not_asked_for_each_with_its_reason():
+    values, built = complete_plate(PLATE, DAY)
+    chosen = {b.row: b.value for b in built}
+    assert chosen == {"units": "mm-MPa", "filled_by": "workspace", "date": "2026-11-11", "size_from": "the dimensions you gave", "element_size": 2.1,
+                      "G13": transverse_estimates("im7-8552").G13, "G23": transverse_estimates("im7-8552").G23, "criteria": "all"}
+    assert all(values[key] == PLATE[key] for key in PLATE)  # no given row is changed
+    # the estimates are said for a plate: they matter where it bends, which a tension coupon's in-plane pull never does
+    assert all("where the plate bends" in b.reason and "in-plane pull" not in b.reason for b in built if b.row in ("G13", "G23"))
+    banned = ("abaqus", "calculix", "prepomax", "spooles", ".toml", ".py", "ours", "our engine", "the team", "studio's")
+    assert not [(b.row, word) for b in built for word in banned if word in b.reason.lower()]
+    given, built = complete_plate({**PLATE, "element_size": 5, "G13": 5200, "filled_by": "an engineer"}, DAY)
+    assert (given["element_size"], given["G13"], given["filled_by"]) == (5, 5200, "an engineer") and not {"element_size", "G13", "filled_by"} & {b.row for b in built}
+    assert "element_size" not in complete_plate({"test": "plate", **REFERENCE}, DAY)[0]  # no size yet: the check asks for it by row
+
+
+@pytest.mark.parametrize("length, width, size, elements", [(100, 100, 2.0, 2500), (250, 25, 2.1, 1500), (1000, 1000, 20.0, 2500), (2000, 10, 1.0, 20000),
+                                                           (5000, 5, 1.1, 20000)])
+def test_a_plates_element_size_follows_its_size_and_never_passes_the_most_elements(length, width, size, elements):
+    values, _ = complete_plate({"test": "plate", **REFERENCE, "length": length, "width": width}, DAY)
+    assert values["element_size"] == size
+    assert length * width / size**2 <= elements * 1.2
+
+
+def test_a_tension_coupons_grips_written_as_a_plates_boundary_conditions_build_the_same_supports(tmp_path):
+    """What the page carries over when an engineer asks for boundary conditions of their own on a tension coupon: the bottom tab fixed, the
+    top tab held but along the coupon and moved by the pull. The model holds the same nodes in the same directions as the coupon's grips
+    (that it then gives the coupon's answer to 1e-12 on one mesh is `test_plate_kind`'s)."""
+    coupon, model, _ = setup_checklist(read_values(values_file(tmp_path / "coupon", REFERENCE)), tmp_path / "none", **TOOLS)
+    assert coupon.state == "ready", coupon.problems
+    path = tmp_path / "plate" / "values.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"form_version": FORM_VERSION, "input": "plate", **PLATE, "element_size": 2, **GRIPS}), encoding="utf-8")
+    with enabled.every_test(True):  # as the API asks for a plate's call (ADR-0089 amendment 7)
+        checklist, plate, _ = setup_checklist(read_values(path), tmp_path / "none", **TOOLS)
+    assert checklist.state == "ready", checklist.problems
+    assert {b["row"] for b in checklist.as_dict()["built"]} == {"units", "filled_by", "date", "size_from", "G13", "G23", "criteria"}
+    held = lambda m: sorted((b.target.replace("Tab-", "Grip-"), dof, round(b.value, 12))  # noqa: E731
+                            for b in m.boundaries for dof in range(b.dof_first, (b.dof_last or b.dof_first) + 1))
+    assert held(plate) == held(model) and len(held(plate)) == 12  # six directions at each end, the top one's along the coupon moved by the pull
+    for end in ("Bottom", "Top"):
+        ours = {tuple(np.round(plate.mesh.xy[n], 9)) for n in plate.node_sets[f"Tab-{end}"]}
+        theirs = {tuple(np.round(model.mesh.xy[n], 9)) for n in model.node_sets[f"Grip-{end}"]}
+        assert ours == theirs  # every node of each tab, as the coupon's grips hold
+
+
+def test_a_values_file_may_name_the_plate_screen_and_no_other(tmp_path):
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps({"form_version": FORM_VERSION, "input": "wing", **REFERENCE}), encoding="utf-8")
+    with pytest.raises(IntakeError, match="a plate on the model tree 'plate'"):
+        read_values(path)
+
+
+def test_two_supports_that_give_one_direction_of_the_same_nodes_two_values_are_refused_by_name(tmp_path):
+    """An edge held where its tab is moved: the check names both regions, the direction and the two values, and nothing is solved. Without
+    it the setup read as ready and the solve then stopped on the first such node of the deck."""
+    path = tmp_path / "values.json"
+    clash = {**GRIPS, "supports": [*GRIPS["supports"], {"region": "Edge-Top", "dofs": [1, 2, 3]}]}
+    path.write_text(json.dumps({"form_version": FORM_VERSION, "input": "plate", **PLATE, **clash}), encoding="utf-8")
+    with enabled.every_test(True):
+        checklist, _, _ = setup_checklist(read_values(path), tmp_path / "none", **TOOLS)
+    assert checklist.state == "blocked"
+    item = next(i for i in checklist.items if i.id == "constraints")
+    assert item.state == "fail" and item.rows == ("Supports",)
+    assert item.message.startswith("Tab-Top and Edge-Top share ") and "give y two values there, 1 mm and 0 mm; free y on one of them" in item.message
+    # the same direction held at zero twice is no clash: an edge lies in its tab
+    same = {**GRIPS, "supports": [*GRIPS["supports"], {"region": "Edge-Bottom", "dofs": [1, 2, 3, 4, 5, 6]}]}
+    path.write_text(json.dumps({"form_version": FORM_VERSION, "input": "plate", **PLATE, **same}), encoding="utf-8")
+    with enabled.every_test(True):
+        assert setup_checklist(read_values(path), tmp_path / "none", **TOOLS)[0].state == "ready"
