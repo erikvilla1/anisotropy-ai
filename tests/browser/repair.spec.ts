@@ -7,6 +7,8 @@ import { bannedIn } from "../../lib/studio-copy";
  * page sends is recorded, so each test can say what was asked. */
 const read = (name: string) => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf-8"));
 const ANSWER = read("example-answer"), EXTERNAL = read("external-answer"), SOLVE = read("example-solve");
+// the bond followed until it lets go (ADR-0140): the solver's own run of the flush example
+const BOND = read("example-bond");
 // the chat's (ADR-0136): the engine's previews of two changes, its sweep of the step length to a load, and what the solved slice of
 // that sweep's pick says of it, as the API puts the two together
 const STEP_CHANGE = read("example-step-change"), LENGTH_CHANGE = read("example-change"), SWEEP = { ...read("example-sweep"), check: read("example-sweep-check") };
@@ -24,6 +26,9 @@ type Sent = { repair?: Record<string, Record<string, unknown> & unknown>; toml?:
 type Reply = { status: number; body: unknown };
 const solves: Sent[] = []; // what "Solve the slice" sent, in the test that runs
 const shapes: Sent[] = []; // what Download STEP sent
+const bonds: Sent[] = []; // what "Follow the bond" sent
+/** What following the bond answers in a test: by default the solver's run of the flush example. */
+const follow: { bond(body: Sent): Reply } = { bond: () => ({ status: 200, body: BOND }) };
 type Asked = Sent & { change?: Record<string, unknown>; sweep?: Record<string, unknown>; question?: string; about?: string };
 const changes: Asked[] = []; // what the chat sent for a preview
 const sweeps: Asked[] = []; // what the chat sent for a sweep
@@ -39,6 +44,8 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
   const sent: Sent[] = [];
   solves.length = 0;
   shapes.length = 0;
+  bonds.length = 0;
+  follow.bond = () => ({ status: 200, body: BOND });
   changes.length = 0;
   sweeps.length = 0;
   searched.length = 0;
@@ -53,6 +60,7 @@ async function playRepairs(page: Page, answer: (body: Sent) => Reply = (body) =>
     if (path.endsWith("/v1/repairs/analyze")) { sent.push(body); return reply(answer(body)); }
     if (path.endsWith("/v1/repairs/solve")) { solves.push(body); return reply(solve(body)); }
     if (path.endsWith("/v1/repairs/shape")) { shapes.push(body); return reply({ status: 200, body: SHAPE }); }
+    if (path.endsWith("/v1/repairs/bond")) { bonds.push(body); return reply(follow.bond(body)); }
     if (path.endsWith("/v1/repairs/changes")) { changes.push(body); return reply(chat.change(body)); }
     if (path.endsWith("/v1/repairs/sweeps")) { sweeps.push(body); return reply(chat.sweep(body)); }
     if (path.endsWith("/v1/workspace/theory-sections")) { searched.push(body); return reply({ status: 200, body: { run_id: null, sections: chat.sections } }); }
@@ -98,7 +106,7 @@ test("a patch repair is picked at the FEA start, opens on the example and shows 
   await expect(page.getByTestId("repair-lap").locator("tr[data-peak=true] th")).toHaveText("Ledge of step 1");
   await expect(page.getByTestId("repair-lap")).not.toContainText("× 10"); // a zero of the arithmetic prints as 0
   await expect(page.getByTestId("repair-sizes")).toContainText("Plies removed, plies left");
-  await expect(page.getByTestId("repair-limits").locator("li")).toHaveCount(5);
+  await expect(page.getByTestId("repair-limits").locator("li")).toHaveCount(6);
 });
 
 test("the words for a patch repair open its page from the FEA start, and a question about one offers it", async ({ page }) => {
@@ -206,6 +214,127 @@ test("a solve that cannot be made says so and keeps the page as it was, and a re
   await expect(page.getByTestId("repair-slice-short")).toHaveText("The solve of the slice still needs the adhesive's Poisson's ratio.");
 });
 
+test("the bond is followed until it lets go on request: the load in this model joins the card, the path and the bond's state the details and the report, never as a strength (ADR-0140)", async ({ page }) => {
+  const sent = await playRepairs(page);
+  await page.goto("/workspace/repair");
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  await expect(page.getByTestId("repair-bond-short")).toHaveCount(0); // nothing is said of a run that was not made
+  await expect(page.getByTestId("repair-bond-needs")).toHaveCount(0);
+  await page.getByTestId("repair-bond-here").click();
+  await expect(page.getByTestId("repair-bond-short")).toHaveText("Bond followed: it first softens at 184 N/mm and lets go at 1,340 N/mm in this model. Not the repair's strength.");
+  expect(bonds).toHaveLength(1);
+  expect(bonds[0].repair).toEqual(ANSWER.repair); // the description itself, and nothing else: the load is what the run finds
+  expect(Object.keys(bonds[0])).toEqual(["repair"]);
+  await expect(page.getByTestId("repair-bond-here")).toHaveCount(0); // followed for this repair: nothing to follow again
+  await expect(page.getByTestId("repair-bond-status")).toContainText("The bond lets go at 1,340 N/mm in this model.");
+  await page.getByTestId("details-toggle").click();
+  const section = page.getByTestId("repair-bond-section");
+  await expect(section.getByRole("heading", { level: 3 })).toHaveText("The bond followed until it lets go");
+  await expect(page.getByTestId("repair-bond-model")).toContainText("Followed as 3,045 eight-node plane elements held flat, with the bond as 319 pairs of points along its 62.1 mm");
+  const lines = page.getByTestId("repair-bond-lines");
+  await expect(lines).toContainText("The bond first softens at 184 N/mm, 37.38 mm from the middle (the adhesive on the ledge of step 2)");
+  await expect(lines).toContainText("In this model the bond lets go at 1,340 N/mm: the load grows no further, and falls as the bond parts.");
+  await expect(lines).toContainText("At that load 18.65 mm of the bond's 62.1 mm is softening and none has parted.");
+  await expect(page.getByTestId("repair-bond-not")).toHaveText("Not the repair's strength: the plies are not checked for damage, and the load follows the fracture energies stated.");
+  await expect(page.getByTestId("repair-bond-table").locator("tbody tr")).toHaveCount(BOND.report.let_go.lines.length);
+  await expect(page.getByTestId("repair-bond-table").locator("tbody tr").first()).toContainText("Adhesive on the floor");
+  // the path: every settled state as a point of one line, the two loads marked and named
+  const curve = page.getByTestId("repair-load-curve");
+  await expect(curve.locator("polyline[data-series=load]")).toHaveCount(1);
+  expect((await curve.locator("polyline[data-series=load]").getAttribute("points"))!.trim().split(" ")).toHaveLength(BOND.report.curve.load.length);
+  await expect(curve.locator("[data-mark=onset] text")).toHaveText("first softens, 184 N/mm");
+  await expect(curve.locator("[data-mark=let-go] text")).toHaveText("lets go, 1,340 N/mm");
+  await curve.hover();
+  await expect(page.getByTestId("repair-load-curve-key")).toContainText(/N\/mm with [\d.]+ mm of the bond past its strength; the panel's end has moved [\d.]+ mm/);
+  // the adhesive's shear along the bond, as it first softens and as it lets go
+  const spread = page.getByTestId("repair-let-go-chart");
+  expect(await spread.locator("polyline[data-series=let-go]").count()).toBe(BOND.report.let_go.lines.length);
+  expect(await spread.locator("polyline[data-series=onset]").count()).toBe(BOND.report.onset.lines.length);
+  // the slice was not solved, so nothing is said of the plies beside the bond's load
+  await expect(page.getByTestId("repair-bond-ply-before")).toHaveCount(0);
+  expect(bannedIn(await section.innerText())).toEqual([]); // no tool and no machinery named (ADR-0091)
+  await page.getByTestId("details-toggle").click();
+  // the chat answers from the run, and still gives no verdict
+  const fell = await ask(page, "when does the bond let go?");
+  await expect(fell.getByTestId("repair-chat-heading")).toHaveText("The bond lets go at 1,340 N/mm in this model");
+  await expect(fell).toContainText("Not the repair's strength");
+  const verdict = await ask(page, "is it strong enough?");
+  await expect(verdict.getByTestId("repair-chat-heading")).toHaveText("This page gives no strength or verdict");
+  await expect(verdict).toContainText("With the bond followed, it lets go at 1,340 N/mm in this model.");
+  // the report has it, as its own section, while it belongs to the repair
+  await page.goto("/workspace/repair/report");
+  await expect(page.getByTestId("repair-report")).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("repair-report-bond-line")).toHaveText("Bond followed: it first softens at 184 N/mm and lets go at 1,340 N/mm in this model. Not the repair's strength.");
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText(["Summary", "1. The repair as stated", "2. The repair as measured", "3. The bondline by hand", "4. The bond followed until it lets go", "5. What these numbers are not"]);
+  await expect(page.getByTestId("repair-report-bond").getByTestId("repair-load-curve")).toBeVisible();
+  await expect(page.getByTestId("repair-report-stated")).toContainText("Fracture energy, shear");
+  expect(bannedIn(await page.locator("main").innerText())).toEqual([]);
+  await page.getByTestId("repair-report-back").click();
+  // kept with the repair over a reload; a change makes it a run of the repair as it was
+  await expect(page.getByTestId("repair-bond-short")).toContainText("lets go at 1,340 N/mm in this model");
+  // with the slice solved too, the page says a ply reaches a strength in it before the bond lets go
+  await page.getByTestId("repair-solve-here").click();
+  await expect(page.getByTestId("repair-slice-short")).toContainText("Solved slice:");
+  await page.getByTestId("details-toggle").click();
+  await expect(page.getByTestId("repair-bond-ply-before")).toHaveText("Before that load, in the solved slice, laminate ply 6 (−45°) reaches a strength at 466.1 N/mm: from there the plies' damage, which this run leaves out, would change the answer.");
+  await page.getByTestId("details-toggle").click();
+  await page.getByTestId("repair-applied-load").fill("120");
+  await expect.poll(() => (sent.at(-1)?.repair?.applied as Record<string, unknown>).load).toBe(120);
+  await expect(page.getByTestId("repair-bond-short")).toHaveText("The bond was followed for the repair as it was. Follow it again for this one.");
+  await expect(page.getByTestId("repair-bond-here")).toHaveText("Follow the bond again");
+  const stale = await ask(page, "when does the bond let go?");
+  await expect(stale.getByTestId("repair-chat-heading")).toHaveText("The bond is not followed yet");
+  await stale.getByTestId("repair-chat-bond").click();
+  await expect.poll(() => bonds.length).toBe(2);
+  expect((bonds[1].repair?.applied as Record<string, unknown>).load).toBe(120);
+  await expect(page.getByTestId("repair-bond-short")).toContainText("Bond followed:");
+});
+
+test("a bond that cannot be followed says what it needs or why, and the chat starts a run by its words (ADR-0140)", async ({ page }) => {
+  const needs = [{ path: "adhesive.peel_energy", words: "the bond's fracture energy in peel" }];
+  await playRepairs(page, (body) => {
+    const adhesive = (body.repair?.adhesive ?? {}) as Record<string, unknown>;
+    return { status: 200, body: adhesive.peel_energy === undefined ? { ...ANSWER, repair: body.repair, bond_needs: needs } : ANSWER };
+  });
+  follow.bond = () => ({ status: 422, body: { detail: "The panel is too short for the far field: the strain at its end is not the laminate theory's" } });
+  await page.goto("/workspace/repair");
+  await page.getByTestId("repair-bond-here").click();
+  await expect(page.getByTestId("repair-bond-problem")).toHaveText("The bond's run: The panel is too short for the far field: the strain at its end is not the laminate theory's");
+  await expect(page.getByTestId("repair-bond-short")).toHaveCount(0);
+  // the fields are the repair file's: the two energies, in the load's unit
+  await page.locator("#panel-repair-adhesive > summary").click();
+  await expect(page.getByTestId("repair-adhesive-shear-energy")).toHaveValue("2");
+  await page.getByTestId("repair-adhesive-peel-energy").fill("");
+  await expect(page.getByTestId("repair-bond-needs")).toHaveText("To follow the bond until it lets go, the repair still needs the bond's fracture energy in peel.");
+  await expect(page.getByTestId("repair-bond-button")).toBeDisabled();
+  await expect(page.getByTestId("repair-bond-here")).toHaveCount(0);
+  const refused = await ask(page, "follow the bond");
+  await expect(refused.getByTestId("repair-chat-heading")).toHaveText("The bond cannot be followed yet");
+  await expect(refused).toContainText("It still needs the bond's fracture energy in peel.");
+  await page.getByTestId("repair-adhesive-peel-energy").fill("0.5");
+  await expect(page.getByTestId("repair-bond-button")).toBeEnabled(); // once the engine has read the repair again
+  await expect(page.getByTestId("repair-bond-needs")).toHaveCount(0);
+  follow.bond = () => ({ status: 200, body: BOND });
+  const started = await ask(page, "follow the bond until it lets go");
+  await expect(started.getByTestId("repair-chat-followed")).toContainText("The bond lets go at 1,340 N/mm in this model");
+  await expect(started.getByTestId("repair-chat-followed")).toContainText("Not the repair's strength");
+  // a question of the run is answered from it: where it starts, and set against the plies once the slice is solved
+  const where = await ask(page, "where does the bond soften first");
+  await expect(where.getByTestId("repair-chat-heading")).toHaveText("The bond first softens at 184 N/mm, 37.38 mm from the middle");
+  const alone = await ask(page, "does the bond fail before the plies?");
+  await expect(alone.getByTestId("repair-chat-heading")).toHaveText("The bond lets go at 1,340 N/mm in this model; the plies' loads are not worked here");
+  const energy = await ask(page, "set the peel fracture energy to 0.3 N/mm");
+  await expect(energy.getByTestId("repair-chat-heading")).toHaveText("Not a change the chat makes");
+  // a service that follows no bonds: the page offers no run
+  await page.unrouteAll({ behavior: "wait" });
+  const { bond_needs: _none, ...older } = ANSWER;
+  await playRepairs(page, () => ({ status: 200, body: older }));
+  await page.reload();
+  await expect(page.getByTestId("repair-headline")).toBeVisible();
+  await expect(page.getByTestId("repair-bond-button")).toHaveCount(0);
+  await expect(page.getByTestId("repair-bond-here")).toHaveCount(0);
+});
+
 test("the other kind of repair, a patch bonded on top, has its own steps and its own answer", async ({ page }) => {
   const sent = await playRepairs(page);
   await page.goto("/workspace/repair");
@@ -287,7 +416,8 @@ test("the report lays the repair out for paper: what is stated, the slice, the h
   await expect(report.getByTestId("repair-lap").locator("tbody tr")).toHaveCount(5);
   await expect(report.getByTestId("repair-bond-chart").locator("polyline[data-series=peel]").first()).toBeVisible();
   await expect(report.getByTestId("repair-plies").locator("tbody tr")).toHaveCount(6);
-  await expect(report.getByTestId("repair-limits").locator("li")).toHaveCount(5);
+  await expect(report.getByTestId("repair-limits").locator("li")).toHaveCount(6);
+  await expect(report.getByTestId("repair-report-bond")).toHaveCount(0); // the bond was not followed, so the report has no section for it
   await expect(report.getByTestId("repair-report-print")).toBeEnabled();
   // on paper: the page's own buttons and the site's header are not printed, and the sheet is white
   await report.emulateMedia({ media: "print" });

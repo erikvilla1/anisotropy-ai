@@ -496,6 +496,81 @@ and the three shear moduli are the three shear terms themselves. They are comput
 
 <!-- code: abaqus_file, engineering_constants, ansys_file, read_abaqus, read_ansys, compare_answers -->
 
+## 12. A repair's bond followed to failure (`repair_bond.py`)
+
+The slice of Section 11 is elastic, and stops where the adhesive first reaches a strength. Here the same slice is solved with a bond that softens and parts, along its whole load path, by a plane solver of this package (`bond_solver.py`; ADR-0140). The answer is the load at which the bond first softens and the load at which it lets go in this model. Every ply stays elastic, so neither is the repair's strength.
+
+### 12.1 The bond's law
+
+A point of the bond has an opening $`\delta_n`$, positive when its two faces part, and a slip $`\delta_s`$ along the bond. Six numbers make its law: a stiffness, a strength and a fracture energy in peel ($`K_n`$, $`\sigma_c`$, $`G_{Ic}`$) and in shear ($`K_s`$, $`\tau_c`$, $`G_{IIc}`$). One number, the damage $`d`$ from 0 to 1, lowers both stiffnesses:
+
+```math
+t_n = (1 - d)\,K_n\,\delta_n \quad (\delta_n > 0), \qquad t_n = K_n\,\delta_n \quad (\delta_n \le 0), \qquad t_s = (1 - d)\,K_s\,\delta_s
+```
+
+A point pressed together carries the pressure with its whole stiffness. With $`\langle\delta_n\rangle`$ the opening when positive and zero otherwise, the size of the movement is $`\delta = \sqrt{\langle\delta_n\rangle^2 + \delta_s^2}`$ and its direction $`c_n = \langle\delta_n\rangle/\delta`$, $`c_s = |\delta_s|/\delta`$. Along that direction the point starts to soften at $`\delta_0`$ and has parted at $`\delta_f`$:
+
+```math
+\delta_0 = \left[\left(\frac{K_n c_n}{\sigma_c}\right)^2 + \left(\frac{K_s c_s}{\tau_c}\right)^2\right]^{-1/2}, \qquad
+\delta_f = \frac{2}{\delta_0}\left[\frac{K_n c_n^2}{G_{Ic}} + \frac{K_s c_s^2}{G_{IIc}}\right]^{-1}
+```
+
+The first is the stresses, each over its strength and squared, adding to one. The second makes the energy spent along that direction, peel's share over $`G_{Ic}`$ plus shear's over $`G_{IIc}`$, add to one when the point parts. Between the two the stress falls in a straight line:
+
+```math
+d = \max\left(d_{\text{before}},\ \frac{\delta_f\,(\delta - \delta_0)}{\delta\,(\delta_f - \delta_0)}\right) \quad (\delta > \delta_0)
+```
+
+Damage only grows; unloaded, a point returns along a straight line to nothing. In pure peel the law is a triangle of height $`\sigma_c`$ that ends at $`2 G_{Ic}/\sigma_c`$, and in pure shear one of height $`\tau_c`$ that ends at $`2 G_{IIc}/\tau_c`$. A law whose fracture energy is below the elastic energy it holds at its strength, $`\sigma_c^2/2K_n`$ or $`\tau_c^2/2K_s`$, is refused. The stresses and the damage are computed by `BondLaw.traction`.
+
+<!-- code: BondLaw.traction -->
+
+### 12.2 The model
+
+The grid, the eight-node elements with four integration points, the holds, the strain across the width and the load on the panel's end are those of Section 11.1. Two things differ. Along every flat bond the adhesive's elements are left out, and each node on the laminate's side is paired with the node over it on the patch's side. A pair is one integration point of the bond, weighted by Simpson's rule along each element's edge (a sixth, four sixths and a sixth of the edge for its two corners and its middle). Its law has the adhesive's stiffness over the bondline's thickness $`\eta`$, computed by `bond_law`:
+
+```math
+K_s = \frac{G}{\eta}, \qquad K_n = \frac{\lambda + 2G}{\eta}, \qquad \lambda = \frac{2G\nu}{1 - 2\nu}
+```
+
+with the adhesive's two strengths and two fracture energies as the repair states them. The peel stiffness is that of a layer kept from straining in its own plane, as a thin adhesive between stiff plies is. The bondline's thickness stays in the mesh as the gap between the two nodes of a pair. The cut faces carry nothing, as in Section 11's default. The elements beside each edge are a quarter of the bondline's thickness long.
+
+The load is not given. Every nodal force and the strain across the width are those of one newton per metre of width, times a load factor $`\lambda_N`$ the path finds, so the factor is the load per unit width. The model is computed by `build_bond_model`; the solids' stiffness matrix is computed by `solid_stiffness`.
+
+<!-- code: bond_law, build_bond_model, solid_stiffness -->
+
+### 12.3 The path
+
+With $`\mathbf{K}`$ the solids' stiffness, $`\mathbf{f}_b(\mathbf{u}, d)`$ the bond's forces and $`\mathbf{F}`$ the unit load, each state satisfies
+
+```math
+\mathbf{K}\,\mathbf{u} + \mathbf{f}_b(\mathbf{u}, d) = \lambda_N\,\mathbf{F}
+```
+
+Up to the first pair at onset the answer is one linear solve, scaled. From there a step of load alone cannot be relied on: where the bond sheds load faster than the rest takes it up, the load must fall, and where the solids hold more energy than the bond can spend, the load and the end's movement both fall back. So the load factor is made an unknown of the step, and the step is given the energy $`\Delta W`$ the bond is to spend in it. For a law that unloads to the origin, the energy spent between a state $`(\mathbf{u}_0, \lambda_0)`$ and the next is
+
+```math
+\Delta W = \tfrac{1}{2}\left[\lambda_0\,\mathbf{F}\cdot(\mathbf{u} - \mathbf{u}_0) - (\lambda_N - \lambda_0)\,\mathbf{F}\cdot\mathbf{u}_0\right]
+```
+
+which is solved with the equilibrium equations by Newton's method, the damage of the step's start in the tangent. A step that must spend energy cannot stall at a peak or on a snap-back, and nothing is added to the equations to get through. The first steps after onset are steps of load, while the bond spends little; where nothing is softening, because what was has parted and nothing else has begun, the load leads again until something does. The step's energy grows when Newton converges quickly and is cut back when it does not. The path is computed by `follow`.
+
+For a repair the path is followed until the load has fallen 10 % below the largest it reached, or the whole bond has parted, or 1,500 steps are taken. The load at which the bond lets go is the first peak after which the load falls by 5 % of it before rising above it again, computed by `Path.first_peak`; a path that ends before such a fall reports none and says why. The repair's path is computed by `follow_bond`.
+
+<!-- code: follow, Path.first_peak, follow_bond -->
+
+### 12.4 What is read back
+
+At the load of first softening and at the load at which the bond lets go: the pair where it began, with its place and the part of the bond it is on, and its peel and shear stress there; the length of bond softening ($`0 < d < 1`$) and parted ($`d = 1`$), as sums of the pairs' weights; the largest shear and peel stress on each stretch of the bond; and the movement of the panel's end, $`\mathbf{F}\cdot\mathbf{u}`$ over the load. The curve of the path gives, state by state, the load, the end's movement and the length of bond past its strength. The answer is computed by `bond_answer`; the report in the file's units is computed by `bond_report`.
+
+Two checks are made on every run, as on the elastic solve: midway between the repair and the panel's end every ply's strain along the load is the far field's within 1 %, and at every station the forces in the plies add up to the load within $`10^{-4}`$ of it.
+
+<!-- code: bond_answer, bond_report -->
+
+### 12.5 What the run leaves out
+
+Every ply is elastic. A ply that reaches a strength before the bond lets go, or a laminate that splits between its plies at a ledge, is not seen, and from that load on the answer would change; the solved slice of Section 11 gives the first ply's load to set beside it. The law is two straight lines: an adhesive that yields at a steady stress before it softens has a plateau the law leaves out, which matters most where the bond is short against its softening zone. The energies add in a straight line; a rule fitted to mixed-mode tests is not used. The cut faces carry nothing. The slice is the strip of Section 11.5, held flat, with no load flowing round the repair. Fatigue, heat, moisture, cure stress and a flaw in the bond are left out. The numbers move with the adhesive's two strengths and two fracture energies as stated, which a datasheet seldom gives.
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -515,6 +590,7 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 
 - The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
 - The repair's slice in CalculiX (Section 11): the graded mesh has a line of nodes on every edge of every rectangle, fine elements beside it, no element much longer than its neighbour and the description's areas; the deck has one material for each ply angle and the adhesive, the far-field width strain as its temperature and the far-field stresses on its end, summing to the load; on a strip patch, the flush example and the example with bonded cut faces the forces add up at every station and, well outside the repair, every ply's stress is the laminate theory's with nothing through the thickness and nothing across the width in sum; held to the lap's assumptions the model returns the lap's closed form (case `constructed-external-strip-held-to-the-stepped-laps-assumptions`, Section 11.4); a patch bonded on top carries the whole load at the hole's edge, what its bondline's shear passes to it is the load within 1 %, it is pressed on at the hole's edge and pulled off at its tip; twice the load doubles every stress and compression changes every sign; the largest mean over a length of bond is found exactly on a bond worked by hand; elements half as long beside the edges change the largest shear stress by less than 0.5 %, the largest peel stress by less than 1 % and the patch's forces by less than 0.2 % on the strip patch and on the flush example, where the value at a bond's last station beside an open cut face grows by more than a fifth; on the flush example the adhesive's elastic limit comes before the first ply, which reaches its transverse tensile strength inside the repair at a lower load than a 90° ply does far from it; bonded cut faces take load off the ledges, so leaving them open is the lower reading; what a solve lacks is refused in words (`test_repair_model.py`).
+- A repair's bond followed to failure (Section 12). The law alone: along any direction it peaks on the onset line and spends the failure line's energy; damage only grows; a pressed bond carries the pressure whole. The plane elements return an even stress and balance a stress inside them. Cases with exact answers: a block pulled off its bond reaches the strength times the length and spends the energy times the length, through a snap-back; the peel test's load is beam theory's within 2 % while the crack grows; the shear test's largest load is 7.8 % under beam theory's at 60 MPa, as the softening zone ahead of a crack of finite strength makes it, and is the one MOOSE gives for the same model within 0.3 % (729.5 N; the input file and the curve are in `fea/checks/bond_cases/`); a patch pulled off a strip held flat runs at the load its energy gives, $`\sqrt{2 G_c S_a (S_a + S_b)/S_b}`$, within 0.5 %, and between the two pure answers with unequal numbers (`test_bond_solver.py`). On the repair: on CalculiX's own nodes and elements the plane elements return CalculiX's strains; held to the stepped lap's assumptions the bond first softens at the lap's elastic limit load; with the bond whole the patch carries midway along every step what it carries in CalculiX's slice within a third of a percent of the load; the example softens over a third of its bond and then lets go, and a mesh four times coarser beside each edge gives the same two loads; a path that ends before the load falls says so; a repair without the six numbers is refused in words (`test_repair_bond.py`).
 - The repair's slice for Abaqus and Ansys (Section 11.6): the Abaqus file holds the deck's nodes, elements, stiffness terms, supports, temperature and load, and solved by CalculiX, which reads the same keywords, it gives the deck's answer; the Ansys file's engineering constants give back the stiffness terms by an inverse written in the test, and its blocks hold the model's nodes, elements, materials, supports and load; stand-in output in each program's wording and figures is read back as the same answer, and a table with a row missing, of another model, with stresses that are not the stiffness times the strains, or with another width strain is refused (`test_repair_files.py`). Neither program runs in the tests.
 
 ## Not modeled yet
@@ -525,4 +601,4 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)
 - Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
 - Eigenvalue buckling of joined shells (CalculiX's `*BUCKLE` misses a wing web's buckle; the wing's panels are flat Ritz plates on the model's mean loads, Section 10.4); a web panel's buckling under its own bending stress; buckling of a curved panel; the load after buckling
-- For a repair's slice (Section 11): a panel free to bend under a one-sided patch (a large-deflection solution); a yielding adhesive and the bond's progressive failure; the laminate beside a hole narrower than the panel and the load that flows around a round repair (the panel in three dimensions); a slice free to shear in the laminate's plane (generalized plane strain); thermal mismatch from the cure
+- For a repair's slice (Section 11): a panel free to bend under a one-sided patch (a large-deflection solution); a yielding adhesive (the followed bond of Section 12 softens in two straight lines, with no plateau); damage in the plies while the bond is followed, and a bond on the cut faces; the laminate beside a hole narrower than the panel and the load that flows around a round repair (the panel in three dimensions); a slice free to shear in the laminate's plane (generalized plane strain); thermal mismatch from the cure

@@ -42,7 +42,7 @@ ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engi
                   "repair.description", "repair.section", "repair.patch_lap", "repair.solid",
                   "cases")  # the case runner last: its listing is printed once, in the verification section
 FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",
-               "wing_model", "repair_model", "repair_files")
+               "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
 # Unit labels for finite element case results, by the deck's unit system and result group.
@@ -266,6 +266,8 @@ def find(name: str, package: str = "anisotropy_engine"):
         if hasattr(module, head):
             target = getattr(module, head)
             if attribute:
+                if not hasattr(target, attribute):
+                    continue  # another module's name of the same spelling (pathlib's Path beside the solver's Path)
                 target = inspect.getattr_static(target, attribute)
                 target = target.fget if isinstance(target, property) else getattr(target, "wrapped", target)
             return target

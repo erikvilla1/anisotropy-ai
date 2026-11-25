@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CATEGORICAL } from "@/lib/studio-colors";
-import { shown, unitText, type RepairReport, type RepairViews, type SliceReport } from "@/lib/repair";
+import { shown, unitText, type BondReport, type RepairReport, type RepairViews, type SliceReport } from "@/lib/repair";
 
 /** The drawings of a repair (ADR-0135), for the repair's page and for its report: the half slice as the engine's rectangles
  * (ADR-0131), the bondline's stresses along the bond, and the forces along the slice. All three share one scale along the slice, `r`
@@ -194,6 +194,80 @@ export function ForceChart({ report, views, slice }: { report: RepairReport; vie
   if (!series.length) return null;
   return <AlongChart series={series} views={views} unit={force} lengthUnit={length} testId="repair-force-chart" height={190}
     label={`The force per unit width in the patch and in the laminate along the slice, in ${force}`} />;
+}
+
+/** The adhesive's shear stress along the bond of a followed bond (ADR-0140), on the scale of the slice: as the bond first softens,
+ * when the stress is at the bond's strength at one point, and at the load at which it lets go, when it has spread: where the bond
+ * is softening the stress has fallen from the strength, and where it has parted it carries none. */
+export function LetGoChart({ report, views, bond }: { report: RepairReport; views: RepairViews; bond: BondReport }) {
+  const state = bond.let_go;
+  if (!state) return null;
+  const stress = unitText(report.units.stress), length = unitText(report.units.length);
+  const series: Series[] = [
+    { id: "onset", label: "Shear as the bond first softens", colour: CATEGORICAL[0], dashed: true, lines: bond.onset.lines.map((line) => ({ r: line.r, value: line.shear })) },
+    { id: "let-go", label: "Shear as the bond lets go", colour: CATEGORICAL[1], lines: state.lines.map((line) => ({ r: line.r, value: line.shear })) },
+  ];
+  return <AlongChart series={series} views={views} unit={stress} lengthUnit={length} testId="repair-let-go-chart" height={190}
+    label={`The adhesive's shear stress along the bond as it first softens and at the load at which it lets go, in ${stress}, against the distance from the repair's middle`} />;
+}
+
+/** The followed bond's path (ADR-0140): the load per unit width against the length of bond past its strength, softening or parted.
+ * Nothing is past it until the load at which the bond first softens; from there the softening spreads as the load grows, to the
+ * load at which the bond lets go, and the load falls after it. Every point is a state the solver settled; the two loads are marked
+ * and named. */
+export function LoadCurve({ bond }: { bond: BondReport }) {
+  const force = unitText(bond.units.force), length = unitText(bond.units.length);
+  const xs = bond.curve.damaged_length, ys = bond.curve.load, moved = bond.curve.end_movement;
+  const height = 230, top = 22, bottom = 34;
+  const xHigh = Math.max(...xs, 0) * 1.06 || 1, yHigh = Math.max(...ys, 0) * 1.1 || 1;
+  const X = (v: number) => LEFT + (v / xHigh) * (WIDTH - LEFT - RIGHT), Y = (v: number) => top + (1 - v / yHigh) * (height - top - bottom);
+  const [at, setAt] = useState<number | null>(null); // the stored state nearest the pointer
+  const move = (event: React.MouseEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - box.left) / box.width) * WIDTH, y = ((event.clientY - box.top) / box.height) * height;
+    let best = 0, gap = Infinity;
+    xs.forEach((v, i) => { const d = Math.hypot(X(v) - x, Y(ys[i]) - y); if (d < gap) { gap = d; best = i; } });
+    setAt(gap <= 60 ? best : null);
+  };
+  const fell = bond.let_go;
+  return (
+    <>
+      <svg viewBox={`0 0 ${WIDTH} ${height}`} className="wing-svg repair-svg" role="img" data-testid="repair-load-curve" onMouseMove={move} onMouseLeave={() => setAt(null)}
+        aria-label={`The load per unit width, in ${force}, against the length of bond past its strength, in ${length}, as the bond softens and lets go`}>
+        {axisTicks(0, yHigh).map((t) => (
+          <g key={`y-${t}`}>
+            <line x1={LEFT} x2={WIDTH - RIGHT} y1={Y(t)} y2={Y(t)} className={t === 0 ? "repair-zero" : "wing-grid"} />
+            <text x={LEFT - 6} y={Y(t) + 4} textAnchor="end" className="wing-label wing-label-small">{shown(t, 3)}</text>
+          </g>
+        ))}
+        {axisTicks(0, xHigh).map((t) => (
+          <g key={`x-${t}`}>
+            <line x1={X(t)} x2={X(t)} y1={height - bottom} y2={height - bottom + 5} className="repair-tick" />
+            <text x={X(t)} y={height - bottom + 17} textAnchor="middle" className="wing-label wing-label-small">{shown(t, 3)}</text>
+          </g>
+        ))}
+        <text x={12} y={top + (height - top - bottom) / 2} className="wing-label wing-label-small" textAnchor="middle" transform={`rotate(-90 12 ${top + (height - top - bottom) / 2})`}>{force}</text>
+        <text x={WIDTH - RIGHT} y={height - 2} textAnchor="end" className="wing-label wing-label-small">bond past its strength, {length}</text>
+        <polyline points={xs.map((v, i) => `${X(v).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")} fill="none" stroke={CATEGORICAL[0]} strokeWidth={2} strokeLinejoin="round" data-series="load" />
+        <g data-mark="onset">
+          <circle cx={X(0)} cy={Y(bond.onset.load)} r={4.5} fill={CATEGORICAL[0]} className="repair-dot" />
+          <text x={X(0) + 10} y={Y(bond.onset.load) + 4} className="wing-label wing-label-small">first softens, {shown(bond.onset.load)} {force}</text>
+        </g>
+        {fell ? (
+          <g data-mark="let-go">
+            <circle cx={X(fell.damaged_length)} cy={Y(fell.load)} r={4.5} fill={CATEGORICAL[0]} className="repair-dot" />
+            <text x={X(fell.damaged_length) - 9} y={Y(fell.load) - 8} textAnchor="end" className="wing-label wing-label-small">lets go, {shown(fell.load)} {force}</text>
+          </g>
+        ) : null}
+        {at !== null ? <circle cx={X(xs[at])} cy={Y(ys[at])} r={4} fill="none" stroke={CATEGORICAL[0]} strokeWidth={2} /> : null}
+      </svg>
+      <p className="wing-legend repair-chart-key" data-testid="repair-load-curve-key">
+        <span className="repair-readout" aria-live="off">{at !== null
+          ? `${shown(ys[at])} ${force} with ${shown(xs[at])} ${length} of the bond past its strength; the panel's end has moved ${shown(moved[at])} ${length}`
+          : "Point at the curve to read a state."}</span>
+      </p>
+    </>
+  );
 }
 
 /** The caption under the slice: what is drawn, and by how much the thickness is stretched. */

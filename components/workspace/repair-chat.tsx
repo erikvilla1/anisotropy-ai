@@ -8,7 +8,7 @@ import {
   previewPlace, previewRows, readRepairAsk, repairAnswer, sweepHeading, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSaid, type RepairSweepAnswer,
 } from "@/lib/repair-chat";
-import { kindOf, NOT_THE_STRENGTH, sameRepair, sliceWords, type RepairDescription } from "@/lib/repair";
+import { bondWords, kindOf, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, sameRepair, sliceWords, type RepairDescription } from "@/lib/repair";
 import { bannedIn } from "@/lib/studio-copy";
 import { REPAIR_HREF } from "@/lib/workspaces";
 import { useRepair } from "./repair-context";
@@ -27,7 +27,7 @@ type Entry =
     from?: RepairDescription; preview?: RepairChangePreview; sweep?: RepairSweepAnswer; outcome?: "applied" | "dismissed" | "undone";
     /** the sections of our pages the question's words find, once the API answers */
     references?: ReferenceSection[];
-    /** a solve started from the chat has ended */
+    /** a solve, or a run of the bond, started from the chat has ended */
     solved?: boolean;
     problem?: string; waiting?: boolean;
   };
@@ -36,10 +36,11 @@ type Said = Extract<Entry, { role: "assistant" }>;
 /** The repair's chat (ADR-0136), under the answer in words: a change is read from the message and previewed by the engine on a copy of
  * the repair, which changes only when the engineer taps Apply, and an applied change can be undone; a sweep is worked by hand at every
  * value, and its pick, solved as a slice, is applied the same way; a question about the result is answered from the report and the
- * solved slice the page holds; a question of why, how or what a thing is from our reference pages. No model reads a message here:
+ * solved slice the page holds, and one about the bond letting go from the bond followed (ADR-0140), which the chat can start; a
+ * question of why, how or what a thing is from our reference pages. No model reads a message here:
  * what the patterns cannot read is said plainly, with examples. */
 export function RepairChat() {
-  const { apiBaseUrl, repair, answer, replace, solve, solveStale, solveSlice, cutFaces } = useRepair();
+  const { apiBaseUrl, repair, answer, replace, solve, solveStale, solveSlice, cutFaces, bond, bondStale, bondNeeds, followBond } = useRepair();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const next = useRef(1);
@@ -58,6 +59,11 @@ export function RepairChat() {
     void solveSlice().then(() => { if (id !== undefined) update(id, { solved: true }); });
   }
 
+  function startBond(id?: number) {
+    showPanel("repair-solve");
+    void followBond().then(() => { if (id !== undefined) update(id, { solved: true }); });
+  }
+
   function undo(): Said | null {
     const last = [...entries].reverse().find((e): e is Said => e.role === "assistant" && e.outcome === "applied" && !!e.from);
     if (!last?.from) return null;
@@ -72,7 +78,8 @@ export function RepairChat() {
     setInput("");
     const ask: RepairAsk = readRepairAsk(message, kindOf(repair), last.current); // a fragment leans on the message before it
     last.current = ask;
-    const held: RepairHeld = { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [] };
+    const held: RepairHeld = { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [],
+      bond: bond && !bondStale ? bond.report : null, bondStale: !!bond && bondStale, bondNeeds };
     let said = repairAnswer(ask, held);
     const id = next.current + 1;
     next.current += 2;
@@ -95,6 +102,8 @@ export function RepairChat() {
       repairReferences(apiBaseUrl, message).then((references) => update(id, { references, waiting: false })).catch(() => update(id, { references: [], waiting: false }));
     } else if (said.kind === "solve") {
       startSolve(id);
+    } else if (said.kind === "bond") {
+      startBond(id);
     }
   }
 
@@ -116,7 +125,7 @@ export function RepairChat() {
                 <div>
                   <Answer entry={e} stale={!!e.from && !e.outcome && !sameRepair(e.from, repair)} current={sameRepair(repair, e.preview?.repair ?? e.sweep?.picked ?? repair)}
                     onApply={(next) => apply(e, next)} onDismiss={() => update(e.id, { outcome: "dismissed" })}
-                    onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} />
+                    onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} onFollow={() => startBond()} />
                 </div>
               </div>
             ))}
@@ -135,9 +144,9 @@ export function RepairChat() {
   );
 }
 
-type Handlers = { onApply(next: RepairDescription | null | undefined): void; onDismiss(): void; onUndo(): void; onSolve(): void };
+type Handlers = { onApply(next: RepairDescription | null | undefined): void; onDismiss(): void; onUndo(): void; onSolve(): void; onFollow(): void };
 
-function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve }: { entry: Said; stale: boolean; current: boolean } & Handlers) {
+function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, onFollow }: { entry: Said; stale: boolean; current: boolean } & Handlers) {
   const { said } = entry;
   if (said.kind === "preview" || said.kind === "sweep") {
     if (entry.problem) return <><h4>{said.kind === "sweep" ? "Not swept" : "Not previewed"}</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{entry.problem}</p></>;
@@ -150,6 +159,7 @@ function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve }: 
     );
   }
   if (said.kind === "solve") return <Solved entry={entry} />;
+  if (said.kind === "bond") return <Followed entry={entry} />;
   // a section is shown only in the product's own words (ADR-0091): one that names a tool of ours is left out, and its equations and tables
   const references = (entry.references ?? []).filter((s) => !bannedIn(`${s.title}\n${s.text}`).length && prose(s.text).length);
   const reference = said.kind === "reference";
@@ -170,6 +180,7 @@ function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve }: 
       ) : null}
       <div className="chat-actions">
         {said.offer === "solve" ? <button type="button" className="studio-button" onClick={onSolve} data-testid="repair-chat-solve">Solve the slice</button> : null}
+        {said.offer === "bond" ? <button type="button" className="studio-button" onClick={onFollow} data-testid="repair-chat-bond">Follow the bond</button> : null}
         {said.offer === "report" ? <Link className="studio-button" href={`${REPAIR_HREF}/report`} target="_blank" rel="noopener">Open the report</Link> : null}
         {said.panel ? <button type="button" className="studio-text-button" onClick={() => showPanel(said.panel!)}>Open {PANEL_TITLES[said.panel] ?? "the step"}</button> : null}
       </div>
@@ -190,6 +201,24 @@ function Solved({ entry }: { entry: Said }) {
       <p>{words.shear}</p>
       <p>{words.peel}</p>
       <p className="chat-note">{NOT_THE_STRENGTH}</p>
+    </div>
+  );
+}
+
+/** A run of the bond started from the chat: said while it runs, then worded from the followed bond the page holds, or the reason it
+ * has none. */
+function Followed({ entry }: { entry: Said }) {
+  const { bond, bondStale, following, bondProblem } = useRepair();
+  if (!entry.solved || following) return <><h4>{entry.said.heading}</h4><p className="chat-typing">{entry.said.lines[0]}</p></>;
+  if (bondProblem) return <><h4>Not followed</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{bondProblem}</p></>;
+  if (!bond || bondStale) return <><h4>The repair changed since</h4><p>Follow the bond again for the repair as it stands.</p></>;
+  const words = bondWords(bond.report);
+  return (
+    <div data-testid="repair-chat-followed">
+      <h4>{words.headline}</h4>
+      <p>{words.softens}</p>
+      {words.extent ? <p>{words.extent}</p> : <p>{words.short}</p>}
+      {bond.report.let_go ? <p className="chat-note">{LET_GO_IS_NOT_THE_STRENGTH}</p> : null}
     </div>
   );
 }

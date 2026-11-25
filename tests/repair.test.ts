@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  answerWords, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_REPAIR, inSentence, kindOf, layupText, LIMITS, materialMode, modelWords, needsWords, NOT_THE_STRENGTH, peakPlace,
-  REPAIR_MATERIALS, repairFileName, repairToml, sameRepair, sentence, sliceWords, statedGroups, unitsOf, valueAt, withKind, withLaminateMaterial, withLibraryMaterial,
-  withTypedMaterial, withValue, type RepairAnswer, type RepairSolve,
+  ADHESIVE_FIELDS, answerWords, bondModelWords, bondNeedsWords, bondWords, DAMAGE_FIELDS, EXAMPLE_REPAIR, EXTERNAL_REPAIR, inSentence, kindOf, layupText, LET_GO_IS_NOT_THE_STRENGTH, LIMITS, materialMode, modelWords, needsWords, NOT_THE_STRENGTH, peakPlace, plyBefore,
+  REPAIR_MATERIALS, REPAIR_UNIT_LABELS, repairFileName, repairToml, sameRepair, sentence, sliceWords, statedGroups, unitsOf, valueAt, withKind, withLaminateMaterial, withLibraryMaterial,
+  withTypedMaterial, withValue, type RepairAnswer, type RepairBond, type RepairSolve,
 } from "../lib/repair";
 
 // The repair page's own words and its repair file (ADR-0135). Every number comes from the engine or the solver, in the answers
@@ -12,6 +12,7 @@ import {
 const read = <T>(name: string): T => JSON.parse(readFileSync(`tests/fixtures/repair/${name}.json`, "utf-8")) as T;
 const ANSWER = read<RepairAnswer>("example-answer"), EXTERNAL = read<RepairAnswer>("external-answer");
 const SOLVE = read<RepairSolve>("example-solve"), EXTERNAL_SOLVE = read<RepairSolve>("external-solve");
+const BOND = read<RepairBond>("example-bond"), EXTERNAL_BOND = read<RepairBond>("external-bond");
 
 test("each example saves as the repair file the engine reads back as the example (api/tests/test_repairs_api.py reads the same files)", () => {
   assert.equal(repairToml(EXAMPLE_REPAIR), readFileSync("tests/fixtures/repair/example-saved.toml", "utf-8"));
@@ -98,7 +99,8 @@ test("what a solve of the slice still needs is one sentence, and nothing when it
 test("the solved slice beside the hand calculation: the two peaks, the limit loads and what comes first, the limit never called a strength", () => {
   const words = sliceWords(SOLVE.report);
   assert.equal(words.shear, "Largest shear 11.5 MPa, 37.29 mm from the middle (the adhesive on the ledge of step 2); by hand 12.58 MPa.");
-  assert.match(words.peel, /^Largest peel 4\.112 MPa, 62\.45 mm from the middle \(the adhesive under the cover plies\); not judged: the adhesive states no peel strength\.$/);
+  assert.equal(words.peel, "Largest peel 4.112 MPa, 62.45 mm from the middle (the adhesive under the cover plies); it reaches the peel strength at 972.6 N/mm.");
+  assert.match(sliceWords({ ...SOLVE.report, peel_limit_load: null }).peel, /; not judged: the adhesive states no peel strength\.$/);
   assert.equal(words.limit, `The adhesive reaches its elastic limit in shear at 260.8 N/mm; by hand 238.5 N/mm. ${NOT_THE_STRENGTH}`);
   assert.match(words.ply, /^First ply by maximum stress: laminate ply 6 \(−45°\), transverse tension, at 466\.1 N\/mm, 37\.46 mm from the middle\.$/);
   assert.equal(words.first, "First, the adhesive reaches its elastic limit in shear, at 260.8 N/mm.");
@@ -124,7 +126,11 @@ test("the report lists what the description states, grouped as the page's steps,
   assert.equal(rows["Patch: Ply material"], "The laminate's");
   assert.equal(rows["Cover plies: Cover plies"], "[45], 1 ply");
   assert.equal(rows["Adhesive: Shear modulus"], "1000 MPa");
-  assert.equal(rows["Adhesive: Peel strength"], undefined);
+  assert.equal(rows["Adhesive: Peel strength"], "40 MPa");
+  assert.equal(rows["Adhesive: Fracture energy, peel"], "0.5 N/mm");
+  assert.equal(rows["Adhesive: Fracture energy, shear"], "2 N/mm");
+  const without = statedGroups(withValue(withValue(EXAMPLE_REPAIR, "adhesive.peel_energy", undefined), "adhesive.shear_energy", undefined));
+  assert.ok(!without.flatMap((g) => g.rows).some(([name]) => /Fracture energy/.test(name))); // left out of the file, so left out of the report
   assert.equal(rows["Panel and load: Load per unit width"], "100 N/mm");
   const onTop = statedGroups(EXTERNAL_REPAIR);
   assert.deepEqual(onTop.map((g) => g.title), ["Repair", "Laminate", "Hole and steps", "Patch", "Adhesive", "Panel and load"]);
@@ -135,6 +141,51 @@ test("two descriptions are the same repair value for value, and the limits are s
   assert.ok(sameRepair(EXAMPLE_REPAIR, JSON.parse(JSON.stringify(EXAMPLE_REPAIR))));
   assert.ok(!sameRepair(EXAMPLE_REPAIR, withValue(EXAMPLE_REPAIR, "applied.load", 120)));
   assert.ok(!sameRepair(null, EXAMPLE_REPAIR));
-  assert.equal(LIMITS.length, 5);
+  assert.equal(LIMITS.length, 6);
   assert.ok(LIMITS.some((line) => /not where the repair fails/.test(line)));
+  assert.ok(LIMITS.some((line) => /the load at which the bond lets go is not the repair's strength/.test(line)));
+});
+
+test("the bond followed until it lets go, in the page's words: the load in this model, where it first softens, never a strength (ADR-0140)", () => {
+  const words = bondWords(BOND.report);
+  assert.equal(words.headline, "The bond lets go at 1,340 N/mm in this model");
+  assert.equal(words.short, `It first softens at 184 N/mm. ${LET_GO_IS_NOT_THE_STRENGTH}`);
+  assert.equal(words.card, "it first softens at 184 N/mm and lets go at 1,340 N/mm in this model. Not the repair's strength.");
+  assert.equal(words.softens, "The bond first softens at 184 N/mm, 37.38 mm from the middle (the adhesive on the ledge of step 2): the shear stress there is 30 MPa, with the bond pressed together by 14.03 MPa.");
+  assert.equal(words.letsGo, "In this model the bond lets go at 1,340 N/mm: the load grows no further, and falls as the bond parts. The panel's end has then moved 2.227 mm.");
+  assert.equal(words.extent, "At that load 18.65 mm of the bond's 62.1 mm is softening and none has parted.");
+  assert.equal(words.after, "The run went on until the load had fallen to 1,153 N/mm; by then 1.589 mm had parted, first 35.25 mm from the middle (the adhesive on the ledge of step 2).");
+  assert.equal(words.law, "The bond starts to soften at 30 MPa in shear and 40 MPa in peel, and has parted once 2 N/mm in shear or 0.5 N/mm in peel is spent on it.");
+  assert.match(bondModelWords(BOND.report), /^Followed as 3,045 eight-node plane elements held flat, with the bond as 319 pairs of points along its 62\.1 mm, through 46 states of growing damage, in 10 s\. /);
+  assert.doesNotMatch(bondModelWords(BOND.report), /anisotropy_fea|solver|moose|calculix/i); // the page names no tool (ADR-0091)
+  for (const text of Object.values(words)) assert.doesNotMatch(text.replace(LET_GO_IS_NOT_THE_STRENGTH, ""), /strength of the repair|the repair fails|failure load|margin|passes|carries the load/i);
+  // the patch bonded on top: softens first at the patch's edge
+  const onTop = bondWords(EXTERNAL_BOND.report);
+  assert.equal(onTop.headline, "The bond lets go at 873.2 N/mm in this model");
+  assert.match(onTop.softens, /^The bond first softens at 161\.9 N\/mm, 52\.5 mm from the middle \(the adhesive under the patch\): the shear stress there is /);
+  // a run that ended before the load fell names no such load
+  const held = bondWords({ ...BOND.report, let_go: null, ended: "stalled" });
+  assert.equal(held.headline, "No load at which the bond lets go was found");
+  assert.equal(held.short, "The path could not be followed further. The largest load reached is 1,340 N/mm.");
+  assert.equal(held.extent, "");
+  assert.equal(held.card, "no load at which it lets go was found. The path could not be followed further. The largest load reached is 1,340 N/mm.");
+  // the path's states: the load, the panel's end and the bond past its strength, one of each a state, the last three never falling
+  const curve = BOND.report.curve;
+  assert.deepEqual([curve.end_movement.length, curve.damaged_length.length, curve.parted_length.length], [curve.load.length, curve.load.length, curve.load.length]);
+  assert.ok(curve.damaged_length.every((v, i) => i === 0 || v >= curve.damaged_length[i - 1]));
+  assert.equal(BOND.report.let_go!.damaged_length, BOND.report.let_go!.softening_length + BOND.report.let_go!.parted_length);
+  // beside the bond's load: a ply of the solved slice that reaches a strength at a lower one, since the run leaves the plies' damage out
+  assert.equal(plyBefore(BOND.report, SOLVE.report), "Before that load, in the solved slice, laminate ply 6 (−45°) reaches a strength at 466.1 N/mm: from there the plies' damage, which this run leaves out, would change the answer.");
+  assert.equal(plyBefore(BOND.report, null), "");
+  assert.equal(plyBefore(BOND.report, { ...SOLVE.report, first_ply: null }), "");
+  assert.equal(plyBefore(BOND.report, { ...SOLVE.report, first_ply: { ...SOLVE.report.first_ply!, load: 2000 } }), "");
+  assert.equal(plyBefore({ ...BOND.report, let_go: null }, SOLVE.report), "");
+  // what following the bond needs is one sentence, and the answer says there is nothing more to state for the examples
+  assert.deepEqual([ANSWER.bond_needs, EXTERNAL.bond_needs], [[], []]);
+  assert.equal(bondNeedsWords([]), "");
+  assert.equal(bondNeedsWords([{ path: "adhesive.peel_energy", words: "the bond's fracture energy in peel" }, { path: "adhesive.shear_energy", words: "the bond's fracture energy in shear" }]),
+    "To follow the bond until it lets go, the repair still needs the bond's fracture energy in peel; the bond's fracture energy in shear.");
+  // a fracture energy is stated as a force per length, the load's unit in every system
+  assert.deepEqual(ADHESIVE_FIELDS.slice(5).map((f) => [f.path, f.unit, f.optional]), [["adhesive.peel_energy", "energy", true], ["adhesive.shear_energy", "energy", true]]);
+  for (const system of ["mm-MPa", "SI", "US", "psi"] as const) assert.equal(REPAIR_UNIT_LABELS[system].energy, REPAIR_UNIT_LABELS[system].load);
 });

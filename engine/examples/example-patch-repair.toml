@@ -25,6 +25,9 @@ shear_modulus = 1000.0   # MPa
 thickness = 0.1          # mm
 shear_strength = 30.0    # MPa
 poisson = 0.35           # for the solve of the slice
+peel_strength = 40.0     # MPa: the stress pulling the patch off that the bond can take
+peel_energy = 0.5        # N/mm (kJ/m^2): the energy to part a unit area of the bond by pulling it open; with the next, to follow the bond until it lets go (ADR-0140)
+shear_energy = 2.0       # N/mm: the same by sliding it
 
 [panel]
 length = 300.0           # mm, along the load

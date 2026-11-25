@@ -28,7 +28,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
-from anisotropy_engine.repair import pick_check, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
+from anisotropy_engine.repair import bond_needs, pick_check, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
@@ -49,7 +49,7 @@ from .theory import find as find_theory, repair_sections, wing_sections
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .model_costs import ModelCall
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
-                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
+                          SolverBusy, UnknownCoupon, WING, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       model_calls_since,
@@ -66,7 +66,7 @@ from .uploads import tool_command as upload_command
 from .schemas import (
     AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponModelReceipt, ImportedModelReceipt, ImportedModelResponse, LiveSolveResponse, ModelProgram, ModelUnits, TowTestRequest, TowTestResponse, WingAnswer, WingChangePreview, WingChangeRequest, WingCheckOutput, WingCheckRequest,
-    WingRequest, WingShapeAnswer, RepairAnswer, RepairChangePreview, RepairChangeRequest, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
+    WingRequest, WingShapeAnswer, RepairAnswer, RepairBondAnswer, RepairChangePreview, RepairChangeRequest, RepairRequest, RepairShapeAnswer, RepairSolveAnswer, RepairSolveRequest,
     RepairSweepAnswer, RepairSweepRequest,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -1928,22 +1928,21 @@ def analyze_repair_endpoint(problem: RepairRequest, actor: Actor, request: Reque
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairAnswer(run_id=None if run_id is None else str(run_id), engine_version=version("anisotropy-engine"), repair=data, report=report,
-                        views=views, needs=needs)
+                        views=views, needs=needs, bond_needs=bond_needs(repair))
 
 
-def _slice_solved(data: dict, cut_faces: str, timeout_s: float) -> tuple[str, Any]:
-    """A repair's slice built, solved and read back by the fea package's `repair_model` in a process of its own (ADR-0051, ADR-0132):
-    how it ended and what came of it. `("solved", report)` with the tool's report, its headline in it; `("refused", words)` in the tool's
-    words; `("absent", None)` where the tool is not installed; `("slow", None)` when it outlasts its time; `("failed", status)`, the cause
-    written to the log and to no reader (ADR-0091 amendment 2)."""
-    command = repair_model_command()
+def _repair_tool_report(command: list[str] | None, data: dict, options: list[str], report_name: str, what: str, timeout_s: float) -> tuple[str, Any]:
+    """One of the fea package's repair tools run on a repair's table in a process of its own (ADR-0051), and the report it leaves in
+    the folder it is given: how it ended and what came of it. `("solved", report)` with the tool's report, its headline in it;
+    `("refused", words)` in the tool's words; `("absent", None)` where the tool is not installed; `("slow", None)` when it outlasts
+    its time; `("failed", status)`, the cause written to the log and to no reader (ADR-0091 amendment 2)."""
     if command is None:
         return "absent", None
     with tempfile.TemporaryDirectory(prefix="repair-solve-") as folder:
         stated, out = Path(folder) / "repair.json", Path(folder) / "model"
         stated.write_text(json.dumps(data), encoding="utf-8")
         try:
-            done = subprocess.run([*command, str(stated), "--out", str(out), "--cut-faces", cut_faces], capture_output=True, text=True, encoding="utf-8",
+            done = subprocess.run([*command, str(stated), "--out", str(out), *options], capture_output=True, text=True, encoding="utf-8",
                                   errors="replace", cwd=FEA, timeout=timeout_s, check=False)
         except subprocess.TimeoutExpired:
             return "slow", None
@@ -1951,14 +1950,19 @@ def _slice_solved(data: dict, cut_faces: str, timeout_s: float) -> tuple[str, An
         if done.returncode == REPAIR_REFUSED and refusal:
             return "refused", refusal
         try:
-            report = json.loads((out / REPAIR_REPORT).read_text(encoding="utf-8")) if done.returncode == 0 else None
+            report = json.loads((out / report_name).read_text(encoding="utf-8")) if done.returncode == 0 else None
         except (OSError, ValueError):
             report = None
         if not isinstance(report, dict) or not isinstance(report.get("headline"), str) or not _finite(report):
             cause = next((line.strip() for line in reversed(done.stderr.splitlines()) if line.strip()), "")
-            print(f"the repair's solve stopped with status {done.returncode}: {cause}", flush=True)  # the tool's own words stay in the log
+            print(f"{what} stopped with status {done.returncode}: {cause}", flush=True)  # the tool's own words stay in the log
             return "failed", done.returncode
     return "solved", report
+
+
+def _slice_solved(data: dict, cut_faces: str, timeout_s: float) -> tuple[str, Any]:
+    """A repair's slice built, solved and read back by the fea package's `repair_model` (ADR-0132), as `_repair_tool_report` ends."""
+    return _repair_tool_report(repair_model_command(), data, ["--cut-faces", cut_faces], REPAIR_REPORT, "the repair's solve", timeout_s)
 
 
 @app.post(REPAIR_SOLVE, response_model=RepairSolveAnswer)
@@ -1993,6 +1997,50 @@ def solve_repair_endpoint(problem: RepairSolveRequest, actor: Actor, request: Re
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairSolveAnswer(run_id=None if run_id is None else str(run_id), headline=headline, report=report)
+
+
+REPAIR_BOND = "/v1/repairs/bond"
+REPAIR_BOND_TIMEOUT_S = 120.0  # the example's bond is followed in about 10 s; a cold start of the fea environment takes a few more
+REPAIR_BOND_REPORT = "repair-bond.json"  # anisotropy_fea.repair_bond.REPORT, in the folder the run is given
+BOND_NOT_NOW = "The bond could not be followed right now. Try again in a minute; if it keeps failing, contact us."
+
+
+@app.post(REPAIR_BOND, response_model=RepairBondAnswer)
+def follow_repair_bond_endpoint(problem: RepairRequest, actor: Actor, request: Request, response: Response) -> RepairBondAnswer:
+    """A repair's bond followed until it lets go (ADR-0140) from the repair's page: the engine reads the description first, so a repair
+    the page could not work is refused in the same words, and one that lacks what the run needs (the adhesive's two strengths and two
+    fracture energies, and what a solve needs) is refused with the list; then the fea package's `repair_bond` builds the slice with the
+    bond as pairs, follows its path and reads it back in a process of its own. It needs no load: the load is what it finds. A run the
+    tool refuses is refused in its words; one that fails is said so without them. Recorded with its actor: the description and the
+    run's headline numbers, not its curves."""
+    data, repair, _ = _repair_read(request, actor, problem)
+    needs = bond_needs(repair)
+    if needs:
+        detail = "To follow the bond until it lets go the repair needs: " + "; ".join(need["words"] for need in needs) + "."
+        run_id = _record(request, actor, problem, error=detail)
+        raise HTTPException(status_code=422, detail=detail, headers=_run_header(run_id))
+    ended, report = _repair_tool_report(repair_bond_command(), data, [], REPAIR_BOND_REPORT, "the repair's bond run", REPAIR_BOND_TIMEOUT_S)
+    if ended == "absent":
+        raise HTTPException(status_code=503, detail="The solver is not installed here")
+    if ended == "slow":
+        run_id = _record(request, actor, problem, error="following the bond took longer than the time allowed")
+        raise HTTPException(status_code=504, detail="Following the bond took too long", headers=_run_header(run_id))
+    if ended == "refused":
+        run_id = _record(request, actor, problem, error=report)
+        raise HTTPException(status_code=422, detail=report, headers=_run_header(run_id))
+    if ended == "failed":
+        run_id = _record(request, actor, problem, error=f"the bond's run stopped with status {report}")
+        raise HTTPException(status_code=503, detail=BOND_NOT_NOW, headers=_run_header(run_id))
+    headline = report.pop("headline")
+    onset, fell = report.get("onset") or {}, report.get("let_go")
+    run_id = _record(request, actor, problem, response={
+        "headline": headline, "model": report.get("model"), "checks": report.get("checks"), "ended": report.get("ended"),
+        "onset": {key: onset.get(key) for key in ("load", "r", "part")},
+        "let_go": None if fell is None else {key: fell.get(key) for key in ("load", "softening_length", "parted_length")},
+        "largest_load": (report.get("largest") or {}).get("load")})
+    if run_id is not None:
+        response.headers[RUN_ID_HEADER] = str(run_id)
+    return RepairBondAnswer(run_id=None if run_id is None else str(run_id), headline=headline, report=report)
 
 
 REPAIR_CHANGES = "/v1/repairs/changes"

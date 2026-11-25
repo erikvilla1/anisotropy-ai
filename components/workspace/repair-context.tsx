@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { analyzeRepair, solveRepair, StudioError } from "@/lib/studio-api";
-import { EXAMPLE_REPAIR, sameRepair, withValue, type RepairAnswer, type RepairDescription, type RepairSolve, type RepairValue } from "@/lib/repair";
+import { analyzeRepair, followRepairBond, solveRepair, StudioError } from "@/lib/studio-api";
+import { EXAMPLE_REPAIR, sameRepair, withValue, type RepairAnswer, type RepairBond, type RepairDescription, type RepairSolve, type RepairValue, type SolveNeed } from "@/lib/repair";
 import { browserStorage } from "@/components/studio/project-context";
 
 /** How long the page waits after the last change before it asks the engine: long enough not to send every keystroke, short enough to
@@ -13,8 +13,12 @@ export const REPAIR_STORAGE_KEY = "anisotropy.repair.v1";
 /** Where this browser keeps the last solved slice with the repair and the choice it was solved for, so a reload and the report have it. */
 export const REPAIR_SOLVE_KEY = "anisotropy.repair-solve.v1";
 
+/** Where this browser keeps the last followed bond with the repair it was followed for (ADR-0140). */
+export const REPAIR_BOND_KEY = "anisotropy.repair-bond.v1";
+
 export type CutFaces = "open" | "bonded";
 export type KeptSolve = { repair: RepairDescription; cutFaces: CutFaces; solve: RepairSolve };
+export type KeptBond = { repair: RepairDescription; bond: RepairBond };
 
 /** The repair this browser kept, or null. */
 export function storedRepair(): RepairDescription | null {
@@ -35,6 +39,18 @@ export function storedSolve(): KeptSolve | null {
         && (kept.cutFaces === "open" || kept.cutFaces === "bonded")) return kept;
     }
   } catch { /* storage blocked or holding something else: no solve */ }
+  return null;
+}
+
+/** The followed bond this browser kept, or null. */
+export function storedBond(): KeptBond | null {
+  try {
+    const value: unknown = JSON.parse(browserStorage()?.getItem(REPAIR_BOND_KEY) ?? "null");
+    if (value && typeof value === "object" && "repair" in value && "bond" in value) {
+      const kept = value as KeptBond;
+      if (kept.repair && typeof kept.repair === "object" && kept.bond && typeof kept.bond.headline === "string" && kept.bond.report?.onset && kept.bond.report?.curve) return kept;
+    }
+  } catch { /* storage blocked or holding something else: no run */ }
   return null;
 }
 
@@ -63,6 +79,16 @@ export type RepairContextValue = {
   cutFaces: CutFaces;
   setCutFaces(choice: CutFaces): void;
   solveSlice(): Promise<void>;
+  /** The last followed bond (ADR-0140), and whether the repair has changed since it was followed. */
+  bond: RepairBond | null;
+  bondStale: boolean;
+  following: boolean;
+  /** Why the bond was not followed, in the engine's, the solver's or the page's words, or empty. */
+  bondProblem: string;
+  /** What following the bond still needs, by the engine's last answer (of an earlier description while `stale`); null before the
+   * first answer, or where the analysis service follows no bonds. */
+  bondNeeds: readonly SolveNeed[] | null;
+  followBond(): Promise<void>;
 };
 
 const RepairContext = createContext<RepairContextValue | null>(null);
@@ -70,7 +96,8 @@ const RepairContext = createContext<RepairContextValue | null>(null);
 /** The repair the page edits and the engine's answers to it, shared by the steps, the drawings and the words beside them (ADR-0135).
  * The repair is kept in this browser as its repair file's table. Every change is worked by hand again once the typing settles; an
  * answer that comes back for an older description than the newest is dropped. The slice is solved when asked, and its answer is kept
- * with the description it was solved for, so the page says when the two no longer belong together. */
+ * with the description it was solved for, so the page says when the two no longer belong together; the bond followed until it lets
+ * go (ADR-0140) is kept the same way. */
 export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; children: ReactNode }) {
   const [repair, setRepairState] = useState<RepairDescription>(EXAMPLE_REPAIR);
   const [keep, setKeep] = useState(false); // the repair is kept: found in this browser, opened or changed
@@ -83,6 +110,9 @@ export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; c
   const [solving, setSolving] = useState(false);
   const [solveProblem, setSolveProblem] = useState("");
   const [cutFaces, setCutFacesState] = useState<CutFaces>("open");
+  const [keptBond, setKeptBond] = useState<KeptBond | null>(null);
+  const [following, setFollowing] = useState(false);
+  const [bondProblem, setBondProblem] = useState("");
   const loaded = useRef(false);
   const worked = useRef<RepairDescription | null>(null); // the description the shown answer belongs to, so an opened file is not worked twice
 
@@ -96,6 +126,8 @@ export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; c
     if (found) { setRepairState(found); setKeep(true); }
     const solved = storedSolve();
     if (solved) { setKept(solved); setCutFacesState(solved.cutFaces); }
+    const followed = storedBond();
+    if (followed) setKeptBond(followed);
     setRevision((r) => r + 1);
     loaded.current = true;
   }, []);
@@ -150,14 +182,32 @@ export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; c
       setSolving(false);
     }
   }, [apiBaseUrl, repair, cutFaces]);
+  const followBond = useCallback(async () => {
+    if (!apiBaseUrl) { setBondProblem("The analysis service is not set up on this page."); return; }
+    setBondProblem(""); setFollowing(true);
+    const started = repair;
+    try {
+      const bond = await followRepairBond(apiBaseUrl, started);
+      const next = { repair: started, bond };
+      setKeptBond(next); setKeep(true);
+      try { browserStorage()?.setItem(REPAIR_BOND_KEY, JSON.stringify(next)); } catch { /* the run stays on the page; a reload forgets it */ }
+    } catch (error) {
+      setBondProblem(error instanceof StudioError ? error.message : "The bond could not be followed. Try again.");
+    } finally {
+      setFollowing(false);
+    }
+  }, [apiBaseUrl, repair]);
+  const bondStale = useMemo(() => keptBond !== null && !sameRepair(keptBond.repair, repair), [keptBond, repair]);
+  const bondNeeds = answer?.bond_needs ?? null;
   const setCutFaces = useCallback((choice: CutFaces) => setCutFacesState(choice), []);
   const solveStale = useMemo(() => kept !== null && (!sameRepair(kept.repair, repair) || kept.cutFaces !== cutFaces), [kept, repair, cutFaces]);
 
   const value = useMemo<RepairContextValue>(() => ({
     apiBaseUrl, repair, revision, setValue, replace, openFile, answer, stale: answered !== repair, working, problem,
     solve: kept?.solve ?? null, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice,
+    bond: keptBond?.bond ?? null, bondStale, following, bondProblem, bondNeeds, followBond,
   }), [apiBaseUrl, repair, revision, setValue, replace, openFile, answer, answered, working, problem, kept, solveStale, solving, solveProblem, cutFaces,
-    setCutFaces, solveSlice]);
+    setCutFaces, solveSlice, keptBond, bondStale, following, bondProblem, bondNeeds, followBond]);
   return <RepairContext.Provider value={value}>{children}</RepairContext.Provider>;
 }
 
