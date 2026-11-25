@@ -201,6 +201,28 @@ def test_a_cap_with_records_off_is_refused_not_ignored():
         load_settings({**OFF, JOBS_PER_DAY_VARIABLE: "5"})
 
 
+from anisotropy_api.settings import MODEL_CALLS_PER_DAY_VARIABLE
+
+
+def test_no_cap_on_calls_to_the_model_unless_set():
+    assert load_settings(ON).model_calls_per_user_per_day is None and load_settings(OFF).model_calls_per_user_per_day is None
+
+
+def test_the_cap_on_calls_to_the_model_is_a_whole_number_with_records_on():
+    assert load_settings({**ON, MODEL_CALLS_PER_DAY_VARIABLE: " 100 "}).model_calls_per_user_per_day == 100
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "2.5", "many", "1e3"])
+def test_a_cap_on_calls_that_is_not_a_whole_number_is_refused(value):
+    with pytest.raises(RuntimeError, match=MODEL_CALLS_PER_DAY_VARIABLE):
+        load_settings({**ON, MODEL_CALLS_PER_DAY_VARIABLE: value})
+
+
+def test_a_cap_on_calls_with_records_off_is_refused_not_ignored():
+    with pytest.raises(RuntimeError, match="needs run records on"):
+        load_settings({**OFF, MODEL_CALLS_PER_DAY_VARIABLE: "100"})
+
+
 # ------------------------------------------------------------------------------- the job queue (ADR-0056 amendment 3)
 
 from anisotropy_api.settings import JOB_ROLE_VARIABLE

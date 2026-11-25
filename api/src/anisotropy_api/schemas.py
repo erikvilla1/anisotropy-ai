@@ -1179,11 +1179,13 @@ class CouponTests(Contract):
 
 
 class AssistantInfo(Contract):
-    """Whether a model reads messages here (ADR-0088): the page asks once, and with none it reads with its own patterns."""
+    """Whether a model reads messages here (ADR-0088): the page asks once, and with none it reads with its own patterns. `checked`: whether
+    the model is one the real-model Assistant check has been run with (ADR-0121 amendment 8); null with no model."""
 
     proposes: bool
     provider: str | None
     model: str | None
+    checked: bool | None = None
 
 
 class CouponSummary(Contract):

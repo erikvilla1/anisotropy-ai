@@ -144,7 +144,7 @@ A week whose `flag` starts with "look" cost more than 30% more per call, or thou
 
 ### The monthly report (ADR-0120 amendments 1 and 2)
 
-On the 1st of each month a scheduled session of Claude reads last month's views and writes a short report as a row of the Notion database "Model cost reports", under Expenses, with one line and the link in the project: the total and the month before, who used most and for what, flagged weeks with what changed in them, unpriced models, and suggestions. It reads through a login that can see the three views and nothing else. Make it once, or again to replace its password, from the repository root with the Neon CLI signed in:
+On the 1st of each month a scheduled session of Claude reads last month's views and writes a short report as a row of the Notion database "Model cost reports", under Expenses, with one line and the link in the project: the total and the month before, who used most and for what, flagged weeks with what changed in them, unpriced models, and suggestions. It reads through a login that can see the three views, and the guards' weekly counts (`assistant_guards_by_feature`, ADR-0139), and nothing else. Make it once, or again to replace its password, from the repository root with the Neon CLI signed in:
 
 ```powershell
 $env:DATABASE_URL_UNPOOLED = neon connection-string production
