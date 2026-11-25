@@ -164,12 +164,23 @@ def main() -> int:
             }
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             grades[qid] = {"verdict": "weak", "criteria": [], "why": "the judge gave no grade in this run"}
+    # a grade this run used is kept another KEEP_DAYS; one no run used for that long goes. When each was last used is kept in a file of
+    # its own: the store travels between runs as an artifact, whose files need not keep their times (ADR-0138 amendment 2)
     now = time.time()
-    for path in store.folder.glob("*.json"):  # a grade this run used is kept another KEEP_DAYS; one no run used for that long goes
+    used_file = args.store / "grades-used.json"
+    try:
+        last_used: dict[str, float] = json.loads(used_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        last_used = {}
+    for path in store.folder.glob("*.json"):
         if path.stem in keys.values():
-            os.utime(path, (now, now))
-        elif now - path.stat().st_mtime > KEEP_DAYS * 86400:
+            last_used[path.stem] = now
+        elif now - last_used.setdefault(path.stem, now) > KEEP_DAYS * 86400:
             path.unlink()
+            del last_used[path.stem]
+    used_file.write_text(
+        json.dumps({k: round(v) for k, v in sorted(last_used.items()) if (store.folder / f"{k}.json").exists()}), encoding="utf-8"
+    )
     args.out.write_text(
         json.dumps({"grades": grades, "spent": round(spend.dollars, 6), "sent": len(store.sent), "stopped": stopped}, indent=1),
         encoding="utf-8",

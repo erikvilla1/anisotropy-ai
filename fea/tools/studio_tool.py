@@ -263,7 +263,8 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
         write_json(out / "checklist.json", unreadable(values_path, str(exc)).as_dict())
         print(f"blocked: {exc}")
         return "blocked"
-    checklist, model, _ = setup_checklist(form, root)
+    # the file is for another program on the engineer's own machine: no limit on its elements (ADR-0086 amendment 1; the founder, 2026-11-24)
+    checklist, model, _ = setup_checklist(form, root, element_limit=None)
     write_json(out / "checklist.json", checklist.as_dict())
     if not solvable(checklist, model):
         print(f"{checklist.state}: no model written")

@@ -40,6 +40,8 @@ export function plan(mode: Mode, features: readonly string[] = [], from: readonl
   if (unknown.length) throw new Error(`no bank named ${unknown.join(", ")}`);
   for (const bank of from) {
     if (wanted.size && !wanted.has(bank.feature)) continue;
+    // a bank may ask the same words twice, with the Ansys file offered and without: the site offers it to everyone (ADR-0129 amendment 3)
+    const ansysTwins = new Set(bank.questions.filter((q) => q.ansys === true).map((q) => `${q.ask.trim().toLowerCase()}|${q.after?.join("|") ?? ""}`));
     bank.questions.forEach((question, index) => {
       const id = `${bank.feature}#${index + 1}`;
       const skip = (reason: string) => skipped.push({ id, feature: bank.feature, ask: question.ask, page: question.page, reason, question });
@@ -48,6 +50,9 @@ export function plan(mode: Mode, features: readonly string[] = [], from: readonl
       if (offered) return skip(offered);
       if (question.picked !== undefined) return skip("it is asked about an element clicked on the model, which the check does not click");
       if (question.asking !== undefined) return skip("it answers the chat's own question in the middle of a setup");
+      if (question.ansys !== true && ansysTwins.has(`${question.ask.trim().toLowerCase()}|${question.after?.join("|") ?? ""}`)) {
+        return skip("it is asked of a page without the Ansys file, which the site offers to everyone: its twin with the file offered is asked");
+      }
       const modelRead = modelRequests(question).length > 0;
       if (mode === "quick" && modelRead) return skip("a model reads it on the site: asked in the full run");
       asked.push({ id, feature: bank.feature, question, modelRead });
@@ -67,5 +72,9 @@ export function plan(mode: Mode, features: readonly string[] = [], from: readonl
   return { asked: asked.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map(({ p }) => p), skipped };
 }
 
-/** Whether a question's route may move the page on, so the page is checked and set up again after it. */
-export const moves = (question: Question): boolean => MOVES.has(question.route);
+/** Routes whose answer changes the page's rows at once ("switch to inches", a name): a later question would be asked of another coupon
+ * than its bank's, so the page is set up again after it (the second run asked "what units are you using?" after "work in metres"). */
+const CHANGES: ReadonlySet<string> = new Set(["patterns", "name"]);
+
+/** Whether a question's route may move the page on or change its rows, so the page is checked and set up again after it. */
+export const moves = (question: Question): boolean => MOVES.has(question.route) || CHANGES.has(question.route);

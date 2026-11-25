@@ -37,6 +37,9 @@ EDGE_REGIONS = ("Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right")  # the pla
 AREA_REGIONS = ("Face",)  # every element; Tab-Bottom and Tab-Top join when there are tabs; a [[regions]] box is an area too
 RESERVED_REGIONS = (*EDGE_REGIONS, "Hole", *AREA_REGIONS, "Tab-Bottom", "Tab-Top", "Gauge", "Grip-Bottom", "Grip-Top")
 LINE_TOLERANCE = 1e-9  # relative to the length: a node row must sit on a tab or support line within this
+# The most elements our kernel builds and solves in one model: the setup check refuses a mesh past it before meshing (ADR-0086
+# amendment 1), and the mesh study leaves out a refinement past it (ADR-0068). The file written for Abaqus or Ansys is not held to it.
+MOST_ELEMENTS = 40_000
 # A coupon's ply angles are counted from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in
 # bending, the length of a plate. The engine counts from the laminate x axis (ADR-0004), so a stated angle has its fibre this far past x.
 LENGTH_AXIS_ROTATION_DEG = 90.0
@@ -644,6 +647,17 @@ def mesh_counts(spec: CouponSpec) -> tuple[int, int]:
         return m.nx, m.ny
     across = section_width(spec)  # a dog-bone's columns follow its outline, so the narrow section sets their count (ADR-0075)
     return max(1, math.ceil(across / m.element_size - 1e-9)), max(1, math.ceil(g.length / m.element_size - 1e-9))
+
+
+def element_estimate(spec: CouponSpec) -> int:
+    """How many elements the spec's mesh will have, from its counts alone, before anything is meshed: nx by ny for the structured mesher;
+    for Gmsh's plate with a hole, the rectangle at the element size and the rings around the hole, an upper estimate."""
+    m, g = spec.mesh, spec.geometry
+    if m.mesher == "structured":
+        nx, ny = mesh_counts(spec)
+        return nx * ny
+    rings = m.hole.circumferential * m.hole.radial_layers if m.hole is not None else 0
+    return math.ceil(g.width / m.element_size) * math.ceil(g.length / m.element_size) + rings
 
 
 def row_coordinates(spec: CouponSpec) -> list[float] | None:
