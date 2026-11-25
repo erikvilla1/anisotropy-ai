@@ -538,6 +538,10 @@ test("editing a library material copies its record into the engineer's own field
   await expect(page.getByLabel("Own material: F1t (MPa)", { exact: true })).toHaveValue("2558.5065363489152");
   await expect(page.locator("#studio-G13")).toHaveValue("4688.43"); // the estimate the coupon was already built with
   await expect(page.getByLabel("Own material: source", { exact: true })).toHaveValue(/IM7 \/ 8552 from our library, edited here/);
+  // picking the material again puts the library's own numbers back, and the record can be taken for editing again
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await expect(page.getByTestId("material-values").locator("[data-key=E1] dd")).toHaveText("162.1 GPa");
+  await page.getByTestId("edit-library-values").click();
   // the engineer changes one of them, and the check is sent their value, with no library id
   await page.getByLabel("Own material: E1 (MPa)", { exact: true }).fill("150000");
   await page.getByTestId("build-button").click();
@@ -545,9 +549,6 @@ test("editing a library material copies its record into the engineer's own field
   const edited = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
   expect([edited.library, edited.own_E1, edited.own_name]).toEqual([undefined, 150000, "IM7-8552"]);
   expect(edited.own_E2).toEqual(8963.18448111887); // the rest still the record's
-  // picking the material again puts the library's own numbers back
-  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
-  await expect(page.getByTestId("material-values").locator("[data-key=E1] dd")).toHaveText("162.1 GPa");
 });
 
 test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
