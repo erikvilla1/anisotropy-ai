@@ -15,7 +15,11 @@
     0,
     45
    ],
-   "nu23": 0.45
+   "nu23": 0.45,
+   "fibre_tension_energy": 80.0,
+   "fibre_compression_energy": 80.0,
+   "matrix_tension_energy": 0.3,
+   "matrix_shear_energy": 0.8
   },
   "damage": {
    "diameter": 25.0

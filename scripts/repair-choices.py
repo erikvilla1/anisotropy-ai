@@ -3,13 +3,15 @@
 
     uv run --project engine python scripts/repair-choices.py          # the choices and the hand calculation's answers
     uv run --project fea python scripts/repair-choices.py --solve     # also the solved slices (needs CalculiX, `ccx`)
+    uv run --project fea python scripts/repair-choices.py --plies     # also the flush example carried until it cannot hold the load, on two meshes (minutes)
 
 lib/repair-choices.json holds the two example repair files as the engine reads them (a flush repair in a stepped cut,
 engine/examples/example-patch-repair.toml, and a patch bonded on top, engine/examples/example-external-patch-repair.toml) and
 the library materials a repair can name: a ply material with a ply thickness. tests/fixtures/repair/ holds the API's answer
 to each example (POST /v1/repairs/analyze, with no run id) and, with --solve, the solve of each example's slice (POST
 /v1/repairs/solve) and its bond followed until it lets go (POST /v1/repairs/bond, ADR-0140), their run times fixed so the files do
-not change from run to run. For the repair's chat (ADR-0136) it also
+not change from run to run; with --plies, the flush example carried until its plies and its bond cannot hold the load (GET
+/v1/repairs/plies/{job}, ADR-0141), on the run's own mesh and on one a step finer. For the repair's chat (ADR-0136) it also
 holds two changes previewed on the flush example (POST /v1/repairs/changes: each step 0.5 in long, and a step added), a sweep of
 its step length to a load (POST /v1/repairs/sweeps, with no check) and, with --solve, what the solved slice of that sweep's
 pick says of it (the answer's `check`).
@@ -23,8 +25,8 @@ import tomllib
 from pathlib import Path
 
 from anisotropy_engine.library import library_core, library_material, list_datasets
-from anisotropy_engine.repair import (RepairChange, RepairSweep, bond_needs, pick_check, preview_change, repair_from_dict, repair_report, repair_views,
-                                      solve_needs, sweep_repair)
+from anisotropy_engine.repair import (RepairChange, RepairSweep, bond_needs, pick_check, ply_needs, preview_change, repair_from_dict,
+                                      repair_report, repair_views, solve_needs, sweep_repair)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = {"example": ROOT / "engine" / "examples" / "example-patch-repair.toml",
@@ -72,7 +74,7 @@ def answer(name: str) -> dict:
     data = example(name)
     repair, load = repair_from_dict(data)
     return {"run_id": None, "engine_version": "0.1.0", "repair": data, "report": repair_report(repair, data["units"], load),
-            "views": repair_views(repair, data["units"], load), "needs": solve_needs(repair, load), "bond_needs": bond_needs(repair)}
+            "views": repair_views(repair, data["units"], load), "needs": solve_needs(repair, load), "bond_needs": bond_needs(repair), "ply_needs": ply_needs(repair)}
 
 
 def answer_text(name: str) -> str:
@@ -99,6 +101,23 @@ def bond(name: str) -> dict:
     report = bond_report(run_bond(repair_from_dict(data)[0]), data["units"])
     report["model"]["seconds"] = 10.0
     return {"run_id": None, "headline": headline(report), "report": report}
+
+
+def plies(name: str, finer: int = 0) -> dict:
+    """The API's answer for an example carried until its plies and its bond cannot hold the load, once its job is done
+    (GET /v1/repairs/plies/{job}, ADR-0141 amendment 1): a job with fixed ids and times, on the run's own mesh or one `finer`
+    steps finer, as the job's tool picks it. Each run takes minutes, so they are written only with `--plies`."""
+    from anisotropy_fea.repair_plies import MESH_STEP, SHORTEN, STAGES, headline, longest_element, plies_report, run_plies
+
+    data = example(name)
+    repair = repair_from_dict(data)[0]
+    size = MESH_STEP ** finer * SHORTEN * longest_element(repair) if finer else None
+    report = plies_report(run_plies(repair, element_size_m=size, units=data["units"]), data["units"])
+    sys.stdout.write(f"{name}, {finer} finer: {report['model']['elements']} elements, {report['model']['seconds']:.0f} s\n")
+    report["model"]["seconds"] = 260.0 if finer == 0 else 420.0
+    return {"job_id": f"00000000-0000-4000-8000-00000000000{7 + finer}", "state": "done", "repair": data.get("title"), "finer": finer,
+            "started_at": "2026-11-25T08:00:00+00:00", "finished_at": "2026-11-25T08:05:00+00:00", "stage": None, "stages_done": list(STAGES),
+            "stages": list(STAGES), "message": None, "run_id": None, "headline": headline(report), "report": report}
 
 
 def change(name: str) -> dict:
@@ -145,4 +164,9 @@ if __name__ == "__main__":
         path = FIXTURES / f"{name}.json"
         path.write_text(compact(value), encoding="utf-8", newline="\n")
         written.append(path)
+    if "--plies" in sys.argv[1:]:
+        for finer, name in ((0, "example-plies"), (1, "example-plies-finer")):
+            path = FIXTURES / f"{name}.json"
+            path.write_text(compact(plies("example", finer)), encoding="utf-8", newline="\n")
+            written.append(path)
     sys.stdout.write(f"wrote {', '.join(str(path.relative_to(ROOT)) for path in written)}\n")

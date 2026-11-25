@@ -5,7 +5,10 @@ import {
   changeLine, previewPlace, previewRows, readRepairAsk, repairAnswer, REPAIR_EXAMPLES, REPAIR_ROUTES, sweepHeading, sweepLine, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSweepAnswer,
 } from "../lib/repair-chat";
-import { EXAMPLE_REPAIR, EXTERNAL_REPAIR, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, withValue, type RepairAnswer, type RepairBond, type RepairSolve } from "../lib/repair";
+import {
+  CARRIES_IS_NOT_THE_STRENGTH, EXAMPLE_REPAIR, EXTERNAL_REPAIR, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, withValue,
+  type RepairAnswer, type RepairBond, type RepairPliesJob, type RepairSolve,
+} from "../lib/repair";
 import { bannedIn } from "../lib/studio-copy";
 
 // The repair's chat (ADR-0136): what the page reads in a message by its own patterns, and how it answers from the engine's report and
@@ -22,6 +25,10 @@ const SOLVED: RepairHeld = { ...HAND, slice: SOLVE.report };
 const BOND = read<RepairBond>("example-bond");
 const CAN_FOLLOW: RepairHeld = { ...HAND, bondNeeds: [] };
 const FOLLOWED: RepairHeld = { ...SOLVED, bond: BOND.report, bondNeeds: [] };
+// the repair carried until it cannot hold the load (ADR-0141): the page that can carry it, and the page that has
+const PLIES = read<RepairPliesJob>("example-plies").report!, PLIES_FINER = read<RepairPliesJob>("example-plies-finer").report!;
+const CAN_CARRY: RepairHeld = { ...CAN_FOLLOW, pliesNeeds: [] };
+const CARRIED: RepairHeld = { ...FOLLOWED, plies: PLIES, pliesNeeds: [] };
 const ON_TOP: RepairHeld = { repair: EXTERNAL_REPAIR, report: EXTERNAL.report, slice: null, sliceStale: false, needs: [] };
 const say = (message: string, held: RepairHeld = HAND) => repairAnswer(readRepairAsk(message, held.report?.kind ?? "flush"), held);
 
@@ -343,6 +350,101 @@ test("a question of why, how or what a thing is goes to the reference pages, bes
   assert.equal(readRepairAsk("what is the peel stress").route, "repair-result", "with its article it asks for this repair's value");
 });
 
+test("the load the repair carries is answered from the run with the plies damaging, with the load it does not carry, never as a strength (ADR-0141)", () => {
+  // asked as a load, however it is named: the largest, the maximum, the ultimate, the failure load, how much it takes
+  const asks = ["what is the largest load it carries", "whats teh max load", "ultimate load?", "what is the failure load", "how much load can the repair take",
+    "how much can it carry", "what load does it carry before it fails", "load capacity", "when does the repair fail"];
+  for (const message of asks) assert.deepEqual(readRepairAsk(message), { route: "repair-result", topic: "carries" }, message);
+  const carries = say("what is the largest load it carries", CARRIED);
+  assert.deepEqual([carries.kind, carries.heading, carries.panel, carries.offer], ["result", "The slice carries 1,208 N/mm in this model", "repair-solve", undefined]);
+  assert.deepEqual(carries.lines, ["It holds 1,208 N/mm and does not hold 1,213 N/mm.", "The first softening is at 184.4 N/mm: the bond.",
+    "What gives is the plies: no part of the bond has parted at that load.", CARRIES_IS_NOT_THE_STRENGTH]);
+  assert.deepEqual(carries.data, { held: PLIES.load.held, not_held: PLIES.load.not_held, onset: PLIES.onset.load });
+  // with a second run on a finer mesh, how far the load moved is said
+  assert.ok(say("max load", { ...CARRIED, pliesFiner: PLIES_FINER }).lines.includes("On a mesh a fifth finer (7,458 elements against 6,322) it carries 1,212 N/mm: the load moves 0.35 % between the two meshes."));
+  // a run whose time came first gives a floor, said as one
+  const floor = say("what is the largest load", { ...CARRIED, plies: { ...PLIES, load: { ...PLIES.load, not_held: null, spread: null }, ended: "time" } });
+  assert.equal(floor.heading, "The slice carries at least 1,208 N/mm in this model");
+  assert.match(floor.lines[0], /^The run reached the time it is given before it found a load the slice cannot hold/);
+  // not carried yet: the offer to start it; under way: what it is doing; changed since: said; what it still needs: named, with its step
+  const offer = say("what is the largest load it carries", CAN_CARRY);
+  assert.deepEqual([offer.kind, offer.heading, offer.lines, offer.offer], ["none", "The repair is not carried to that load yet", ["Carry the repair until it cannot hold the load to get it: a few minutes."], "plies"]);
+  const running = say("what is the maximum load", { ...CAN_CARRY, pliesRunning: "Carrying the repair: raising the load…" });
+  assert.deepEqual([running.heading, running.lines, running.offer], ["The repair is being carried now", ["Carrying the repair: raising the load…", "Ask again when it is done: the Solve step shows it."], undefined]);
+  assert.deepEqual(say("max load", { ...CAN_CARRY, pliesStale: true }).lines, ["It was carried as it was: carry it again for the repair as it stands."]);
+  const needs = say("what load does it carry before it fails", { ...ON_TOP, pliesNeeds: EXTERNAL.ply_needs });
+  assert.deepEqual([needs.heading, needs.lines, needs.panel, needs.offer],
+    ["The repair is not carried to that load yet", ["To carry the repair until it cannot hold the load, it still needs the laminate ply's four fracture energies."], "repair-laminate", undefined]);
+  assert.equal(say("max load", { ...CAN_CARRY, pliesNeeds: [{ path: "patch.F1t", words: "the patch ply's strengths" }] }).panel, "repair-patch");
+  assert.equal(say("max load", { ...CAN_CARRY, pliesNeeds: [{ path: "adhesive.peel_energy", words: "the bond's fracture energy in peel" }] }).panel, "repair-adhesive");
+  // where the analysis service makes no such run, the question is one of a verdict, as before
+  assert.equal(say("what is the largest load it carries").heading, "This page gives no strength or verdict");
+  // other loads keep their own answers: the adhesive's elastic limit, the bond's, the force in the patch, a sweep's pick, a load to set
+  assert.equal(say("what is the elastic limit load", CARRIED).heading, "238.5 N/mm by hand");
+  assert.equal(say("what load does the bond let go at", CARRIED).heading, "The bond lets go at 1,340 N/mm in this model");
+  assert.equal(say("what is the bond failure load", CARRIED).heading, "The bond lets go at 1,340 N/mm in this model");
+  assert.equal(say("how much does the patch carry", CARRIED).heading, "The patch carries 53.03 of the 100 N/mm at the middle");
+  assert.deepEqual(readRepairAsk("largest load that stays elastic"), { route: "repair-result", topic: "elastic" });
+  assert.equal(readRepairAsk("can it carry 200 N/mm?").route === "repair-result" && (readRepairAsk("can it carry 200 N/mm?") as { topic: string }).topic, "verdict");
+  assert.equal(readRepairAsk("set the load to 300 N/mm").route, "repair-change");
+});
+
+test("what had failed at that load is the run's own counts, a yes or no opens with it, and the bond is set against the plies by them (ADR-0141)", () => {
+  const failed = say("what had failed by then", CARRIED);
+  assert.equal(failed.heading, "At 1,208 N/mm plies have cracked and no bond has parted");
+  assert.deepEqual(failed.lines, [
+    "16.52 mm of the bond's 62.1 mm is past its strength and still carrying, and none has parted.",
+    "13 of the 6,322 elements of ply are broken across the fibres, 0 of them through; the worst is in laminate ply 2 (0°), 34.14 mm from the middle.",
+    "4,570 of the 6,322 elements of ply are cracked along the fibres, 42 of them through; the worst is in laminate ply 4 (90°), 13.69 mm from the middle.",
+    "What gives is the plies: no part of the bond has parted at that load.",
+    `The slice carries 1,208 N/mm in this model. ${CARRIES_IS_NOT_THE_STRENGTH}`,
+  ]);
+  for (const message of ["which plies crack", "what gives", "where is the matrix cracking", "what breaks in the plies"]) assert.equal(say(message, CARRIED).heading, failed.heading, message);
+  assert.deepEqual(readRepairAsk("do the fibres break"), { route: "repair-result", topic: "carries", failed: true, crack: "fibre" });
+  assert.equal(say("do the fibers break", CARRIED).heading, "Yes: fibres are broken in 13 elements at 1,208 N/mm");
+  assert.equal(say("does the matrix crack?", CARRIED).heading, "Yes: the matrix is cracked in 4,570 elements at 1,208 N/mm");
+  const whole = { ...CARRIED, plies: { ...PLIES, at_held: { ...PLIES.at_held, plies: PLIES.at_held.plies.filter((row) => row.crack === "matrix") } } };
+  assert.equal(say("do the fibres break", whole).heading, "No: no fibres are broken at 1,208 N/mm");
+  const nothing = { ...CARRIED, plies: { ...PLIES, at_held: { ...PLIES.at_held, bond: { ...PLIES.at_held.bond, softening: 0 }, plies: [] } } };
+  assert.equal(say("what had failed", nothing).heading, "Nothing had failed at 1,208 N/mm, the largest load held");
+  const softening = { ...CARRIED, plies: { ...PLIES, at_held: { ...PLIES.at_held, plies: [] } } };
+  assert.equal(say("what had failed", softening).heading, "At 1,208 N/mm the bond is softening and nothing has parted");
+  const both = { ...CARRIED, plies: { ...PLIES, at_held: { ...PLIES.at_held, bond: { ...PLIES.at_held.bond, parted: 3 } } } };
+  assert.equal(say("what had failed", both).heading, "At 1,208 N/mm the bond and the plies have begun to fail");
+  assert.equal(say("does the bond fail before the plies", both).heading, "The bond and the plies have both begun to fail");
+  // the bond against the plies: the carried run answers it, whether or not the bond alone was followed
+  const before = say("does the bond fail before the plies", CARRIED);
+  assert.equal(before.heading, "No: the plies give first in this model; no bond has parted");
+  assert.equal(before.lines[0], "The slice carries 1,208 N/mm in this model. It holds 1,208 N/mm and does not hold 1,213 N/mm.");
+  assert.equal(before.lines.at(-1), CARRIES_IS_NOT_THE_STRENGTH);
+  assert.equal(say("what fails first, the bond or the plies", { ...CARRIED, bond: null }).heading, "The plies give first in this model; no bond has parted");
+  const parted = { ...CARRIED, plies: { ...PLIES, at_held: { ...PLIES.at_held, bond: { ...PLIES.at_held.bond, parted: 3 }, plies: [] } } };
+  assert.equal(say("does the bond fail before the plies", parted).heading, "Yes: the bond gives first in this model; no ply has failed");
+  // the verdict lists the carried load with the rest, and still gives none
+  const verdict = say("is it strong enough", CARRIED);
+  assert.equal(verdict.heading, "This page gives no strength or verdict");
+  assert.ok(verdict.lines.includes("With the plies damaging as well, it carries 1,208 N/mm in this model and not 1,213 N/mm."));
+  assert.equal(verdict.lines.at(-1), "None of these is the repair's strength: plies parting from each other are not followed, and what the analysis leaves out is listed under the results.");
+  assert.equal(verdict.data.carries, PLIES.load.held);
+});
+
+test("the repair is carried on a command, when it states what that needs, and one run at a time (ADR-0141)", () => {
+  for (const message of ["carry it until it cannot hold the load", "carry the repair", "run the ply damage", "carry it again", "follow the damage in the plies", "load it until it cannot hold"]) {
+    assert.deepEqual(readRepairAsk(message), { route: "repair-command", command: "plies" }, message);
+  }
+  const started = say("carry the repair", CAN_CARRY);
+  assert.deepEqual([started.kind, started.heading, started.panel], ["plies", "Carrying the repair until it cannot hold the load", "repair-solve"]);
+  assert.deepEqual(started.lines, ["A few minutes, nine at most; it goes on if you leave the page. Details and the Solve step show it when it is done."]);
+  const already = say("carry the repair", { ...CAN_CARRY, pliesRunning: "Carrying the repair: building the model…" });
+  assert.deepEqual([already.kind, already.heading], ["none", "The repair is being carried already"]);
+  const needs = say("carry the repair until it cannot hold the load", { ...ON_TOP, pliesNeeds: EXTERNAL.ply_needs });
+  assert.deepEqual([needs.kind, needs.heading, needs.panel], ["none", "The repair cannot be carried yet", "repair-laminate"]);
+  assert.equal(say("carry the repair").heading, "The repair cannot be carried to that load here");
+  // a question of it is not a command, and the bond's own run keeps its words
+  assert.equal(readRepairAsk("how long does it take to carry the repair?").route === "repair-command", false);
+  assert.deepEqual(readRepairAsk("follow the bond"), { route: "repair-command", command: "bond" });
+});
+
 test("a command is started or pointed to, and what cannot be read is said with examples", () => {
   for (const message of ["solve the slice", "solve it", "Solve", "run the finite element check", "please solve the slice"]) assert.deepEqual(readRepairAsk(message), { route: "repair-command", command: "solve" }, message);
   assert.equal(say("solve the slice").kind, "solve");
@@ -367,13 +469,14 @@ test("every route is reached, and no answer names a tool or calls a number a str
   for (const route of REPAIR_ROUTES) assert.equal(readRepairAsk(messages[route]).route, route);
   const asked = ["what is the largest shear?", "what is the elastic limit load", "what is the peel stress", "what fails first", "which ply fails first", "how wide is the repair",
     "how much load does the patch carry", "is it strong enough?", "can it carry 200 N/mm?", "is the adhesive still elastic at 200 N/mm?", "add a step", "double the step length",
-    "smallest repair", "sweep the load", "solve the slice", "open the report", "hello", "why is it not the strength"];
-  for (const held of [HAND, SOLVED, ON_TOP]) {
+    "smallest repair", "sweep the load", "solve the slice", "open the report", "hello", "why is it not the strength", "what is the largest load it carries", "which plies crack",
+    "does the bond fail before the plies", "carry the repair"];
+  for (const held of [HAND, SOLVED, ON_TOP, CAN_CARRY, CARRIED]) {
     for (const message of asked) {
       const said = say(message, held);
       const text = [said.heading, ...said.lines].join("\n");
       assert.deepEqual(bannedIn(text), [], `${message}: ${text}`);
-      assert.doesNotMatch(text.replace(NOT_THE_STRENGTH, "").replace(/no strength|gives no strength or verdict|Not judged|peel strength|shear strength|no strength to bring back/g, ""),
+      assert.doesNotMatch(text.replace(NOT_THE_STRENGTH, "").replace(CARRIES_IS_NOT_THE_STRENGTH, "").replace(LET_GO_IS_NOT_THE_STRENGTH, "").replace(/None of these is the repair's strength/g, "").replace(/no strength|gives no strength or verdict|Not judged|peel strength|shear strength|no strength to bring back/g, ""),
         /\bthe repair's strength\b|\bstrength of the repair\b|\bmargin\b|\bwill (?:fail|hold)\b|\bis safe\b|\bpasses\b/, `${message}: ${text}`);
     }
   }

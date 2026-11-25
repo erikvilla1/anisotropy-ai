@@ -1,6 +1,6 @@
 /** The repair's page (ADR-0135): one stepped patch repair, the same table a repair file holds (ADR-0131), edited on the page, worked by
- * the engine's hand calculation on every change (ADR-0130) and, on request, solved as a slice in CalculiX (ADR-0132) and its bond followed
- * until it lets go (ADR-0140). Nothing here
+ * the engine's hand calculation on every change (ADR-0130) and, on request, solved as a slice in CalculiX (ADR-0132), its bond followed
+ * until it lets go (ADR-0140) and the whole carried until its plies and its bond cannot hold the load (ADR-0141). Nothing here
  * computes a result: the description is sent as it stands, the engine reads it by its own rules and refuses what is wrong by name, and
  * the page shows its numbers. What this file does is keep the description (its fields, its two kinds, its materials), write it out as a
  * repair file, and word the engine's and the solver's answers. */
@@ -103,9 +103,16 @@ export const TYPED_MATERIAL_FIELDS: readonly { key: string; label: string; unit?
 export const STRENGTH_FIELDS: readonly { key: string; label: string }[] = [
   { key: "F1t", label: "F1t" }, { key: "F1c", label: "F1c" }, { key: "F2t", label: "F2t" }, { key: "F2c", label: "F2c" }, { key: "F6", label: "F6" },
 ];
+/** A ply material's four fracture energies, all four or none, for a library material or one typed in full (ADR-0141): with them the
+ * repair can be carried until its plies and its bond cannot hold the load. Stated as a force per length, like the bond's. */
+export const ENERGY_FIELDS: readonly { key: string; label: string }[] = [
+  { key: "fibre_tension_energy", label: "Fibre break, pulled" }, { key: "fibre_compression_energy", label: "Fibre break, pressed" },
+  { key: "matrix_tension_energy", label: "Matrix crack, opened" }, { key: "matrix_shear_energy", label: "Matrix crack, slid" },
+];
 const TYPED_KEYS = [...TYPED_MATERIAL_FIELDS.map((f) => f.key), ...STRENGTH_FIELDS.map((f) => f.key)];
 const LIBRARY_KEYS = ["library", "dataset"];
 
+const lowerFirst = (text: string): string => (text ? text[0].toLowerCase() + text.slice(1) : text);
 const isTable = (value: RepairValue | undefined): value is RepairDescription => typeof value === "object" && value !== null && !Array.isArray(value);
 const tableOf = (repair: RepairDescription, name: string): RepairDescription => (isTable(repair[name]) ? (repair[name] as RepairDescription) : {});
 
@@ -132,7 +139,7 @@ export function withTypedMaterial(repair: RepairDescription, table: "parent" | "
 /** The description with the patch of the laminate's own material: the patch's table keeps what is not a material's. */
 export function withLaminateMaterial(repair: RepairDescription): RepairDescription {
   const kept = Object.fromEntries(Object.entries(tableOf(repair, "patch")).filter(([key]) => !TYPED_KEYS.includes(key) && !LIBRARY_KEYS.includes(key)
-    && !["E3", "G13", "G23", "nu13", "nu23"].includes(key)));
+    && !["E3", "G13", "G23", "nu13", "nu23"].includes(key) && !ENERGY_FIELDS.some((f) => f.key === key)));
   const out: RepairDescription = { ...repair, patch: kept };
   if (Object.keys(kept).length === 0) delete out.patch;
   return out;
@@ -194,13 +201,14 @@ function materialRows(repair: RepairDescription, table: "parent" | "patch", unit
   if (mode === "laminate") return [["Ply material", "The laminate's"]];
   const through = ["E3", "G13", "G23", "nu13", "nu23"].filter((key) => key in stated)
     .map((key): [string, string] => [key.replace("nu", "ν"), statedText(stated[key], key.startsWith("nu") ? "" : units.modulus)]);
+  const energies = ENERGY_FIELDS.filter((f) => f.key in stated).map((f): [string, string] => [`Energy of a ${lowerFirst(f.label)}`, statedText(stated[f.key], units.energy)]);
   if (mode === "library") {
     const found = REPAIR_MATERIALS.find((m) => m.id === stated.library);
-    return [["Ply material", found?.name ?? String(stated.library)], ...through];
+    return [["Ply material", found?.name ?? String(stated.library)], ...through, ...energies];
   }
   const typed = TYPED_MATERIAL_FIELDS.filter((f) => f.key in stated).map((f): [string, string] => [f.label, statedText(stated[f.key], f.unit ? units[f.unit] : "")]);
   const strengths = STRENGTH_FIELDS.filter((f) => f.key in stated).map((f): [string, string] => [f.label, statedText(stated[f.key], units.stress)]);
-  return [...typed, ...through, ...strengths];
+  return [...typed, ...through, ...strengths, ...energies];
 }
 
 /** What the description states, grouped as the page's steps are, for the report: every value as it was typed, with its unit. A value
@@ -250,9 +258,10 @@ export type RepairViews = {
 };
 export type SolveNeed = { path: string; words: string };
 /** `bond_needs` is what following the bond until it lets go still needs (ADR-0140); an analysis service that does not follow bonds
- * yet leaves it out, and the page then offers no such run. */
+ * yet leaves it out, and the page then offers no such run. `ply_needs` is the same for carrying the repair until its plies and its
+ * bond cannot hold the load (ADR-0141). */
 export type RepairAnswer = { run_id: string | null; engine_version: string; repair: RepairDescription; report: RepairReport; views: RepairViews; needs: SolveNeed[];
-  bond_needs?: SolveNeed[] };
+  bond_needs?: SolveNeed[]; ply_needs?: SolveNeed[] };
 
 export type SlicePeak = { value: number; r: number; part: string };
 export type SlicePly = { name: string; kind: RegionKind; angle: number; strength_ratio: number | null; mode: string | null; r: number | null; stress: number[] | null };
@@ -280,7 +289,7 @@ export type BondRunLine = { name: string; step: number | null; r: number[]; shea
  * of the bond is softening and has parted (`damaged_length` is the two together: the bond past its strength). */
 export type BondRunState = { load: number; end_movement: number; spent: number; softening_length: number; parted_length: number; damaged_length: number };
 /** A repair's bond followed until it lets go (ADR-0140), as `bond_report` gives it in the file's units. `let_go` is null when the run
- * ended before the load fell, and `ended` then says how ("gone", "steps" or "stalled"). */
+ * ended before the load fell, and `ended` then says how ("gone", "steps", "stalled" or "time"). */
 export type BondReport = {
   units: { length: string; stress: string; force: string; energy: string; stiffness: string };
   model: { solver: string; element: string; elements: number; nodes: number; pairs: number; bond_length: number; element_size: number; fine_size: number;
@@ -298,6 +307,30 @@ export type BondReport = {
   curve: { end_movement: number[]; load: number[]; damaged_length: number[]; parted_length: number[] };
 };
 export type RepairBond = { run_id: string | null; headline: string; report: BondReport };
+/** Where an element of a ply is: the kind of part, the ply's number in it and its angle, and its distance from the repair's middle. */
+export type PliesPlace = { kind: RegionKind; ply: number; angle: number; r: number };
+export type PliesCrack = "fibre_tension" | "fibre_compression" | "matrix";
+/** A repair carried until its plies and its bond cannot hold the load (ADR-0141), in the repair file's units: the model, what first
+ * softens and at what load, the largest load held and the smallest not held (null when the run's time came before one was found),
+ * how the search `ended` ("closed", "levels" or "time"), what had failed at the largest load held, and every load held on the way. */
+export type PliesReport = {
+  units: { system: string; length: string; force: string; stress: string };
+  model: { elements: number; pairs: number; element_size: number; fine_size: number; bond_length: number; longest_element: number; solves: number; seconds: number };
+  onset: { load: number; what: string; crack?: "bond" | "fibre" | "matrix"; place?: PliesPlace | null };
+  load: { held: number; not_held: number | null; spread: number | null; why: string; end_movement: number };
+  ended: string;
+  at_held: { bond: { softening: number; parted: number; length: number }; elements: number;
+    plies: { crack: PliesCrack; elements: number; through: number; worst: PliesPlace }[] };
+  levels: { load: number; end_movement: number; bond_parted: number; bond_softening: number; matrix_cracked: number; fibre_broken: number }[];
+  checks: { equilibrium: number };
+};
+/** A ply run as the analysis service has it (ADR-0141 amendment 1): a job, queued or running with its stage, then done with its
+ * report, refused with the reason, or stopped with what to do. `finer` is how many steps finer than its own mesh it was made on. */
+export type RepairPliesJob = {
+  job_id: string; state: "queued" | "running" | "done" | "stopped" | "refused"; repair: string | null; finer: number; started_at: string;
+  finished_at: string | null; stage: string | null; stages_done: string[]; stages: string[]; message: string | null; run_id: string | null;
+  headline: string | null; report: PliesReport | null;
+};
 export type RepairShape = { run_id: string | null; step: string;
   parts: { title: string; units: { length: string; volume: string }; parts: { name: string; kind: RegionKind; angle: number | null; volume: number }[]; volumes: Record<RegionKind, number> } };
 
@@ -312,7 +345,6 @@ export const CRITERION_WORDS: Record<string, string> = { max_stress: "maximum st
 /** The sentence that stands beside every limit load of the adhesive (ADR-0130): it is not a strength. */
 export const NOT_THE_STRENGTH = "Not the repair's strength: the adhesive yields before it fails.";
 
-const lowerFirst = (text: string): string => (text ? text[0].toLowerCase() + text.slice(1) : text);
 /** A name of the engine's inside a sentence: "Ledge of step 2" as "the ledge of step 2", "The whole patch" as "the whole patch",
  * "Adhesive on the floor" as "the adhesive on the floor"; a ply's name ("Laminate ply 6 (−45°)") keeps no article. */
 export function inSentence(name: string): string {
@@ -365,11 +397,121 @@ export function bondNeedsWords(needs: readonly SolveNeed[]): string {
   return `To follow the bond until it lets go, the repair still needs ${needs.map((n) => n.words).join("; ")}.`;
 }
 
+/** The sentence that stands beside the load a repair carries with its plies damaging (ADR-0141): still not a strength. */
+export const CARRIES_IS_NOT_THE_STRENGTH = "Not the repair's strength: plies parting from each other are not followed, and the load follows the fracture energies stated.";
+
+/** What carrying the repair until it cannot hold the load still needs, as one sentence, or empty when it can be carried. The plies'
+ * strengths and energies are named as the page's fields name them, not by the repair file's keys. */
+export function pliesNeedsWords(needs: readonly SolveNeed[]): string {
+  if (!needs.length) return "";
+  const whose = (path: string) => (path.startsWith("patch.") ? "the patch ply's" : "the laminate ply's");
+  const words = needs.map((n) => (/\.fibre_tension_energy$/.test(n.path) ? `${whose(n.path)} four fracture energies`
+    : /\.F1t$/.test(n.path) ? `${whose(n.path)} five strengths` : n.words));
+  return `To carry the repair until it cannot hold the load, it still needs ${words.join("; ")}.`;
+}
+
+/** What a ply run is doing, for the button and the status while it is under way. */
+export const PLIES_STAGE_WORDS: Record<string, string> = {
+  build: "building the model", soften: "carrying it to its first softening", raise: "raising the load", close: "closing in on the largest load it holds",
+};
+export function pliesProgress(job: RepairPliesJob): string {
+  if (job.state === "queued") return "Waiting to start…";
+  if (job.state !== "running") return "";
+  const words = job.stage ? PLIES_STAGE_WORDS[job.stage] : null;
+  return words ? `Carrying the repair: ${words}…` : "Carrying the repair…";
+}
+
+/** A ply run that ended without an answer, when the service gave no reason. */
+export const PLIES_NO_ANSWER = "The run ended without an answer. Start it again.";
+
+/** A ply run in one line, wherever the page reads it: under way with its stage, ended without an answer with the reason (`alert`),
+ * made for the repair as it was (`stale`), or done with its load and the sentence that it is not the repair's strength. */
+export function pliesLine(job: RepairPliesJob, stale: boolean): { alert: boolean; text: string } {
+  if (job.state === "queued" || job.state === "running") return { alert: false, text: pliesProgress(job) };
+  if (job.state !== "done" || !job.report) return { alert: true, text: job.message ?? PLIES_NO_ANSWER };
+  if (stale) return { alert: false, text: "The repair was carried as it was; it has changed since." };
+  const words = pliesWords(job.report);
+  return { alert: false, text: `${words.headline}. ${words.short}` };
+}
+
+/** The second run of a repair, on a finer mesh, in one line: under way, ended without an answer, or how far the load moved. */
+export function pliesFinerLine(job: RepairPliesJob, finer: RepairPliesJob): { alert: boolean; text: string } {
+  if (finer.state === "queued") return { alert: false, text: "On the finer mesh: waiting to start…" };
+  if (finer.state === "running") return { alert: false, text: `On the finer mesh: ${PLIES_STAGE_WORDS[finer.stage ?? ""] ?? "carrying the repair"}…` };
+  if (finer.state !== "done" || !finer.report || !job.report) return { alert: true, text: `The run on the finer mesh ended without an answer. ${finer.message ?? "Start it again."}` };
+  return { alert: false, text: pliesWords(job.report, finer.report).mesh };
+}
+
+const CRACK_WORDS: Record<PliesCrack, string> = { fibre_tension: "broken across the fibres", fibre_compression: "crushed along the fibres", matrix: "cracked along the fibres" };
+/** A ply by its part, its number and its angle, as the slice names its plies: "Laminate ply 4 (90°)". */
+export function plyName(place: PliesPlace): string {
+  const part = place.kind === "parent" ? "Laminate" : place.kind === "patch" ? "Patch" : "Cover";
+  return `${part} ply ${place.ply} (${place.angle < 0 ? "−" : ""}${shown(Math.abs(place.angle))}°)`;
+}
+
+/** The model of a ply run in one line: what was carried and how its check came out. No tool is named (ADR-0091). */
+export function pliesModelWords(report: PliesReport): string {
+  const m = report.model, length = unitText(report.units.length);
+  return `Carried as ${m.elements.toLocaleString("en-US")} eight-node plane elements held flat, none longer than ${shown(m.element_size, 3)} ${length} `
+    + `(a crack can soften in an element up to ${shown(m.longest_element, 3)} ${length}), with the bond as ${m.pairs.toLocaleString("en-US")} pairs of points, `
+    + `through ${report.levels.length} loads held and ${m.solves.toLocaleString("en-US")} solves, in ${shown(m.seconds, 3)} s. `
+    + `At the largest load held the forces along the load add up to the load within ${report.checks.equilibrium.toExponential(1)} of it.`;
+}
+
+/** A ply run in the page's words (ADR-0141): the load the slice carries in this model as the short form, with the load it does not
+ * carry beside it; what first softens; what had failed at the largest load held, from the run's own counts; what gives; and how far
+ * the load moves on a finer mesh when a second run was made (`finer`, for the same repair). The load is never called the repair's
+ * strength, and a run whose time came first says so. */
+export function pliesWords(report: PliesReport, finer: PliesReport | null = null): { headline: string; short: string; card: string; bracket: string;
+  softens: string; failed: string[]; gives: string; mesh: string } {
+  const force = unitText(report.units.force), length = unitText(report.units.length);
+  const load = report.load, at = report.at_held, onset = report.onset;
+  const open = load.not_held === null;
+  const headline = `The slice carries ${open ? "at least " : ""}${shown(load.held)} ${force} in this model`;
+  const cut = report.ended === "time" ? " The run reached the time it is given before the two were brought nearer."
+    : report.ended === "levels" ? " The run reached its limit of loads tried before the two were brought nearer." : "";
+  const bracket = open
+    ? "The run reached the time it is given before it found a load the slice cannot hold: it holds this load, and how much more this run does not say. A shorter panel makes a model it finishes."
+    : `It holds ${shown(load.held)} ${force} and does not hold ${shown(load.not_held as number)} ${force}.${cut}`;
+  const what = onset.crack === "matrix" && onset.place ? `a crack along the fibres in ${inSentence(plyName(onset.place))}, ${shown(onset.place.r)} ${length} from the middle`
+    : onset.crack === "fibre" && onset.place ? `a break across the fibres in ${inSentence(plyName(onset.place))}, ${shown(onset.place.r)} ${length} from the middle`
+      : "the bond";
+  const softens = `The first softening is at ${shown(onset.load)} ${force}: ${what}.`;
+  const none = (value: number) => Math.abs(value) < 1e-9 * at.bond.length;
+  const failed: string[] = [];
+  if (!none(at.bond.softening) || !none(at.bond.parted)) {
+    failed.push(`${shown(at.bond.softening)} ${length} of the bond's ${shown(at.bond.length)} ${length} is past its strength and still carrying, and `
+      + `${none(at.bond.parted) ? "none has parted" : `${shown(at.bond.parted)} ${length} has parted`}.`);
+  }
+  for (const row of at.plies) {
+    failed.push(`${row.elements.toLocaleString("en-US")} of the ${at.elements.toLocaleString("en-US")} elements of ply are ${CRACK_WORDS[row.crack]}, `
+      + `${row.through.toLocaleString("en-US")} of them through; the worst is in ${inSentence(plyName(row.worst))}, ${shown(row.worst.r)} ${length} from the middle.`);
+  }
+  if (!failed.length) failed.push("Nothing had failed yet at that load: the slice came apart within one step of it.");
+  const gives = at.plies.length && none(at.bond.parted) ? "What gives is the plies: no part of the bond has parted at that load."
+    : !at.plies.length && !none(at.bond.parted) ? "What gives is the bond: no ply has begun to fail at that load."
+      : at.plies.length ? "The bond and the plies have both begun to fail at that load." : "";
+  let mesh = "This is one mesh. Carry it on a finer one to see how far the load moves with the mesh.";
+  if (finer) {
+    const moved = Math.abs(finer.load.held - load.held) / load.held;
+    mesh = `On a mesh a fifth finer (${finer.model.elements.toLocaleString("en-US")} elements against ${report.model.elements.toLocaleString("en-US")}) it carries `
+      + `${finer.load.not_held === null ? "at least " : ""}${shown(finer.load.held)} ${force}: the load moves ${shown(100 * moved, 2)} % between the two meshes.`
+      + (moved > 0.02 ? " That is more than 2 %: read the load with it in mind." : "");
+  }
+  return {
+    headline, bracket, softens, failed, gives, mesh,
+    short: `${open ? bracket : `It does not carry ${shown(load.not_held as number)} ${force}.${cut}`} ${CARRIES_IS_NOT_THE_STRENGTH}`,
+    card: open ? `it carries at least ${shown(load.held)} ${force} in this model; the run's time came before a load it cannot hold was found. Not the repair's strength.`
+      : `it carries ${shown(load.held)} ${force} in this model and not ${shown(load.not_held as number)} ${force}. Not the repair's strength.`,
+  };
+}
+
 /** How a run that found no load at which the bond lets go ended, in the page's words (the run's own `ended`). */
 const ENDED_WORDS: Record<string, string> = {
   gone: "The whole bond parted and the load never fell.",
   steps: "The run reached its limit of steps before the load fell.",
   stalled: "The path could not be followed further.",
+  time: "The run reached the time it is given before the load fell; a shorter panel, longer steps or fewer plies make a model it finishes.",
 };
 
 /** The model of a followed bond in one line: what was followed and how its two checks came out. No tool is named (ADR-0091). */
@@ -465,6 +607,7 @@ export const LIMITS: readonly string[] = [
   "The solved slice is one plane through the repair's middle, along the load, held flat. It does not hold the panel beside the repair, which carries load round it, and a panel free to bend would add bending.",
   "Both are elastic. The load at the adhesive's elastic limit is where the adhesive starts to yield, not where the repair fails.",
   "A followed bond is the same slice with the adhesive as a line that softens and parts while every ply stays elastic. The plies are not checked for damage, so the load at which the bond lets go is not the repair's strength, and it follows the bond's strengths and fracture energies as stated.",
+  "A repair carried until it cannot hold the load is the same slice once more, with each ply able to break across its fibres and crack along them as well as the bond softening. Plies parting from each other and crushing across the fibres are not followed, cracks along the fibres go on multiplying where a real laminate's stop, and the load follows the strengths and fracture energies as stated: the load it carries in this model is not the repair's strength.",
   "Largest bondline stresses in the slice are means over a square of adhesive as long as the bondline is thick: at a corner the stress itself grows with the mesh.",
   "Cure stresses, moisture, temperature, fatigue and the quality of the bond are not in either.",
 ];

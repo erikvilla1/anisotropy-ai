@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CATEGORICAL } from "@/lib/studio-colors";
-import { shown, unitText, type BondReport, type RepairReport, type RepairViews, type SliceReport } from "@/lib/repair";
+import { shown, unitText, type BondReport, type PliesReport, type RepairReport, type RepairViews, type SliceReport } from "@/lib/repair";
 
 /** The drawings of a repair (ADR-0135), for the repair's page and for its report: the half slice as the engine's rectangles
  * (ADR-0131), the bondline's stresses along the bond, and the forces along the slice. All three share one scale along the slice, `r`
@@ -265,6 +265,73 @@ export function LoadCurve({ bond }: { bond: BondReport }) {
         <span className="repair-readout" aria-live="off">{at !== null
           ? `${shown(ys[at])} ${force} with ${shown(xs[at])} ${length} of the bond past its strength; the panel's end has moved ${shown(moved[at])} ${length}`
           : "Point at the curve to read a state."}</span>
+      </p>
+    </>
+  );
+}
+
+/** A repair carried until its plies and its bond cannot hold the load (ADR-0141), as the path the run took: every load the slice
+ * held against how far the panel's end had moved, from no load. The first point is the load at which something first softens, the
+ * last the largest load held; the load the slice does not hold is the dashed line above it. Each point is a load the solver held
+ * the slice under until its damage stopped growing; pointing at one reads what had failed by then. */
+export function HeldCurve({ plies }: { plies: PliesReport }) {
+  const force = unitText(plies.units.force), length = unitText(plies.units.length);
+  const levels = plies.levels;
+  const xs = [0, ...levels.map((l) => l.end_movement)], ys = [0, ...levels.map((l) => l.load)];
+  const height = 230, top = 22, bottom = 34;
+  const notHeld = plies.load.not_held;
+  const xHigh = Math.max(...xs, 0) * 1.12 || 1, yHigh = Math.max(...ys, notHeld ?? 0, 0) * 1.14 || 1;
+  const X = (v: number) => LEFT + (v / xHigh) * (WIDTH - LEFT - RIGHT), Y = (v: number) => top + (1 - v / yHigh) * (height - top - bottom);
+  const [at, setAt] = useState<number | null>(null); // the load held nearest the pointer
+  const move = (event: React.MouseEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - box.left) / box.width) * WIDTH, y = ((event.clientY - box.top) / box.height) * height;
+    let best = 0, gap = Infinity;
+    levels.forEach((l, i) => { const d = Math.hypot(X(l.end_movement) - x, Y(l.load) - y); if (d < gap) { gap = d; best = i; } });
+    setAt(gap <= 60 ? best : null);
+  };
+  const first = levels[0], last = levels[levels.length - 1];
+  const read = at !== null ? levels[at] : null;
+  return (
+    <>
+      <svg viewBox={`0 0 ${WIDTH} ${height}`} className="wing-svg repair-svg" role="img" data-testid="repair-held-curve" onMouseMove={move} onMouseLeave={() => setAt(null)}
+        aria-label={`Every load per unit width the slice held, in ${force}, against how far the panel's end had moved, in ${length}`}>
+        {axisTicks(0, yHigh).map((t) => (
+          <g key={`y-${t}`}>
+            <line x1={LEFT} x2={WIDTH - RIGHT} y1={Y(t)} y2={Y(t)} className={t === 0 ? "repair-zero" : "wing-grid"} />
+            <text x={LEFT - 6} y={Y(t) + 4} textAnchor="end" className="wing-label wing-label-small">{shown(t, 3)}</text>
+          </g>
+        ))}
+        {axisTicks(0, xHigh).map((t) => (
+          <g key={`x-${t}`}>
+            <line x1={X(t)} x2={X(t)} y1={height - bottom} y2={height - bottom + 5} className="repair-tick" />
+            <text x={X(t)} y={height - bottom + 17} textAnchor="middle" className="wing-label wing-label-small">{shown(t, 3)}</text>
+          </g>
+        ))}
+        <text x={12} y={top + (height - top - bottom) / 2} className="wing-label wing-label-small" textAnchor="middle" transform={`rotate(-90 12 ${top + (height - top - bottom) / 2})`}>{force}</text>
+        <text x={WIDTH - RIGHT} y={height - 2} textAnchor="end" className="wing-label wing-label-small">the panel&apos;s end has moved, {length}</text>
+        {notHeld !== null ? <line x1={LEFT} x2={WIDTH - RIGHT} y1={Y(notHeld)} y2={Y(notHeld)} stroke={CATEGORICAL[0]} strokeWidth={1.5} strokeDasharray="5 4" data-mark="not-held" /> : null}
+        <polyline points={xs.map((v, i) => `${X(v).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")} fill="none" stroke={CATEGORICAL[0]} strokeWidth={2} strokeLinejoin="round" data-series="held" />
+        {levels.map((l, i) => <circle key={i} cx={X(l.end_movement)} cy={Y(l.load)} r={2.5} fill={CATEGORICAL[0]} className="repair-dot" data-mark="level" />)}
+        {first ? (
+          <g data-mark="onset">
+            <circle cx={X(first.end_movement)} cy={Y(first.load)} r={4.5} fill={CATEGORICAL[0]} className="repair-dot" />
+            <text x={X(first.end_movement) + 10} y={Y(first.load) + 14} className="wing-label wing-label-small">first softens, {shown(plies.onset.load)} {force}</text>
+          </g>
+        ) : null}
+        {last ? (
+          <g data-mark="held">
+            <circle cx={X(last.end_movement)} cy={Y(last.load)} r={4.5} fill={CATEGORICAL[0]} className="repair-dot" />
+            <text x={WIDTH - RIGHT} y={Y(notHeld ?? last.load) - 7} textAnchor="end" className="wing-label wing-label-small">
+              {notHeld !== null ? `holds ${shown(last.load)}, not ${shown(notHeld)} ${force} (dashed)` : `holds ${shown(last.load)} ${force}; no load it cannot hold was found`}</text>
+          </g>
+        ) : null}
+        {read ? <circle cx={X(read.end_movement)} cy={Y(read.load)} r={5} fill="none" stroke={CATEGORICAL[0]} strokeWidth={2} /> : null}
+      </svg>
+      <p className="wing-legend repair-chart-key" data-testid="repair-held-curve-key">
+        <span className="repair-readout" aria-live="off">{read
+          ? `Held at ${shown(read.load)} ${force}: the panel's end has moved ${shown(read.end_movement)} ${length}; ${shown(read.bond_softening)} ${length} of the bond is past its strength and ${shown(read.bond_parted)} ${length} has parted; ${read.matrix_cracked.toLocaleString("en-US")} elements of ply are cracked along the fibres and ${read.fibre_broken.toLocaleString("en-US")} broken across them`
+          : "Point at the curve to read a load the slice held."}</span>
       </p>
     </>
   );

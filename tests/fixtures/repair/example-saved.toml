@@ -6,6 +6,10 @@ units = "mm-MPa"
 library = "im7-8552"
 layup = [45, 0, -45, 90, 90, -45, 0, 45]
 nu23 = 0.45
+fibre_tension_energy = 80
+fibre_compression_energy = 80
+matrix_tension_energy = 0.3
+matrix_shear_energy = 0.8
 
 [damage]
 diameter = 25

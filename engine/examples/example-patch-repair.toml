@@ -6,6 +6,13 @@ units = "mm-MPa"
 library = "im7-8552"                        # stiffness and cured ply thickness come from the library record
 layup = [45, 0, -45, 90, 90, -45, 0, 45]    # degrees from the load, bottom face first
 nu23 = 0.45                                 # for the solve of the slice (ADR-0132): a unidirectional ply's constants through the thickness follow from it
+# The ply's four fracture energies, to carry the repair until the plies and the bond cannot hold the load (ADR-0141): the
+# energy it takes to part a unit area of one crack, N/mm (kJ/m^2). Round numbers of our own for the example, not measured
+# values of this material.
+fibre_tension_energy = 80.0                 # a break across the fibres, pulled apart
+fibre_compression_energy = 80.0             # the same, crushed
+matrix_tension_energy = 0.3                 # a crack along the fibres, pulled open
+matrix_shear_energy = 0.8                   # the same, slid
 
 [damage]
 diameter = 25.0          # mm: the deepest cut

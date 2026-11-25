@@ -3,20 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { analyzeRepair, StudioError } from "@/lib/studio-api";
-import { answerWords, bondWords, EXAMPLE_REPAIR, needsWords, repairFileName, sameRepair, sentence, statedGroups, type RepairAnswer, type RepairDescription } from "@/lib/repair";
+import { answerWords, bondWords, EXAMPLE_REPAIR, needsWords, pliesWords, repairFileName, sameRepair, sentence, statedGroups, type RepairAnswer, type RepairDescription } from "@/lib/repair";
 import { REPAIR_HREF } from "@/lib/workspaces";
-import { storedBond, storedRepair, storedSolve, type KeptBond, type KeptSolve } from "./repair-context";
-import { BondResults, LapTable, Limits, SizesTable, SliceResults } from "./repair-details";
-import { BondChart, ForceChart, LetGoChart, LoadCurve, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
+import { storedBond, storedPlies, storedRepair, storedSolve, type KeptBond, type KeptPlies, type KeptSolve } from "./repair-context";
+import { BondResults, LapTable, Limits, PliesResults, SizesTable, SliceResults } from "./repair-details";
+import { BondChart, ForceChart, HeldCurve, LetGoChart, LoadCurve, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
 
 /** The repair's report (ADR-0135): the repair this browser holds, laid out for paper. It reads the repair and the last solved slice
  * the page kept, asks for the hand calculation again, and prints what the page shows: what the repair is, its slice, the
- * hand calculation, the solved slice and the bond followed until it lets go (ADR-0140) when they belong to this repair, and what
- * the analysis is not. The browser's own print saves it as a PDF. Every number is the engine's or the solver's. */
+ * hand calculation, the solved slice, the bond followed until it lets go (ADR-0140) and the repair carried until its plies and its
+ * bond cannot hold the load (ADR-0141) when they belong to this repair, and what the analysis is not. The browser's own print saves it as a PDF. Every number is the engine's or the solver's. */
 export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [repair, setRepair] = useState<RepairDescription | null>(null);
   const [kept, setKept] = useState<KeptSolve | null>(null);
   const [keptBond, setKeptBond] = useState<KeptBond | null>(null);
+  const [keptPlies, setKeptPlies] = useState<KeptPlies | null>(null);
   const [answer, setAnswer] = useState<RepairAnswer | null>(null);
   const [problem, setProblem] = useState("");
   const [printed, setPrinted] = useState("");
@@ -26,6 +27,7 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
     setRepair(found);
     setKept(storedSolve());
     setKeptBond(storedBond());
+    setKeptPlies(storedPlies());
     setPrinted(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }));
     if (!apiBaseUrl) { setProblem("The analysis service is not set up on this page."); return; }
     const controller = new AbortController();
@@ -53,6 +55,10 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
   // and so does the followed bond
   const bond = answer && keptBond && sameRepair(keptBond.repair, repair) ? keptBond.bond.report : null;
   const bondSaid = bond ? bondWords(bond) : null;
+  // and the run with the plies damaging, once it is done, with its second run on a finer mesh when that is done too
+  const carried = answer && keptPlies && sameRepair(keptPlies.repair, repair) && keptPlies.run.state === "done" ? keptPlies.run.report : null;
+  const carriedFiner = carried && keptPlies?.finer?.state === "done" ? keptPlies.finer.report : null;
+  const how = ["hand calculation", solve ? "the solved slice" : "", bond ? "following the bond" : "", carried ? "carrying the repair with its plies damaging" : ""].filter(Boolean);
   const words = answer ? answerWords(answer.report) : null;
   let section = 0;
   const next = () => { section += 1; return section; };
@@ -81,6 +87,7 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
                 : <p data-testid="repair-report-solve-line">{staleSolve ? "The slice was solved for an earlier state of this repair, so its results are left out of this report."
                   : answer.needs.length ? `The slice was not solved. ${needsWords(answer.needs)}` : "The slice was not solved for this report; the bondline is worked by hand only."}</p>}
               {bondSaid ? <p data-testid="repair-report-bond-line">Bond followed: {bondSaid.card}</p> : null}
+              {carried ? <p data-testid="repair-report-plies-line">Carried with the plies damaging: {pliesWords(carried).card}</p> : null}
               <p className="repair-report-facts">{words.facts.join(" · ")}</p>
             </section>
 
@@ -149,10 +156,22 @@ export function RepairReport({ apiBaseUrl }: { apiBaseUrl: string }) {
               </section>
             ) : null}
 
+            {carried ? (
+              <section data-testid="repair-report-plies">
+                <h2>{next()}. The repair carried until it cannot hold the load</h2>
+                <p>The same slice is loaded once more with the plies able to fail as well as the bond. A ply can break across its fibres and crack along them; each begins at the ply&apos;s strength and then softens until the ply&apos;s fracture energy for that crack is spent. The slice is held under a load until its damage stops growing, the load is raised, and the largest load it holds is closed in on from both sides.</p>
+                <PliesResults plies={carried} finer={carriedFiner} stale={false} />
+                <figure className="repair-report-figure">
+                  <HeldCurve plies={carried} />
+                  <figcaption>Every load per unit width the slice held, against how far the panel&apos;s end had moved. The dashed line is the smallest load found that it does not hold.</figcaption>
+                </figure>
+              </section>
+            ) : null}
+
             <section className="repair-report-last">
               <h2>{next()}. What these numbers are not</h2>
               <Limits />
-              <p className="repair-report-foot">Every number in this report was computed from the repair as stated in section 1{solve && bond ? ", by hand calculation, by the solved slice or by following the bond" : solve ? ", by hand calculation or by the solved slice" : bond ? ", by hand calculation or by following the bond" : ", by hand calculation"}. None was typed or estimated.</p>
+              <p className="repair-report-foot">Every number in this report was computed from the repair as stated in section 1, by {how.length > 1 ? `${how.slice(0, -1).join(", by ")} or by ${how[how.length - 1]}` : how[0]}. None was typed or estimated.</p>
             </section>
           </>
         ) : null}

@@ -10,6 +10,7 @@ the answer read from its path.
 
 The path follower itself is held to exact fracture answers in test_bond_solver.py."""
 
+import importlib.util
 import json
 import tomllib
 from pathlib import Path
@@ -73,6 +74,13 @@ def test_the_bond_is_refused_without_its_six_numbers():
         build_bond_model(weak)
     with pytest.raises(BondRunError, match="hold must be one of"):
         build_bond_model(stated()[0], hold="nowhere")
+    # a refusal states its numbers in the repair file's units (ADR-0140 amendment 3): a fracture energy is a force per length there
+    with pytest.raises(BondRunError, match="shear energy is under the energy it holds when it reaches its shear strength: it must be above 0.045 N/mm"):
+        build_bond_model(weak, units="mm-MPa")
+    with pytest.raises(BondRunError, match="it must be above 0.257 lb/in"):
+        build_bond_model(weak, units="US")
+    with pytest.raises(BondRunError, match="units must be one of"):
+        build_bond_model(stated()[0], units="furlongs")
 
 
 def test_the_law_is_the_adhesives_stiffness_over_the_bondlines_thickness_with_its_strengths_and_energies():
@@ -137,6 +145,77 @@ def test_held_to_the_laps_assumptions_the_bond_first_softens_at_the_laps_elastic
     assert shear[stretch.pairs][0] / MPA == pytest.approx(expected["peak_shear"], rel=1e-4)
     assert shear[stretch.pairs][-1] / MPA == pytest.approx(expected["shear_at_ends"][0][0], rel=1e-4)
     assert not np.abs(built.model.jumps(first.displacement)[0]).max() > 0  # nothing peels when nothing moves through the thickness
+
+
+@pytest.mark.parametrize("bondline", [0.5, 0.9])
+def test_a_bondline_thicker_than_a_ply_is_one_bond_through_its_whole_thickness(bondline):
+    """The grid gives a bondline thicker than a ply more than one element through its thickness (here three and five, on
+    plies of 0.2 mm). The bond is the whole stack: its pairs join the laminate's top to the patch's bottom, one bondline
+    apart, and held to the lap's assumptions it first softens at the load of the lap's closed form for that bondline, worked
+    without the engine (ADR-0140 amendment 3). Before, such a repair was refused as having no flat bondline."""
+    spec = importlib.util.spec_from_file_location("closed_forms", ENGINE / "validation" / "closed_forms.py")
+    closed_forms = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(closed_forms)
+    case = tomllib.loads(HELD.read_text(encoding="utf-8"))
+    case["adhesive"]["thickness"] = bondline
+    expected = closed_forms.external_patch_repair(case)
+    repair, _ = stated(HELD, **BOND, **{"adhesive.thickness": bondline})
+    built = build_bond_model(repair, hold="everywhere")
+    under, over = built.model.nodes[built.model.under], built.model.nodes[built.model.over]
+    assert under[:, 0] == pytest.approx(over[:, 0], abs=1e-12) and over[:, 1] - under[:, 1] == pytest.approx(bondline * MM, rel=1e-9)
+    assert built.bond_length_m == pytest.approx(45 * MM, rel=1e-9)  # from the hole's edge to the patch's, as with a thin bondline
+    path, _ = follow_bond(built, steps=1)
+    assert path.onset_load / PER_MM == pytest.approx(expected["elastic_limit_load"], rel=1e-4)
+
+
+def test_a_panel_too_short_round_its_repair_is_refused_before_the_path_is_followed(monkeypatch):
+    """The far-field check needs only the elastic state, so it is made before the path (ADR-0140 amendment 3): the run asks
+    for one state, and refuses, where before it followed the whole path first."""
+    import anisotropy_fea.repair_bond as module
+
+    asked = []
+    follow = module.follow
+
+    def counted(model, *, steps, **options):
+        asked.append(steps)
+        return follow(model, steps=steps, **options)
+
+    monkeypatch.setattr(module, "follow", counted)
+    short, _ = stated(**{"parent.layup": [0, 90, 90, 0], "steps.count": 2, "steps.length": 5.0, "damage.diameter": 8.0, "cover.overlap": 1.0,
+                         "panel.length": 34.0, "panel.width": 60.0})
+    with pytest.raises(BondRunError, match="the panel is too short around the repair for this model; give a longer panel"):
+        run_bond(short)
+    assert asked == [1]
+
+
+def test_a_run_out_of_its_time_is_read_as_far_as_it_was_followed_and_says_so(example):
+    """A run given less time than its path takes is not lost (ADR-0140 amendment 4): the path ends at the first state
+    reached after its time, says it ended by "time", names no load at which the bond lets go, and keeps the onset."""
+    short = run_bond(stated()[0], seconds=0.0)
+    assert short.ended == "time" and short.let_go is None and len(short.path.points) == 2
+    assert short.onset.load == pytest.approx(example.onset.load, rel=1e-12)
+    assert short.largest.load == pytest.approx(short.onset.load, rel=1e-2) and short.largest.load < example.let_go.load  # one step from the first state
+    report = bond_report(short, "mm-MPa")
+    assert report["ended"] == "time" and report["let_go"] is None
+    assert headline(report).endswith("the path was not followed to a load at which the bond lets go: the time the run was given came first")
+    assert example.ended == "let_go" and run_bond(stated()[0], seconds=3600.0).ended == "let_go"
+
+
+def test_a_slice_larger_than_the_run_takes_is_refused_before_it_is_meshed(monkeypatch):
+    """With a limit on its elements (the page's, ADR-0140 amendment 4) a slice past it is refused in words that say what
+    makes it large: one far past it before the mesh is made, one a little past it once its elements are counted."""
+    import anisotropy_fea.repair_bond as module
+
+    meshed = []
+    slice_mesh = module.slice_mesh
+    monkeypatch.setattr(module, "slice_mesh", lambda *args, **options: meshed.append(1) or slice_mesh(*args, **options))
+    with pytest.raises(BondRunError, match=r"The slice would have more than 320,000 elements, and the bond's run takes at most 100\. .*lengthen the steps or shorten the panel"):
+        build_bond_model(stated(**{"panel.length": 1.0e6})[0], most_elements=100)
+    assert meshed == []
+    with pytest.raises(BondRunError, match=r"The slice would have 3,045 elements, and the bond's run takes at most 3,000\."):
+        build_bond_model(stated()[0], most_elements=3000)
+    assert meshed == [1]
+    assert len(build_bond_model(stated()[0], most_elements=3045).model.elements) == 3045
 
 
 @needs_ccx

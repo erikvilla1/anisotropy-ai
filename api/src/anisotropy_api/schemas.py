@@ -1510,8 +1510,9 @@ class RepairSolveRequest(RepairRequest):
 class RepairAnswer(Contract):
     """The hand calculation of a repair (ADR-0135): the description as the engine read it, what it works out to in the file's units as
     `repair_report` gives it (sizes, the slice's rectangles, areas, volumes, the lap and its answer), what a page draws beside the
-    rectangles (`repair_views`), what a solve of the slice still needs (`solve_needs`, empty when it can be solved) and what following
-    the bond until it lets go still needs (`bond_needs`, ADR-0140)."""
+    rectangles (`repair_views`), what a solve of the slice still needs (`solve_needs`, empty when it can be solved), what following
+    the bond until it lets go still needs (`bond_needs`, ADR-0140) and what carrying the repair until its plies and its bond cannot
+    hold the load still needs (`ply_needs`, ADR-0141 amendment 1)."""
 
     run_id: str | None = None
     engine_version: str
@@ -1520,6 +1521,7 @@ class RepairAnswer(Contract):
     views: dict[str, Any]
     needs: list[dict[str, str]]
     bond_needs: list[dict[str, str]] = []
+    ply_needs: list[dict[str, str]] = []
 
 
 class RepairSolveAnswer(Contract):
@@ -1540,6 +1542,35 @@ class RepairBondAnswer(Contract):
     run_id: str | None = None
     headline: str
     report: dict[str, Any]
+
+
+class RepairPliesRequest(RepairRequest):
+    """A repair to carry until its plies and its bond cannot hold the load (ADR-0141 amendment 1): the repair as for its hand
+    calculation, and `finer`, how many steps finer than the run's own mesh it is made on (each step's elements four fifths of the
+    one before), so the page can set a second run beside the first and show how far the load moves with the mesh."""
+
+    finer: Literal[0, 1, 2] = 0
+
+
+class RepairPliesOutput(Contract):
+    """A repair's ply run as it stands (ADR-0141 amendment 1), a job as a wing's check is one: `queued` until a solver takes it,
+    `running` with its stage (build, soften, raise, close), then `done` with the run's report in the repair file's units and the
+    run in one line, `refused` with the reason the repair cannot be carried, or `stopped` with what to do. `message` is shown as it
+    is; the causes of a stop stay in the log."""
+
+    job_id: str
+    state: Literal["queued", "running", "done", "stopped", "refused"]
+    repair: str | None = None
+    finer: int = 0
+    started_at: str
+    finished_at: str | None = None
+    stage: str | None = None
+    stages_done: list[str] = []
+    stages: list[str] = []
+    message: str | None = None
+    run_id: str | None = None
+    headline: str | None = None
+    report: dict[str, Any] | None = None
 
 
 class RepairChangeRequest(RepairRequest):

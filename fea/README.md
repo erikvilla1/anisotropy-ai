@@ -156,6 +156,16 @@ uv run --project fea --extra mesh python -m anisotropy_fea.repair_bond engine/ex
 
 prints the load at which the bond first softens and where, and the load at which it lets go in this model with the length of bond softening and parted; `--out` keeps `repair-bond.json`, which also holds the bond's state by stretch and the path's curve. The file has to state what a solve needs and, for its adhesive, `shear_strength`, `peel_strength`, `peel_energy` and `shear_energy`. Every ply stays elastic, so the load is not the repair's strength. The theory is `docs/theory.md`, Section 12; the checks are `tests/test_bond_solver.py` and `tests/test_repair_bond.py`, and two runs in MOOSE are kept in `checks/bond_cases/`.
 
+## A patch repair carried until it cannot hold the load
+
+`anisotropy_fea.repair_plies` loads the same slice with its plies able to fail beside its bond (ADR-0141): a break across the fibres and a crack along them, each softening over its own fracture energy in a band one element wide. It holds a load until the damage stops growing, raises it, and closes in on the largest load the slice holds. The panel's end moves as one (amendment 1).
+
+```
+uv run --project fea --extra mesh python -m anisotropy_fea.repair_plies engine/examples/example-patch-repair.toml --out run --meshes 3
+```
+
+prints the first softening, the load the slice carries in this model and the smallest it does not, what had failed at the largest load held, and with `--meshes` the same repair on finer meshes; `--out` keeps `repair-plies.json`. One mesh of the example takes about four minutes on four cores. The file has to state what following the bond needs and, for each ply material, its five strengths and the four energies `fibre_tension_energy`, `fibre_compression_energy`, `matrix_tension_energy` and `matrix_shear_energy`. Plies parting from each other are not followed, so the load is not the repair's strength. The page runs it as a job, one mesh at a time (`--finer`, `--seconds`, `--most`, `--result`, `--progress`). The theory is `docs/theory.md`, Section 13; the checks are `tests/test_ply_damage.py` and `tests/test_repair_plies.py`.
+
 `anisotropy_fea.repair_files` writes the same slice for two other solvers and reads them back (ADR-0132 amendment 1):
 
 ```bash

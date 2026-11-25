@@ -1,15 +1,16 @@
 "use client";
 
-import { answerWords, bondWords, needsWords, sentence, type RepairAnswer } from "@/lib/repair";
+import { answerWords, bondWords, needsWords, pliesLine, pliesWords, sentence, type RepairAnswer } from "@/lib/repair";
 import { DetailsToggle, Slot, useCanvasSlots } from "./canvas-slots";
 import { showPanel } from "./panels/step-panel";
-import { useRepair } from "./repair-context";
-import { BondResults, Limits, LapTable, SizesTable, SliceResults } from "./repair-details";
-import { BondChart, ForceChart, LetGoChart, LoadCurve, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
+import { pliesUnderWay, useRepair } from "./repair-context";
+import { BondResults, Limits, LapTable, PliesResults, SizesTable, SliceResults } from "./repair-details";
+import { BondChart, ForceChart, HeldCurve, LetGoChart, LoadCurve, sliceCaption, SliceDrawing, SliceLegend } from "./repair-drawings";
 
 /** The centre of the repair's page (ADR-0135): the half slice as the engine cut it, the adhesive's stresses along the bond under it on
  * the same scale, the answer in its short form in the card, and the tables under Details. On request the bond is followed until it
  * lets go (ADR-0140): the load at which it does, in this model, joins the card, and the path and the bond's state join Details.
+ * The repair carried until its plies and its bond cannot hold the load (ADR-0141) joins them the same way, once its run is done.
  * Every number is the engine's or the solver's; the page picks, draws and words. */
 export function RepairStage() {
   const { answer, stale, working, problem } = useRepair();
@@ -25,7 +26,8 @@ export function RepairStage() {
 
 function Answer({ answer, stale, problem }: { answer: RepairAnswer; stale: boolean; problem: string }) {
   const { report, views, needs } = answer;
-  const { solve, solveStale, solving, solveSlice, solveProblem, bond, bondStale, following, followBond, bondProblem, bondNeeds } = useRepair();
+  const { solve, solveStale, solving, solveSlice, solveProblem, bond, bondStale, following, followBond, bondProblem, bondNeeds,
+    plies, pliesFiner, pliesStale, carrying, pliesProblem, pliesNeeds, carryPlies } = useRepair();
   const slots = useCanvasSlots();
   const words = answerWords(report);
   const slice = solve?.report ?? null;
@@ -33,6 +35,11 @@ function Answer({ answer, stale, problem }: { answer: RepairAnswer; stale: boole
   const run = bond?.report ?? null;
   const canFollow = bondNeeds !== null && bondNeeds.length === 0 && !stale && !problem;
   const runWords = run ? bondWords(run) : null;
+  const carried = plies?.state === "done" ? plies.report : null;
+  const carriedFiner = pliesFiner?.state === "done" ? pliesFiner.report : null;
+  const carriedLine = plies ? pliesLine(plies, pliesStale) : null;
+  const canCarry = pliesNeeds !== null && pliesNeeds.length === 0 && !stale && !problem;
+  const carryingNow = carrying || pliesUnderWay(plies);
   return (
     <div className="wing-stage wing-canvas repair-canvas" data-testid="repair-stage" data-state={stale ? "stale" : "current"}>
       <div className="repair-views">
@@ -70,6 +77,12 @@ function Answer({ answer, stale, problem }: { answer: RepairAnswer; stale: boole
               : `Bond followed: ${runWords.card}`}</p>
           ) : null}
           {bondProblem ? <p className="studio-alert" role="alert" data-testid="repair-bond-problem-here">{bondProblem}</p> : null}
+          {plies && carriedLine ? (
+            carriedLine.alert ? <p className="studio-alert" role="alert" data-testid="repair-plies-short">{carriedLine.text}</p>
+              : <p className="cv-answer-note" data-testid="repair-plies-short">{carried && pliesStale ? "The repair was carried as it was. Carry it again for this one."
+                : carried ? `Carried with the plies damaging: ${pliesWords(carried).card}` : carriedLine.text}</p>
+          ) : null}
+          {pliesProblem ? <p className="studio-alert" role="alert" data-testid="repair-plies-problem-here">{pliesProblem}</p> : null}
           <div className="cv-answer-actions">
             {!slice || solveStale ? (
               can ? <button type="button" className="studio-text-button" onClick={() => void solveSlice()} disabled={solving} data-testid="repair-solve-here">{solving ? "Solving the slice…" : slice ? "Solve the slice again" : "Solve the slice"}</button>
@@ -78,6 +91,10 @@ function Answer({ answer, stale, problem }: { answer: RepairAnswer; stale: boole
             {canFollow && (!run || bondStale) ? (
               <button type="button" className="studio-text-button" onClick={() => void followBond()} disabled={following} data-testid="repair-bond-here">
                 {following ? "Following the bond…" : run ? "Follow the bond again" : "Follow the bond until it lets go"}</button>
+            ) : null}
+            {canCarry && (!carried || pliesStale) ? (
+              <button type="button" className="studio-text-button" onClick={() => void carryPlies()} disabled={carryingNow} data-testid="repair-plies-here">
+                {carryingNow ? "Carrying the repair…" : plies ? "Carry the repair again" : "Carry it until it cannot hold the load"}</button>
             ) : null}
             {slots ? <DetailsToggle open={slots.details} onToggle={slots.setDetails} /> : null}
           </div>
@@ -104,6 +121,16 @@ function Answer({ answer, stale, problem }: { answer: RepairAnswer; stale: boole
                 <LetGoChart report={report} views={views} bond={run} />
               </figure>
             ) : null}
+          </section>
+        ) : null}
+        {carried ? (
+          <section className="studio-panel" data-testid="repair-plies-section">
+            <h3>The repair carried until it cannot hold the load</h3>
+            <PliesResults plies={carried} finer={carriedFiner} stale={pliesStale} />
+            <figure className="wing-figure">
+              <h4>The loads held against the movement of the panel&apos;s end</h4>
+              <HeldCurve plies={carried} />
+            </figure>
           </section>
         ) : null}
         {views.lap || slice ? (
