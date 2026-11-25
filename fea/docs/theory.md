@@ -571,6 +571,83 @@ Two checks are made on every run, as on the elastic solve: midway between the re
 
 Every ply is elastic. A ply that reaches a strength before the bond lets go, or a laminate that splits between its plies at a ledge, is not seen, and from that load on the answer would change; the solved slice of Section 11 gives the first ply's load to set beside it. The law is two straight lines: an adhesive that yields at a steady stress before it softens has a plateau the law leaves out, which matters most where the bond is short against its softening zone. The energies add in a straight line; a rule fitted to mixed-mode tests is not used. The cut faces carry nothing. The slice is the strip of Section 11.5, held flat, with no load flowing round the repair. Fatigue, heat, moisture, cure stress and a flaw in the bond are left out. The numbers move with the adhesive's two strengths and two fracture energies as stated, which a datasheet seldom gives.
 
+## 13. A repair's plies damaged beside its bond (`repair_plies.py`)
+
+Section 12 follows the bond with every ply elastic, so a repair whose plies fail first is not caught. Here every ply may damage too (`ply_damage.py`; ADR-0141), and the answer is the load the slice carries with both able to fail. For the example repair that load is below the load at which its bond alone lets go, which is why the slice exists.
+
+### 13.1 A ply's two cracks
+
+In a ply's own axes, 1 along the fibres, 2 across them in the ply, 3 through its thickness, two cracks are followed. A **fibre break**, whose plane's normal is 1, begins where
+
+```math
+E_1\,\varepsilon_1 = F_{1t} \quad \text{(pulled apart)}, \qquad -E_1\,\varepsilon_1 = F_{1c} \quad \text{(crushed)}
+```
+
+and a **matrix crack**, whose normal is 2, where
+
+```math
+\left(\frac{E_2\,\langle\varepsilon_2\rangle}{F_{2t}}\right)^2 + \left(\frac{G_{12}\,\gamma_{12}}{F_6}\right)^2 = 1
+```
+
+with $`\langle\varepsilon_2\rangle`$ the strain across the fibres when it is positive and zero otherwise, so a crack pressed shut does not begin. Each crack has a damage $`d`$ from 0 to 1, which lowers the terms of the ply's compliance $`\mathbf{S}`$ that its own plane carries: $`S_{11}`$ and the shears 12 and 13 for a fibre break, $`S_{22}`$ and the shears 12 and 23 for a matrix crack. Each is divided by what is left of it:
+
+```math
+S_{11} \rightarrow \frac{S_{11}}{1 - d_f}, \qquad S_{22} \rightarrow \frac{S_{22}}{1 - d_m}, \qquad
+G_{13} \rightarrow (1 - d_f)\,G_{13}, \qquad G_{23} \rightarrow (1 - d_m)\,G_{23}, \qquad G_{12} \rightarrow (1 - d_f)(1 - d_m)\,G_{12}
+```
+
+So a ply pulled along one axis alone carries $`(1 - d)`$ of its elastic stress there, and the stiffness stays one an elastic solid may have. Which way a crack is loaded is read from the stress on it, which has one sign whichever stiffness it is given: a crack pressed shut carries the pressure with the whole stiffness, and only $`S_{22}`$ changes with the sign. Damage only grows. The stiffness and the stresses are computed by `PlyDamage.stiffness` and `PlyDamage.stress`.
+
+<!-- code: PlyDamage.stiffness, PlyDamage.stress -->
+
+### 13.2 The band a crack softens in
+
+After onset the stress falls in a straight line with the strain. A matrix crack is the bond's own law of Section 12.1 with the strain times a width $`b`$ as the opening and the slip, the stiffnesses $`E_2/b`$ and $`G_{12}/b`$, and the ply's two matrix energies; a fibre break is that law in one direction. The width $`b`$ is what makes the answer the same on any mesh: a crack spends
+
+```math
+\int \sigma \,\mathrm{d}\varepsilon \cdot b = G_c
+```
+
+per unit of its own area, so the strain at which the stress reaches nothing is set from $`b`$ and a wider band softens over less strain (the crack band of Bažant and Oh, 1983). The band is one element wide, cut at the ply's angle $`\theta`$: with $`\ell`$ the element's length along the load,
+
+```math
+b_f = \ell\,|\cos\theta| \quad \text{(a fibre break)}, \qquad b_m = \ell\,|\sin\theta| \quad \text{(a matrix crack)}
+```
+
+An element damages as one, from its mean strains, so its four integration points cannot soften apart and spend the energy twice over. A crack whose plane holds the load's direction cannot form in a slice along the load and is not followed: the matrix crack of a 0° ply, the fibre break of a 90° ply.
+
+A crack softens only where its fracture energy is above the energy the ply holds when it reaches its strength, which bounds the band and so the element:
+
+```math
+\ell \le \frac{2\,G_c\,E}{X^2}
+```
+
+for each of the four cracks of each material, with $`E`$ the modulus and $`X`$ the strength of that crack. A model whose elements are longer is refused in words. The run takes two fifths of the smallest bound, because an element near the bound softens over almost no strain and the load the slice holds then falls far below where a finer mesh puts it. The bound and the band are computed by `longest_element` and `PlyDamage.setup`.
+
+<!-- code: longest_element, PlyDamage.setup -->
+
+### 13.3 How the load is carried
+
+The slice, the bond, the holds and the strain across the width are Section 12.2's, with the load on the panel's end alone: the stress the width strain makes is the plies' own now and moves with their damage. The path of Section 12.3 cannot be used, because dozens of plies reach their strength in one step and its Newton iterations pass between two states without settling. Instead a load is held and the damage let grow until it stops. Under a load $`\lambda_N`$, from a damage $`d`$, each turn solves the slice as an elastic body with the stiffness that damage leaves,
+
+```math
+\mathbf{K}(d)\,\mathbf{u} = \lambda_N\,\mathbf{F}(d)
+```
+
+and every element and every pair then takes the damage of the strains found, never less than it had. Where the damage stops growing, the state is one the slice can rest in under that load, which is what carrying a load means; where the movement runs away, the slice cannot hold it. The load is raised from the first softening of anything, bond or ply, by 15 % while the slice holds it, and then halved in until the load held and the load not held are within half a percent of each other. The holding of one load and the raising of it are computed by `Holder.hold` and `largest_load`.
+
+<!-- code: Holder.hold, largest_load -->
+
+### 13.4 What is read back
+
+The load at which anything first softens and what it was; the largest load the slice holds and the smallest it does not, so the load it carries lies between them; what had failed at the largest load held, as lengths of bond past its strength and parted and as counts of elements broken across the fibres, crushed or cracked along them with the worst one's place; and the loads held in order with the movement of the panel's end. One check is made on every run: at the largest load held the plies' forces along the load add up to the load at every station within $`10^{-3}`$ of it. A mesh study, the same repair on meshes each four fifths of the one before, is run beside the answer and its spread reported with the load. The answer, the study and the report in the file's units are computed by `run_plies`, `mesh_study` and `plies_report`.
+
+<!-- code: run_plies, mesh_study, plies_report -->
+
+### 13.5 What the run leaves out
+
+A ply parting from its neighbour is not modelled, so a laminate that splits between its plies at a ledge is not seen. A ply crushing across its fibres is not followed ($`F_{2c}`$ is unused). Nothing saturates matrix cracking, so where the panel's far field itself cracks the number of cracked elements grows with the mesh; the mesh study is what says whether a load may be read, and a repair whose load does not settle has none to report. The strain across the width stays the undamaged laminate's. What the slice leaves out it still leaves out: the cut faces carry nothing, the slice is held flat, no load flows round the repair, and fatigue, heat, moisture and cure stress are absent. The load carried is "the load the repair carries in this model", never its strength: no test of a repair has been compared.
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -591,6 +668,7 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
 - The repair's slice in CalculiX (Section 11): the graded mesh has a line of nodes on every edge of every rectangle, fine elements beside it, no element much longer than its neighbour and the description's areas; the deck has one material for each ply angle and the adhesive, the far-field width strain as its temperature and the far-field stresses on its end, summing to the load; on a strip patch, the flush example and the example with bonded cut faces the forces add up at every station and, well outside the repair, every ply's stress is the laminate theory's with nothing through the thickness and nothing across the width in sum; held to the lap's assumptions the model returns the lap's closed form (case `constructed-external-strip-held-to-the-stepped-laps-assumptions`, Section 11.4); a patch bonded on top carries the whole load at the hole's edge, what its bondline's shear passes to it is the load within 1 %, it is pressed on at the hole's edge and pulled off at its tip; twice the load doubles every stress and compression changes every sign; the largest mean over a length of bond is found exactly on a bond worked by hand; elements half as long beside the edges change the largest shear stress by less than 0.5 %, the largest peel stress by less than 1 % and the patch's forces by less than 0.2 % on the strip patch and on the flush example, where the value at a bond's last station beside an open cut face grows by more than a fifth; on the flush example the adhesive's elastic limit comes before the first ply, which reaches its transverse tensile strength inside the repair at a lower load than a 90° ply does far from it; bonded cut faces take load off the ledges, so leaving them open is the lower reading; what a solve lacks is refused in words (`test_repair_model.py`).
 - A repair's bond followed to failure (Section 12). The law alone: along any direction it peaks on the onset line and spends the failure line's energy; damage only grows; a pressed bond carries the pressure whole. The plane elements return an even stress and balance a stress inside them. Cases with exact answers: a block pulled off its bond reaches the strength times the length and spends the energy times the length, through a snap-back; the peel test's load is beam theory's within 2 % while the crack grows; the shear test's largest load is 7.8 % under beam theory's at 60 MPa, as the softening zone ahead of a crack of finite strength makes it, and is the one MOOSE gives for the same model within 0.3 % (729.5 N; the input file and the curve are in `fea/checks/bond_cases/`); a patch pulled off a strip held flat runs at the load its energy gives, $`\sqrt{2 G_c S_a (S_a + S_b)/S_b}`$, within 0.5 %, and between the two pure answers with unequal numbers (`test_bond_solver.py`). On the repair: on CalculiX's own nodes and elements the plane elements return CalculiX's strains; held to the stepped lap's assumptions the bond first softens at the lap's elastic limit load; with the bond whole the patch carries midway along every step what it carries in CalculiX's slice within a third of a percent of the load; the example softens over a third of its bond and then lets go, and a mesh four times coarser beside each edge gives the same two loads; a path that ends before the load falls says so; a repair without the six numbers is refused in words (`test_repair_bond.py`).
+- A repair's plies damaged beside its bond (Section 13). The law alone: it peaks at the strength, the stress integrated over the strain times the band's width is the fracture energy within a thousandth, damage only grows, and a crack pressed shut carries the pressure whole. A bar of one ply with a weak element breaks at that element's strength with 10, 20, 40 and 80 elements along it, for a 0° ply and a 90° ply, which is what the crack band is for. A cross-ply strip's first ply failure is laminate theory's, written out in the check, and the load it carries lies between the whole laminate's at the fibre's onset strain and its 0° plies' alone. A crack whose plane holds the load is not followed; an element too long to soften in is refused in words (`test_ply_damage.py`). On a repair: the element is cut to what a crack can soften in; a repair without the plies' strengths or fracture energies is refused with the list; the plies' forces add up to the load at every station; and on the example of a patch bonded over a hole, where the bond is the only way across, the load at which Section 12's own path method has the bond let go lies between the load this method holds and the load it does not, although the two share nothing past onset (`test_repair_plies.py`).
 - The repair's slice for Abaqus and Ansys (Section 11.6): the Abaqus file holds the deck's nodes, elements, stiffness terms, supports, temperature and load, and solved by CalculiX, which reads the same keywords, it gives the deck's answer; the Ansys file's engineering constants give back the stiffness terms by an inverse written in the test, and its blocks hold the model's nodes, elements, materials, supports and load; stand-in output in each program's wording and figures is read back as the same answer, and a table with a row missing, of another model, with stresses that are not the stiffness times the strains, or with another width strain is refused (`test_repair_files.py`). Neither program runs in the tests.
 
 ## Not modeled yet

@@ -24,7 +24,10 @@ judges the peel stress, without it the peel stress is reported and not judged. T
 `peel_energy` and `shear_energy`: the energy it takes to part a unit area of the bond by pulling it open and by sliding it,
 in the unit system's force per length (N/mm in "mm-MPa", which is kJ/m^2; N/m in "SI", which is J/m^2; lb/in in "US" and
 "psi"). A material typed in full may also state its ply strengths, all of `F1t`, `F1c`, `F2t`, `F2c`, `F6`,
-for the check of which ply fails first; a library material brings its own.
+for the check of which ply fails first; a library material brings its own. To follow the plies as they damage (ADR-0141) a
+material needs its five strengths and, beside them, its four fracture energies, `fibre_tension_energy`,
+`fibre_compression_energy`, `matrix_tension_energy` and `matrix_shear_energy`: the energy it takes to part a unit area of
+one crack, in the same unit as the adhesive's.
 
 A patch bonded on top over a hole (ADR-0131 amendment 1) says so and states its patch in full:
 
@@ -44,7 +47,7 @@ from __future__ import annotations
 from ..lamina import Lamina, Strengths
 from ..library import library_material
 from ..units import UNIT_SYSTEMS
-from .description import PATCH_SHAPES, REPAIR_KINDS, Repair, RepairError, RepairMaterial, ThroughThickness, tape_through_thickness
+from .description import PATCH_SHAPES, REPAIR_KINDS, PlyEnergies, Repair, RepairError, RepairMaterial, ThroughThickness, tape_through_thickness
 from .lap_file import lap_report
 from .patch_lap import lap_steps, repair_lap
 from .section import areas, bond_lengths, check_regions, regions, volumes
@@ -54,6 +57,8 @@ TABLES = ("parent", "damage", "steps", "patch", "cover", "adhesive", "panel", "a
 TYPED_MATERIAL = ("name", "E1", "E2", "G12", "nu12", "ply_thickness")
 THROUGH = ("E3", "G13", "G23", "nu13", "nu23")  # a ply's constants through the thickness, for the solve of the slice (ADR-0132)
 STRENGTHS = ("F1t", "F1c", "F2t", "F2c", "F6")
+# a ply's fracture energies, for following the plies as they damage (ADR-0141): the energy to part a unit area of one crack
+ENERGIES = ("fibre_tension_energy", "fibre_compression_energy", "matrix_tension_energy", "matrix_shear_energy")
 
 
 def _keys(table: object, where: str, required: set[str], optional: set[str] = frozenset()) -> dict:
@@ -88,6 +93,20 @@ def _through(table: dict, where: str, lamina: Lamina, si) -> ThroughThickness | 
                       f"the table gives {', '.join(stated)}")
 
 
+def _energies(table: dict, where: str, si) -> PlyEnergies | None:
+    """A ply's four fracture energies when the table states them. All four or none, as the strengths are."""
+    stated = [key for key in ENERGIES if key in table]
+    if not stated:
+        return None
+    if len(stated) != len(ENERGIES):
+        raise RepairError(f"[{where}]: give all of the ply's fracture energies {', '.join(ENERGIES)} or none; the table gives "
+                          f"{', '.join(stated)}")
+    try:
+        return PlyEnergies(**{key[: -len("_energy")]: si(table[key], "N", "fracture energy") for key in ENERGIES})
+    except RepairError as error:
+        raise RepairError(f"[{where}]: {error}") from error
+
+
 def _material(table: dict, where: str, si) -> RepairMaterial:
     """A library material by its id (its ply thickness may be replaced by a typed one), or one typed in full; either with
     its constants through the thickness when the table states them."""
@@ -111,7 +130,7 @@ def _material(table: dict, where: str, si) -> RepairMaterial:
             raise RepairError(f"[{where}]: the ply constants E1, E2, G12 and nu12 and the strengths do not make a material: {error}") from error
         name, thickness = table["name"], si(table["ply_thickness"], "length")
     try:
-        return RepairMaterial(name, lamina, thickness, _through(table, where, lamina, si))
+        return RepairMaterial(name, lamina, thickness, _through(table, where, lamina, si), _energies(table, where, si))
     except RepairError as error:
         raise error if str(error).startswith(f"[{where}]") else RepairError(f"[{where}]: {error}") from error
 
@@ -119,8 +138,8 @@ def _material(table: dict, where: str, si) -> RepairMaterial:
 def _material_keys(table: object, where: str, also: set[str], optional: set[str] = frozenset()) -> dict:
     """The keys of a table that names a material: by the library, or typed in full, never half of each."""
     if isinstance(table, dict) and "library" in table:
-        return _keys(table, where, {"library"} | also, {"dataset", "ply_thickness"} | set(THROUGH) | optional)
-    return _keys(table, where, set(TYPED_MATERIAL) | also, set(THROUGH) | set(STRENGTHS) | optional)
+        return _keys(table, where, {"library"} | also, {"dataset", "ply_thickness"} | set(THROUGH) | set(ENERGIES) | optional)
+    return _keys(table, where, set(TYPED_MATERIAL) | also, set(THROUGH) | set(STRENGTHS) | set(ENERGIES) | optional)
 
 
 def repair_from_dict(data: dict) -> tuple[Repair, float | None]:
@@ -277,6 +296,22 @@ def solve_needs(repair: Repair, load_n_per_m: float | None = None) -> list[dict]
         needs.append({"path": "adhesive.poisson", "words": "the adhesive's Poisson's ratio"})
     if load_n_per_m is None or load_n_per_m == 0:
         needs.append({"path": "applied.load", "words": "a load per unit width that is not zero"})
+    return needs
+
+
+def ply_needs(repair: Repair) -> list[dict]:
+    """What following the plies as they damage (ADR-0141) still needs, as `solve_needs` words it; empty when they can be
+    followed. It needs what following the bond does, and of every ply material its five strengths and its four fracture
+    energies."""
+    needs = bond_needs(repair)
+    materials = [(repair.parent_material, "parent", "the laminate ply's")]
+    if repair.patch_material is not repair.parent_material:
+        materials.append((repair.patch_material, "patch", "the patch ply's"))
+    for material, table, whose in materials:
+        if material.lamina.strengths is None:
+            needs.append({"path": f"{table}.F1t", "words": f"{whose} strengths, all of {', '.join(STRENGTHS)}"})
+        if material.energies is None:
+            needs.append({"path": f"{table}.{ENERGIES[0]}", "words": f"{whose} fracture energies, all of {', '.join(ENERGIES)}"})
     return needs
 
 

@@ -98,6 +98,23 @@ class ThroughThickness:
             object.__setattr__(self, name, float(value))
 
 
+@dataclass(frozen=True)
+class PlyEnergies:
+    """A ply's fracture energies (J/m^2): the energy it takes to part a unit area of one crack (ADR-0141). `fibre_tension`
+    and `fibre_compression` are a break across the fibres, pulled apart and crushed; `matrix_tension` and `matrix_shear` a
+    crack along the fibres, pulled open and slid. A hand calculation and the elastic solve do not use them; following the
+    plies as they damage does."""
+
+    fibre_tension: float
+    fibre_compression: float
+    matrix_tension: float
+    matrix_shear: float
+
+    def __post_init__(self) -> None:
+        for name in ("fibre_tension", "fibre_compression", "matrix_tension", "matrix_shear"):
+            object.__setattr__(self, name, _positive(getattr(self, name), name.replace("_", " ")))
+
+
 def tape_through_thickness(lamina: Lamina, nu23: float) -> ThroughThickness:
     """The through-thickness constants of a unidirectional ply from one number. Such a ply is the same in every direction
     across its fibres, so E3 = E2, G13 = G12 and nu13 = nu12, and the shear modulus across the fibres follows from E2 and
@@ -110,12 +127,14 @@ def tape_through_thickness(lamina: Lamina, nu23: float) -> ThroughThickness:
 @dataclass(frozen=True)
 class RepairMaterial:
     """A ply material of a repair: its name, its in-plane constants and its cured ply thickness; and, when the slice is to be
-    solved, its constants through the thickness."""
+    solved, its constants through the thickness, and when the plies are to be followed as they damage, its four fracture
+    energies."""
 
     name: str
     lamina: Lamina
     ply_thickness_m: float
     through: ThroughThickness | None = None
+    energies: PlyEnergies | None = None  # for following the plies as they damage (ADR-0141)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -123,6 +142,9 @@ class RepairMaterial:
         if not isinstance(self.lamina, Lamina):
             raise RepairError(f"Material {self.name!r} needs its ply constants (E1, E2, G12, nu12)")
         object.__setattr__(self, "ply_thickness_m", _positive(self.ply_thickness_m, f"The ply thickness of {self.name!r}"))
+        if self.energies is not None and not isinstance(self.energies, PlyEnergies):
+            raise RepairError(f"The fracture energies of {self.name!r} must be the fibre's in tension and compression and the matrix "
+                              "crack's in tension and shear")
         if self.through is not None:
             if not isinstance(self.through, ThroughThickness):
                 raise RepairError(f"The through-thickness constants of {self.name!r} must be E3, G13, G23, nu13 and nu23")
