@@ -80,7 +80,11 @@ PLATE_SYSTEM = (
     "held and loaded. The engineer may use Abaqus's words: a boundary condition (BC) is a support; U1, U2, U3 are x, y, z and UR1, UR2, "
     "UR3 are tilt_x, tilt_y, turn_z; encastre is all six; pinned (or pin) is x, y and z; XSYMM is x, tilt_y and turn_z; YSYMM is y, tilt_x and "
     "turn_z; ZSYMM is z, tilt_x and tilt_y; CF1, CF2 and CF3 are a force along x, y and z. A roller with no direction written: propose "
-    "nothing for it and ask which direction it holds. Quote the words that hold these names."
+    "nothing for it and ask which direction it holds. Quote the words that hold these names. The engineer ticks what enters, so where "
+    "the region is clear, propose rather than ask. A fastening said in everyday words that name no support above (bolted, welded, glued, "
+    "screwed, riveted, built into a wall): propose it clamped, all six, and put in the question one short sentence that says you read it "
+    "as clamped and that pinned holds x, y and z only. Where the words leave a support's direction open between two readings (up or "
+    "down on an edge): propose the likelier and say in the question which direction you took and how to ask for the other."
 )
 
 

@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MODEL_FILE_LABELS, modelFile, StudioError, type ModelProgram } from "@/lib/studio-api";
-import { buildValues, PLATE_TEST } from "@/lib/studio-form";
-import { plateValues } from "@/lib/studio-plate";
-import { tensionValues } from "@/lib/tension-screen";
+import { PLATE_TEST } from "@/lib/studio-form";
+import { workspaceValues } from "@/lib/tension-screen";
 import { remembered, RUN_BY_KEY } from "./local";
 import { useProject } from "./project-context";
 
@@ -20,7 +19,7 @@ function save(text: string, name: string) {
 /** The model as a file for the engineer's own program (ADR-0129): the rows as they stand are sent, the fea package writes the file,
  * and the browser saves it. The rows are the ones a live solve sends, so the file is the model on the page. The page computes nothing. */
 export function useModelDownload() {
-  const { apiBaseUrl, form, plate, offersAll } = useProject();
+  const { apiBaseUrl, form, plate, allTests, offersAll } = useProject();
   const [busy, setBusy] = useState<ModelProgram | null>(null);
   const [problem, setProblem] = useState("");
   const [saved, setSaved] = useState("");
@@ -29,7 +28,7 @@ export function useModelDownload() {
     setBusy(program); setProblem(""); setSaved("");
     try {
       const rows = { ...form, filled_by: (form.filled_by ?? "").trim() || remembered(RUN_BY_KEY) }; // as the live solve names the file
-      const values = offersAll ? buildValues(rows, form.test === PLATE_TEST ? plateValues(plate) : undefined) : tensionValues(rows);
+      const values = workspaceValues(rows, plate, allTests || (offersAll && form.test !== PLATE_TEST)); // the rows a live solve sends
       const file = await modelFile(apiBaseUrl, values, program);
       save(file.text, file.name);
       setSaved(`Saved the ${MODEL_FILE_LABELS[program]}.`); // the file's kind, not its name: the name carries the program's (ADR-0091)
@@ -38,7 +37,7 @@ export function useModelDownload() {
     } finally {
       setBusy(null);
     }
-  }, [apiBaseUrl, form, plate, offersAll]);
+  }, [apiBaseUrl, form, plate, allTests, offersAll]);
   return { busy, problem, saved, download };
 }
 

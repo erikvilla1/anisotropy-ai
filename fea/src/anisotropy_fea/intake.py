@@ -751,9 +751,13 @@ def read_values(path: Path | str) -> FormInput:
     built: tuple = ()
     screen = data.pop("input", None)
     if screen is not None:  # the tension screen sends the material and the layup; the rest is chosen, each choice stated (ADR-0090)
-        if screen != tension_input.INPUT:
-            raise IntakeError(f"{path.name}: input {screen!r} is not one this tool reads; the tension screen sends {tension_input.INPUT!r}")
-        data, built = tension_input.complete_tension(data)
+        if screen == tension_input.PLATE_INPUT:  # a plate set up on the model tree: its size, supports and loads are the engineer's (ADR-0089 amendment 8)
+            data, built = tension_input.complete_plate(data)
+        elif screen != tension_input.INPUT:
+            raise IntakeError(f"{path.name}: input {screen!r} is not one this tool reads; the tension screen sends {tension_input.INPUT!r} "
+                              f"and a plate on the model tree {tension_input.PLATE_INPUT!r}")
+        else:
+            data, built = tension_input.complete_tension(data)
     lists: dict[str, list] = {}
     for name in PLATE_LISTS:
         if name in data:

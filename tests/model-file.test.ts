@@ -9,7 +9,7 @@ import { exampleForm } from "../lib/studio-form";
 
 const state = (results: boolean): ChatState => ({
   form: exampleForm("2026-11-20"), readOnly: false, results, facts: results, api: true, modelReads: true, onPlate: false, ready: true, step: null, about: null,
-  thread: null, sections: true,
+  thread: null, sections: true, plates: true,
 });
 
 test("a request for the model as a file is read, with the program it names (ADR-0129)", () => {
