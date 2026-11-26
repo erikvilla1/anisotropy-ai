@@ -658,7 +658,7 @@ The load at which anything first softens and what it was; the largest load the s
 
 A ply parting from its neighbour is not modelled, so a laminate that splits between its plies at a ledge is not seen. A ply crushing across its fibres is not followed ($`F_{2c}`$ is unused). Nothing saturates matrix cracking, so where the panel's far field itself cracks the number of cracked elements grows with the mesh; the mesh study is what says whether a load may be read, and a repair whose load does not settle has none to report. The strain across the width stays the undamaged laminate's. What the slice leaves out it still leaves out: the cut faces carry nothing, the slice is held flat, no load flows round the repair, and fatigue, heat, moisture and cure stress are absent. The load carried is "the load the repair carries in this model", never its strength: no test of a repair has been compared.
 
-## 14. A plate followed as its shape changes (`large_displacement.py`, `followed_plate.py`)
+## 14. A plate followed as its shape changes (`large_displacement.py`)
 
 Everything above writes equilibrium on the shape the plate had before the load: twice the load gives twice the deflection. That holds while the deflection is small beside the thickness. A thin plate pressed until it deflects by its own thickness has become a shallow dish, and a dish carries pressure by stretching as well as by bending; it is stiffer than the flat plate was, and the stiffer the further it goes. A solve that follows the shape as it changes sees this. Abaqus calls the switch NLGEOM, Ansys NLGEOM,ON or "large deflection".
 
@@ -726,7 +726,7 @@ The plate's difference from the report grows with the deflection and does not mo
 
 ### 14.6 What this leaves out
 
-A load past which a plate snaps or buckles cannot be passed: the load is raised and never lowered, so the run ends at the last load it could hold and says which. The material stays elastic and each ply whole. Strains of several percent are outside what the law of Section 14.1 can be trusted for (CalculiX's manual says of it that it "does not lead to a physically sensible material law" under large compression), which is one more reason the tension coupon is left as it is. A whole plate's plies and failure under a followed solve are Sections 14.7 to 14.10, and what those leave out is Section 14.10.
+A load past which a plate snaps or buckles cannot be passed: the load is raised and never lowered, so the run ends at the last load it could hold and says which. The material stays elastic and each ply whole. Strains of several percent are outside what the law of Section 14.1 can be trusted for (CalculiX's manual says of it that it "does not lead to a physically sensible material law" under large compression), which is one more reason the tension coupon is left as it is. A whole plate's plies and failure under a followed solve are Sections 14.7 to 14.10, and what those leave out is Section 14.11.
 
 ### 14.7 The whole plate, read from what CalculiX prints
 
@@ -756,7 +756,7 @@ with the shear doubled, as a laminate's law takes it. $`\varepsilon^0`$ and $`\k
 
 <!-- code: serendipity_derivatives, midplane_slopes, shell_solution -->
 
-### 14.9 What the supports carry
+### 14.9 The reaction at the supports
 
 CalculiX prints as a held node's reaction the force the plate puts on it. A load put straight onto a held direction of a node never enters the plate and is not in that number: the supports of a clamped plate of 20 by 20 elements under a pressure print 96.6 % of the pressure's whole force, the missing 3.4 % being the share of the pressure that falls on the edge nodes (seen on CalculiX 2.21). An eight-node element spreads a uniform pressure $`p`$ over its area $`A`$ as
 
@@ -770,21 +770,23 @@ four of each summing to $`pA`$. The share that lands on held directions is added
 
 ### 14.10 An answer that does not scale
 
-Under a linear solve every stress is proportional to the load, so a ply whose failure index is $`f = 1/R`$ at the loads applied fails at $`R`$ times them (Section 6). A followed plate is not proportional: a tenth more load moves it less than the tenth before, and the stretching of its middle grows with about the square of the deflection. $`R`$ is still written, as the same function of the index at the loads applied, and is a measure of how near the ply is; $`R`$ times the loads is no longer where it fails, so no loading at first-ply failure is written from it.
+Under a linear solve every stress is proportional to the load, so a ply with $`f = 1/R`$ at the loads applied reaches its limit at $`R`$ times them (Section 6). A followed plate is not proportional: a tenth more load moves it less than the tenth before, and the stretching of its middle grows with about the square of the deflection. $`R`$ is still written, as one over $`f`$ at the loads applied, and says how near the ply is; $`R`$ times the loads is no longer where the ply gives way, so no loading at first-ply failure is worked from it.
 
-What is written instead is what the solve passed through. The failure index of each criterion is kept at every level. If it reaches one before the whole load, the share of the load at which it does is taken on the straight line between the two levels it lies between,
+What is written instead is what the solve passed through: $`f`$ of each criterion at every level. If it reaches one before the whole load, the share of the load where it does is taken on the straight line between the two levels around it,
 
 ```math
 \lambda^\ast = \lambda_i + (\lambda_{i+1} - \lambda_i)\,\frac{1 - f_i}{f_{i+1} - f_i} ,
 ```
 
-from $`f = 0`$ at no load for the first level, and the two levels are named with it. If the index stays below one, the plate is said not to fail at the loads applied and no failure load is given. The crossing is computed by `crossing`. The fields the page reads, with the levels, the load against the largest displacement, the failure index at each level and the linear answer of our own kernel on the same plate, are computed by `followed_fields`, and the two files of a run are computed by `write_followed`.
+from $`f = 0`$ at no load for the first level, and the two levels are named with it. If it stays below one, the plate holds at the loads applied and no load at failure is given. The crossing is computed by `crossing`. The fields the page reads, with the levels, the load against the largest displacement, $`f`$ at each level and our own kernel's linear answer on the same plate, are computed by `followed_fields`, and the two files of a run are computed by `write_followed`.
 
 <!-- code: crossing, followed_fields, write_followed -->
 
 **The linear answer beside it.** Our kernel solves the same plate linear in the same run. It is not a check of the followed answer; it is the straight line the curve is drawn against, and the number that says what following the shape changed. At a thousandth of the load the two are one plate (`test_under_a_small_load_the_followed_plate_is_our_kernels_linear_plate`, an unsymmetric laminate so that bending and stretching are coupled: deflection within 2 %, moments within 4 % at the worst element of 256, the two elements being different ones).
 
-**When it matters.** Every shell result, linear or followed, states its largest displacement out of the plate's plane over the thinnest laminate's thickness. A clamped 200 mm square [45/0/-45/90]s plate of IM7/8552, 1.463 mm thick, under 0.03 MPa shows the size of the effect:
+### 14.11 When following the shape matters, and what it leaves out
+
+Every shell result, linear or followed, states its largest displacement out of the plate's plane over the thinnest laminate's thickness. A clamped 200 mm square [45/0/-45/90]s plate of IM7/8552, 1.463 mm thick, under 0.03 MPa shows the size of the effect:
 
 | Share of the load | Linear deflection over thickness | Followed over linear |
 | --- | --- | --- |
@@ -795,7 +797,7 @@ from $`f = 0`$ at no load for the first level, and the two levels are named with
 
 A linear deflection of half the thickness is a tenth too large on this plate, and past it the gap widens quickly. A linear plate past a ratio of 0.5 therefore says so in its explanation and names the switch. The ratio and the mark are written into the summary by `field_data`.
 
-**What this leaves out.** One solver gives the followed answer, and the cases of Section 14.5 are deflections and bent strips: no ply stress of a followed plate has a published value behind it. A plate that is exactly flat under loads in its own plane does not buckle in this solve, there being nothing to start it leaving its plane; a buckling load is not found. The levels are a tenth of the load apart, so a failure load is placed within a tenth and then by a straight line. The share of a pressure on held nodes is taken on the first shape. No mesh study is made of a followed run. On the plate above the largest displacement is 1.855, 1.857 and 1.857 mm on 8, 16 and 32 elements a side, while the Tsai-Hill failure index, largest in the element beside the clamped edge, is 0.126, 0.186 and 0.227: a ply's stress is one value per element, the bending there is steepest at the edge itself, and the element's value climbs toward the edge's as the element shrinks. At the plate's centre the same index is 0.107, 0.110 and 0.110. The further a plate deflects, the narrower the strip beside a clamp in which it still bends: under fifty times the pressure the index beside the edge is 1.14, 1.78 and 2.54 on the same three meshes. The deflection of a coarse plate can be relied on; its failure index beside a held edge cannot, and the page says so. Laminates of more than 13 plies and meshes past 10,000 elements times plies are refused. The tension coupon and the other pulled or bent coupons stay linear (Section 14.2).
+One solver gives the followed answer, and the cases of Section 14.5 are deflections and bent strips: no ply stress of a followed plate has a published value behind it. A plate that is exactly flat under loads in its own plane does not buckle in this solve, there being nothing to start it leaving its plane; a buckling load is not found. The levels are a tenth of the load apart, so a failure load is placed within a tenth and then by a straight line. The share of a pressure on held nodes is taken on the first shape. No mesh study is made of a followed run. On the plate above the largest displacement is 1.855, 1.857 and 1.857 mm on 8, 16 and 32 elements a side. The largest failure index, in the element beside the clamped edge, is 0.126, 0.186 and 0.227, and at the centre 0.107, 0.110 and 0.110: a ply's stress is one value per element, the bending is steepest at the edge itself, and the element's value there climbs as the element shrinks. The further a plate deflects, the narrower the strip beside a clamp where it still bends: under fifty times the pressure the value beside the edge is 1.14, 1.78 and 2.54 on the same meshes. The deflection of a coarse plate can be relied on; the value beside a held edge cannot, and the page says so. Laminates of more than 13 plies and meshes past 10,000 elements times plies are refused. The tension coupon and the other pulled or bent coupons stay linear (Section 14.2).
 
 ## Checks
 

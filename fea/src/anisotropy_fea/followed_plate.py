@@ -1,4 +1,4 @@
-"""A plate's whole answer with its shape followed as the load rises (ADR-0142, step 2; fea/docs/theory.md, Section 14.7 to 14.10).
+"""A plate's whole answer with its shape followed as the load rises (ADR-0142, step 2; fea/docs/theory.md, Sections 14.7 to 14.11).
 
 `large_displacement.py` asks CalculiX for a history at a few probes, for the cases that hold it to published answers. This module asks
 for the whole plate, for the run an engineer starts with the Analysis step's switch on: CalculiX solves the spec's eight-node twin with a
