@@ -12,8 +12,11 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
   back when the words fit two regions, and the words it did not read (`unread`, as the proposals' are, ADR-0088 amendment 1).
 - `check_plan`: what the server checks before a plan is kept: only tools on offer; at most `MAX_STEPS` steps with the server's own;
   every change previewed by `setup_tools.change_setup`, every one or none; every region one the model has; every number in a step
-  written in the sentence (a unit converted only by the tools); every quote a span of the sentence; one run, the changes before it and
-  the answers after it. A plan kept is a list of steps, each with its role, its one line and its state.
+  written in the sentence, with the unit written beside it (a unit converted only by the tools); a material from the library and a
+  choice the sentence names; every quote a span of the sentence; one run, the changes before it and the answers after it, and no run
+  that leaves out a change the sentence gives no value for; an answer's question a question that tells the answer nothing to say and
+  states no verdict, and a question asked back that decides nothing (step 4). A plan kept is a list of steps, each with its role, its
+  one line and its state.
 - `make_plan`: one call, one more with the reasons when the plan fails the checks, then the plan, the question or why there is none;
   `plan_with` is the same for any kind's view, schema and checks (a wing's and a repair's are in `planner_kinds.py`, build step 5).
 - `run_values`: the values a run and its check take for the setup, exactly as the page's `workspaceValues` (`lib/tension-screen.ts`)
@@ -32,12 +35,16 @@ from typing import Any
 from . import setup_tools
 from .proposals import (_NUMBER, COUPON_UNITS, HIDDEN_ENDINGS, HIDDEN_KEYS, MAX_QUOTE, UNREAD_REASONS, _plain, _squash, numbers_written,
                         unit_named)
+from .verdict_guard import APPROVAL, FAILS, HOLDS, PLACES_FAILURE, SUPPOSES
 
 MAX_STEPS = 12  # a plan's steps, the server's check and qa among them (ADR-0144)
 MAX_ASK = 1000
 MAX_QUESTION = 200
 MAX_UNREAD = 5
 MAX_NOTE = 400
+MAX_REASONS = 5  # the reasons a refused plan's answer gives the engineer; the model's one more try is given every one
+MAX_VALUE = 120  # a step's value as written: a number, a choice, a material's id or a mesh's list of numbers
+MAX_UNIT = 16
 STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
 STEP_STATES = ("planned", "running", "done", "failed", "skipped")
 # What a plan plans on: a kept `fea` project's coupon or plate, a kept `wing` project, or a repair the page holds (no project).
@@ -69,6 +76,20 @@ QA_LINES = {True: "Check the result: reference solver, mesh study, equilibrium, 
             False: "Check the result: reference solver, mesh study, equilibrium"}
 ANGLE_WORDS = frozenset({"deg", "degs", "degree", "degrees", "°", "rad", "radian", "radians"})
 _UNIT_AFTER = re.compile(r"\s*([a-zµμ°\"]+(?:\s*/\s*[a-z]+)?)")
+# An answer step's question stands on the card ("Answer: …") before anything runs, and goes to the reader of questions about the result
+# as the engineer's own (ADR-0102): it asks, and the result answers. Words that tell the answer what to say, or a verdict stated before the
+# run, are the model deciding for the engineer (ADR-0139), whatever the reader's own guards then make of them (ADR-0144, step 4).
+TELLS = re.compile(
+    r"^\s*(?:please\s+)?(?:say|state|claim|confirm|declare|pretend|assume|answer|write|ignore|disregard|forget)\b"
+    r"|\btell\s+(?:me|us|them|the\s+engineer)\s+(?:that\s+)?(?:it|the\s+\w+)\s+(?:holds?|pass(?:es)?|fails?|works?|is)\b"
+    r"|\b(?:whatever|regardless|no\s+matter|either\s+way|in\s+any\s+case|even\s+if)\b"
+    r"|\b(?:ignore|disregard|forget)\b[^?]{0,40}\b(?:rules?|instructions?|prompt|guards?|checks?)\b",
+    re.IGNORECASE)
+# A verdict the words state of the part as a whole: the word guard's (`verdict_guard.py`), with "passes" and "is fine" beside "holds".
+PASSES = re.compile(r"\b(?:it|the\s+(?:laminate|coupon|plate|part|design|specimen))\s+(?:passes|is\s+(?:fine|ok|okay|good))\b",
+                    re.IGNORECASE)
+# What a model may write into a refusal's reason, which the engineer reads on the card: a short name or a unit, else nothing of its own.
+_PLAIN_WORD = re.compile(r"^[\w ./%°µ+\-]{1,32}$")
 
 # What each tool does and takes, in the words the model is shown.
 TOOL_WORDS: dict[str, tuple[str, dict[str, str]]] = {
@@ -117,10 +138,15 @@ def tools_for(content: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"name": name, "does": TOOL_WORDS[name][0], "takes": dict(TOOL_WORDS[name][1])} for name in tool_names(content)]
 
 
+def library() -> dict[str, str]:
+    """The library's materials a coupon or a plate may take, by id with the name the page shows (`libraryOptions`, lib/studio-form.ts)."""
+    return {str(entry["Id"]): str(entry.get("Name") or entry["Id"]) for entry in setup_tools.form_definition().get("library", [])}
+
+
 def offered_rows(content: dict[str, Any]) -> list[dict[str, Any]]:
     """The rows a `row` change may set: those the form shows for the model's test, less the test and the units (set on the page), and
     less every row that names a person, a source, a note or the team's own names (R-11). Each with its label in the model's units, its
-    kind, its choices and its value as written."""
+    kind, its choices and its value as written. The library material's choices are the library's ids, as the proposals offer them."""
     form = setup_tools.form_of(content)
     units = setup_tools.units_of(form)
     rows = []
@@ -132,6 +158,8 @@ def offered_rows(content: dict[str, Any]) -> list[dict[str, Any]]:
         row = {"key": key, "label": f.get("labels", {}).get(units, f["label"]), "kind": f["kind"]}
         if f.get("words"):
             row["choices"] = list(f["words"])
+        elif key == "library":
+            row["choices"] = list(library())
         row["value"] = (form.get(key) or "").strip() or None
         rows.append(row)
     return rows
@@ -239,20 +267,40 @@ def units_beside(sentence: str, number: Decimal, angle: bool = False) -> list[st
     return found
 
 
+def shown(word: Any, instead: str) -> str:
+    """A word the model wrote, as a refusal's reason may name it: a short name or a unit as written, else the words `instead`; never a
+    sentence of the model's own, which the engineer would read on the card as the product's words (ADR-0139)."""
+    text = str(word).strip() if isinstance(word, (str, int, float)) else ""
+    return text if _PLAIN_WORD.match(text) else instead
+
+
 def _value_reasons(change: dict[str, Any], sentence: str) -> list[str]:
-    """Why a change's value cannot be the sentence's: a number it does not write, a unit it does not write, or a value the sentence writes
+    """Why a change's value cannot be the sentence's: a number it does not write, a unit it does not write beside that number (a unit
+    found anywhere in the sentence is not enough: the N of "2 kN" is not 2 N, the m of "2 mm" is not 2 m), or a value the sentence writes
     with a unit given with none (which the tools would read in the model's own units)."""
     reasons = []
     value, unit = change.get("value"), change.get("unit")
     if value is None:
         return reasons
+    if len(str(value)) > MAX_VALUE or len(str(unit or "")) > MAX_UNIT:  # the tools' reasons name a value as given: never a long one
+        return ["the value or the unit given is longer than any a step takes"]
     stray = stray_numbers(str(value), sentence)
     if stray:
         reasons.append(f"{', '.join(stray)} is not a number the sentence writes; a value is copied as written and the tools convert it")
         return reasons
     if unit is not None:
         if not str(unit).strip() or _squash(str(unit)) not in _squash(sentence):
-            reasons.append(f"the unit {unit} is not written in the sentence")
+            reasons.append(f"the unit {shown(unit, 'given')} is not written in the sentence")
+            return reasons
+        named = unit_named(str(unit).strip())
+        if named in COUPON_UNITS:  # a length, a force or a stress: the one written right after the number (ADR-0144, step 4)
+            for number in numbers_written(str(value)):
+                beside = units_beside(sentence, number)
+                if beside and named not in beside:
+                    written = next((b for b in beside if b), None)
+                    number_text = setup_tools._written(abs(number))
+                    said = f"{number_text} {written}" if written else f"{number_text} with no unit"
+                    reasons.append(f"the sentence writes {said}, and the step gives it in {shown(unit, 'another unit')}")
         return reasons
     angle = change.get("action") == "move" and isinstance(change.get("dof"), int) and change["dof"] >= 4
     for number in numbers_written(str(value)):
@@ -260,6 +308,57 @@ def _value_reasons(change: dict[str, Any], sentence: str) -> list[str]:
         if beside and all(beside):
             reasons.append(f"the sentence writes {setup_tools._written(abs(number))} {beside[0]}, and the step gives it with no unit")
     return reasons
+
+
+def _letters(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", _plain(text))
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]{3,}", _plain(text))
+
+
+def choice_named(choice: str, choices: list[str], sentence: str) -> bool:
+    """Whether the sentence names a row's choice: all of it, spaces and marks aside ("tsai wu", "force"), or a word of it that no other
+    choice has ("D3039" names "ASTM D3039/D3039M-17"; "ASTM" names none of them)."""
+    parts = re.findall(r"[a-z0-9]+", _plain(choice))
+    if parts and re.search(r"\b" + r"[^a-z0-9]*".join(parts) + r"\b", _plain(sentence)):
+        return True
+    written = set(_tokens(sentence))
+    others = {word for other in choices if other != choice for word in _tokens(other)}
+    return any(word in written and word not in others for word in _tokens(choice))
+
+
+def _free_value_reason(change: dict[str, Any], sentence: str) -> str | None:
+    """Why a row cannot take the value the plan gives it from the sentence: a material not in the library, or one the sentence does not
+    name by its id or its name ("AS4/8552" names as4-8552); a choice the sentence does not name ("skip the checks" names no failure
+    criteria of "none"); a text (a mesh's partitions or seeds) the sentence does not write. Letters and digits are compared, case and
+    punctuation aside. A yes or no (symmetric) is the tools' to hold, as "[0/90]2s" says yes in no word of the row (ADR-0144, step 4)."""
+    key, value = change.get("key"), change.get("value")
+    if value is None or not str(value).strip():
+        return None
+    text = str(value).strip()
+    if key == "library":
+        materials = library()
+        if text not in materials:
+            return f"{shown(text, 'the material given')} is not a material of the library; the materials are given by id"
+        said = _letters(sentence)
+        named = {m: [_letters(w) for w in (m, name) if _letters(w) and _letters(w) in said] for m, name in materials.items()}
+        if not named[text]:
+            return f"the sentence does not name {materials[text]}; a material is set only when the sentence names it"
+        longer = [m for m, found in named.items() if m != text and any(w in f and w != f for w in named[text] for f in found)]
+        if longer:  # "AS4 PW / 8552S" names as4-8552s-pw, and holds the letters of as4-8552
+            return f"the sentence names {materials[longer[0]]}, not {materials[text]}"
+        return None
+    f = setup_tools._field(str(key)) or {}
+    words = list(f.get("words") or [])
+    forced = key == "control" and text == "force" and any(COUPON_UNITS.get(unit or "", ("",))[0] == "force" for number in
+                                                          numbers_written(sentence) for unit in units_beside(sentence, number))
+    if words and set(words) != {"yes", "no"} and text in words and not forced and not choice_named(text, words, sentence):
+        return f"the sentence does not name {text} for {f.get('label', key)}; a choice is set only when the sentence names it"
+    if (f.get("kind") == "text" or (f.get("kind") == "list" and not words)) and _letters(text) not in _letters(sentence):
+        return f"{f.get('label', key)} takes only words the sentence writes"
+    return None
 
 
 def _quote_reason(quote: Any, sentence: str) -> str | None:
@@ -270,7 +369,21 @@ def _quote_reason(quote: Any, sentence: str) -> str | None:
     return None
 
 
+def verdict_stated(text: str) -> str | None:
+    """A verdict the words state of the part as a whole ("it holds", "the coupon fails", "it passes"), with no supposition and no place
+    of failure: no plan may hold one, since nothing has run when it is shown (ADR-0139). None when they state none."""
+    if SUPPOSES.search(text):
+        return None
+    found = HOLDS.search(text) or PASSES.search(text)
+    if found:
+        return found.group(0)
+    failed = FAILS.search(text)
+    return failed.group(0) if failed and not PLACES_FAILURE.search(text) else None
+
+
 def _question_reason(question: Any, sentence: str) -> str | None:
+    """Why an answer step's question cannot stand: none; too long; a number the sentence does not write; not a question; words that tell
+    the answer what to say ("say it passes", "whatever the result"); or a verdict stated before the run (ADR-0144, step 4)."""
     if not isinstance(question, str) or not question.strip():
         return "an answer names the question it answers"
     if len(question.strip()) > MAX_QUESTION:
@@ -278,6 +391,30 @@ def _question_reason(question: Any, sentence: str) -> str | None:
     stray = stray_numbers(question, sentence)
     if stray:
         return f"its question writes {', '.join(stray)}, which the sentence does not"
+    if not question.strip().endswith("?"):
+        return "its question is not a question: an answer asks the engineer's question of the result, ending in a question mark"
+    told = TELLS.search(question)
+    if told:
+        return f"its question tells the answer what to say (“{told.group(0).strip()}”): it asks, and the result answers"
+    stated = verdict_stated(question)
+    if stated:
+        return f"its question states a verdict (“{stated}”) before anything has run: it asks, and the result answers"
+    return None
+
+
+def asked_back_reason(question: str, sentence: str) -> str | None:
+    """Why a question asked back cannot stand: too long, a number the sentence does not write, not a question, or words that decide (a
+    verdict, or a design called safe) in what should only ask which region or row is meant (ADR-0139)."""
+    if len(question.strip()) > MAX_QUESTION:
+        return f"the question back is longer than {MAX_QUESTION} characters"
+    stray = stray_numbers(question, sentence)
+    if stray:
+        return f"the question back writes {', '.join(stray)}, which the sentence does not"
+    if not question.strip().endswith("?"):
+        return "the question back is not a question: it asks which one is meant, ending in a question mark"
+    decided = verdict_stated(question) or (APPROVAL.search(question).group(0) if APPROVAL.search(question) else None)
+    if decided:
+        return f"the question back decides (“{decided}”): it only asks which one is meant"
     return None
 
 
@@ -337,11 +474,7 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
 
     question = raw.get("question")
     if isinstance(question, str) and question.strip():
-        reason = None
-        if len(question.strip()) > MAX_QUESTION:
-            reason = f"the question back is longer than {MAX_QUESTION} characters"
-        elif stray_numbers(question, sentence):
-            reason = f"the question back writes {', '.join(stray_numbers(question, sentence))}, which the sentence does not"
+        reason = asked_back_reason(question, sentence)
         if reason:
             out.reasons.append(reason)
         else:
@@ -366,7 +499,8 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
             continue
         tool, args = step.get("tool"), step.get("args") if isinstance(step.get("args"), dict) else {}
         if tool not in offered:
-            refuse(f"{tool!r} is not a tool on offer here; the tools are {', '.join(offered)}")
+            named = repr(tool) if shown(tool, "") else "the tool given"
+            refuse(f"{named} is not a tool on offer here; the tools are {', '.join(offered)}")
             continue
         quote_reason = _quote_reason(step.get("quote"), sentence)
         if quote_reason:
@@ -395,14 +529,17 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
             continue
         if tool == "row":
             if change.get("key") not in rows:
-                refuse(f"{change.get('key') or 'no row'} is not a row on offer")
+                refuse(f"{shown(change.get('key'), 'the row given') if change.get('key') else 'no row'} is not a row on offer")
                 continue
         elif change.get("region") not in regions:
-            refuse(f"{change.get('region') or 'no region'} is not a region of this model; it has {', '.join(sorted(regions)) or 'none'}")
+            named = shown(change.get("region"), "the region given") if change.get("region") else "no region"
+            refuse(f"{named} is not a region of this model; it has {', '.join(sorted(regions)) or 'none'}")
             continue
-        value_reasons = _value_reasons(change, sentence)
-        if value_reasons:
-            for reason in value_reasons:
+        material = tool == "row" and change.get("key") == "library"  # an id's digits are its name ("as4-8552"), not a number written
+        value_reasons = [] if material else _value_reasons(change, sentence)
+        free = _free_value_reason(change, sentence) if tool == "row" and not value_reasons else None
+        if value_reasons or free:
+            for reason in [*value_reasons, *([free] if free else [])]:
                 refuse(reason)
             continue
         planned.append((index, tool, change, quote, None))
@@ -410,6 +547,11 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
     total = len(planned) + (len(SERVER_TOOLS) if ran_at is not None else 0)
     if total > MAX_STEPS:
         out.reasons.append(f"the plan has {total} steps with the checks the software adds; a plan has at most {MAX_STEPS}")
+    # a run that leaves out a change the sentence asks for, with no value ("make it wider") or by an earlier message ("as before"), runs
+    # something the engineer did not ask for: the plan asks for it instead (ADR-0144, step 4)
+    for part in out.unread if ran_at is not None else []:
+        if part["reason"] in ("no_value", "refers_back"):
+            out.reasons.append(f"the sentence asks for a change the plan leaves out (“{part['quote']}”): ask for it rather than run without it")
     if out.reasons:
         return out
 
@@ -471,6 +613,14 @@ def _billed(calls: list, reading: Any) -> Any:
     return reading
 
 
+def reason_of(reasons: list[str]) -> str:
+    """A refused plan's reasons as its answer gives them: the first few, and how many more (a plan that runs fifty times is refused once
+    per extra run; the engineer needs the first to see why, the model's one more try is given them all)."""
+    kept = "; ".join(reasons[:MAX_REASONS])
+    more = len(reasons) - MAX_REASONS
+    return f"{kept}; and {more} more like them" if more > 0 else kept
+
+
 def _asked(assistant: Any, view: dict[str, Any], schema: dict[str, Any], system: str | None) -> Any:
     """One call: a coupon's or a plate's plan in the planner's own words, another kind's with the words for it."""
     return assistant.plan(view, schema) if system is None else assistant.plan(view, schema, system=system)
@@ -488,10 +638,10 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
     if not checked.ok:
         again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason="; ".join(checked.reasons))
+            return Planned("refused", unread=checked.unread, reason=reason_of(checked.reasons))
         retried = check(again.raw)
         if not retried.ok:
-            return Planned("refused", unread=retried.unread, reason="; ".join(retried.reasons))
+            return Planned("refused", unread=retried.unread, reason=reason_of(retried.reasons))
         reading, checked = again, retried
     if checked.question is not None:
         return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model)

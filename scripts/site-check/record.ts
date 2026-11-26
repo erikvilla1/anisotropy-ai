@@ -1,6 +1,7 @@
 /** What a run of the site check writes, in a form the founders' QA page will read later (ADR-0138): `results.json`, one file per run,
  * with `schema` naming its version. A new field may be added within a version; a field renamed or removed raises it. Everything in it
  * is scrubbed before it is written (`scrub.ts`). */
+import type { CardPlan } from "./chat";
 import type { Check } from "./grade";
 import type { Mode } from "./plan";
 
@@ -30,6 +31,9 @@ export type QuestionResult = {
   reason: string | null;
   /** What the chat showed; `interim`, the answer it showed first, when the page then worked and replaced it (a sweep, a solve). */
   answer: { heading: string; shown: string; folded: string; parts: string[]; applies: boolean; interim?: { heading: string; shown: string } } | null;
+  /** A planner question's plan card as shown (ADR-0144, step 4), never approved: its stage and state, heading, steps, and reason or
+   * question back. Absent for every other question, and in results written before it. */
+  plan?: CardPlan | null;
   seconds: number | null;
   modelCalls: number;
   /** What the site's calls to the model cost for it, in dollars, as the site's answer said. */

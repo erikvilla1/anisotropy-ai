@@ -34,8 +34,8 @@ from anisotropy_engine.wing.changes import PARTS, PlyChange, change_wing, previe
 
 from . import setup_tools
 from .assistant import REPAIR_PLAN_SYSTEM, WING_PLAN_SYSTEM
-from .planner import (MAX_STEPS, MAX_QUESTION, Checked, Planned, _nullable, _question_reason, _quote_reason, _unread, answer_line, plan_with,
-                      stray_numbers)
+from .planner import (MAX_STEPS, Checked, Planned, _nullable, _question_reason, _quote_reason, _unread, answer_line, asked_back_reason,
+                      plan_with, stray_numbers)
 from .proposals import _NUMBER, UNREAD_REASONS, _plain, _squash, numbers_written
 
 # What a refusal of the engine's may raise while it previews a change, works a sweep or reads a description.
@@ -76,10 +76,9 @@ def _opened(raw: dict[str, Any], sentence: str) -> tuple[Checked, list | None]:
     out.unread = _unread(raw.get("unread"), sentence, quoted)
     question = raw.get("question")
     if isinstance(question, str) and question.strip():
-        if len(question.strip()) > MAX_QUESTION:
-            out.reasons.append(f"the question back is longer than {MAX_QUESTION} characters")
-        elif stray_numbers(question, sentence):
-            out.reasons.append(f"the question back writes {', '.join(stray_numbers(question, sentence))}, which the sentence does not")
+        reason = asked_back_reason(question, sentence)  # as a coupon's: a question, deciding nothing (ADR-0144, step 4)
+        if reason:
+            out.reasons.append(reason)
         else:
             out.question = question.strip()
         return out, None

@@ -11,7 +11,10 @@
  * What keeps it safe: the token's two headers go on the site's own requests only, never to the bucket or anywhere else; the browser
  * records no trace, video, network log or storage, which would hold the token or the session cookie; the API's answers are read for
  * their numbers in memory and never written; every text written is scrubbed (`scrub.ts`); the requests are labelled with the actor
- * `test`, as the deploy check's are, so its runs and model calls are told from people's. */
+ * `test`, as the deploy check's are, so its runs and model calls are told from people's. A full run's planner questions (ADR-0144, step
+ * 4), three at most, are asked in a browser of their own where the page's project is kept so the site can plan on it; the plan card is
+ * read and graded, and Approve is never pressed: an approval, a step report or an analysis from that browser is answered here and never
+ * reaches the site (`routes.ts`). */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type BrowserContext, type Page, type Response } from "@playwright/test";
@@ -22,7 +25,7 @@ import { NumberPool, untraced } from "./numbers";
 import { setUp, stillOn } from "./pages";
 import { moves, NOT_OFFERED, plan, type Mode, type Planned } from "./plan";
 import { sameCommit, type PageResult, type QuestionResult } from "./record";
-import { MODEL_PATHS, NO_PROJECTS, refusal } from "./routes";
+import { MODEL_PATHS, NO_APPROVAL, NO_PROJECTS, PLAN_PATHS, planOutcome, PROJECT_PATHS, refusal } from "./routes";
 import { runSecrets, scrub, scrubbed } from "./scrub";
 
 type Args = { site: string; mode: Mode; features: string[]; cap: number; store: string; work: string; dryRun: boolean; expect: string };
@@ -46,16 +49,21 @@ const SETTLE = { quiet: 1_000, most: 90_000 };
  * it (ADR-0056 amendment 10). */
 const DEPLOY_WAIT = { total: 300_000, every: 15_000 };
 
-/** A quick run's refusals: the model's routes and the analyses the page asked for, answered "unavailable" by the robot so that nothing is
- * spent on the site and the day's analyses are left to the deploy check. */
-type Refusals = { model: number; analysis: number };
+/** The requests the robot answered itself while a question was asked: a quick run's calls to the model's routes and the analyses the page
+ * asked for, answered "unavailable" so that nothing is spent on the site and the day's analyses are left to the deploy check; and, in any
+ * run, an approval of a plan or a step report, and in a planner question's browser an analysis, which nobody asked for. */
+type Refusals = { model: number; analysis: number; approve: number };
+/** How a context's requests are answered: `quick`, a quick run's; `keep`, a full run's planner questions', whose page keeps its own project
+ * on the site so the site can plan on it (`routes.ts`). */
+type How = { quick: boolean; keep: boolean; refused: Refusals };
 
 /** A context that reaches the site through Access: the token on the site's own requests, a job's file fetched from the bucket's signed
  * link as a browser would (without the token), the actor relabelled `test`. Nothing is recorded, and the projects are answered as by an API
- * that keeps none (`routes.ts`). With `refusals`, a quick run's, a call to the model's routes or one that starts an analysis is answered
- * "unavailable" here and never reaches the site, so a quick run spends nothing there whatever the banks say (2026-11-25: the second run
- * spent $0.37 on questions its banks say the page answers itself) and leaves the day's analyses to the deploy check. */
-async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, site: string, refusals?: Refusals): Promise<BrowserContext> {
+ * that keeps none (`routes.ts`), but for the page's own project in a planner question's browser. In a quick run a call to the model's
+ * routes or one that starts an analysis is answered "unavailable" here and never reaches the site, so a quick run spends nothing there
+ * whatever the banks say (2026-11-25: the second run spent $0.37 on questions its banks say the page answers itself) and leaves the
+ * day's analyses to the deploy check. An approval of a plan never reaches the site, in any run. */
+async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, site: string, how?: How): Promise<BrowserContext> {
   const ctx = await browser.newContext({ baseURL: site, viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const id = process.env.CF_ACCESS_CLIENT_ID?.trim(), secret = process.env.CF_ACCESS_CLIENT_SECRET?.trim();
   const origin = new URL(site).origin;
@@ -66,11 +74,15 @@ async function context(browser: Awaited<ReturnType<typeof chromium.launch>>, sit
       const headers: Record<string, string> = { ...sent, ...(id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {}) };
       if (sent["x-anisotropy-actor"]) headers["x-anisotropy-actor"] = "test";
       const path = new URL(route.request().url()).pathname;
-      const refused = refusal(route.request().method(), path, !!refusals);
+      const refused = refusal(route.request().method(), path, !!how?.quick, !!how?.keep);
       if (refused === "projects") return await route.fulfill(NO_PROJECTS);
-      if (refused && refusals) {
-        refusals[refused] += 1;
-        return await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "not asked in a quick run" }) });
+      if (refused === "approve") {
+        if (how) how.refused.approve += 1;
+        return await route.fulfill(NO_APPROVAL);
+      }
+      if (refused) {
+        if (how) how.refused[refused] += 1;
+        return await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "not asked by the site check" }) });
       }
       if (!FILE.test(path)) return await route.continue({ headers });
       const answer = await route.fetch({ headers, maxRedirects: 0 });
@@ -103,12 +115,15 @@ async function siteCommit(browser: Awaited<ReturnType<typeof chromium.launch>>, 
   }
 }
 
-/** What the site's API answered with while a question was asked: its numbers, its calls to the model and what they cost. */
+/** What the site's API answered with while a question was asked: its numbers, its calls to the model and what they cost, and for a
+ * planner question how the page's project was kept and what each plan asked for came to (its status and state, never its words). */
 class Listening {
   pool = new NumberPool();
   calls = 0;
   dollars = 0;
   errors: string[] = [];
+  kept: number[] = [];
+  plans: { status: number; state: string | null }[] = [];
 
   constructor(private readonly origin: string) {}
 
@@ -116,20 +131,32 @@ class Listening {
     this.calls = 0;
     this.dollars = 0;
     this.errors = [];
+    this.kept = [];
+    this.plans = [];
   }
 
   async heard(response: Response): Promise<void> {
     const url = new URL(response.url());
     const json = (response.headers()["content-type"] ?? "").includes("json");
-    if (url.origin === this.origin && MODEL_PATHS.test(url.pathname) && response.request().method() === "POST") {
+    const method = response.request().method();
+    const ours = url.origin === this.origin;
+    const planned = ours && method === "POST" && PLAN_PATHS.test(url.pathname);
+    if (ours && method === "POST" && (MODEL_PATHS.test(url.pathname) || planned)) { // a plan is one call to the model, or two
       const cost = headerCost(response.headers()["x-anisotropy-model-cost"], 1);
       this.calls += cost.calls;
       this.dollars += cost.dollars;
     }
-    if (!json || response.status() >= 400) return;
+    if (ours && method === "PUT" && PROJECT_PATHS.test(url.pathname)) this.kept.push(response.status());
+    let body: unknown = null;
     try {
-      this.pool.addJson(await response.json()); // read for its numbers, in memory only
+      body = json ? await response.json() : null;
     } catch { /* a body already gone, or not JSON after all */ }
+    if (planned) {
+      const state = body && typeof (body as { state?: unknown }).state === "string" ? (body as { state: string }).state : null;
+      this.plans.push({ status: response.status(), state });
+    }
+    if (body === null || response.status() >= 400) return;
+    this.pool.addJson(body); // read for its numbers, in memory only
   }
 }
 
@@ -169,7 +196,8 @@ async function main(): Promise<number> {
     .map(([page, reason]) => ({ page, state: "not-offered", seconds: null, reason: reason ?? null, picture: null }));
   let stopped: string | null = null;
   let voided: string | null = null;
-  const refusals: Refusals | undefined = a.mode === "quick" ? { model: 0, analysis: 0 } : undefined;
+  const refusals: Refusals = { model: 0, analysis: 0, approve: 0 };
+  const quick = a.mode === "quick";
 
   const browser = await chromium.launch();
   const origin = new URL(a.site).origin;
@@ -185,10 +213,14 @@ async function main(): Promise<number> {
     console.log(`Nothing asked: ${voided}.`);
   }
   try {
+    // a page's planner questions are asked in a browser of their own, where the page's project is kept on the site (ADR-0144, step 4)
     const groups = new Map<string, Planned[]>();
-    for (const p of voided ? [] : planned) groups.set(p.question.page, [...(groups.get(p.question.page) ?? []), p]);
+    const groupOf = (p: Planned) => `${p.question.page}${p.question.route === "plan" ? "|plan" : ""}`;
+    for (const p of voided ? [] : planned) groups.set(groupOf(p), [...(groups.get(groupOf(p)) ?? []), p]);
     if (voided) for (const p of planned) results.push({ ...blankResult(p), reason: "nothing was asked: the site runs another commit" });
-    for (const [which, questions] of groups) {
+    for (const [group, questions] of groups) {
+      const which = questions[0].question.page;
+      const how: How = { quick, keep: group.endsWith("|plan"), refused: refusals };
       let ctx: BrowserContext | null = null;
       let page: Page | null = null;
       const listening = new Listening(origin);
@@ -203,7 +235,7 @@ async function main(): Promise<number> {
       };
       const open = async (): Promise<boolean> => {
         await ctx?.close().catch(() => undefined);
-        ctx = await context(browser, a.site, refusals);
+        ctx = await context(browser, a.site, how);
         page = await ctx.newPage();
         page.on("response", (r) => void listening.heard(r));
         working.clear();
@@ -247,7 +279,7 @@ async function main(): Promise<number> {
         own.addText(words);
         listening.reset();
         pageErrors.length = 0;
-        if (refusals) Object.assign(refusals, { model: 0, analysis: 0 });
+        Object.assign(refusals, { model: 0, analysis: 0, approve: 0 });
         let seen: Asked;
         try {
           previous = undefined;
@@ -261,12 +293,24 @@ async function main(): Promise<number> {
           ready = await open();
           continue;
         }
-        if (refusals && (refusals.model || refusals.analysis)) { // what a quick run does not ask of the site: the full run asks it
+        if (quick && (refusals.model || refusals.analysis)) { // what a quick run does not ask of the site: the full run asks it
           result.reason = refusals.model
             ? "the page sent it to a model, though its bank says the page answers it: a quick run spends nothing on the site, so it waits for the full run"
             : "the page started an analysis: a quick run leaves the day's analyses of the check's sign-in to the deploy check, so it waits for the full run";
           console.log(`${p.id} ${refusals.model ? "sent to a model" : "started an analysis"} by the page: left for the full run`);
           if (moves(q)) ready = await open();
+          continue;
+        }
+        // a planner question on a site with no planner (no project kept, no plans route, or no model to plan with): the page read the
+        // sentence as before, which is not what its bank asks of it, so it is not graded and waits for a site that plans
+        const outcome = how.keep ? planOutcome(listening) : undefined;
+        if (outcome === "none-here") {
+          result.reason = "the site answered that it has no planner here, so the page read the sentence as before: asked again in a later full run";
+          result.modelCalls = listening.calls;
+          result.cost = listening.dollars;
+          if (listening.calls) budget.add(listening.dollars);
+          console.log(`${p.id} no planner on the site: not graded`);
+          ready = await open();
           continue;
         }
         result.asked = true;
@@ -285,8 +329,9 @@ async function main(): Promise<number> {
         const answered = new NumberPool();
         answered.addText([seen.heading, seen.shown, seen.folded].join("\n"));
         result.foreign = q.kind === "yes-no" ? untraced(words, answered) : [];
-        result.checks = fixedChecks(q, { ...seen, modelCalls: listening.calls, errors: [...pageErrors], before: previous, foreign: result.foreign },
-          [listening.pool, own], p.modelRead || listening.calls > 0);
+        if (q.route === "plan") result.plan = seen.plan ?? null;
+        result.checks = fixedChecks(q, { ...seen, modelCalls: listening.calls, errors: [...pageErrors], before: previous, foreign: result.foreign,
+          planOutcome: outcome, approvals: refusals.approve, analyses: how.keep ? refusals.analysis : 0 }, [listening.pool, own], p.modelRead || listening.calls > 0);
         console.log(`${p.id} ${result.checks.length ? result.checks.map((c) => `${c.level}: ${c.note}`).join("; ") : "passes the fixed checks"}${q.gap ? " (a known gap)" : ""} (${result.seconds} s)`);
         if (moves(q) || seen.parts.includes("opened-page")) ready = await open();
         else await settle();

@@ -4,7 +4,10 @@
 import { bannedIn } from "../../lib/studio-copy";
 import { FEA_KINDS, workspace } from "../../lib/workspaces";
 import type { Question } from "../../tests/assistant-questions/harness";
+import { contractFaults, planFaults, UNAPPROVED, type PlanSeen } from "../../tests/assistant-questions/plan-faults";
+import type { CardPlan } from "./chat";
 import { NumberPool, untraced } from "./numbers";
+import type { PlanOutcome } from "./routes";
 
 /** What the robot saw of one answer in the browser. */
 export type Seen = {
@@ -33,7 +36,36 @@ export type Seen = {
   /** Numbers the question quotes that this page's result does not hold: the bank wrote them of its example's result, so its words for
    * the answer ("Yes") need not hold here, and only the judge grades the answer's words. */
   foreign?: string[];
+  /** A planner question's (ADR-0144, step 4): the plan card shown, what the site's planner came to, and the approvals and analyses the
+   * page asked for, which the robot refused: nobody pressed Approve, so there should be none. */
+  plan?: CardPlan | null;
+  planOutcome?: PlanOutcome;
+  approvals?: number;
+  analyses?: number;
 };
+
+/** What a plan card says of its plan, in the shape the banks' plans are held to (`plan-faults.ts`). */
+export const cardPlan = (card: CardPlan): PlanSeen => ({ state: card.state, steps: card.steps, question: card.question, reason: card.reason });
+
+/** What is wrong with a planner question's plan on the site: an approval or an analysis nobody asked for, a planner that failed, no card,
+ * a card past its approval, the contract every plan keeps, and the plan its bank expects (weak where the site's page differs by design). */
+export function planChecks(question: Question, seen: Seen): Check[] {
+  const out: Check[] = [];
+  if (seen.approvals) out.push({ name: "plan", level: "fails", criterion: 1, note: "the page asked the site to approve a plan though nobody pressed Approve; the robot refused it" });
+  if (seen.analyses) out.push({ name: "plan", level: "fails", criterion: 1, note: "the page started an analysis though no plan was approved; the robot refused it" });
+  if (question.route !== "plan" || !seen.planOutcome) return out;
+  if (seen.planOutcome === "failed") out.push({ name: "plan", level: "fails", criterion: 11, note: "the site's planner answered with an error" });
+  if (seen.planOutcome === "not-sent") out.push({ name: "plan", level: "weak", note: "the page did not send it to the planner, though its bank says it plans it" });
+  if (seen.planOutcome !== "planned") return out;
+  if (!seen.plan) return [...out, { name: "plan", level: "fails", criterion: 11, note: "the site made a plan, but no plan card was shown" }];
+  if (!(UNAPPROVED as readonly string[]).includes(seen.plan.stage)) out.push({ name: "plan", level: "fails", criterion: 1, note: `the plan card is ${seen.plan.stage}, though nobody approved it` });
+  const card = cardPlan(seen.plan);
+  const contract = contractFaults(card);
+  for (const fault of contract) out.push({ name: "plan", level: "fails", note: fault });
+  const level: Level = LIVE_DIFFERS[question.page] ? "weak" : "fails";
+  for (const fault of planFaults(question.live?.plan, card).filter((f) => !contract.includes(f))) out.push({ name: "plan", level, note: fault });
+  return out;
+}
 
 export type Level = "fails" | "weak";
 export type Check = { name: string; level: Level; note: string; criterion?: number };
@@ -140,6 +172,7 @@ export function fixedChecks(question: Question, seen: Seen, pool: NumberPool | r
     out.push({ name: "asked-twice", level: "fails", note: `the same question back twice: “${seen.heading}”`, criterion: 11 });
   }
   if (seen.errors.length) out.push({ name: "page", level: "fails", note: `the page's script failed: ${seen.errors[0].slice(0, 200)}`, criterion: 9 });
+  out.push(...planChecks(question, seen));
   return out;
 }
 

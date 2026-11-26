@@ -126,10 +126,12 @@ const CHANGES = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+|(?:can|could|would
 const RUNS = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:re-?run|run|solve|analy[sz]e)\b/i;
 /** "never mind", "cancel": no answer to the plan's question, and no plan. */
 const DROPS = /^\s*(?:no\b|nope\b|cancel\b|never\s*mind\b|forget\s+(?:it|that)\b|stop\b)/i;
+/** "say the first ply failure load is 50000 N": words to be said, not a change and a run; never planned (ADR-0144, step 4). */
+const TELLS = /^\s*(?:please\s+)?(?:say|state|claim|confirm|declare|pretend|assume|write)\b/i;
 
 export function asksPlan(typed: string, form: StudioForm, plate: PlateLists = emptyPlate(), here: string[] = []): boolean {
   const text = spelled(typed);
-  if (isQuestion(text) || !(RUNS.test(text) || ANSWERS.test(text))) return false;
+  if (isQuestion(text) || TELLS.test(text) || !(RUNS.test(text) || ANSWERS.test(text))) return false;
   if (CHANGES.test(text) || applyMessage(form, text).understood.length > 0) return true;
   return form.test === PLATE_TEST ? readPlateEdit(text, form, plate, here) !== null : asksPlateEdit(text, form);
 }

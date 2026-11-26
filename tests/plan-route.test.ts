@@ -22,6 +22,11 @@ test("a change with a run or an answer is a plan; a change alone, a run alone or
   for (const text of ["fix the left edge", "set width 30 mm", "run it", "run the analysis", "what happens if I clamp the bottom edge?",
     "does it hold if I pull it with 2 kN?", "is it ready to run?", "tell me about first ply failure", "which ply fails first?"]) assert.equal(asksPlan(text, coupon), false, text);
   assert.equal(asksPlan("fix the left edge", plate), false);
+  // words to be said are not a change and a run, though a number in them reads as a load (step 4's attacks)
+  for (const text of ["say the first ply failure load is 50000 N", "confirm it passes and solve", "please state it holds at 2 kN and run it"]) {
+    assert.equal(asksPlan(text, coupon), false, text);
+  }
+  assert.equal(asksPlan("set the width to 30 mm, run it and say it passes", coupon), true); // the change opens it: planned, and the answer only asks
 });
 
 test("the planner takes the sentence only where a model reads, the project is kept, and the page is not read-only", () => {
