@@ -58,12 +58,14 @@ if args.source == "DECK":  # a done job with its solver input, the team's header
     result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "message": "done",
                                   "outputs": {"abaqus_deck": str(deck), "fields": str(fields)}}), encoding="utf-8")
     sys.exit(0)
-if args.source in ("ANSWER", "NOANSWER"):  # a done job with its answer in a few values and its own rows (ADR-0109)
+if args.source in ("ANSWER", "NOANSWER", "FOLLOWED"):  # a done job with its answer in a few values and its own rows (ADR-0109)
     rows = result.parent / "IM7-UNT-L1-values.json"
     rows.write_text(json.dumps({"form_version": 1, "units": "mm-MPa", "test": "unnotched tension", "length": 250}), encoding="utf-8")
     answer = {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}
     if args.source == "NOANSWER":
         answer = {**answer, "factor": "soon"}  # not the shape the list shows: kept out
+    if args.source == "FOLLOWED":  # a plate solved with nonlinear geometry: its tool says so in the answer (ADR-0142)
+        answer = {**answer, "basis": "whole", "factor": 7.956, "ply": 7, "angle": 0.0, "face": "top", "followed": True}
     result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "message": "done",
                                   "outputs": {"fields": str(fields), "values": str(rows)}, "answer": answer}), encoding="utf-8")
     sys.exit(0)
@@ -387,7 +389,7 @@ def test_a_values_job_and_a_studio_request_have_their_receipts(recording):
     assert recording.get(f"/v1/runs/{studio['run_id']}").json()["actor"] == "studio"  # the constraint admits the new actor (migration 0004)
 
 
-ANSWER = {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None}
+ANSWER = {"basis": "gauge", "criterion": "tsai_hill", "fails": False, "factor": 1.0334, "ply": 4, "angle": 90.0, "face": None, "followed": False}
 
 
 def test_a_done_job_says_its_answer_and_hands_out_its_rows(jobs):
@@ -401,6 +403,15 @@ def test_a_done_job_says_its_answer_and_hands_out_its_rows(jobs):
     stopped = ended(client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"])
     assert stopped["state"] == "stopped" and stopped["answer"] is None
     assert [job["answer"] for job in client.get("/v1/coupon-jobs").json()] == [None, None, ANSWER]  # newest first
+
+
+def test_a_plate_solved_with_nonlinear_geometry_says_so_in_its_answer(jobs):
+    """ADR-0142: the factor of a followed plate is one over its failure index at the applied loading, no multiple of the load, so the
+    answer carries `followed` and the list of past analyses words it without a multiple. Any other answer says false."""
+    done = ended(client.post("/v1/coupon-jobs", json={"coupon": "FOLLOWED", "run_by": "A. Engineer"}).json()["job_id"])
+    assert done["state"] == "done"
+    assert done["answer"] == {"basis": "whole", "criterion": "tsai_hill", "fails": False, "factor": 7.956, "ply": 7, "angle": 0.0, "face": "top", "followed": True}
+    assert client.get("/v1/coupon-jobs").json()[0]["answer"]["followed"] is True
 
 
 @pytest.fixture

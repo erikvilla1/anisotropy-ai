@@ -93,6 +93,14 @@ def test_a_setup_is_checked_by_the_api_as_it_was_given_with_the_forms_version(ca
     assert fake.calls[-1][2]["values"]["form_version"] == "0.7" and older["setup"]["state"] == "ready"
 
 
+def test_a_preview_of_a_setup_that_asks_for_nonlinear_geometry_says_it_is_a_linear_solve(call, fake):
+    """A preview is a linear solve whatever the setup asks (ADR-0142): a plate's shape is followed only by a full run on the page."""
+    plain, asked = call(("solve_coupon", {"values": VALUES}), ("solve_coupon", {"values": {**VALUES, "nonlinear_geometry": True}}))
+    assert "note" not in plain and fake.calls[-1][2]["values"]["nonlinear_geometry"] is True  # the row goes to the API as given
+    assert "this preview is a linear solve" in asked["note"] and "does not scale with the load" in asked["note"]
+    assert not re.search(r"calculix|prepomax|abaqus|\bkernel\b", asked["note"], re.I)  # ADR-0091
+
+
 def test_a_solve_returns_the_packages_answer_and_sentences_and_an_id_never_the_fields(call, fake):
     solved, = call(("solve_coupon", {"values": VALUES}))
     summary = FIELDS["summary"]

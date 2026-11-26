@@ -37,6 +37,7 @@ def main() -> None:
         spec = load_spec(args.spec)
         followed = follow_plate(spec, args.out, timeout_s=args.timeout)
     except Stopped as exc:
+        print(exc.detail, flush=True)  # the solver's own words, for the log; the last line is what the engineer is told
         raise SystemExit(str(exc)) from None
     except (SpecError, MeshError, CalculixWriterError, FollowedError) as exc:
         raise SystemExit(f"the plate is not followed: {exc}") from None

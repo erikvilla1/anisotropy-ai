@@ -14,7 +14,7 @@ from anisotropy_fea.calculix import ENV_VARIABLE, CalculixError, find_ccx
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.fields import run_answer
+from anisotropy_fea.fields import FOLLOW_FROM, field_data, run_answer
 from anisotropy_fea.followed_plate import (LEVELS, MOST_BRICKS, FollowedError, Stopped, crossing, follow_plate, followed_fields, frame_of,
                                            loads_on_held_nodes, midplane_slopes, printed_blocks, read_plate, serendipity_derivatives,
                                            shell_solution, through_the_height, why_not, write_followed)
@@ -127,6 +127,12 @@ def test_the_setup_check_says_what_the_solver_that_follows_the_shape_takes(tmp_p
     assert thick.state == "blocked" and "the laminate has 14 plies" in item.message and "turn nonlinear geometry off to solve this plate" in item.message
     off = setup_checklist(read_values(values_file(tmp_path / "off", element_size=2)), tmp_path / "none", **TOOLS)[0]
     assert off.state == "ready" and "nonlinear" not in next(i for i in off.items if i.id == "solver").message  # the linear plate is judged as before
+    # no report is written of a followed run: the check says so, and never warns that a report cannot be written
+    report = lambda checklist: next(i for i in checklist.items if i.id == "document")  # noqa: E731
+    assert report(ready).state == "pass" and report(ready).message == "no report is written of a run with nonlinear geometry; its results are on the page"
+    assert report(off).message == "the report is written as a PDF"
+    bare = setup_checklist(read_values(values_file(tmp_path / "bare", **{FOLLOWED_KEY: True})), tmp_path / "none", **{**TOOLS, "tectonic": lambda: None})[0]
+    assert report(bare).state == "pass" and "nonlinear geometry" in report(bare).message
 
 
 def test_a_plate_is_judged_from_its_counts_before_any_mesh(tmp_path):
@@ -283,6 +289,22 @@ def test_under_a_small_load_the_followed_plate_is_our_kernels_linear_plate(tmp_p
     assert max(level.fit for level in followed.levels) < 1e-3  # the strain is straight in the height
 
 
+def test_a_linear_plate_says_how_far_it_leaves_its_plane_against_its_thickness(tmp_path):
+    """What says whether the shape is worth following: the largest displacement out of the plane over the laminate's thickness, in every
+    plate's summary; past about half, the linear result's own sentences name the switch. No solver but ours is needed for it."""
+    coupon = {"designation": "plate", "test": "plate", "layup": "[45/0/-45/90]s"}
+    for share, past in ((1.0, True), (0.1, False)):  # the linear deflection is 2.5 thicknesses under the pressure, a quarter under a tenth of it
+        frame = frame_of(under(spec_of(tmp_path / str(share), **COARSE, **{FOLLOWED_KEY: True}), share))
+        data = field_data(frame.deck, solve_deck(frame.deck), frame.units, coupon=coupon)
+        told = data["summary"]["deflection"]
+        assert told["thickness"] == pytest.approx(8 * 0.18288) and told["value"] == pytest.approx(abs(data["summary"]["max_displacement"]["components"][2]))
+        assert told["ratio"] == pytest.approx(told["value"] / told["thickness"]) == pytest.approx(share * 2.483, rel=1e-3)
+        assert told["past_linear"] is past is (told["ratio"] > FOLLOW_FROM)
+        words = " ".join(explanation(data["summary"], data["coupon"], frame.units, data["labels"])["sentences"])
+        assert ("That is 2.483 times the plate's thickness of 1.463 mm." in words) is past
+        assert ("nonlinear geometry, in the Analysis step, follows the shape" in words) is past
+
+
 @needs_ccx
 def test_the_supports_carry_the_load_applied_at_every_level_and_the_plate_stiffens(solved):
     whole = 0.03e6 * 0.2 * 0.2  # N: the supports push up against the pressure
@@ -319,7 +341,9 @@ def test_the_fields_of_a_followed_plate_say_what_only_a_followed_solve_has(solve
     for worked in summary["working"]["criteria"].values():
         assert worked["steps"] and all(step["id"] != "loading" for step in worked["steps"])  # R times the loads is not where a followed plate fails
     assert run_answer(summary)["followed"] is True
+    assert summary["deflection"]["value"] == pytest.approx(abs(curve["values"][-1])) and summary["deflection"]["past_linear"] is True
     words = " ".join(explanation(summary, data["coupon"], solved.frame.units, data["labels"])["sentences"])
+    assert "times the plate's thickness" not in words  # the followed result needs no pointer to the switch that made it
     assert "(nonlinear geometry), in 10 levels of the load, by the reference solver alone" in words and "following the shape makes it" in words
     assert "% smaller" in words and "times the applied" not in words and "calculix" not in words.lower()  # the page shows these sentences
     written = write_followed(solved, tmp_path, "plate")
@@ -370,7 +394,8 @@ def test_the_published_plate_of_step_1_is_the_same_plate_through_the_whole_plate
 def test_a_solve_stopped_before_its_first_level_says_so(tmp_path):
     with pytest.raises(Stopped, match="stopped before its first level, a tenth of the load") as stopped:
         follow_plate(spec_of(tmp_path, **{FOLLOWED_KEY: True}), tmp_path / "run", timeout_s=0.2)
-    assert stopped.value.reached == 0.0
+    assert stopped.value.reached == 0.0 and "it ran past 0.2 s" in str(stopped.value) and "CalculiX" in stopped.value.detail
+    assert "calculix" not in str(stopped.value).lower()  # the page shows the message; the program's own words go to the log
 
 
 @needs_ccx
@@ -397,6 +422,10 @@ def test_a_solve_that_stops_on_the_way_says_how_far_it_came(solved, tmp_path, mo
     assert re.search(r"largest displacement \d\.\d+ mm: no balance of forces was found past it", str(diverged)) and "a smaller load runs to its end" in str(diverged)
     late = stopped("followed.inp: CalculiX did not finish in 480 s")
     assert late.reached == 0.5 and "it ran past 480 s; a coarser mesh follows the whole load" in str(late)
+    assert "too many cutbacks" in diverged.detail and "calculix" not in (str(diverged) + str(late)).lower()
+    partial.unlink()
+    nothing = stopped("followed.inp: CalculiX ended with an error: *ERROR: nonpositive jacobian")
+    assert nothing.reached == 0.0 and "stopped before its first level, a tenth of the load: no balance of forces was found" in str(nothing)
 
 
 # --- the file for another program states the same step (ADR-0129, ADR-0142) -----------------------------

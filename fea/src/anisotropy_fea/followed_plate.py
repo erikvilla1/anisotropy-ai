@@ -63,12 +63,13 @@ class FollowedError(ValueError):
 
 
 class Stopped(FollowedError):
-    """CalculiX stopped before the whole load. `reached` is the last fraction of the load it printed (0 when none), `words` what the
-    plate had done by then."""
+    """CalculiX stopped before the whole load. The message is for the engineer and names no program; `reached` is the last fraction of
+    the load it printed (0 when none) and `detail` the solver's own words, for the run's log."""
 
-    def __init__(self, message: str, reached: float = 0.0):
+    def __init__(self, message: str, reached: float = 0.0, detail: str = ""):
         super().__init__(message)
         self.reached = reached
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -384,16 +385,18 @@ def follow_plate(spec: CouponSpec, workdir: Path | str, ccx: str | Path | None =
     if failure is None and levels and abs(levels[-1].fraction - 1.0) <= 1e-6:
         return Followed(frame, levels, version, elapsed, deck)
     lab = UNIT_LABEL[frame.units]
+    timed_out = failure is not None and "did not finish" in failure
+    detail = failure or "CalculiX printed no level"
     if not levels:
         raise Stopped("the solve with nonlinear geometry stopped before its first level, a tenth of the load: "
-                      + (failure.splitlines()[0] if failure else "CalculiX printed no level"))
+                      + (f"it ran past {timeout_s:g} s; a coarser mesh is followed sooner" if timed_out else
+                         "no balance of forces was found; a smaller load runs, and so does a plate held against every rigid motion"), 0.0, detail)
     last = levels[-1]
     moved = float(from_si(np.linalg.norm(last.displacement, axis=1).max(), "length", frame.units))
-    timed_out = failure is not None and "did not finish" in failure
     raise Stopped(f"the solve with nonlinear geometry reached {last.fraction * 100:.0f} % of the load and stopped there, the largest displacement "
                   f"{moved:.4g} {lab['length']}: " + (f"it ran past {timeout_s:g} s; a coarser mesh follows the whole load" if timed_out else
                                                       "no balance of forces was found past it (a plate that buckles or snaps through stops so); "
-                                                      "a smaller load runs to its end"), last.fraction)
+                                                      "a smaller load runs to its end"), last.fraction, detail)
 
 
 # --- the fields the page reads -----------------------------------------------------------------------
@@ -467,6 +470,9 @@ def followed_fields(followed: Followed) -> dict[str, Any]:
     for worked in (summary.get("working") or {}).get("criteria", {}).values():  # the step from R to a loading holds for a linear model alone
         worked["steps"] = [step for step in worked["steps"] if step.get("id") != "loading"]
     value = float(from_si(last.displacement[node, axis], "length", units))
+    largest = float(summary["max_displacement"]["value"])
+    # how far following the shape moves the largest displacement from the linear answer's, in percent of the linear one, and which way
+    change = 100.0 * (largest / linear_largest - 1.0) if linear_largest > 0.0 else None
     summary["followed"] = {
         "solver": f"CalculiX {followed.version}" if followed.version else "CalculiX",
         "seconds": round(followed.elapsed_s, 1),
@@ -477,7 +483,8 @@ def followed_fields(followed: Followed) -> dict[str, Any]:
                   "linear": [float(fraction * linear_value) for fraction in fractions]},
         "reaction": reactions,
         "index": index,
-        "linear": {"value": linear_value, "largest": linear_largest, "ratio": value / linear_value if linear_value else None},
+        "linear": {"value": linear_value, "largest": linear_largest, "ratio": value / linear_value if linear_value else None,
+                   "change_percent": None if change is None else abs(change), "change": None if change is None else "smaller" if change < 0 else "larger"},
         "fit": max(level.fit for level in followed.levels),
         "law": "the Lagrangian strain and the second Piola-Kirchhoff stress, by the constants of small strain; a pressure follows the surface it "
                "presses on, a force keeps its direction",

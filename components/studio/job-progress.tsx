@@ -31,7 +31,7 @@ export function JobProgress({ job, brief = false }: { job: JobStatus; /** the pr
       </ol>
       {detail ? <p className="studio-muted">{detail}</p> : null}
       {took ? <p className="studio-muted" data-testid="job-took">{took}</p> : null}
-      {check ? <p className={check.verified ? "studio-ok" : "studio-warn"} data-testid="job-message">{check.line}</p> : null}
+      {check ? <p className={check.verified ? "studio-ok" : check.note ? "studio-muted" : "studio-warn"} data-testid="job-message">{check.line}</p> : null}
       {problem ? <p className="studio-problem" role="alert" data-testid="job-problem">{problem}</p> : null}
     </div>
   );

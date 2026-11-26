@@ -65,7 +65,7 @@ export function useVersions(project: string, form: StudioForm, plate: PlateLists
     const s = run.fields.summary, lab = run.fields.labels;
     const stat = answerStat(run.fields, printed);
     const result = { reaction: `${printed(Math.abs(s.reaction.value))} ${lab.force}`, displacement: `${printed(s.max_displacement.value)} ${lab.length}`,
-      failure: stat ? `${stat.verdict}, R = ${stat.factor}` : "not checked" };
+      failure: stat ? `${stat.verdict}, ${stat.measure}` : "not checked" };
     const done = run.loadedJob;
     setList((l) => withResult(l, done, result));
   }, [run.loadedJob]); // eslint-disable-line react-hooks/exhaustive-deps

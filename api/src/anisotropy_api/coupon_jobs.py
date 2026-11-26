@@ -279,7 +279,8 @@ def documents_of_row(outputs: dict, inputs: dict) -> str | None:
 def answer_of_outcome(outcome: dict | None) -> dict | None:
     """A done run's answer in a few values, as its tool wrote it into the outcome (ADR-0109): the basis, the criterion that governs,
     whether a ply fails at the applied loading, the factor, and the ply with its angle and face. Kept only in that shape, since the row
-    and the list of past analyses hold it as it is; None for anything else, a factor that is not finite included (no stress, no answer)."""
+    and the list of past analyses hold it as it is; None for anything else, a factor that is not finite included (no stress, no answer).
+    A plate solved with nonlinear geometry says so (`followed`, ADR-0142): its factor is no multiple of the load, and the list words it so."""
     answer = (outcome or {}).get("answer")
     if not isinstance(answer, dict) or (outcome or {}).get("status") != "done":
         return None
@@ -287,8 +288,9 @@ def answer_of_outcome(outcome: dict | None) -> dict | None:
         factor, face = float(answer["factor"]), answer.get("face")
         if not math.isfinite(factor) or answer["basis"] not in ("gauge", "whole") or not isinstance(answer["fails"], bool):
             return None
-        return {"basis": answer["basis"], "criterion": str(answer["criterion"]), "fails": answer["fails"], "factor": factor,
+        kept = {"basis": answer["basis"], "criterion": str(answer["criterion"]), "fails": answer["fails"], "factor": factor,
                 "ply": int(answer["ply"]), "angle": float(answer["angle"]), "face": None if face is None else str(face)}
+        return {**kept, "followed": True} if answer.get("followed") is True else kept
     except (KeyError, TypeError, ValueError):
         return None
 

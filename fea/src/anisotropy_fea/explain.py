@@ -114,13 +114,16 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
                 facts.update({f"{criterion}_percent_at_failure": printed(100.0 * float(at["fraction"])),
                               f"{criterion}_percent_before": printed(100.0 * float(at["between"][0])),
                               f"{criterion}_percent_after": printed(100.0 * float(at["between"][1]))})
+    deflection = summary.get("deflection")
+    if deflection and facts["test"] == "plate" and not summary.get("followed") and deflection["past_linear"]:
+        # a linear plate that leaves its plane by more than about half its thickness: said, with the switch that follows its shape (ADR-0142)
+        facts.update(deflection_ratio=printed(float(deflection["ratio"])), deflection_thickness=printed(float(deflection["thickness"])))
     followed = summary.get("followed")
     if followed:  # the shape followed as the load rose (ADR-0142): what a linear solve of the same plate gives, and how far the two are apart
         linear = abs(float(followed["linear"]["largest"]))
         facts.update(followed=True, followed_levels=len(followed["fractions"]), followed_linear_displacement=printed(linear))
-        if linear > 0.0:
-            change = 100.0 * (float(summary["max_displacement"]["value"]) / linear - 1.0)
-            facts.update(followed_change_percent=printed(abs(change)), followed_change="smaller" if change < 0 else "larger")
+        if followed["linear"].get("change_percent") is not None:
+            facts.update(followed_change_percent=printed(float(followed["linear"]["change_percent"])), followed_change=followed["linear"]["change"])
     outside = verdict.get("outside_earlier") if verdict else None
     if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip or inside the stand-off (ADR-0108): reported apart
         facts.update(outside_criterion=outside["criterion"], outside_factor=printed(float(outside["factor"])),
@@ -185,6 +188,10 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
                f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
                f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
                ply_stress_sentence(facts)]
+    if "deflection_ratio" in facts:
+        context.insert(2, f"That is {number(facts['deflection_ratio'])} times the plate's thickness of {number(facts['deflection_thickness'])} "
+                          f"{facts['length_unit']}. Past about half the thickness a linear solve overstates the deflection: nonlinear geometry, in "
+                          "the Analysis step, follows the shape as the load rises.")
     if facts.get("followed"):
         context = followed_sentences(facts) + context
     if facts["isotropic"]:

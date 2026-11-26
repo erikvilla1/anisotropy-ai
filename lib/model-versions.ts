@@ -5,7 +5,7 @@
  * package's own values, printed.
  */
 import { layupNotation } from "./studio-chat";
-import { fieldByKey, PLY_KEYS, type StudioForm } from "./studio-form";
+import { fieldByKey, FOLLOWED_KEY, FOLLOWED_LABEL, PLY_KEYS, type StudioForm } from "./studio-form";
 import { plateWords, type PlateLists } from "./studio-plate";
 
 /** A run's answer as its version keeps it: the package's reaction, largest displacement and first-ply failure, printed. */
@@ -39,8 +39,10 @@ export function setupKey(form: StudioForm, plate: PlateLists): string {
   return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), plate]);
 }
 
-const label = (key: string) => fieldByKey[key]?.label ?? key;
+const label = (key: string) => (key === FOLLOWED_KEY ? FOLLOWED_LABEL : fieldByKey[key]?.label ?? key);
 const shown = (value: string | undefined) => (value ?? "").trim() || "blank";
+/** The Analysis step's switch is on or off, never blank (ADR-0142). */
+const switched = (value: string | undefined) => ((value ?? "").trim() === "yes" ? "on" : "off");
 
 /** What changed between two setups, one line per row in its label, the plies as one layup, and a plate's lists as their sentences. */
 export function changesBetween(before: { form: StudioForm; plate: PlateLists } | null, after: { form: StudioForm; plate: PlateLists }): string[] {
@@ -49,7 +51,9 @@ export function changesBetween(before: { form: StudioForm; plate: PlateLists } |
   const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => (a[k] ?? "").trim() !== (b[k] ?? "").trim());
   const lines: string[] = [];
   if (keys.some((k) => LAYUP_KEYS.has(k))) lines.push(`Layup: ${layupNotation(before.form) || "blank"} → ${layupNotation(after.form) || "blank"}`);
-  for (const key of keys.filter((k) => !LAYUP_KEYS.has(k)).sort()) lines.push(`${label(key)}: ${shown(a[key])} → ${shown(b[key])}`);
+  for (const key of keys.filter((k) => !LAYUP_KEYS.has(k)).sort()) {
+    lines.push(key === FOLLOWED_KEY ? `${label(key)}: ${switched(a[key])} → ${switched(b[key])}` : `${label(key)}: ${shown(a[key])} → ${shown(b[key])}`);
+  }
   const was = plateWords(before.plate), now = plateWords(after.plate);
   for (const line of now.filter((l) => !was.includes(l))) lines.push(`Added: ${line}`);
   for (const line of was.filter((l) => !now.includes(l))) lines.push(`Removed: ${line}`);

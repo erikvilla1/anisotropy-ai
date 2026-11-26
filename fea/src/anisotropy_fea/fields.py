@@ -339,6 +339,11 @@ def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]
     return out
 
 
+FOLLOW_FROM = 0.5
+"""The deflection over the thickness past which a linear solve of a plate overstates it by about a tenth or more, so its shape is worth
+following (ADR-0142): the clamped plate of `tests/fixtures/studio-followed/` is 10 % over at a linear deflection of half its thickness."""
+
+
 def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
     """A result's answer in a few values, for a list of past runs (ADR-0109): whether a ply fails at the applied loading, the factor, the
     criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict. A
@@ -486,6 +491,12 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     }
     if "total_force" in applied:
         summary["applied"]["total_force"] = float(from_si(applied["total_force"], "force", units))
+    if shell:  # how far the plate leaves its plane against its thickness: what says whether its shape should be followed (ADR-0142)
+        out_of_plane = np.abs(displacement[:, 2])
+        thickness = min(sum(ply.thickness_m for ply in section.plies) for section in mesh.sections)
+        ratio = float(out_of_plane.max() / thickness)
+        summary["deflection"] = {"value": float(length(out_of_plane.max())), "thickness": float(length(thickness)), "ratio": ratio,
+                                 "past_linear": ratio > FOLLOW_FROM}
     summary["isotropic"] = isotropic_only(deck)
 
     def place_of(flat_index: int, array: np.ndarray) -> dict[str, Any]:

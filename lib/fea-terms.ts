@@ -82,12 +82,12 @@ export const FEA_TERMS: FeaTerm[] = [
     here: "Our coupons and plates are one part. Shapes and sizes of new parts belong to the CAD section, which is coming." },
   { id: "step", title: "Step", names: ["step", "steps", "analysis step", "initial step", "static step", "static, general", "linear perturbation", "static structural", "analysis settings", "load step", "load steps"],
     means: "A stage of the analysis in which boundary conditions and loads are switched on. The initial step holds only the fixed ones.",
-    here: "One linear static step: every boundary condition and load is on at once. A second step is not offered yet." },
-  // asked by the founder while recreating a teammate's model, whose step had it on (2026-11-25): our solve is linear, said plainly
+    here: "One static step: every boundary condition and load is on at once. It is linear unless nonlinear geometry is on, which a plate offers. A second step is not offered yet." },
+  // asked by the founder while recreating a teammate's model, whose step had it on (2026-11-25); a plate offers it since ADR-0142
   { id: "nonlinear-geometry", title: "Nonlinear geometry", general: true,
     names: ["nonlinear geometry", "nlgeom", "geometric nonlinearity", "geometric non-linearity", "non-linear geometry", "large displacement", "large displacements", "large deflection", "large deflections", "large deformation", "large deformations"],
     means: "A solve that follows the shape as it changes under load, in small increments; a linear solve works on the original shape, so its answer doubles when the load does.",
-    here: "Not offered yet: the solve here is linear, for small displacements, and the model file is written with it off. It matters when a part moves or bends by much, as a thin plate that deflects more than its thickness." },
+    here: "On a plate, tick it in the Analysis step or say “turn on nonlinear geometry”: the load rises in ten levels. It matters when a plate deflects by more than about half its thickness. A coupon pulled along its length is solved linear." },
   { id: "interaction", title: "Interaction", names: ["interaction", "interactions", "contact", "tie", "tie constraint", "tied", "coupling", "coupling constraint", "kinematic coupling", "connection", "connections", "bonded contact", "joint", "joints"],
     means: "How two regions touch or are joined: contact, a tie that glues them, or a coupling to a reference point.",
     here: "Not offered yet: our models are one part, so nothing touches or is tied. An imported file's couplings are read." },

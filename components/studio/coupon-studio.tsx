@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, type ReactNode } from "react";
 import type { Preview } from "@/lib/studio-api";
-import { PLATE_TEST } from "@/lib/studio-form";
+import { followsShape, PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
@@ -84,7 +84,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         <>
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
             live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false}
-            onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} emphasis={emphasis} view={view} onShown={setShownField} />
+            onPicked={setPicked} place={place} proposed={isPlate ? proposed : null} emphasis={emphasis} view={view} onShown={setShownField}
+            linearPreview={Boolean(showLive && live) && followsShape(form)} />
         </>
       ) : (
         <>

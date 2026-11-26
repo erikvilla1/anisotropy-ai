@@ -544,14 +544,17 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             refused = why_not_followed(spec) if element_limit is not None else None
             if refused is not None:
                 problems.append(f"{FOLLOWED_LABEL}: {refused}")
-                notes.note("solver", "fail", f"nonlinear geometry: {refused}", (FOLLOWED_LABEL, row("element_size")))
+                # the message opens with the switch's label, as a row's problem does, so the page puts it under the switch
+                notes.note("solver", "fail", f"{FOLLOWED_LABEL}: {refused}", (FOLLOWED_LABEL, row("element_size")))
             else:
                 notes.note("solver", "pass", f"nonlinear geometry: the plate's shape is followed as the load rises, in {len(FOLLOWED_LEVELS)} levels")
     else:
         notes.note("solver", "fail", "CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md); the run tool refuses "
                    "to start without it")
     tectonic_path = tectonic()
-    if tectonic_path:
+    if spec is not None and follows_shape(spec):  # no report is written of a run with nonlinear geometry (ADR-0142): said, and no warning
+        notes.note("document", "pass", "no report is written of a run with nonlinear geometry; its results are on the page")
+    elif tectonic_path:
         notes.note("document", "pass", "the report is written as a PDF")
     else:
         notes.note("document", "warn", "the report PDF cannot be written here; the results are still kept")
