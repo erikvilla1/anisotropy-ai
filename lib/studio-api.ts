@@ -529,6 +529,27 @@ export async function getProject(apiBase: string, id: string, signal?: AbortSign
   return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "GET", headers, signal }, "the project"));
 }
 
+/** A version of a project's model as the server keeps it (ADR-0113, on the server since ADR-0143): checked by `readServerVersions`
+ * in `lib/model-versions.ts` before the history shows it. */
+export type VersionUpload = { by: "you" | "assistant"; why: string | null; changes: string[]; form: Record<string, string>; plate: Record<string, unknown> };
+const versionsOf = (apiBase: string, id: string) => `${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}/versions`;
+
+/** A project's last versions on the server, the oldest first, as the API wrote them (unchecked). */
+export async function listVersions(apiBase: string, id: string, signal?: AbortSignal): Promise<unknown> {
+  return call(versionsOf(apiBase, id), { method: "GET", headers, signal }, "the model's versions");
+}
+
+/** A version the page settled, kept by the server and numbered after the project's last; the last one when the setup is the same. */
+export async function addVersion(apiBase: string, id: string, version: VersionUpload, signal?: AbortSignal): Promise<unknown> {
+  return call(versionsOf(apiBase, id), { method: "POST", headers, body: JSON.stringify(version), signal }, "keeping the version");
+}
+
+/** The run made from version `n`, and its answer once the page has read it. */
+export async function markVersionRun(apiBase: string, id: string, n: number, run: { job: string; result: Record<string, string> | null },
+  signal?: AbortSignal): Promise<unknown> {
+  return call(`${versionsOf(apiBase, id)}/${n}/run`, { method: "PUT", headers, body: JSON.stringify(run), signal }, "marking the version's run");
+}
+
 export async function renameProject(apiBase: string, id: string, name: string, signal?: AbortSignal): Promise<ProjectRecord> {
   return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "PATCH", headers, body: JSON.stringify({ name }), signal }, "renaming the project"));
 }

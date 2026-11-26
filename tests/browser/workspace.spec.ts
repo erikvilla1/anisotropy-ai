@@ -11,7 +11,9 @@ const SERVER_PROJECT = {
 
 /** The API answers the workspace needs to open: the coupon list, and the project store with one project kept on the server (part 6); the
  * setup check and the jobs are the studio scenarios' business. `store` holds what the page PUT. */
-async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}, questions: unknown[] = []) {
+type Kept = Record<string, unknown> & { n: number; form: Record<string, string>; plate: unknown };
+async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}, questions: unknown[] = [],
+  versions: Record<string, Kept[]> = {}) {
   store[SERVER_PROJECT.id] = SERVER_PROJECT;
   await page.route(API, (route) => {
     const request = route.request();
@@ -34,6 +36,18 @@ async function quietApi(page: import("@playwright/test").Page, store: Record<str
       return json(store[id], kept ? 200 : 201);
     }
     if (one && request.method() === "GET") return store[one[1]] ? json(store[one[1]]) : json({ detail: "No project of yours" }, 404);
+    // a model's versions, kept with its project (ADR-0143): numbered after the last, the last again when the setup is the same
+    const many = /^\/v1\/projects\/([^/]+)\/versions$/.exec(path);
+    if (many && !store[many[1]]) return json({ detail: "No project of yours" }, 404);
+    if (many && request.method() === "GET") return json(versions[many[1]] ?? []);
+    if (many && request.method() === "POST") {
+      const kept = (versions[many[1]] ??= []);
+      const sent = request.postDataJSON() as Kept, last = kept[kept.length - 1];
+      if (last && JSON.stringify([last.form, last.plate]) === JSON.stringify([sent.form, sent.plate])) return json(last);
+      const made = { ...sent, n: (last?.n ?? 0) + 1, at: new Date().toISOString(), run: null };
+      kept.push(made);
+      return json(made, 201);
+    }
     return json({ detail: "not in this scenario" }, 404);
   });
 }
@@ -292,6 +306,28 @@ test("FEA answers a question before anything is set up, and is set up as a coupo
   await expect(chat.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // the message said no more, so it is not read again
   await expect.poll(() => Object.values(store).find((p) => p.name === "Coupons for the class")?.content, { timeout: 10_000 })
     .not.toHaveProperty("analysis"); // kept on the server as a coupon
+});
+
+test("a model's versions are kept on the server with its project, so a change made elsewhere is in its history (ADR-0143)", async ({ page }) => {
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click();
+  await page.getByTestId("chat-question").getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  // the project reaches the server a moment after it is made, and its versions after it, numbered there
+  await expect.poll(() => Object.values(versions).flat().some((v) => v.form.library === "im7-8552"), { timeout: 20_000 }).toBe(true);
+  const id = Object.keys(versions)[0];
+  expect(store[id]).toBeTruthy();
+  expect(versions[id].map((v) => v.n)).toEqual(versions[id].map((_, i) => i + 1));
+  // a change the workspace's tools made, kept on the server as the next version; this browser's own copy then cleared, as on another computer
+  const last = versions[id][versions[id].length - 1];
+  versions[id].push({ ...last, n: last.n + 1, by: "assistant", why: "use 3 mm elements", changes: ["Element size (mm): blank → 3"], form: { ...last.form, element_size: "3" } });
+  await page.evaluate((key) => window.localStorage.removeItem(key), `anisotropy.versions.${id}`);
+  await page.reload();
+  const history = page.getByTestId("tree-history");
+  await expect(history.locator("li[data-by=assistant]").filter({ hasText: "use 3 mm elements" })).toHaveCount(1, { timeout: 20_000 });
 });
 
 test("a switch to another section goes at once from an empty project and asks first when work is open (ADR-0124)", async ({ page }) => {

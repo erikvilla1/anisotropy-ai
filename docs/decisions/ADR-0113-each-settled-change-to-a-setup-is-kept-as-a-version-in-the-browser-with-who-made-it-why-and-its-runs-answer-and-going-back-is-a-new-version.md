@@ -1,6 +1,6 @@
 # ADR-0113: Each settled change to a setup is kept as a version in the browser, with who made it, why, and its run's answer, and going back is a new version
 
-- Status: Proposed
+- Status: Proposed; the versions are kept by the server, the browser keeping a copy, by [ADR-0143](ADR-0143-a-models-setup-is-changed-through-typed-tools-in-the-api-that-the-page-the-mcp-server-and-the-workspaces-planner-share-and-the-server-keeps-its-versions.md)
 - Date: 2026-11-18
 - Decided by: Founder, 2026-11-17, on a review of the workspace he shared ("Model history, revisions, and traceability ... Every consequential change should be traceable and reversible"), choosing it among the gaps offered: "point 2 3 and 4 is good" | Drafted by: Claude Code
 - Related: [ADR-0111](ADR-0111-the-fea-workspace-sets-a-model-up-in-a-model-tree-on-the-left-in-the-words-of-any-finite-element-program-and-the-chat-changes-the-same-tabs.md) (the model tree the History sits in), [ADR-0109](ADR-0109-a-persons-past-analyses-are-listed-from-their-own-jobs-each-with-the-answer-its-run-wrote-and-one-opens-again-as-it-was-solved-from-the-files-that-run-stored.md) (past runs, kept by the server), [ADR-0088](ADR-0088-the-model-proposes-rows-from-the-engineers-words-a-source-guard-keeps-what-the-message-writes-and-the-engineer-ticks-what-enters.md) (changes made by talking), [ADR-0001](ADR-0001-deterministic-engine.md); `lib/model-versions.ts`, `components/studio/use-versions.ts`, `components/workspace/history-tab.tsx`

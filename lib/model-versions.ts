@@ -86,6 +86,72 @@ export function comparison(a: ModelVersion, b: ModelVersion): { changes: string[
   };
 }
 
+/** The server's versions of a project (ADR-0143), checked: each with a whole number, a time, who made it, its lines and its setup; anything
+ * else is left out, and a payload that is no list is none. The setup is the page's own object, as the page sent it. */
+export function readServerVersions(payload: unknown): ModelVersion[] {
+  if (!Array.isArray(payload)) return [];
+  const text = (v: unknown): v is string => typeof v === "string";
+  const object = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+  return payload.flatMap((v): ModelVersion[] => {
+    if (!object(v) || !Number.isInteger(v.n) || !text(v.at) || (v.by !== "you" && v.by !== "assistant") || !(v.why === null || text(v.why))
+      || !Array.isArray(v.changes) || !v.changes.every(text) || !object(v.form) || !Object.values(v.form).every(text) || !object(v.plate)) return [];
+    const run = object(v.run) && text(v.run.job) ? { job: v.run.job, result: readResult(v.run.result) } : undefined;
+    return [{ n: v.n as number, at: v.at, by: v.by, why: v.why as string | null, changes: v.changes as string[], form: v.form as StudioForm,
+      plate: v.plate as PlateLists, ...(run ? { run } : {}) }];
+  });
+}
+
+function readResult(value: unknown): VersionResult | null {
+  if (typeof value !== "object" || value === null) return null;
+  const r = value as Record<string, unknown>;
+  return typeof r.reaction === "string" && typeof r.displacement === "string" && typeof r.failure === "string"
+    ? { reaction: r.reaction, displacement: r.displacement, failure: r.failure } : null;
+}
+
+/** A version as the server takes it: who made it and why, what it changed and its setup; the number, the time and the run are the server's. */
+export const versionUpload = (v: ModelVersion) => ({ by: v.by, why: v.why, changes: v.changes, form: v.form as Record<string, string>,
+  plate: v.plate as unknown as Record<string, unknown> });
+
+/** The versions the server does not yet hold, the oldest first: those after the last setup both lists share. All of them when the server
+ * holds none, none when the server's last is this browser's last. */
+export function unsent(local: ModelVersion[], server: ModelVersion[]): ModelVersion[] {
+  if (!server.length) return local;
+  const last = setupKey(server[server.length - 1].form, server[server.length - 1].plate);
+  let i = local.length - 1;
+  while (i >= 0 && setupKey(local[i].form, local[i].plate) !== last) i--;
+  return i < 0 ? local.slice(-1) : local.slice(i + 1);
+}
+
+/** The history as the page shows it once the server holds versions: the server's, each keeping a run this browser marked on the same
+ * setup and the server has not yet heard of, then this browser's versions the server does not hold, numbered after its last. */
+export function mergeVersions(server: ModelVersion[], local: ModelVersion[]): ModelVersion[] {
+  if (!server.length) return local;
+  // a run marked here goes on the server's last version of the same setup: the numbers of the two lists need not agree
+  const marked = new Map<number, NonNullable<ModelVersion["run"]>>();
+  for (const l of local) {
+    if (!l.run) continue;
+    const key = setupKey(l.form, l.plate);
+    const on = [...server].reverse().find((v) => setupKey(v.form, v.plate) === key);
+    if (on) marked.set(on.n, l.run);
+  }
+  const kept = server.map((v) => {
+    const mine = marked.get(v.n);
+    if (!mine || v.run?.result || (v.run && v.run.job !== mine.job)) return v;
+    return { ...v, run: mine };
+  });
+  const after = kept[kept.length - 1].n;
+  return [...kept, ...unsent(local, server).map((v, i) => ({ ...v, n: after + i + 1 }))].slice(-MAX_VERSIONS);
+}
+
+/** The runs this browser marked that the server's versions do not yet say: a version's job, or its answer once read. */
+export function runsToSend(server: ModelVersion[], shown: ModelVersion[]): { n: number; job: string; result: VersionResult | null }[] {
+  return shown.flatMap((v) => {
+    const there = server.find((s) => s.n === v.n);
+    if (!there || !v.run || (there.run?.job === v.run.job && (!v.run.result || there.run.result))) return [];
+    return [{ n: v.n, job: v.run.job, result: v.run.result }];
+  });
+}
+
 const KEY = (project: string) => `anisotropy.versions.${project}`;
 
 /** A project's versions from this browser; none where storage is blocked or holds something else. */
