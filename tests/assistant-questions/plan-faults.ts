@@ -21,7 +21,8 @@ export type PlanWant = {
   /** Tools it holds somewhere, and tools it never holds. */
   has?: string[];
   never?: string[];
-  /** Rows its changes set, by key, the value as written, and rows it never sets (the API's answer holds them; the card does not). */
+  /** Rows its changes set, by key, the value as written, and rows it never sets (the API's answer holds them; the card does not). A row
+   * the page already holds at that value needs no change: "[0/90]2s" on a ready coupon leaves its fourth ply, already 90, as it is. */
   rows?: Record<string, string>;
   leaves?: string[];
   /** Regions its changes name (the API's answer holds them; the card does not). */
@@ -36,6 +37,8 @@ export type PlanSeen = {
   steps: { tool: string; role: string; state: string; line?: string; change?: Record<string, unknown> | null; regions?: string[] }[];
   question?: string | null;
   reason?: string | null;
+  /** What the sentence asked that no step takes, which the card lists beside a proposed or a refused plan (the API's answer holds it). */
+  unread?: { quote: string; reason: string }[];
 };
 
 /** What the API answers for a plan, as the card's own words would read it. */
@@ -47,6 +50,7 @@ export function planSeen(answer: Record<string, unknown>): PlanSeen {
       change: (s.change ?? null) as Record<string, unknown> | null, regions: Array.isArray(s.regions) ? (s.regions as string[]) : undefined })),
     question: typeof answer.question === "string" ? answer.question : null,
     reason: typeof answer.reason === "string" ? answer.reason : null,
+    unread: Array.isArray(answer.unread) ? (answer.unread as { quote: string; reason: string }[]) : [],
   };
 }
 
@@ -95,8 +99,9 @@ const sameRegion = (a: string, b: string) => {
 };
 
 /** What is wrong with a plan seen, by the contract and by what the bank's question expects of it; none when it holds. With no plan seen,
- * only an expected one is missed. */
-export function planFaults(want: PlanWant | undefined, plan: PlanSeen | null): string[] {
+ * only an expected one is missed. `held` is the setup the plan was made on, where it is known: a row it already holds at the value
+ * expected is met with no change. */
+export function planFaults(want: PlanWant | undefined, plan: PlanSeen | null, held: Record<string, string> = {}): string[] {
   if (!plan) return want ? [`no plan was made; expected ${[want.state].flat().join(" or ")}`] : [];
   const out = contractFaults(plan);
   if (!want) return out;
@@ -108,10 +113,11 @@ export function planFaults(want: PlanWant | undefined, plan: PlanSeen | null): s
   for (const t of want.never ?? []) if (tools.includes(t)) out.push(`a ${t} step`);
   if (want.rows && plan.state === "proposed" && plan.steps.some((s) => s.change !== undefined)) {
     const rows = Object.fromEntries(plan.steps.filter((s) => s.change?.action === "row").map((s) => [String(s.change!.key), String(s.change!.value)]));
+    const same = (got: string | undefined, value: string) => got !== undefined && got.trim() !== ""
+      && (got === value || (Number.isFinite(Number(value)) && Number(got) === Number(value)));
     for (const [key, value] of Object.entries(want.rows)) {
       const got = rows[key];
-      const same = got !== undefined && (got === value || (Number.isFinite(Number(value)) && Number(got) === Number(value)));
-      if (!same) out.push(`sets ${key} to ${got ?? "nothing"}, expected ${value}`);
+      if (!same(got, value) && !(got === undefined && same(held[key], value))) out.push(`sets ${key} to ${got ?? "nothing"}, expected ${value}`);
     }
   }
   for (const key of want.leaves ?? []) {

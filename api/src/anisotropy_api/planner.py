@@ -221,6 +221,9 @@ class Checked:
     question: str | None = None
     unread: list[dict[str, str]] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
+    # words written back that are no question but keep every other rule of a question asked back: when the plan is refused in the end,
+    # they say why to the engineer in place of the check's own reason ("the question back is not a question" was shown on the page)
+    said: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -402,6 +405,18 @@ def _question_reason(question: Any, sentence: str) -> str | None:
     return None
 
 
+NOT_A_QUESTION = "the question back is not a question: it asks which one is meant, ending in a question mark"
+
+
+def said_back(question: str, sentence: str) -> str | None:
+    """Words written back as a question that are none, kept when they keep every other rule of a question asked back (no number the
+    sentence does not write, nothing decided, short): a refused plan's answer gives them, the engineer's own case in the model's words."""
+    words = question.strip()
+    if asked_back_reason(words, sentence) != NOT_A_QUESTION or asked_back_reason(f"{words}?", sentence) is not None:
+        return None
+    return words
+
+
 def asked_back_reason(question: str, sentence: str) -> str | None:
     """Why a question asked back cannot stand: too long, a number the sentence does not write, not a question, or words that decide (a
     verdict, or a design called safe) in what should only ask which region or row is meant (ADR-0139)."""
@@ -411,7 +426,7 @@ def asked_back_reason(question: str, sentence: str) -> str | None:
     if stray:
         return f"the question back writes {', '.join(stray)}, which the sentence does not"
     if not question.strip().endswith("?"):
-        return "the question back is not a question: it asks which one is meant, ending in a question mark"
+        return NOT_A_QUESTION
     decided = verdict_stated(question) or (APPROVAL.search(question).group(0) if APPROVAL.search(question) else None)
     if decided:
         return f"the question back decides (“{decided}”): it only asks which one is meant"
@@ -477,6 +492,7 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
         reason = asked_back_reason(question, sentence)
         if reason:
             out.reasons.append(reason)
+            out.said = said_back(question, sentence)
         else:
             out.question = question.strip()
         return out
@@ -548,10 +564,20 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
     if total > MAX_STEPS:
         out.reasons.append(f"the plan has {total} steps with the checks the software adds; a plan has at most {MAX_STEPS}")
     # a run that leaves out a change the sentence asks for, with no value ("make it wider") or by an earlier message ("as before"), runs
-    # something the engineer did not ask for: the plan asks for it instead (ADR-0144, step 4)
-    for part in out.unread if ran_at is not None else []:
-        if part["reason"] in ("no_value", "refers_back"):
-            out.reasons.append(f"the sentence asks for a change the plan leaves out (“{part['quote']}”): ask for it rather than run without it")
+    # something the engineer did not ask for: the plan asks for it instead (ADR-0144, step 4). Every such change in one reason: a sentence
+    # of ten edges gave the same reason three times
+    left = [part["quote"] for part in (out.unread if ran_at is not None else []) if part["reason"] in ("no_value", "refers_back")]
+    if left:
+        one = len(left) == 1
+        out.reasons.append(f"the sentence asks for {'a change' if one else 'changes'} the plan leaves out "
+                           f"({', '.join(f'“{quote}”' for quote in left)}): ask for {'it' if one else 'them'} rather than run without "
+                           f"{'it' if one else 'them'}")
+    # a run with no change at all while the sentence asks for one no step makes is a run of the setup as it stands: the change asked for
+    # was left out ("make it 3 mm thick", "clamp Edge-Middle", "change the material to steel", the real-model run of 2026-11-26), and the
+    # answer would be read as the changed coupon's. A run that is itself what was asked ("pull it until it breaks") leaves nothing unread
+    if ran_at is not None and not out.reasons and out.unread and all(change is None for _, _, change, _, _ in planned):
+        out.reasons.append("the plan would run the setup as it stands, though the sentence asks for a change no step makes ("
+                           + ", ".join(f"“{part['quote']}”" for part in out.unread) + ")")
     if out.reasons:
         return out
 
@@ -638,10 +664,10 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
     if not checked.ok:
         again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason=reason_of(checked.reasons))
+            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons))
         retried = check(again.raw)
         if not retried.ok:
-            return Planned("refused", unread=retried.unread, reason=reason_of(retried.reasons))
+            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons))
         reading, checked = again, retried
     if checked.question is not None:
         return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model)

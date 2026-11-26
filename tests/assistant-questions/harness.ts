@@ -505,11 +505,14 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
       if (!r.response) return said("failed", "No plan right now", ["The plan could not be made. Try again."]);
       const plan = planSeen(r.response);
       if (plan.state === "unavailable") break; // no model: the page reads the sentence as before
+      // the card lists what no step takes beside a proposed or a refused plan (plan-card.tsx), and the judge reads it there too
+      const unread = plan.state === "proposed" || plan.state === "refused"
+        ? unreadLines((plan.unread ?? []) as ProposalAnswer["unread"]).map((u) => `“${u.quote}”: ${u.words}`) : [];
       const lines = plan.state === "proposed" ? plan.steps.map((s) => `${s.role}: ${s.line ?? s.tool}`)
         : plan.state === "question" ? [customerText(plan.question) ?? "Which region do you mean?"]
         : [customerText(plan.reason) ?? (plan.state === "capped" ? "Today's plans are used. Messages are read the usual way until midnight UTC."
           : "It could not be done with the steps on offer.")];
-      return said("plan", planHeading(plan), lines, { plan });
+      return said("plan", planHeading(plan), [...lines, ...unread], { plan });
     }
     if (r.reader === "questions") { // as fea-start.tsx shows it: the prose, the sections it was answered from, and a kind of work offered
       if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
@@ -601,7 +604,7 @@ export function liveFaults(question: Question, readings: Reading[], answer: Said
   if (live.start !== undefined && answer.data.start !== live.start) out.push(`offers ${String(answer.data.start)}, expected ${live.start}`);
   if (readings.some((r) => r.reader === "plans")) { // the contract every plan keeps, and the plan the bank expects (`plan-faults.ts`)
     const got = readings.find((r) => r.reader === "plans")?.response;
-    out.push(...planFaults(live.plan, got ? planSeen(got) : null));
+    out.push(...planFaults(live.plan, got ? planSeen(got) : null, scene(question, true).form));
   }
   if (live.covered !== undefined && answer.data.covered !== live.covered) out.push(`covered ${String(answer.data.covered)}, expected ${live.covered}`);
   return out;

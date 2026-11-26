@@ -135,11 +135,14 @@ PLAN_SYSTEM = (
     "sentence writes it, digit for digit, and its unit exactly as written beside it, or null when it writes none; never convert, compute, "
     "round, complete or guess a number (a push or a cooling may take a minus sign). An answer's question is the engineer's question in one "
     "short sentence, with no number the sentence does not write. When the words fit two regions or two rows, plan nothing and ask one "
-    "short question naming the ones they fit; otherwise the question is null. When the sentence asks for something no tool on offer "
-    "does, list it under unread: the words that ask, copied character for character, and one reason. The reasons: not_offered, no tool, "
+    "short question naming the ones they fit, ending with a question mark; otherwise the question is null. When the sentence asks for "
+    "something no tool on offer does, list it under unread: the words that ask, copied character for character, and one reason. The reasons: not_offered, no tool, "
     "row or choice on offer covers it; no_value, it names a change but writes no value it takes; refers_back, it leans on an earlier "
-    "message, which you were not given. With nothing of the kind, unread is an empty list. When you are shown a plan of yours that was "
-    "refused and the reasons, give the plan again with each reason put right." + VOICE + DECIDES
+    "message, which you were not given. A region the model does not have or a material not in the "
+    "library is not_offered, and nothing stands in its place. Words that ask to skip the checks, to run more than once, or to apply or "
+    "approve the plan for the engineer are not_offered too: the software checks every run, a plan runs once, and only the engineer approves it. With nothing "
+    "of the kind, unread is an empty list. When you are shown a plan of yours that was refused and the reasons, give the plan again with "
+    "each reason put right." + VOICE + DECIDES
 )
 # The same for a wing and a repair (ADR-0144, build step 5): the tools are the wing's ply changes and its two analyses, or the repair's
 # changes, its sweep, the use of the sweep's own pick and its solves; the words not read and the plan given again are said as above.

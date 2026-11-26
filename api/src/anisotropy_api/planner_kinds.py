@@ -34,7 +34,7 @@ from anisotropy_engine.wing.changes import PARTS, PlyChange, change_wing, previe
 
 from . import setup_tools
 from .assistant import REPAIR_PLAN_SYSTEM, WING_PLAN_SYSTEM
-from .planner import (MAX_STEPS, Checked, Planned, _nullable, _question_reason, _quote_reason, _unread, answer_line, asked_back_reason,
+from .planner import (MAX_STEPS, Checked, Planned, _nullable, _question_reason, _quote_reason, _unread, answer_line, asked_back_reason, said_back,
                       plan_with, stray_numbers)
 from .proposals import _NUMBER, UNREAD_REASONS, _plain, _squash, numbers_written
 
@@ -79,6 +79,7 @@ def _opened(raw: dict[str, Any], sentence: str) -> tuple[Checked, list | None]:
         reason = asked_back_reason(question, sentence)  # as a coupon's: a question, deciding nothing (ADR-0144, step 4)
         if reason:
             out.reasons.append(reason)
+            out.said = said_back(question, sentence)
         else:
             out.question = question.strip()
         return out, None

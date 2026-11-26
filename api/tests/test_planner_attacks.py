@@ -26,7 +26,7 @@ from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN
 from access_tokens import AUDIENCE, TEAM, key_for, token
 from conftest import TEST_URL, needs_test_database
 from memory_store import MemoryStore
-from test_planner import ASK, COUPON, GOOD, PLATE, PULLED, ROOT, STUDIO, calls, plan, project, scripted, step, with_args
+from test_planner import ASK, COUPON, GOOD, PLATE, PULLED, ROOT, STUDIO, FakeWriter, calls, plan, project, scripted, step, with_args
 from test_planner_kinds import WING_ASK, WING_GOOD, capped, wing_step
 
 # A model's own sentence, longer than any value, unit, name or region: a reason must never carry it onto the card.
@@ -373,6 +373,24 @@ def test_a_run_that_leaves_out_a_change_with_no_value_is_refused_and_a_question_
     assert asked.ok and asked.question == "How much wider, in mm?"
 
 
+def test_every_change_a_run_leaves_out_is_said_in_one_reason():
+    sentence = "make it wider, make it longer and run it"
+    ran = planner.check_plan(plan(step("run", "run it"), unread=[{"quote": "make it wider", "reason": "no_value"},
+                                                                 {"quote": "make it longer", "reason": "no_value"}]), sentence, COUPON)
+    assert ran.reasons == ["the sentence asks for changes the plan leaves out (“make it wider”, “make it longer”): ask for them rather than "
+                           "run without them"]
+
+
+@pytest.mark.parametrize("sentence, quote, content", [("make it 3 mm thick and see if it fails", "make it 3 mm thick", COUPON),
+                                                      ("change the material to steel and run", "change the material to steel", COUPON),
+                                                      ("clamp Edge-Middle and run it", "clamp Edge-Middle", PLATE)])
+def test_a_run_with_no_change_beside_a_change_no_step_makes_is_refused(sentence, quote, content):
+    # the real-model run of 2026-11-26: each was planned as the setup's run as it stood, its change dropped
+    ran = planner.check_plan(plan(step("run", sentence.split(" and ")[-1]), unread=[{"quote": quote, "reason": "not_offered"}]), sentence,
+                             content)
+    assert ran.reasons == [f"the plan would run the setup as it stands, though the sentence asks for a change no step makes (“{quote}”)"]
+
+
 def test_a_run_beside_words_no_tool_takes_is_kept_and_its_card_shows_them():
     sentence = "set the width to 30 mm, run it and email me the report"
     kept = planner.check_plan(plan(WIDTH, step("run", "run it"), unread=[{"quote": "email me the report", "reason": "not_offered"}]), sentence,
@@ -394,6 +412,18 @@ AMBIGUOUS = "fix the end and pull it with 2 kN"
 def test_a_question_back_that_decides_is_refused(question, reason):
     reasons = planner.check_plan(plan(question=question), AMBIGUOUS, PLATE).reasons
     assert len(reasons) == 1 and reasons[0].startswith(reason), reasons
+
+
+def test_words_back_that_are_no_question_say_why_when_the_plan_is_refused():
+    # the real-model run of 2026-11-26 showed the check's own reason on the card: "the question back is not a question: ..."
+    words = "The load that breaks it is what a run finds, so give a load to pull with."
+    made = planner.make_plan(FakeWriter(plan(question=words), plan(question=words)), BREAKS, PLATE, [])
+    assert made.state == "refused" and made.reason == words
+    decided = "It holds at any load, so give one."  # a verdict is never said, as a question or as words
+    made = planner.make_plan(FakeWriter(plan(question=decided), plan(question=decided)), BREAKS, PLATE, [])
+    assert made.state == "refused" and made.reason.startswith("the question back is not a question")
+    asked = planner.make_plan(FakeWriter(plan(question=words), plan(question="What load should pull the top edge?")), BREAKS, PLATE, [])
+    assert asked.state == "question" and asked.question == "What load should pull the top edge?"
 
 
 def test_a_question_back_that_asks_is_kept():

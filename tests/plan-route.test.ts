@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { aboutAnswer, whatIfAsked } from "../lib/chat-about";
 import { asksPlan, routeMessage, type ChatState } from "../lib/chat-route";
 import { exampleForm, PLATE_TEST } from "../lib/studio-form";
 import { emptyPlate } from "../lib/studio-plate";
@@ -50,4 +51,33 @@ test("a reply to the plan's question is planned again with it; a question, a new
   assert.notEqual(routeMessage("never mind", state({ planAsks: true })).route, "plan");
   assert.notEqual(routeMessage("the bottom one", state({ planAsks: false })).route, "plan");
   assert.equal(routeMessage("start over", state({ planAsks: true })).route, "start-over");
+});
+
+test("a question of what a change would do, a drop and the loading type alone are answered in fixed words, and nothing is planned or set", () => {
+  // the real-model run of 2026-11-26: the what-if proposed the width, "never mind" was "Not sure what to change", and force control alone
+  // was told it is not something to set
+  const ready = state({ form: coupon });
+  for (const [text, topic, title, line] of [
+    ["what happens if I set the width to 30 mm and run it?", "what-if", "A run tells, and nothing is changed yet", "To try it, say “set the width to 30 mm and run it”."],
+    ["what if we clamp the bottom edge", "what-if", "A run tells, and nothing is changed yet", "To try it, say “clamp the bottom edge and run it”."],
+    ["never mind", "dropped", "Nothing changed", "Say a change or ask a question when you are ready."],
+    ["switch to force control", "control", "Force control takes a force", "Say one, for example “10 kN”: the loading becomes a force with it."],
+    ["use displacement control", "control", "It is under displacement control now", "Say a new value to change it, for example “1 mm displacement”."],
+  ] as const) {
+    const routed = routeMessage(text, ready);
+    assert.deepEqual(routed, { route: "about", topic }, text);
+    const said = aboutAnswer(topic, text, { form: coupon, results: false, readOnly: false });
+    assert.equal(said.title, title, text);
+    assert.equal(said.lines[0], line, text);
+  }
+  assert.equal(routeMessage("never mind", state({ planAsks: true })).route, "about");
+  assert.equal(routeMessage("what happens if I clamp the bottom edge?", state()).route, "about");
+  // a what-if with no change, one of a material of one's own or of units, and a read-only page are not these
+  assert.equal(whatIfAsked("what happens at the grips?"), null);
+  assert.notDeepEqual(routeMessage("what if I use my own material?", ready), { route: "about", topic: "what-if" });
+  assert.notDeepEqual(routeMessage("what if I use inches?", ready), { route: "about", topic: "what-if" });
+  assert.equal(routeMessage("what happens if I set the width to 30 mm?", state({ form: coupon, readOnly: true })).route, "read-only");
+  assert.notEqual(routeMessage("switch to force control with 10 kN", ready).route, "about");
+  const forced = { ...coupon, control: "force", value: "10000" };
+  assert.equal(aboutAnswer("control", "switch to force control", { form: forced, results: false, readOnly: false }).title, "It is under force control now");
 });
