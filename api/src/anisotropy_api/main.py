@@ -52,7 +52,7 @@ from .processes import run_tool
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, REPAIR_PLIES, WING, is_repair_plies, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_plies_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
-from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, add_version, apply_setup, check_ready, list_versions, mark_version_run, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
                       model_calls_since,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
@@ -73,8 +73,9 @@ from .schemas import (
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
     GeneralAnswerResponse, GeneralQuestionRequest, ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
-    VerificationResponse,
+    VerificationResponse, ModelVersionInput, ModelVersionOutput, ProjectChangesRequest, SetupChangesOutput, SetupChangesRequest, SetupReadRequest, VersionRun,
 )
+from . import setup_tools
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
 # What a request's calls to the model cost, on the answer to a request with no signed-in email only: the site check's service token (ADR-0138)
@@ -909,6 +910,102 @@ def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, r
     except SQLAlchemyError as exc:
         raise _database_error(exc) from exc
     return ProjectOutput.of(row)
+
+
+# ----------------------------------------------------------------------------- the workspace's tools and a model's versions (ADR-0143)
+
+SETUP = "/v1/workspace/setup"
+SETUP_CHANGES = "/v1/workspace/setup-changes"
+
+
+def _changes_output(content: dict, changes: list) -> SetupChangesOutput:
+    """Typed changes worked out on a setup (`setup_tools.change_setup`): every one or none, and the setup as it then reads."""
+    changed = setup_tools.change_setup(content, [c.as_dict() for c in changes])
+    plate = setup_tools.form_of(changed.content).get("test") == setup_tools.plate_test()
+    return SetupChangesOutput(ok=changed.ok, done=changed.done, refused=changed.refused, digest=setup_tools.content_digest(content),
+                              setup=setup_tools.read_setup(changed.content), content=changed.content,
+                              values=setup_tools.plate_values(changed.content) if plate else None)
+
+
+@app.post(SETUP)
+def read_setup_endpoint(problem: SetupReadRequest, actor: Actor) -> dict[str, Any]:
+    """A model's setup as a reader with no page sees it (ADR-0143): its test, units and size, a plate's regions with where each lies and
+    whether it is an end or a side, and what is held and loaded, one line each. The rows as written; nothing is computed or kept."""
+    return setup_tools.read_setup(problem.content.model_dump())
+
+
+@app.post(SETUP_CHANGES, response_model=SetupChangesOutput)
+def preview_setup_changes(problem: SetupChangesRequest, actor: Actor) -> SetupChangesOutput:
+    """Typed changes to a setup the request carries, previewed (ADR-0143): every change made on a copy, or none with the reason for each
+    refused one. Nothing is kept; the MCP server previews here, and a kept project is changed at `/v1/projects/{id}/setup-changes`."""
+    return _changes_output(problem.content.model_dump(), problem.changes)
+
+
+@app.post(PROJECTS + "/{project_id}/setup-changes", response_model=SetupChangesOutput)
+def change_project_setup(project_id: uuid.UUID, problem: ProjectChangesRequest, actor: Actor, request: Request) -> SetupChangesOutput:
+    """Typed changes to one of the requester's projects (ADR-0143). Without `apply`, a preview. With `apply` and the `digest` of the
+    preview as `base`, the project's content is replaced and the setup kept as a new version, by `by` and for `why`, in one transaction:
+    409 when the project changed since the preview, 422 with the reasons when a change is refused. Only a model's setup changes here;
+    a run is started as always (`POST /v1/coupon-jobs`)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    if row.kind != "fea":
+        raise HTTPException(status_code=422, detail=f"a {row.kind} project has no setup of supports and loads; these changes are a model's")
+    content = dict(row.content)
+    out = _changes_output(content, problem.changes)
+    if not problem.apply:
+        return out
+    if not out.ok:
+        raise HTTPException(status_code=422, detail="; ".join(f"change {r['change']}: {r['reason']}" for r in out.refused))
+    if problem.base is None:
+        raise HTTPException(status_code=422, detail="an applied change names the setup it was worked out on: pass the preview's digest as base")
+    try:
+        kept = apply_setup(engine, row.id, base=problem.base, digest_of=setup_tools.content_digest, content=out.content, made_by=problem.by,
+                           why=problem.why, changes=out.done, version_digest=setup_tools.setup_key(out.content), now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if kept is None:
+        raise HTTPException(status_code=409, detail="The model changed since this change was worked out. Look at it again and redo the change.")
+    project, version = kept
+    return out.model_copy(update={"project": ProjectOutput.of(project), "version": ModelVersionOutput.of(version)})
+
+
+@app.get(PROJECTS + "/{project_id}/versions", response_model=list[ModelVersionOutput])
+def project_versions(project_id: uuid.UUID, actor: Actor, request: Request,
+                     limit: Annotated[int, Query(ge=1, le=200)] = 50) -> list[ModelVersionOutput]:
+    """A project's last versions, the oldest of them first (ADR-0113, kept by the server since ADR-0143)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        return [ModelVersionOutput.of(v) for v in list_versions(engine, row.id, limit)]
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+
+
+@app.post(PROJECTS + "/{project_id}/versions", status_code=201, response_model=ModelVersionOutput)
+def add_project_version(project_id: uuid.UUID, version: ModelVersionInput, actor: Actor, request: Request, response: Response) -> ModelVersionOutput:
+    """A version the page settled, numbered after the project's last: 201 when it is new, 200 with the last one when the setup is the
+    same as the last's."""
+    engine, row = _requesters_project(request, actor, project_id)
+    content = {"form": version.form, "plate": version.plate}
+    try:
+        kept, made = add_version(engine, row.id, made_by=version.by, why=version.why, changes=version.changes, content=content,
+                                 digest=setup_tools.setup_key(content), now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    response.status_code = 201 if made else 200
+    return ModelVersionOutput.of(kept)
+
+
+@app.put(PROJECTS + "/{project_id}/versions/{n}/run", response_model=ModelVersionOutput)
+def mark_project_version_run(project_id: uuid.UUID, n: int, run: VersionRun, actor: Actor, request: Request) -> ModelVersionOutput:
+    """The run made from a version, and its answer once the page has read it."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        marked = mark_version_run(engine, row.id, n, job_id=run.job, result=None if run.result is None else run.result.model_dump())
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if marked is None:
+        raise HTTPException(status_code=404, detail=f"No version {n} of this project")
+    return ModelVersionOutput.of(marked)
 
 
 # ----------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)

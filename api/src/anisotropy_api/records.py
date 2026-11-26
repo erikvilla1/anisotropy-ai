@@ -157,6 +157,32 @@ class ProjectRow(Base):
     __table_args__ = (CheckConstraint(f"kind IN ({_sql_list(PROJECT_KINDS)})", name="projects_kind_known"),)
 
 
+VERSION_MAKERS = ("you", "assistant")
+
+
+class ModelVersionRow(Base):
+    """A version of a project's model (ADR-0143, migration 0016; the versions of ADR-0113 kept by the server instead of the browser): the
+    setup after one settled change, who made it (the engineer, or the assistant from a message of theirs) and why, what it changed in
+    lines, and the run made from it with its answer as the page printed it. Numbered from 1 within the project; going back is a new
+    version, so no earlier one is rewritten except to note the run made from it. `digest` tells a change from none (`setup_key`)."""
+
+    __tablename__ = "model_versions"
+
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    n: Mapped[int] = mapped_column(Integer, primary_key=True)
+    made_by: Mapped[str] = mapped_column(String(12), nullable=False)
+    why: Mapped[str | None] = mapped_column(Text)
+    changes: Mapped[list] = mapped_column(JSONB, nullable=False)
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_id: Mapped[str | None] = mapped_column(String(64))
+    result: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (CheckConstraint(f"made_by IN ({_sql_list(VERSION_MAKERS)})", name="model_versions_maker_known"),
+                      CheckConstraint("n >= 1", name="model_versions_n_positive"))
+
+
 UPLOAD_VERDICTS = ("agrees", "differs", "incomplete", "refused")
 
 
@@ -523,6 +549,58 @@ def project_jobs(engine: Engine, project_id: uuid.UUID, limit: int = 50) -> list
     """The jobs started for a project, newest first."""
     with Session(engine, expire_on_commit=False) as session:
         return list(session.scalars(select(JobRow).where(JobRow.project_id == project_id).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+
+
+def add_version(engine: Engine, project_id: uuid.UUID, *, made_by: str, why: str | None, changes: list[str], content: dict, digest: str,
+                now: dt.datetime) -> tuple[ModelVersionRow, bool]:
+    """A new version of a project's model, numbered after its last (True); the last one again (False) when the setup is the same. The
+    project's row is locked while the number is chosen, so two changes at once never take one number."""
+    with Session(engine, expire_on_commit=False) as session:
+        session.execute(select(ProjectRow.id).where(ProjectRow.id == project_id).with_for_update())
+        last = session.scalars(select(ModelVersionRow).where(ModelVersionRow.project_id == project_id).order_by(ModelVersionRow.n.desc()).limit(1)).first()
+        if last is not None and last.digest == digest:
+            return last, False
+        row = ModelVersionRow(project_id=project_id, n=(last.n if last else 0) + 1, made_by=made_by, why=why, changes=list(changes),
+                              content=content, digest=digest, created_at=now)
+        session.add(row)
+        session.commit()
+        return row, True
+
+
+def list_versions(engine: Engine, project_id: uuid.UUID, limit: int = 50) -> list[ModelVersionRow]:
+    """A project's last versions, the oldest of them first."""
+    with Session(engine, expire_on_commit=False) as session:
+        rows = list(session.scalars(select(ModelVersionRow).where(ModelVersionRow.project_id == project_id)
+                                    .order_by(ModelVersionRow.n.desc()).limit(limit)))
+    return rows[::-1]
+
+
+def mark_version_run(engine: Engine, project_id: uuid.UUID, n: int, *, job_id: str, result: dict | None) -> ModelVersionRow | None:
+    """The run made from a version, and its answer once read; None when the project has no such version."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(ModelVersionRow, (project_id, n))
+        if row is None:
+            return None
+        row.job_id, row.result = job_id, result
+        session.commit()
+        return row
+
+
+def apply_setup(engine: Engine, project_id: uuid.UUID, *, base: str, digest_of, content: dict, made_by: str, why: str | None,
+                changes: list[str], version_digest: str, now: dt.datetime) -> tuple[ProjectRow, ModelVersionRow] | None:
+    """A project's content replaced by a changed setup and kept as a new version, in one transaction, only while the content is still
+    the one the change was worked out on (`digest_of(content) == base`); None when it has changed since."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.scalars(select(ProjectRow).where(ProjectRow.id == project_id).with_for_update()).first()
+        if row is None or digest_of(dict(row.content)) != base:
+            return None
+        row.content, row.updated_at = content, now
+        last = session.scalars(select(ModelVersionRow).where(ModelVersionRow.project_id == project_id).order_by(ModelVersionRow.n.desc()).limit(1)).first()
+        version = ModelVersionRow(project_id=project_id, n=(last.n if last else 0) + 1, made_by=made_by, why=why, changes=list(changes),
+                                  content=content, digest=version_digest, created_at=now)
+        session.add(version)
+        session.commit()
+        return row, version
 
 
 # -------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)

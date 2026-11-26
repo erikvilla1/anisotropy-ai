@@ -18,7 +18,7 @@ VALUES = {"filled_by": "A. Engineer", "date": "2026-11-17", "test": "unnotched t
           "angles": [45, 0, -45, 90], "symmetric": "yes", "library": "im7-8552", "G13": 4688.43, "G23": 3000.0, "control": "displacement", "value": 1.0}
 FIELDS = fixture("fields.json")
 EXPLANATION = fixture("explanation.json")
-TOOLS = ["list_materials", "material_values", "describe_coupon_form", "check_setup", "solve_coupon", "result_values", "result_extreme", "explain_result",
+TOOLS = ["list_materials", "material_values", "describe_coupon_form", "check_setup", "read_plate", "preview_plate_change", "solve_coupon", "result_values", "result_extreme", "explain_result",
          "read_wing", "wing_results", "wing_rules", "wing_strengths", "search_wing_references", "preview_wing_change",
          "read_repair", "repair_results", "preview_repair_change", "sweep_repair", "search_repair_references", "show_working"]
 EXAMPLE_WING = (Path(__file__).resolve().parents[2] / "engine" / "examples" / "example-wing.toml").read_text(encoding="utf-8")
@@ -361,3 +361,31 @@ def test_a_question_finds_the_repairs_reference_sections_and_never_a_value_from_
     assert fake.calls[-1][2] == {"question": "why does the shear stress peak at the ends of a step?", "about": "repair", "limit": 3}
     assert found["sections"][0]["from"] == "Bonded repairs, Why the shear stress peaks at the ends of a step"
     assert "never from a section" in found["how_to_answer"]
+
+
+PLATE = fixture("plate-setup.json", Path(__file__).resolve().parent / "fixtures")
+
+
+def test_a_plate_is_read_with_its_ends_and_sides_as_the_api_reads_it(call, fake):
+    read, = call(("read_plate", {"setup": {"form": {**PLATE["setup"]["form"], "length": 250}}}))  # a number given as a row's text
+    assert read == PLATE["read"]
+    assert {r["name"]: r["role"] for r in read["regions"]}["Edge-Left"] == "side"
+    assert fake.calls[-1][2] == {"content": PLATE["setup"]}  # the lists a new plate starts with are sent empty
+    assert "Edge-Left and Edge-Right are its long sides" in INSTRUCTIONS and "say which you read and ask" in INSTRUCTIONS
+
+
+def test_a_plate_change_is_previewed_never_applied_with_the_values_to_solve(call, fake):
+    previewed, refused = call(("preview_plate_change", {"setup": PLATE["setup"], "changes": PLATE["changes"]}),
+                              ("preview_plate_change", {"setup": PLATE["setup"], "changes": PLATE["refused_changes"]}))
+    assert previewed["ok"] and previewed["applied"] is False
+    assert previewed["done"] == ["Edge-Bottom: fixed (encastre)", "Edge-Top: force of 10000 N along y (tension)"]
+    assert previewed["values"]["loads"] == [{"region": "Edge-Top", "dof": 2, "total": 10000}] and previewed["values"]["input"] == "plate"
+    assert previewed["setup_after"] == PLATE["preview"]["content"] and previewed["loaded"] == ["Edge-Top: force of 10000 N along y"]
+    assert fake.calls[0][2]["changes"] == PLATE["changes"]  # the unit as the engineer wrote it, never converted here
+    assert not refused["ok"] and refused["refused"] == [{"change": 2, "reason": "a pressure acts on an area, and Edge-Top is an edge"}]
+    assert refused["setup_after"] == PLATE["setup"]  # one refused change makes none
+
+
+def test_a_plate_tool_needs_a_setup_with_its_rows(call):
+    refused, = call(("read_plate", {"setup": {"plate": {}}}))
+    assert isinstance(refused, Refused) and "setup is the model as the workspace keeps it" in refused

@@ -29,6 +29,8 @@ REACHED_BY = {
     "/v1/workspace/result-answers": lambda q: q["route"] == "why",
     "/v1/workspace/theory-sections": lambda q: bool(q.get("sections")),
     "/v1/workspace/questions": lambda q: q["route"] == "general",  # the FEA assistant of a blank project (ADR-0124)
+    "/v1/workspace/setup": lambda q: q.get("mcp", {}).get("tool") == "read_plate",  # the tools over a setup (ADR-0143): the MCP server's today
+    "/v1/workspace/setup-changes": lambda q: q.get("mcp", {}).get("tool") == "preview_plate_change",
 }
 
 

@@ -1279,6 +1279,129 @@ class ProjectOutput(Contract):
                    created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat(), jobs=[ProjectJobOutput.of(job) for job in jobs])
 
 
+class SetupChange(Contract):
+    """One typed change to a model's setup (ADR-0143), as `setup_tools.change_setup` takes it: `action` and the fields it uses. A value
+    is a number or its text, in the model's own units unless `unit` names another unit of the same system."""
+
+    action: Literal["hold", "move", "force", "pressure", "free", "unload", "row"]
+    region: Annotated[str, Field(max_length=80)] | None = None
+    dofs: Annotated[list[int], Field(max_length=6)] | None = None
+    dof: int | None = None
+    sense: Literal["tension", "compression"] | None = None
+    value: int | float | Annotated[str, Field(max_length=40)] | None = None
+    unit: Annotated[str, Field(max_length=20)] | None = None
+    key: Annotated[str, Field(max_length=40)] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
+class SetupContent(Contract):
+    """A model's setup as the page keeps it in a project's content: the form's rows as text and a plate's lists."""
+
+    form: dict[str, str]
+    plate: dict[str, Any] = {}
+
+    @model_validator(mode="after")
+    def small(self) -> Self:
+        size = len(json.dumps(self.model_dump(), ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the setup is {size} bytes; a model's rows and lists are far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class SetupReadRequest(Contract):
+    content: SetupContent
+
+
+class SetupChangesRequest(Contract):
+    """Changes previewed on a setup the request carries (ADR-0143): nothing is kept."""
+
+    content: SetupContent
+    changes: Annotated[list[SetupChange], Field(min_length=1, max_length=24)]
+
+
+class ProjectChangesRequest(Contract):
+    """Changes to a kept project's setup (ADR-0143): previewed, or with `apply` made and kept as a new version. `base` is the `digest`
+    the preview gave: the change is applied only to the setup it was worked out on."""
+
+    changes: Annotated[list[SetupChange], Field(min_length=1, max_length=24)]
+    apply: bool = False
+    base: Annotated[str, Field(min_length=64, max_length=64)] | None = None
+    by: Literal["you", "assistant"] = "assistant"
+    why: Annotated[str, Field(max_length=400)] | None = None
+
+
+class SetupChangesOutput(Contract):
+    """What the changes make of the setup: `ok` when every one can be made (none is made otherwise), the lines of what changed, the
+    changes refused by their place in the list (from 1) with the reason, the setup after (or as it was) read as `read_setup` reads it,
+    and its content. `digest` is the setup's before the changes. `values` are a plate's values as the fea package takes them (the page's
+    `plateTreeValues`), to check or solve the setup as it now stands. With `apply`, the project and the version made."""
+
+    ok: bool
+    done: list[str]
+    refused: list[dict[str, Any]]
+    digest: str
+    setup: dict[str, Any]
+    content: dict[str, Any]
+    values: dict[str, Any] | None = None
+    project: "ProjectOutput | None" = None
+    version: "ModelVersionOutput | None" = None
+
+
+class VersionResult(Contract):
+    """A run's answer as a version keeps it: the package's reaction, largest displacement and first-ply failure, as the page printed them."""
+
+    reaction: Annotated[str, Field(max_length=120)]
+    displacement: Annotated[str, Field(max_length=120)]
+    failure: Annotated[str, Field(max_length=120)]
+
+
+class VersionRun(Contract):
+    job: Annotated[str, Field(min_length=1, max_length=64)]
+    result: VersionResult | None = None
+
+
+class ModelVersionInput(Contract):
+    """A version of a project's model as the page settled it (ADR-0113, kept by the server since ADR-0143)."""
+
+    by: Literal["you", "assistant"] = "you"
+    why: Annotated[str, Field(max_length=400)] | None = None
+    changes: Annotated[list[Annotated[str, Field(max_length=400)]], Field(max_length=80)]
+    form: dict[str, str]
+    plate: dict[str, Any]
+
+    @model_validator(mode="after")
+    def small(self) -> Self:
+        size = len(json.dumps({"form": self.form, "plate": self.plate}, ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the setup is {size} bytes; a model's rows and lists are far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class ModelVersionOutput(Contract):
+    """A version as the page's history lists it (`ModelVersion` in `lib/model-versions.ts`)."""
+
+    n: int
+    at: str
+    by: Literal["you", "assistant"]
+    why: str | None
+    changes: list[str]
+    form: dict[str, Any]
+    plate: dict[str, Any]
+    run: VersionRun | None = None
+
+    @classmethod
+    def of(cls, row) -> "ModelVersionOutput":
+        content = dict(row.content)
+        run = None if row.job_id is None else VersionRun(job=row.job_id, result=None if row.result is None else VersionResult(**row.result))
+        return cls(n=row.n, at=row.created_at.isoformat(), by=row.made_by, why=row.why, changes=list(row.changes),
+                   form=dict(content.get("form") or {}), plate=dict(content.get("plate") or {}), run=run)
+
+
+SetupChangesOutput.model_rebuild()
+
+
 class CouponValuesOutput(Contract):
     """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
 

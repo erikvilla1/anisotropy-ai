@@ -1,0 +1,389 @@
+{
+ "about": "The API's answers to the plate tools' requests (api/tests/test_setup_tools.py checks the API still gives them, ADR-0143).",
+ "setup": {
+  "form": {
+   "test": "plate",
+   "units": "mm-MPa",
+   "length": "250",
+   "width": "25",
+   "library": "im7-8552",
+   "ply_1": "45",
+   "ply_2": "0",
+   "ply_3": "-45",
+   "ply_4": "90",
+   "symmetric": "yes",
+   "element_size": "2.1"
+  },
+  "plate": {
+   "supports": [],
+   "loads": [],
+   "regions": []
+  }
+ },
+ "read": {
+  "test": "plate",
+  "is_plate": true,
+  "units": {
+   "system": "mm-MPa",
+   "length": "mm",
+   "force": "N",
+   "stress": "MPa"
+  },
+  "size": {
+   "length": "250",
+   "width": "25",
+   "tab_length": null,
+   "hole_diameter": null
+  },
+  "material": "im7-8552",
+  "layup": {
+   "plies_bottom_first": [
+    "45",
+    "0",
+    "-45",
+    "90"
+   ],
+   "symmetric": "yes"
+  },
+  "element_size": "2.1",
+  "digest": "db65a86c3ef232a32275840d80791a516397c57eb51d39b206d7b69674ca5ab8",
+  "regions": [
+   {
+    "name": "Edge-Bottom",
+    "kind": "edge",
+    "role": "end",
+    "where": "the bottom end, at y = 0, across the width (25 mm)"
+   },
+   {
+    "name": "Edge-Top",
+    "kind": "edge",
+    "role": "end",
+    "where": "the top end, at y = 250, across the width (25 mm)"
+   },
+   {
+    "name": "Edge-Left",
+    "kind": "edge",
+    "role": "side",
+    "where": "the left side, at x = 0, along the length (250 mm)"
+   },
+   {
+    "name": "Edge-Right",
+    "kind": "edge",
+    "role": "side",
+    "where": "the right side, at x = 25, along the length (250 mm)"
+   },
+   {
+    "name": "Face",
+    "kind": "area",
+    "role": "area",
+    "where": "the whole face of the plate"
+   }
+  ],
+  "held": [],
+  "loaded": [],
+  "note": "The plate's length runs along y. A pull or push along the length acts on its ends (Edge-Bottom and Edge-Top, or the tabs there); Edge-Left and Edge-Right are its long sides, and a force on them acts across the width."
+ },
+ "changes": [
+  {
+   "action": "hold",
+   "region": "Edge-Bottom",
+   "dofs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "action": "force",
+   "region": "Edge-Top",
+   "sense": "tension",
+   "value": 10.0,
+   "unit": "kN"
+  }
+ ],
+ "preview": {
+  "ok": true,
+  "done": [
+   "Edge-Bottom: fixed (encastre)",
+   "Edge-Top: force of 10000 N along y (tension)"
+  ],
+  "refused": [],
+  "digest": "db65a86c3ef232a32275840d80791a516397c57eb51d39b206d7b69674ca5ab8",
+  "setup": {
+   "test": "plate",
+   "is_plate": true,
+   "units": {
+    "system": "mm-MPa",
+    "length": "mm",
+    "force": "N",
+    "stress": "MPa"
+   },
+   "size": {
+    "length": "250",
+    "width": "25",
+    "tab_length": null,
+    "hole_diameter": null
+   },
+   "material": "im7-8552",
+   "layup": {
+    "plies_bottom_first": [
+     "45",
+     "0",
+     "-45",
+     "90"
+    ],
+    "symmetric": "yes"
+   },
+   "element_size": "2.1",
+   "digest": "63351c2fe3e63df850b2162708f1b2b0367fc0a1f918743df7506fa3bf4a7bc4",
+   "regions": [
+    {
+     "name": "Edge-Bottom",
+     "kind": "edge",
+     "role": "end",
+     "where": "the bottom end, at y = 0, across the width (25 mm)"
+    },
+    {
+     "name": "Edge-Top",
+     "kind": "edge",
+     "role": "end",
+     "where": "the top end, at y = 250, across the width (25 mm)"
+    },
+    {
+     "name": "Edge-Left",
+     "kind": "edge",
+     "role": "side",
+     "where": "the left side, at x = 0, along the length (250 mm)"
+    },
+    {
+     "name": "Edge-Right",
+     "kind": "edge",
+     "role": "side",
+     "where": "the right side, at x = 25, along the length (250 mm)"
+    },
+    {
+     "name": "Face",
+     "kind": "area",
+     "role": "area",
+     "where": "the whole face of the plate"
+    }
+   ],
+   "held": [
+    "Edge-Bottom: fixed (encastre)"
+   ],
+   "loaded": [
+    "Edge-Top: force of 10000 N along y"
+   ],
+   "note": "The plate's length runs along y. A pull or push along the length acts on its ends (Edge-Bottom and Edge-Top, or the tabs there); Edge-Left and Edge-Right are its long sides, and a force on them acts across the width."
+  },
+  "content": {
+   "form": {
+    "test": "plate",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "45",
+    "ply_2": "0",
+    "ply_3": "-45",
+    "ply_4": "90",
+    "symmetric": "yes",
+    "element_size": "2.1"
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "value": ""
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "kind": "force",
+      "dof": 2,
+      "total": "10000"
+     }
+    ],
+    "regions": []
+   }
+  },
+  "values": {
+   "form_version": "0.9",
+   "units": "mm-MPa",
+   "test": "plate",
+   "length": 250,
+   "width": 25,
+   "ply_1": 45,
+   "ply_2": 0,
+   "ply_3": -45,
+   "ply_4": 90,
+   "symmetric": "yes",
+   "library": "im7-8552",
+   "element_size": 2.1,
+   "supports": [
+    {
+     "region": "Edge-Bottom",
+     "dofs": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ]
+    }
+   ],
+   "loads": [
+    {
+     "region": "Edge-Top",
+     "dof": 2,
+     "total": 10000
+    }
+   ],
+   "regions": [],
+   "input": "plate"
+  },
+  "project": null,
+  "version": null
+ },
+ "refused_changes": [
+  {
+   "action": "force",
+   "region": "Edge-Left",
+   "sense": "tension",
+   "value": 10.0,
+   "unit": "kN"
+  },
+  {
+   "action": "pressure",
+   "region": "Edge-Top",
+   "value": 1.0
+  }
+ ],
+ "refused": {
+  "ok": false,
+  "done": [],
+  "refused": [
+   {
+    "change": 2,
+    "reason": "a pressure acts on an area, and Edge-Top is an edge"
+   }
+  ],
+  "digest": "db65a86c3ef232a32275840d80791a516397c57eb51d39b206d7b69674ca5ab8",
+  "setup": {
+   "test": "plate",
+   "is_plate": true,
+   "units": {
+    "system": "mm-MPa",
+    "length": "mm",
+    "force": "N",
+    "stress": "MPa"
+   },
+   "size": {
+    "length": "250",
+    "width": "25",
+    "tab_length": null,
+    "hole_diameter": null
+   },
+   "material": "im7-8552",
+   "layup": {
+    "plies_bottom_first": [
+     "45",
+     "0",
+     "-45",
+     "90"
+    ],
+    "symmetric": "yes"
+   },
+   "element_size": "2.1",
+   "digest": "db65a86c3ef232a32275840d80791a516397c57eb51d39b206d7b69674ca5ab8",
+   "regions": [
+    {
+     "name": "Edge-Bottom",
+     "kind": "edge",
+     "role": "end",
+     "where": "the bottom end, at y = 0, across the width (25 mm)"
+    },
+    {
+     "name": "Edge-Top",
+     "kind": "edge",
+     "role": "end",
+     "where": "the top end, at y = 250, across the width (25 mm)"
+    },
+    {
+     "name": "Edge-Left",
+     "kind": "edge",
+     "role": "side",
+     "where": "the left side, at x = 0, along the length (250 mm)"
+    },
+    {
+     "name": "Edge-Right",
+     "kind": "edge",
+     "role": "side",
+     "where": "the right side, at x = 25, along the length (250 mm)"
+    },
+    {
+     "name": "Face",
+     "kind": "area",
+     "role": "area",
+     "where": "the whole face of the plate"
+    }
+   ],
+   "held": [],
+   "loaded": [],
+   "note": "The plate's length runs along y. A pull or push along the length acts on its ends (Edge-Bottom and Edge-Top, or the tabs there); Edge-Left and Edge-Right are its long sides, and a force on them acts across the width."
+  },
+  "content": {
+   "form": {
+    "test": "plate",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "45",
+    "ply_2": "0",
+    "ply_3": "-45",
+    "ply_4": "90",
+    "symmetric": "yes",
+    "element_size": "2.1"
+   },
+   "plate": {
+    "supports": [],
+    "loads": [],
+    "regions": []
+   }
+  },
+  "values": {
+   "form_version": "0.9",
+   "units": "mm-MPa",
+   "test": "plate",
+   "length": 250,
+   "width": 25,
+   "ply_1": 45,
+   "ply_2": 0,
+   "ply_3": -45,
+   "ply_4": 90,
+   "symmetric": "yes",
+   "library": "im7-8552",
+   "element_size": 2.1,
+   "supports": [],
+   "loads": [],
+   "regions": [],
+   "input": "plate"
+  },
+  "project": null,
+  "version": null
+ }
+}
