@@ -163,6 +163,8 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
         ))}
       </ol>
       {drawn ? <p className="chat-note" data-testid="plan-drawn">The regions it holds and loads are drawn dashed on the model.</p> : null}
+      {/* what the sentence asked that no step does, shown before the approval as a refused plan shows it (ADR-0144, step 4) */}
+      {stage === "proposed" || stage === "approving" ? <UnreadList lines={unreadLines(plan.unread)} /> : null}
       {flow.blocked.length ? <ul className="chat-understood" data-testid="plan-blocked">{flow.blocked.map((line) => <li key={line}>{line}</li>)}</ul> : null}
       {flow.problem ? <p className="chat-problem" data-testid="plan-problem">{flow.problem}</p> : null}
       {flow.qa ? (

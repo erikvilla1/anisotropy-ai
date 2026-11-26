@@ -29,6 +29,7 @@ import { hasWork, newProject } from "../../lib/project-store";
 import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
 import { readRepairAsk, repairAnswer, REPAIR_ROUTES, type RepairAsk, type RepairHeld } from "../../lib/repair-chat";
 import type { WingDescription, WingReport } from "../../lib/wing";
+import { planFaults, planHeading, planSeen, type PlanSeen, type PlanWant } from "./plan-faults";
 
 export const FOLDER = "tests/assistant-questions";
 
@@ -100,6 +101,8 @@ export type Live = {
   covered?: boolean;
   /** The kind of FEA work a model's answer on the start page offers to set up, or "none" (ADR-0124). */
   start?: "coupon" | "none";
+  /** The plan a sentence of a change and a run is made into (ADR-0144): its state, steps, rows, regions and words (`plan-faults.ts`). */
+  plan?: PlanWant;
   /** Anything else the judge should hold the answer to, in words. */
   judge?: string;
 };
@@ -135,8 +138,8 @@ export type Question = {
     context?: "setup" | "solved" | "wing" | "repair" };
   live?: Live;
   /** A known gap: the answer does not yet hold what is expected, by the skill's criterion. The bank fails when the gap closes, so the
-   * mark comes off with the fix. A gap that opens "search:" is the theory search's (the API's test), "mcp:" the MCP server's; any other
-   * is the page's. */
+   * mark comes off with the fix. A gap that opens "search:" is the theory search's (the API's test), "mcp:" the MCP server's, "plan:"
+   * the API's planner's (`api/tests/test_planner_attacks.py`); any other is the page's. */
   gap?: string;
   /** Where the question comes from, when a person asked it. */
   source?: string;
@@ -154,7 +157,7 @@ export type Bank = {
 };
 
 /** Whether a question's gap is the page's, rather than the theory search's or the MCP server's. */
-export const pageGap = (question: Question): boolean => !!question.gap && !/^(?:search|mcp):/.test(question.gap);
+export const pageGap = (question: Question): boolean => !!question.gap && !/^(?:search|mcp|plan):/.test(question.gap);
 
 export function banks(folder = FOLDER): Bank[] {
   return readdirSync(folder).filter((name) => name.endsWith(".json")).sort()
@@ -429,7 +432,8 @@ function rules(question: Question, answer: Said): string[] {
   const out: string[] = [];
   const text = [answer.heading, ...answer.lines].join("\n");
   // a question is never a row of the setup: "what is ASTM D3039?" or "how did you get 16740 N?" changes nothing (criterion 1, ADR-0100)
-  const changes = answer.kind === "rows" || answer.kind === "preview" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0);
+  const changes = answer.kind === "rows" || answer.kind === "preview" || (answer.kind === "proposal" && Object.keys((answer.data.proposals ?? {}) as object).length > 0)
+    || (answer.kind === "plan" && ((answer.data.plan as PlanSeen | undefined)?.steps ?? []).some((s) => !["check", "run", "qa", "answer"].includes(s.tool)));
   if (changes && question.kind !== "change" && question.kind !== "command") out.push(`a question changed the setup: ${answer.lines.join(", ")}`);
   // every answer, whatever was asked (criterion 8 and ADR-0091): short, and in the product's own words
   const banned = bannedIn(text);
@@ -440,7 +444,7 @@ function rules(question: Question, answer: Said): string[] {
 
 /** A request the page sends a model's reader in the API, as the page builds it (coupon-chat.tsx): the reading of a question of the results,
  * the setup's proposals, or the answer in words to a question of why. */
-export type ModelRequest = { reader: "result-questions" | "proposals" | "result-answers" | "questions"; body: Record<string, unknown> };
+export type ModelRequest = { reader: "result-questions" | "proposals" | "result-answers" | "questions" | "plans"; body: Record<string, unknown> };
 
 /** What the page sends a model for a question, with a model reading as on the hosted site, in the order it sends them: a question of the
  * results is read first, and the setup's proposals are asked only when that reading kept nothing (`readWithModel`). None when the page
@@ -452,6 +456,14 @@ export function modelRequests(question: Question): ModelRequest[] {
   // the coupon chat sends one of meaning with no kind, since its work is set up (ADR-0121 amendment 5)
   if (route === "general") return [{ reader: "questions", body: { question: question.ask, kinds: question.page === "start" ? [...ASKED_KINDS] : [] } }];
   if (route === "why") return s.facts ? [{ reader: "result-answers", body: { question: question.ask, facts: s.facts } }] : [];
+  // a sentence of a change and a run is planned on the project the page keeps (ADR-0144), and a reply to the plan's question with the
+  // sentence it answers, as planFor in coupon-chat.tsx sends it; with no earlier sentence in the bank there is nothing to send
+  if (route === "plan") {
+    const asked = question.asking === "plan" ? question.after?.at(-1) : undefined;
+    if (question.asking === "plan" && !asked) return [];
+    const ask = asked ? `${asked.replace(/[.\s]+$/, "")}. ${question.ask}` : question.ask;
+    return [{ reader: "plans", body: { ask, content: { form: s.form, plate: s.state.plate ?? emptyPlate() } } }];
+  }
   if (route !== "model") return [];
   const out: ModelRequest[] = [];
   if (s.fields && modelAsksResults(question.ask, s.form, true)) out.push({ reader: "result-questions", body: resultOffer(s.fields, question.ask, s.picked) });
@@ -471,6 +483,16 @@ export function modelAnswer(question: Question, readings: Reading[]): Said {
   const text = question.ask;
   let parts: ProposalAnswer["unread"] = [];
   for (const r of readings) {
+    if (r.reader === "plans") { // as planFor and the plan card show it (ADR-0144): the plan's steps, its question back, or why there is none
+      if (!r.response) return said("failed", "No plan right now", ["The plan could not be made. Try again."]);
+      const plan = planSeen(r.response);
+      if (plan.state === "unavailable") break; // no model: the page reads the sentence as before
+      const lines = plan.state === "proposed" ? plan.steps.map((s) => `${s.role}: ${s.line ?? s.tool}`)
+        : plan.state === "question" ? [customerText(plan.question) ?? "Which region do you mean?"]
+        : [customerText(plan.reason) ?? (plan.state === "capped" ? "Today's plans are used. Messages are read the usual way until midnight UTC."
+          : "It could not be done with the steps on offer.")];
+      return said("plan", planHeading(plan), lines, { plan });
+    }
     if (r.reader === "questions") { // as fea-start.tsx shows it: the prose, the sections it was answered from, and a kind of work offered
       if (!r.response) return said("failed", "The question could not be answered", ["Try again."]);
       const answer = r.response as unknown as GeneralAnswer;
@@ -559,6 +581,10 @@ export function liveFaults(question: Question, readings: Reading[], answer: Said
     }
   }
   if (live.start !== undefined && answer.data.start !== live.start) out.push(`offers ${String(answer.data.start)}, expected ${live.start}`);
+  if (readings.some((r) => r.reader === "plans")) { // the contract every plan keeps, and the plan the bank expects (`plan-faults.ts`)
+    const got = readings.find((r) => r.reader === "plans")?.response;
+    out.push(...planFaults(live.plan, got ? planSeen(got) : null));
+  }
   if (live.covered !== undefined && answer.data.covered !== live.covered) out.push(`covered ${String(answer.data.covered)}, expected ${live.covered}`);
   return out;
 }
