@@ -14,6 +14,7 @@ from sqlalchemy import inspect, text
 from anisotropy_api import access
 from anisotropy_api.assistant import CHECKED_MODELS, DAILY_LIMIT_REASON, ClaudeAssistant, LimitedAssistant
 from anisotropy_api.main import app
+from anisotropy_api.planner import PLAN_LIMIT_REASON
 from anisotropy_api.records import model_calls_since, record_model_calls
 from anisotropy_api.settings import (ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, MODEL_CALLS_PER_DAY_VARIABLE,
                                      RECORDING_VARIABLE, AccessSettings)
@@ -191,6 +192,21 @@ def test_the_view_counts_each_week_and_route_and_flags_a_jump_in_answers_set_asi
     assert by_feature["workspace/proposals"][:4] == (1, 1, 0, 1) and by_feature["workspace/result-questions"][3] == 0
     assert by_feature["explain"][-1] == "no earlier week to compare with" and first == "no earlier week to compare with"
     assert "ADR-0139" in comment
+
+
+@needs_test_database
+def test_a_request_past_the_days_planned_requests_is_counted_capped(empty_runs):
+    """A sentence past the day's planned requests (ADR-0144) asked no model, as one past the day's calls: the view counts it capped
+    (migration 0017), not as a request the model did not answer."""
+    monday = dt.datetime(2026, 11, 16, 9, tzinfo=dt.timezone.utc)
+    plans = "/v1/projects/{project_id}/plans"
+    with empty_runs.begin() as connection:
+        for response in (KEPT, {"writer": "template", "model": None, "withheld": False, "reason": PLAN_LIMIT_REASON}):
+            _run(connection, plans, monday, response)
+    with empty_runs.connect() as connection:
+        row = connection.execute(text("SELECT asked, kept, no_answer, capped FROM assistant_guards_by_feature WHERE feature = 'projects/{project_id}/plans'")).one()
+        comment = connection.execute(text("SELECT obj_description('assistant_guards_by_feature'::regclass)")).scalar_one()
+    assert tuple(row) == (1, 1, 0, 1) and "ADR-0139" in comment
 
 
 @needs_test_database

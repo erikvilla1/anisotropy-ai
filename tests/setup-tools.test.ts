@@ -11,12 +11,20 @@ import { workspaceValues } from "../lib/tension-screen";
 // the API's typed changes to the same file, so a change on one side that the other does not follow fails one of the two.
 type Case = { name: string; form: StudioForm; plate: PlateLists; values: Record<string, unknown> };
 type Edit = { text: string; changes: unknown[]; done: string[]; after: PlateLists };
+type Coupon = { name: string; form: StudioForm; values: Record<string, unknown> };
 const FIXTURE = JSON.parse(readFileSync("tests/fixtures/setup-tools/plate-setup.json", "utf8")) as {
-  values: Case[]; edits: { form: StudioForm; start: PlateLists; cases: Edit[] } };
+  values: Case[]; edits: { form: StudioForm; start: PlateLists; cases: Edit[] }; coupons: Coupon[] };
+const NO_LISTS: PlateLists = { supports: [], loads: [], regions: [] };
 
 test("a plate's values are what the page writes, rows and lists alike", () => {
   assert.equal(FIXTURE.values.length, 3);
   for (const c of FIXTURE.values) assert.deepEqual(workspaceValues(c.form, c.plate, false), c.values, c.name);
+});
+
+test("a coupon's values are what the page sends for a run, which the planner's run sends too (ADR-0144)", () => {
+  // `api/tests/test_planner.py` holds `planner.run_values` to the same cases
+  assert.equal(FIXTURE.coupons.length, 3);
+  for (const c of FIXTURE.coupons) assert.deepEqual(workspaceValues(c.form, NO_LISTS, false), c.values, c.name);
 });
 
 test("each sentence the page reads makes the change the API's typed change makes", () => {

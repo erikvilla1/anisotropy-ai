@@ -1,5 +1,5 @@
 {
- "about": "What the page writes for a plate (lib/tension-screen.ts workspaceValues) and what its sentence reader makes of a change (lib/plate-edits.ts readPlateEdit), with the typed change the API's tools take for the same sentence (api/src/anisotropy_api/setup_tools.py, ADR-0143). tests/setup-tools.test.ts holds the page to it; api/tests/test_setup_tools.py holds the API's tools to it.",
+ "about": "What the page writes for a plate (lib/tension-screen.ts workspaceValues) and what its sentence reader makes of a change (lib/plate-edits.ts readPlateEdit), with the typed change the API's tools take for the same sentence (api/src/anisotropy_api/setup_tools.py, ADR-0143). tests/setup-tools.test.ts holds the page to it; api/tests/test_setup_tools.py holds the API's tools to it. `coupons`: what the page sends for a coupon's run, which the planner's run sends too (api/tests/test_planner.py, ADR-0144).",
  "values": [
   {
    "name": "a plate held at one end and pulled at the other",
@@ -1332,5 +1332,99 @@
     }
    }
   ]
- }
+ },
+ "coupons": [
+  {
+   "name": "a tension coupon of a library material",
+   "form": {
+    "test": "unnotched tension",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": "1",
+    "filled_by": ""
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": 1,
+    "length": 250,
+    "width": 25
+   }
+  },
+  {
+   "name": "a tension coupon with an element size, an own G13 and no standard",
+   "form": {
+    "test": "unnotched tension",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": "1",
+    "filled_by": "",
+    "element_size": "1.5",
+    "own_E1": "160000",
+    "G13": "5000",
+    "standard": "none"
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "standard": "none",
+    "G13": 5000,
+    "control": "displacement",
+    "value": 1,
+    "length": 250,
+    "width": 25,
+    "element_size": 1.5
+   }
+  },
+  {
+   "name": "a tension coupon in inches pulled by a force",
+   "form": {
+    "test": "unnotched tension",
+    "units": "in-psi",
+    "length": "10",
+    "width": "1",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "force",
+    "value": "2000",
+    "filled_by": ""
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "units": "in-psi",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "control": "force",
+    "value": 2000,
+    "length": 10,
+    "width": 1
+   }
+  }
+ ]
 }

@@ -243,6 +243,12 @@ def test_a_plates_run_values_are_the_pages(case):
     assert planner.run_values({"form": case["form"], "plate": case["plate"]}, False) == case["values"]
 
 
+@pytest.mark.parametrize("case", PLATE_SETUP["coupons"], ids=lambda c: c["name"])
+def test_a_coupons_run_values_are_the_pages(case):
+    """What the page sends for a coupon's run (`workspaceValues`), held by `tests/setup-tools.test.ts` to the same cases."""
+    assert planner.run_values({"form": case["form"], "plate": {}}, False) == case["values"]
+
+
 def test_a_coupons_run_values_are_the_tension_screens():
     form = {**COUPON["form"], "element_size": "1.5", "own_E1": "160000", "G13": "5000", "standard": "none"}
     assert planner.run_values({"form": form, "plate": {}}, False) == {

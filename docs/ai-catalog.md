@@ -2,7 +2,7 @@
 
 Every place a language model reads or writes in the product, what it is shown, what it may do, what checks its answer, and how to switch it off. Kept by the founder; a new AI feature adds its row here in the pull request that builds it (ADR-0139).
 
-No model computes a number here (ADR-0001). Each feature below is one call with no tools, answering in a fixed schema or in plain sentences; the page or the engine does the rest. Nothing a model writes changes a setup until the engineer taps Apply (ADR-0088), and nothing it writes is shown unless its guards keep it.
+No model computes a number here (ADR-0001). Each feature below is one call with no tools, answering in a fixed schema or in plain sentences; the page or the engine does the rest. Nothing a model writes changes a setup until the engineer taps Apply (ADR-0088) or approves a plan (ADR-0144), and nothing it writes is shown unless its guards keep it.
 
 ## The features
 
@@ -12,6 +12,7 @@ No model computes a number here (ADR-0001). Each feature below is one call with 
 | Words for a result (`explain_result`, ADR-0052) | Coupon page, beside a result | The result's fact sheet and the template's sentences; no name or note | Sentences | Number guard; and it says the laminate holds or fails only as the engine's verdict per criterion says, and decides nothing (word guard) | none yet: the guards' own tests |
 | Words for a laminate problem (`explain_laminate`, ADR-0060) | Laminate page | The laminate's fact sheet and the template's sentences | Sentences | Number guard; word guard (deciding words) | none yet: the guards' own tests |
 | A message read into changes (`propose_changes`, ADR-0088, ADR-0101) | Coupon chat, plate | The message, the rows on offer, the filled rows without names, notes or sources | Proposed rows, supports and loads | Each value is written in the message (source guard); only offered rows and regions (plate guard); the engineer ticks what enters | `coupon-setup`, `plate`, `attacks` |
+| A sentence planned into steps (`plan_steps`, ADR-0144) | Coupon chat and plate, on a kept project, for a sentence that asks for a change and a run or an answer | The sentence, the setup as the API reads it (regions, what is held and loaded), the tools on offer; no name, note or other project | A plan of typed tool steps, or one question back | Only listed tools; every change previews, all or none; every region exists; every number is written in the sentence; one retry with the reasons, then no plan. Nothing changes or runs until the engineer taps Approve, and the server holds that gate | `planner`, `attacks` |
 | A question read into a lookup (`read_question`, ADR-0100) | Coupon chat, with a result | The message and what can be looked up (quantities, plies, elements); no value of the result | A typed request, or one question back | The request names only what is offered; the page reads the value from the stored result | `result-values`, `result-extremes`, `attacks` |
 | A "why" answered in words (`answer_question`, ADR-0102) | Coupon chat, with a result | The question, the fact sheet, the theory sections the question finds | An answer, the sections it rests on | Every number is the results' or the question's; the sections were shown; word guard (both rules) | `why-answers`, `attacks` |
 | A question before a setup (`answer_question`, ADR-0124) | FEA start page | The question, the theory sections found, the kinds of work offered | An answer, sections, the kind to set up | Every number is the question's (ply angles aside); word guard (deciding words) | `sections`, `attacks` |
@@ -24,6 +25,7 @@ The questions are the banks in `tests/assistant-questions/` (ADR-0121): checked 
 
 - **One model for the site**, named by `ANISOTROPY_ASSISTANT_MODEL` (today `claude-opus-5-5`), at low effort, with a cap on the tokens of each answer (`assistant.py`).
 - **A cap per person per day**: `ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY` in `wrangler.jsonc` (100). Past it the chat reads with its own patterns until midnight UTC and says so ("Reading simple phrases until tomorrow"). Counted from `model_calls` by the sign-in's email. A service token of ours (the deploy check, the site check) has no email and is not counted: the site check keeps a budget of its own (ADR-0138). Locally there is no cap.
+- **A cap on planned requests**: `ANISOTROPY_AGENT_REQUESTS_PER_DAY` in `wrangler.jsonc` (30 per signed-in person per day, counted from `agent_plans`). Past it the sentence is read as before, without a plan, until midnight UTC.
 - **Every call is a row** of `model_calls` with who asked, for what, the tokens and the cost (ADR-0120), and every request is a run record that says what became of the model's answer (ADR-0026).
 - **What a model is never shown**: another person's work, a coupon's name, the engineer's notes, the team's files, a key. Every chat that sends a message to a model (the coupon chat, the FEA assistant of a blank project, the laminate chat) answers a question for a key, the hidden prompt or another person's work itself, before any model sees it (`lib/chat-private.ts`).
 
@@ -52,7 +54,7 @@ The check after each deploy reads `/v1/workspace/assistant` and fails when the s
 
 ## Change the daily cap
 
-Edit `ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY` under `vars` in `wrangler.jsonc` by pull request; it takes effect when the merge deploys. Remove the line for no cap.
+Edit `ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY` under `vars` in `wrangler.jsonc` by pull request; it takes effect when the merge deploys. Remove the line for no cap. The planned requests' cap is `ANISOTROPY_AGENT_REQUESTS_PER_DAY` beside it (30 when left out).
 
 ## Read how often the guards set answers aside
 
