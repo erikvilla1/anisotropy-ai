@@ -55,7 +55,7 @@ from anisotropy_fea.fields import run_answer
 from anisotropy_fea.intake import VALUES_SUFFIX, IntakeError, convert, gauge_probes, read_input, values_of_spec
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.quality import element_quality
-from anisotropy_fea.spec import load_spec
+from anisotropy_fea.spec import follows_shape, load_spec
 
 from regenerate_decks import regenerate  # noqa: E402  (tools share a folder)
 
@@ -66,8 +66,13 @@ LEFT_OUT = {  # why the record keeps the gauge probes only, in the words the cou
 }
 COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded under the name its tests use
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
-STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result", "the mesh study",
-          "the drawings", "the package", "the outputs")
+STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result",
+          "the mesh study", "the drawings", "the package", "the outputs")
+FOLLOWED_STAGE = "the followed solve"
+# a plate with its shape followed (ADR-0142): CalculiX solves it once more after the linear check, and no study or report is made of it
+FOLLOWED_STAGES = (*STAGES[:STAGES.index("the result")], FOLLOWED_STAGE, "the result", "the outputs")
+FOLLOWED = "followed"  # the attempt's run/followed/: a plate solved with its shape followed (ADR-0142)
+FOLLOWED_DOCUMENTS = "no report for a run with nonlinear geometry"  # the report and the mesh study describe a linear answer; the page reads these words
 DOCUMENT_STAGES = STAGES[STAGES.index("the mesh study"):]  # after the result: made in the background of the studio's view (ADR-0064; the study since its amendment 3)
 STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run, and the rows it ran on
 SETUP_KEYS = ("checklist", "preview", "values")  # that folder's files by key: kept on a run's outputs whatever became of the run
@@ -113,6 +118,7 @@ class Progress:
         self.attempt: Path | None = None
         self.held = False  # waiting at the gate (--gate)
         self.result: str | None = None  # the result's one line, once the solve and the record are done (ADR-0064)
+        self.stages: tuple[str, ...] = STAGES  # the steps this run takes; a followed plate's are FOLLOWED_STAGES, known once its spec is written
         self.timings: dict[str, float] = {}  # the seconds each finished stage took, the evidence of where a job's time goes (ADR-0056 amendment 6)
         self._since: float | None = None
 
@@ -140,7 +146,7 @@ class Progress:
     def write(self) -> None:
         if self.path is None:
             return
-        data = {"stage": self.stage, "done": list(self.done), "stages": list(STAGES), "outputs": {key: rel(p) for key, p in self.outputs.items()},
+        data = {"stage": self.stage, "done": list(self.done), "stages": list(self.stages), "outputs": {key: rel(p) for key, p in self.outputs.items()},
                 "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held, "result": self.result,
                 "timings": dict(self.timings)}
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -517,15 +523,27 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
                                  "--node-probes", *nodes, "--element-probes", *elements, "--notes", notes, "--out", str(record)],
          {"record": record}),
     ]
+    followed = follows_shape(load_spec(spec))  # a plate whose shape is followed as the load rises (ADR-0142)
+    shown = out / FOLLOWED if followed else out / "kernel"  # whose fields and sentences the result shows
+    if followed:
+        progress.stages = FOLLOWED_STAGES
+        steps[0][2].pop("fields"), steps[0][2].pop("explanation")  # the page reads the fields as soon as a run names them: a followed run names its own
+        # the linear steps stay: our kernel and CalculiX's linear step on the same model are the check of the model itself, and the linear
+        # answer is what the followed one is set beside. CalculiX then solves it again with the shape followed, and that is the result.
+        steps.append((FOLLOWED_STAGE, [str(paths.FEA / "tools/follow_plate.py"), str(spec), "--out", str(out / FOLLOWED)],
+                      {"fields": shown / f"{name}-fields.json", "explanation": shown / f"{name}-explanation.json",
+                       "calculix_console": shown / "followed.log", "calculix_status": shown / "followed.sta"}))
     what = (f"`fea/tools/run_coupon.py`, run by {run_by}: the decks, our engine on `{spec.name}`, CalculiX {version} on `{twin.name}`, "
-            "the CalculiX record and the package")
-    answer = [  # the result: what the studio shows once it is reported
+            + ("the CalculiX record and the same plate with its shape followed, by CalculiX" if followed else "the CalculiX record and the package"))
+    answer = ([("prepomax_deck", "the followed plate as CalculiX solved it: open in PrePoMax (File, Import)", out / FOLLOWED / "followed.inp")] if followed else [
         ("prepomax_deck", "open in PrePoMax (File, Import)", out / "calculix" / f"{name}-nodal-ccx.inp"),
         ("prepomax_results", "its results in PrePoMax (File, Open results)", out / "calculix" / f"{name}-nodal-ccx.frd"),
-        ("kernel_summary", "our engine: the summary, first-ply failure included", out / "kernel" / "summary.txt"),
-        ("fields", "our engine: every field and the summary, for the studio's viewer", out / "kernel" / f"{name}-fields.json"),
-        ("explanation", "our engine: the explanation of the result", out / "kernel" / f"{name}-explanation.json"),
-        ("record", "the CalculiX record", record),
+    ]) + [  # the result: what the studio shows once it is reported
+        ("kernel_summary", "our engine: the summary, first-ply failure included" + (" (the linear answer)" if followed else ""), out / "kernel" / "summary.txt"),
+        ("fields", ("the shape followed by CalculiX" if followed else "our engine") + ": every field and the summary, for the studio's viewer",
+         shown / f"{name}-fields.json"),
+        ("explanation", ("the shape followed by CalculiX" if followed else "our engine") + ": the explanation of the result", shown / f"{name}-explanation.json"),
+        ("record", "the CalculiX record" + (" (the linear check of the model)" if followed else ""), record),
     ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run",
                 "values": "the rows of this run, as the studio edits them"}[key], path)
          for key, path in progress.outputs.items() if key in SETUP_KEYS]
@@ -544,7 +562,9 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         if missing:
             raise StepFailed(f"the result: {', '.join(rel(path) for path in missing)} not written")
         result = outcome_line(folder)
-        short = answer_of_run(out / "kernel" / f"{name}-fields.json")
+        if followed:
+            result = f"nonlinear geometry, the shape followed by CalculiX {version}; on the linear check of the model, {result}"
+        short = answer_of_run(shown / f"{name}-fields.json")
     except StepFailed as exc:
         add_row(folder, [f"{number:02d}", day, what, "--", f"stopped at {exc}", f"`ours/runs/{attempt.name}/run/`"])
         exc.coupon, exc.attempt = name, attempt
@@ -553,11 +573,15 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         discard_ahead()  # a run that stopped before its CalculiX step leaves no solver running
     progress.result, result_at = result, time.perf_counter()
     progress.made(**{key: path for key, _, path in answer})
-    print(f"\nResult: attempt {number:02d} of {name}: {result}. The mesh study, the drawings and the package follow.", flush=True)
-    study = mesh_study(name, out, spec, progress)
-    if study is not None:
-        answer.append(("convergence", "our engine: the mesh convergence study", study))
-    opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress, f"{number:02d}")
+    print(f"\nResult: attempt {number:02d} of {name}: {result}." + ("" if followed else " The mesh study, the drawings and the package follow."), flush=True)
+    if followed:  # the mesh study and the report are our linear kernel's: beside a followed answer they would describe another one
+        progress.start("the outputs")
+        opens, documents, delivered = [], FOLLOWED_DOCUMENTS, None
+    else:
+        study = mesh_study(name, out, spec, progress)
+        if study is not None:
+            answer.append(("convergence", "our engine: the mesh convergence study", study))
+        opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress, f"{number:02d}")
     evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`" + ("" if delivered is None else f"; `{paths.DOCUMENTS}/{delivered.name}/`")
     written = ("package written" if pdf else "package written without its PDF") if documents == "written" else documents
     add_row(folder, [f"{number:02d}", day, what, result, written, evidence])

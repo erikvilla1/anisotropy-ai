@@ -80,11 +80,14 @@ def tied_grips(model: FEModel) -> tuple[TiedGrip, ...]:
 class LargeDisplacement:
     """A step that follows the shape as it deforms (ADR-0142): `*STEP, NLGEOM`, the load raised from nothing to the model's own in increments
     CalculiX sizes itself from `first` (a fraction of the load), at most `most` of them. `at` names the fractions of the load at which the
-    results are printed (the last, 1, is always one of them); empty prints every increment CalculiX takes."""
+    results are printed (the last, 1, is always one of them); empty prints every increment CalculiX takes. `whole` prints the whole plate at
+    each of them, for `followed_plate.py`: the displacement of every node and the strain at every integration point of every element, and
+    no results file (a `.frd` holds every level, CalculiX taking one list of levels for all it writes: seen on 2.21, 2026-11-25)."""
 
     first: float = 0.1
     most: int = 200
     at: tuple[float, ...] = ()
+    whole: bool = False
 
     def __post_init__(self) -> None:
         if not 0.0 < self.first <= 1.0:
@@ -201,7 +204,13 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
         for name in model.probe_elements:
             out.append(f"*EL PRINT, ELSET=Probe-{name}" + (", GLOBAL=YES" if requests.el_print_global else "") + printed)
             out.append("S, E" + (", COORD" if el_print_coord else ""))
-    if requests.frd:
+    if large is not None and large.whole:
+        # the strain alone: the printed stress is the true stress in the fixed axes, which a section that has turned no longer shares
+        out.append(f"*NODE PRINT, NSET=Nall{printed}")
+        out.append("U")
+        out.append(f"*EL PRINT, ELSET={section.elset}, GLOBAL=YES{printed}")
+        out.append("E, COORD")
+    elif requests.frd:
         out.append(f"*NODE FILE{printed}")
         out.append("U")
         out.append(f"*EL FILE{printed}")

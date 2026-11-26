@@ -457,3 +457,47 @@ def test_every_gripped_coupon_runs_under_a_force(tool, tmp_path, kind):
     reaction = summary["calculix"]["reaction"]  # the force the coupon carries, in the load's sense: ours is the force stated, CalculiX's what it carries there
     assert reaction["agrees"] and reaction["ours"] == pytest.approx(force, rel=1e-6) and reaction["calculix"] == pytest.approx(force, rel=0.03)
     assert all(all(ply["agrees"]) for ply in summary["calculix"]["gauge"])
+
+
+# --- a plate with nonlinear geometry (ADR-0142, step 2) -------------------------------------------------
+
+
+@needs_ccx
+def test_a_plate_with_nonlinear_geometry_is_solved_once_more_with_its_shape_followed_and_that_is_its_result(tool, tmp_path, capsys):
+    """The Analysis step's switch on: the linear steps run as the check of the model, CalculiX then follows the plate's shape, and the
+    fields, the sentences and the answer the page reads are the followed ones. No mesh study and no report are made of it."""
+    from anisotropy_fea.intake import FORM_VERSION
+
+    clamped = [{"region": f"Edge-{side}", "dofs": [1, 2, 3, 4, 5, 6]} for side in ("Bottom", "Top", "Left", "Right")]
+    values = tmp_path / "values.json"
+    values.write_text(json.dumps({"form_version": FORM_VERSION, "input": "plate", "test": "plate", "library": "im7-8552", "angles": [45, 0, -45, 90],
+                                  "symmetric": "yes", "length": 200, "width": 200, "element_size": 25, "nonlinear_geometry": True,
+                                  "supports": clamped, "loads": [{"region": "Face", "pressure": 0.03}]}), encoding="utf-8")
+    progress_path = tmp_path / "progress.json"
+    outcome = tool.run(str(values), "A. Engineer", pdf=False, theory=False, progress=tool.Progress(progress_path))
+    name, out = outcome.coupon, outcome.attempt / "run"
+    assert set(outcome.outputs) == {"prepomax_deck", "kernel_summary", "fields", "explanation", "record", "checklist", "preview", "values"}
+    assert outcome.outputs["fields"] == out / "followed" / f"{name}-fields.json" and outcome.outputs["prepomax_deck"] == out / "followed" / "followed.inp"
+    assert "*STEP, NLGEOM" in outcome.outputs["prepomax_deck"].read_text(encoding="utf-8")
+    assert not (out / "followed" / "followed.dat").exists()  # tens of megabytes, read and left out of the attempt
+    fields = json.loads(outcome.outputs["fields"].read_text(encoding="utf-8"))
+    told = fields["summary"]["followed"]
+    assert fields["solver"] == "calculix-followed" and len(told["fractions"]) == 10 and 0.3 < told["linear"]["ratio"] < 0.7
+    linear = json.loads((out / "kernel" / f"{name}-fields.json").read_text(encoding="utf-8"))  # our kernel's linear answer stays beside it
+    assert "followed" not in linear["summary"]
+    assert linear["summary"]["max_displacement"]["value"] == pytest.approx(told["linear"]["largest"], rel=1e-9)
+    assert fields["summary"]["max_displacement"]["value"] < 0.7 * linear["summary"]["max_displacement"]["value"]
+    assert outcome.answer["followed"] is True and outcome.answer["fails"] is False and outcome.documents == tool.FOLLOWED_DOCUMENTS
+    assert outcome.result.startswith("nonlinear geometry, the shape followed by CalculiX 2.") and "on the linear check of the model, " in outcome.result
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["stages"] == list(tool.FOLLOWED_STAGES) and progress["done"] == list(tool.FOLLOWED_STAGES[:-1]) and progress["stage"] == "the outputs"
+    assert tool.FOLLOWED_STAGE in progress["timings"] and "the mesh study" not in progress["stages"]
+    console = capsys.readouterr().out
+    assert console.index("== the CalculiX record") < console.index("== the followed solve") < console.index("\nResult: attempt")
+    assert "== the mesh study" not in console and "== the package" not in console
+    rows = json.loads(outcome.outputs["values"].read_text(encoding="utf-8"))
+    assert rows["nonlinear_geometry"] is True and rows["element_size"] == 25  # a past run reopens with the switch on
+    spec = (paths.ours(name) / f"{name}.toml").read_text(encoding="utf-8")
+    assert "[analysis]" in spec and "large_displacement = true" in spec
+    row = next(line for line in (paths.LOCAL / name / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
+    assert "with its shape followed" in row and "nonlinear geometry" in row

@@ -29,11 +29,13 @@ from .audit import CRITERION
 from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
 from .femodel import BoundaryDefinition, FEModel, build_model
-from .intake import FIELDS, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
+from .followed_plate import LEVELS as FOLLOWED_LEVELS, why_not as why_not_followed
+from .intake import FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, SpecError, element_estimate, full_angles, is_isotropic, layup_text, spec_plies
+from .spec import (BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, SpecError, element_estimate, follows_shape, full_angles, is_isotropic, layup_text,
+                   spec_plies)
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
@@ -74,6 +76,7 @@ ITEM_OF_KEY = {  # which item a form row belongs to
 ITEM_OF_LABEL = {f.label_in(units): ITEM_OF_KEY[key] for units in UNIT_SYSTEMS for key, f in FIELDS.items()}  # a row's label in any stated system
 ITEM_OF_LABEL.update({"Supports": "constraints", "Loads": "load", "Regions": "geometry"})  # a plate's lists, not rows of the form (ADR-0054)
 ITEM_OF_LABEL["Own material strengths"] = "material"  # the five strengths, refused together
+ITEM_OF_LABEL[FOLLOWED_LABEL] = "solver"  # the Analysis step's switch, no row of the form (ADR-0142)
 GROUP_ROWS = {"Own material strengths": tuple(FIELDS[key].label for key in STRENGTH_KEYS)}  # a group's refusal marks each of its rows
 # where the results are read, in words (intake.probes_data names the points)
 PROBE_WORDS = {"centre": "the coupon centre", "near_grip": "near a grip", "extensometer_bottom": "the ends of the strain measurement",
@@ -536,6 +539,14 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     version = ccx_version(found) if found is not None else None
     if version:
         notes.note("solver", "pass", f"version {version}")  # the program and its path stay out of the page (ADR-0091)
+        if spec is not None and follows_shape(spec):  # the Analysis step's switch (ADR-0142): what the solver that follows the shape takes
+            # the limits are our solver's: a file for another program (no element limit) is written for any mesh and laminate
+            refused = why_not_followed(spec) if element_limit is not None else None
+            if refused is not None:
+                problems.append(f"{FOLLOWED_LABEL}: {refused}")
+                notes.note("solver", "fail", f"nonlinear geometry: {refused}", (FOLLOWED_LABEL, row("element_size")))
+            else:
+                notes.note("solver", "pass", f"nonlinear geometry: the plate's shape is followed as the load rises, in {len(FOLLOWED_LEVELS)} levels")
     else:
         notes.note("solver", "fail", "CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md); the run tool refuses "
                    "to start without it")

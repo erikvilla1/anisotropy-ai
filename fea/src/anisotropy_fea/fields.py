@@ -341,13 +341,17 @@ def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]
 
 def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
     """A result's answer in a few values, for a list of past runs (ADR-0109): whether a ply fails at the applied loading, the factor, the
-    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict."""
+    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict. A
+    followed plate's says so (`followed`): its answer does not scale with the load."""
     verdict = summary.get("verdict")
     if not verdict:
         return None
     first = summary["fpf_gauge" if verdict["basis"] == "gauge" else "fpf"][verdict["earliest"]]
-    return {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
-            "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
+    answer = {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
+              "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
+    if summary.get("followed"):  # a plate whose shape was followed (ADR-0142): the factor is one over the failure index, no multiple of the load
+        answer["followed"] = True
+    return answer
 
 
 def ply_extremes(stress_12: np.ndarray, mises: np.ndarray, elements: np.ndarray, angles: np.ndarray, shell: bool,

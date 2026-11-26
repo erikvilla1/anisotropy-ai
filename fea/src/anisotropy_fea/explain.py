@@ -110,6 +110,17 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
             facts[f"{criterion}_applied_at_failure"] = printed(abs(float(at["applied"])))
             facts[f"{criterion}_reaction_at_failure"] = printed(abs(float(at["reaction"])))
             facts["every_load"] = bool(at.get("every_load", False))
+            if "fraction" in at:  # a followed plate: the share of the load at which the ply's limit was reached, between two levels (ADR-0142)
+                facts.update({f"{criterion}_percent_at_failure": printed(100.0 * float(at["fraction"])),
+                              f"{criterion}_percent_before": printed(100.0 * float(at["between"][0])),
+                              f"{criterion}_percent_after": printed(100.0 * float(at["between"][1]))})
+    followed = summary.get("followed")
+    if followed:  # the shape followed as the load rose (ADR-0142): what a linear solve of the same plate gives, and how far the two are apart
+        linear = abs(float(followed["linear"]["largest"]))
+        facts.update(followed=True, followed_levels=len(followed["fractions"]), followed_linear_displacement=printed(linear))
+        if linear > 0.0:
+            change = 100.0 * (float(summary["max_displacement"]["value"]) / linear - 1.0)
+            facts.update(followed_change_percent=printed(abs(change)), followed_change="smaller" if change < 0 else "larger")
     outside = verdict.get("outside_earlier") if verdict else None
     if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip or inside the stand-off (ADR-0108): reported apart
         facts.update(outside_criterion=outside["criterion"], outside_factor=printed(float(outside["factor"])),
@@ -174,6 +185,8 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
                f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
                f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
                ply_stress_sentence(facts)]
+    if facts.get("followed"):
+        context = followed_sentences(facts) + context
     if facts["isotropic"]:
         return ["The material is isotropic: its yield and failure are not modelled yet, so no failure is reported.", *context, *method_sentences(facts)]
     if not facts["criteria"]:
@@ -197,7 +210,21 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
             if facts["control"] != "force":
                 at += f", {number(facts[f'{criterion}_reaction_at_failure'])} {facts['force_unit']} at {facts['reaction_set']}"
             at += "; "
-        if facts[f"{criterion}_fails"]:
+        if facts.get("followed"):  # the answer does not scale: the failure index at the loads applied, and the share of them at failure when reached
+            index = number(facts[f"{criterion}_index"])
+            if f"{criterion}_percent_at_failure" in facts:
+                text = (f"By the {name} criterion the laminate fails before the applied loading is reached, in {facts['basis']}: {who} reaches its "
+                        f"limit first, at {where}, by {mode}, at about {number(facts[f'{criterion}_percent_at_failure'])} % of the applied loading "
+                        f"(between the levels at {number(facts[f'{criterion}_percent_before'])} % and {number(facts[f'{criterion}_percent_after'])} %); "
+                        f"its failure index at the applied loading is {index}. No ply damage is modelled, so the stresses shown at the applied "
+                        "loading are those of a laminate with every ply whole.")
+            elif facts[f"{criterion}_fails"]:
+                text = (f"By the {name} criterion the laminate fails at the applied loading, in {facts['basis']}: {who}, at {where}, by {mode}, has a "
+                        f"failure index of {index}.")
+            else:
+                text = (f"By the {name} criterion the laminate holds at the applied loading, in {facts['basis']}: the failure index is {index}, largest "
+                        f"in {who}, at {where}, by {mode}.")
+        elif facts[f"{criterion}_fails"]:
             text = (f"By the {name} criterion the laminate fails at the applied loading, in {facts['basis']}: {who} fails first, at {where}, by {mode}, "
                     f"at {number(factor)} of {loads} ({at}failure index {number(facts[f'{criterion}_index'])}); the stresses shown are those of a "
                     "linear model past that point.")
@@ -220,6 +247,20 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
         out.append(f"The gauge section is read at least {number(facts['gauge_stand_off'])} {facts['length_unit']} from each tab line, a quarter of the "
                    f"{facts['gauge_stand_off_of']}, the same distance on every mesh.")
     return out + context + method_sentences(facts)
+
+
+def followed_sentences(facts: dict[str, Any]) -> list[str]:
+    """What a followed plate's result says of how it was solved (ADR-0142): by which solver and in how many levels, that its answer does not
+    scale with the load, and what a linear solve of the same plate gives beside it. The page shows these sentences, so the solver is the
+    reference solver, as the page names it everywhere (ADR-0091)."""
+    out = [f"The plate's shape was followed as the load rose (nonlinear geometry), in {facts['followed_levels']} levels of the load, by the "
+           "reference solver alone: no second solver checks this answer. Each ply's stress and failure index come from the strains it found, by "
+           "the same ply law as a linear solve.",
+           "Such an answer does not scale with the load: the loading at first-ply failure is found by raising the loads, not by a factor."]
+    if "followed_change_percent" in facts:
+        out.append(f"A linear solve of the same plate gives a largest displacement of {number(facts['followed_linear_displacement'])} "
+                   f"{facts['length_unit']}: following the shape makes it {number(facts['followed_change_percent'])} % {facts['followed_change']}.")
+    return out
 
 
 def ply_stress_sentence(facts: dict[str, Any]) -> str:

@@ -300,6 +300,14 @@ class Tabs(Record):
     material: str | None = Field(default=None, min_length=1)
 
 
+class Analysis(Record):
+    """How the model is solved (ADR-0142). `large_displacement` follows the plate's shape as the load rises (a step with nonlinear geometry):
+    CalculiX solves it in increments and our composite layer reads the plies from its strains (`followed_plate.py`); our own kernel stays
+    linear and gives the answer the followed one is set beside."""
+
+    large_displacement: bool = False
+
+
 class OutputRequests(Record):
     fpf_criteria: list[str]
     abaqus: AbaqusOutput
@@ -318,6 +326,7 @@ class CouponSpec(Record):
     layup: Layup | None = None  # the plies; absent for an isotropic material, which states geometry.thickness instead (ADR-0075)
     material: MaterialSpec
     loading: Loading | None = None  # the one loading of a coupon kind; a plate lists its loads instead
+    analysis: Analysis | None = None  # absent: one linear static step; a plate may ask for its shape to be followed (ADR-0142)
     output: OutputRequests
     grips: Grips | None = None  # required for in-plane kinds, absent for bending and for a plate
     supports: list[Support] = []  # a plate's supports (ADR-0054)
@@ -415,6 +424,8 @@ def validate_spec(spec: CouponSpec) -> None:
                 need(ld.region in area_regions(spec), f"loads[{i}]: a pressure acts on an area region ({', '.join(area_regions(spec))}), not on {ld.region!r}")
     else:
         need(not spec.supports and not spec.loads and not spec.regions, "[[supports]], [[loads]] and [[regions]] belong to the plate kind only")
+        need(not follows_shape(spec), "analysis.large_displacement belongs to the plate kind only (ADR-0142): a coupon pulled along its length is "
+                                      "solved as it stands")
         need(spec.loading is not None, "a coupon kind needs its [loading] table")
         need((g.hole_diameter is None) == (kind != "open_hole_tension"), "geometry.hole_diameter is required for open_hole_tension and refused for every other kind")
         need((m.hole is None) == (kind != "open_hole_tension"), "[mesh.hole] is required for open_hole_tension and refused for every other kind")
@@ -609,6 +620,11 @@ def validate_spec(spec: CouponSpec) -> None:
                                 f"for example IM7-{code}-L1")
         need(match.group("test") == code, f"coupon.designation = {designation!r}: kind {kind} has the test code {code}, not {match.group('test')}")
         need(spec.title.startswith(f"{designation}, {name}: "), f"title must start with the coupon's name and test: \"{designation}, {name}: ...\"")
+
+
+def follows_shape(spec: CouponSpec) -> bool:
+    """Whether the spec asks for its shape to be followed as the load rises (`[analysis] large_displacement = true`, ADR-0142)."""
+    return spec.analysis is not None and spec.analysis.large_displacement
 
 
 def is_isotropic(spec: CouponSpec) -> bool:
