@@ -141,8 +141,9 @@ def test_a_wing_the_model_cannot_describe_is_refused_in_the_models_words():
 
 @needs_both
 def test_the_browser_tests_check_has_the_shape_the_tool_writes(solved):
-    """tests/fixtures/wing/example-check.json is this tool's report of the example at 40 mm, which the page's tests play back."""
-    fixture = json.loads((Path(__file__).parents[2] / "tests" / "fixtures" / "wing" / "example-check.json").read_text(encoding="utf-8"))
+    """tests/fixtures/wing/example-check.json is this tool's report of the example at 40 mm, which the page's tests play back, and
+    plan-check.json its report at 40 mm of the wing a plan leaves (tests/fixtures/planner/wing-approve-answered.json, ADR-0144)."""
+    folder = Path(__file__).parents[2] / "tests" / "fixtures"
 
     def shape(value):
         if isinstance(value, dict):
@@ -150,5 +151,7 @@ def test_the_browser_tests_check_has_the_shape_the_tool_writes(solved):
         if isinstance(value, list):
             return [shape(value[0])] if value else []
         return "value"
-    assert shape(fixture) == shape(check_report(solved, "SI", "m/s"))
-    assert fixture["wing"] == "Example straight wing" and fixture["model"]["element_size"] == 40.0 and len(fixture["cases"]) == 34
+    for name in ("example-check", "plan-check"):
+        fixture = json.loads((folder / "wing" / f"{name}.json").read_text(encoding="utf-8"))
+        assert shape(fixture) == shape(check_report(solved, "SI", "m/s"))
+        assert fixture["wing"] == "Example straight wing" and fixture["model"]["element_size"] == 40.0 and len(fixture["cases"]) == 34

@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { analyzeRepair, followRepairBond, getRepairPlies, solveRepair, startRepairPlies, StudioError } from "@/lib/studio-api";
-import { EXAMPLE_REPAIR, sameRepair, withValue, type RepairAnswer, type RepairBond, type RepairDescription, type RepairPliesJob, type RepairSolve, type RepairValue,
+import { EXAMPLE_REPAIR, pliesProgress, sameRepair, withValue, type RepairAnswer, type RepairBond, type RepairDescription, type RepairPliesJob, type RepairSolve, type RepairValue,
   type SolveNeed } from "@/lib/repair";
+import type { RepairHeld } from "@/lib/repair-chat";
 import { browserStorage } from "@/components/studio/project-context";
 
 /** How long the page waits after the last change before it asks the engine: long enough not to send every keystroke, short enough to
@@ -130,6 +131,9 @@ export type RepairContextValue = {
   pliesNeeds: readonly SolveNeed[] | null;
   /** Start the run for the repair as it stands, or (`finer` 1) the same on a finer mesh beside a run that is done. */
   carryPlies(finer?: 0 | 1): Promise<void>;
+  /** A plan's approval taken (ADR-0144, step 5): the repair it leaves becomes the page's, and the slice it solved and the bond it followed,
+   * each of that repair, are kept as the page keeps its own. */
+  adoptPlan(next: { repair: RepairDescription; solve: { cutFaces: CutFaces; solve: RepairSolve } | null; bond: RepairBond | null }): void;
 };
 
 const RepairContext = createContext<RepairContextValue | null>(null);
@@ -310,16 +314,40 @@ export function RepairProvider({ apiBaseUrl, children }: { apiBaseUrl: string; c
   const bondNeeds = answer?.bond_needs ?? null;
   const setCutFaces = useCallback((choice: CutFaces) => setCutFacesState(choice), []);
   const solveStale = useMemo(() => kept !== null && (!sameRepair(kept.repair, repair) || kept.cutFaces !== cutFaces), [kept, repair, cutFaces]);
+  const adoptPlan = useCallback(({ repair: next, solve, bond }: { repair: RepairDescription; solve: { cutFaces: CutFaces; solve: RepairSolve } | null;
+    bond: RepairBond | null }) => {
+    replace(next);
+    if (solve) {
+      const solved: KeptSolve = { repair: next, cutFaces: solve.cutFaces, solve: solve.solve };
+      setKept(solved); setCutFacesState(solve.cutFaces); setSolveProblem("");
+      try { browserStorage()?.setItem(REPAIR_SOLVE_KEY, JSON.stringify(solved)); } catch { /* the solve stays on the page; a reload forgets it */ }
+    }
+    if (bond) {
+      const followed: KeptBond = { repair: next, bond };
+      setKeptBond(followed); setBondProblem("");
+      try { browserStorage()?.setItem(REPAIR_BOND_KEY, JSON.stringify(followed)); } catch { /* the run stays on the page; a reload forgets it */ }
+    }
+  }, [replace]);
 
   const value = useMemo<RepairContextValue>(() => ({
     apiBaseUrl, repair, revision, setValue, replace, openFile, answer, stale: answered !== repair, working, problem,
     solve: kept?.solve ?? null, solveStale, solving, solveProblem, cutFaces, setCutFaces, solveSlice,
     bond: keptBond?.bond ?? null, bondStale, following, bondProblem, bondNeeds, followBond,
-    plies: keptPlies?.run ?? null, pliesFiner: keptPlies?.finer ?? null, pliesStale, carrying, pliesProblem, pliesNeeds, carryPlies,
+    plies: keptPlies?.run ?? null, pliesFiner: keptPlies?.finer ?? null, pliesStale, carrying, pliesProblem, pliesNeeds, carryPlies, adoptPlan,
   }), [apiBaseUrl, repair, revision, setValue, replace, openFile, answer, answered, working, problem, kept, solveStale, solving, solveProblem, cutFaces,
     setCutFaces, solveSlice, keptBond, bondStale, following, bondProblem, bondNeeds, followBond, keptPlies, pliesStale, carrying, pliesProblem, pliesNeeds,
-    carryPlies]);
+    carryPlies, adoptPlan]);
   return <RepairContext.Provider value={value}>{children}</RepairContext.Provider>;
+}
+
+/** What the page holds when a message is answered (`RepairHeld`): the repair, its hand calculation, and each run of it that belongs to the
+ * repair as it stands, with whether an older one is kept. */
+export function heldOf(ctx: RepairContextValue): RepairHeld {
+  const { repair, answer, solve, solveStale, bond, bondStale, bondNeeds, plies, pliesFiner, pliesStale, pliesNeeds } = ctx;
+  return { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [],
+    bond: bond && !bondStale ? bond.report : null, bondStale: !!bond && bondStale, bondNeeds,
+    plies: plies?.state === "done" && !pliesStale ? plies.report : null, pliesFiner: pliesFiner?.state === "done" && !pliesStale ? pliesFiner.report : null,
+    pliesStale: !!plies && pliesStale, pliesNeeds, pliesRunning: plies && pliesUnderWay(plies) && !pliesStale ? pliesProgress(plies) : null };
 }
 
 export function useRepair(): RepairContextValue {

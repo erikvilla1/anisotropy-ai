@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { isUuid, newWingProject, readProjects, reduceWing, upsert, wingProjects, writeProjects, type WingProject } from "@/lib/project-store";
 import { analyzeWing, getWingFeCheck, startWingFeCheck, StudioError, wakeSolver } from "@/lib/studio-api";
 import { EXAMPLE_WING, feWords, withValue, type WingAnswer, type WingDescription, type WingFeCheck, type WingValue } from "@/lib/wing";
+import { wingKey } from "@/lib/wing-versions";
 import { browserStorage } from "@/components/studio/project-context";
 import { useNewestFromServer, useProjectSync } from "@/components/studio/project-sync";
 import { useWingVersions, type WingVersions } from "./use-wing-versions";
@@ -26,6 +27,8 @@ export type WingContextValue = {
   project: WingProject;
   /** Its versions, newest last; any can be gone back to (ADR-0122, as ADR-0113). */
   versions: WingVersions;
+  /** The project is kept in this browser and on the server: opened from the list, brought over, or changed. */
+  kept: boolean;
   wing: WingDescription;
   /** Counts the times the whole description was replaced (an opened file, the example), so the fields show the new values. */
   revision: number;
@@ -46,6 +49,9 @@ export type WingContextValue = {
   /** Why a check could not be started or followed, in the page's words, or empty. */
   feProblem: string;
   startFeCheck(): Promise<void>;
+  /** A plan's approval taken (ADR-0144, step 5): the wing the server changed, kept as a version by the assistant with the sentence as
+   * why; the hand calculation the plan carried, shown as the page's own answer; and the check it started, followed as one started here. */
+  adoptPlan(next: { wing: WingDescription; why: string; answer: WingAnswer | null; check: WingFeCheck | null }): void;
   /** The page may start a check soon: on the hosted tier a machine is started now, so the check does not wait for one. */
   wakeChecks(): void;
 };
@@ -228,11 +234,31 @@ export function WingProvider({ apiBaseUrl, children }: { apiBaseUrl: string; chi
   }, [apiBaseUrl]);
   const feCheckStale = useMemo(() => feWing !== null && JSON.stringify(feWing) !== JSON.stringify(wing), [feWing, wing]);
 
+  // a plan's check marks the version it was started from once the plan's wing is the page's, so the version marked is the wing it changed
+  const marking = useRef<{ wing: string; job: string } | null>(null);
+  const adoptPlan = useCallback(({ wing: next, why, answer: found, check }: { wing: WingDescription; why: string; answer: WingAnswer | null;
+    check: WingFeCheck | null }) => {
+    versions.attribute("assistant", why); // the version this makes says who made it and from which sentence
+    if (found && wingKey(found.wing) === wingKey(next)) { worked.current = next; setAnswer(found); setAnswered(next); setProblem(""); }
+    setWing(next); setRevision((r) => r + 1);
+    if (!check) return;
+    setFeCheck(check); setFeWing(next); setFeJob(check.job_id); setFeProblem("");
+    marking.current = { wing: wingKey(next), job: check.job_id };
+    try { browserStorage()?.setItem(WING_CHECK_KEY, JSON.stringify({ project: project.id, jobId: check.job_id, wing: next })); } catch { /* the check goes on; a reload forgets it */ }
+  }, [versions, setWing, project.id]);
+  const markChecked = versions.checked;
+  useEffect(() => {
+    const mark = marking.current;
+    if (!mark || mark.wing !== wingKey(wing)) return;
+    marking.current = null;
+    markChecked(mark.job);
+  }, [wing, markChecked]);
+
   const value = useMemo<WingContextValue>(() => ({
-    apiBaseUrl, project, versions, wing, revision, setValue, replace, openFile, answer, stale: answered !== wing, working, problem,
-    feCheck, feCheckStale, feProblem, startFeCheck, wakeChecks,
-  }), [apiBaseUrl, project, versions, wing, revision, setValue, replace, openFile, answer, answered, working, problem, feCheck, feCheckStale, feProblem,
-    startFeCheck, wakeChecks]);
+    apiBaseUrl, project, versions, kept: keep, wing, revision, setValue, replace, openFile, answer, stale: answered !== wing, working, problem,
+    feCheck, feCheckStale, feProblem, startFeCheck, adoptPlan, wakeChecks,
+  }), [apiBaseUrl, project, versions, keep, wing, revision, setValue, replace, openFile, answer, answered, working, problem, feCheck, feCheckStale, feProblem,
+    startFeCheck, adoptPlan, wakeChecks]);
   return <WingContext.Provider value={value}>{children}</WingContext.Provider>;
 }
 

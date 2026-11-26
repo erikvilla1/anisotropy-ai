@@ -26,8 +26,8 @@ import { routeStart, START_ROUTES, TARGET_TITLES, type StartRoute } from "../../
 import { privateAnswerOnStart } from "../../lib/chat-private";
 import { ASKED_KINDS } from "../../lib/workspaces";
 import { hasWork, newProject } from "../../lib/project-store";
-import { readWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
-import { readRepairAsk, repairAnswer, REPAIR_ROUTES, type RepairAsk, type RepairHeld } from "../../lib/repair-chat";
+import { routeWingAsk, wingAnswer, WING_ROUTES, type WingAsk } from "../../lib/wing-chat";
+import { repairAnswer, REPAIR_ROUTES, routeRepairAsk, type RepairAsk, type RepairHeld } from "../../lib/repair-chat";
 import type { WingDescription, WingReport } from "../../lib/wing";
 
 export const FOLDER = "tests/assistant-questions";
@@ -360,15 +360,15 @@ export function talk(question: Question, modelReads: boolean): { route: AnyRoute
   let last: { route: AnyRoute; said: Said; routed: ChatRoute | StartRoute | WingAsk | RepairAsk } | null = null;
   let asked: RepairAsk | undefined; // what the repair's chat read the message before as: a fragment leans on it (repair-chat.tsx)
   for (const text of [...(question.after ?? []), question.ask]) {
-    if (question.page in REPAIR_HELD) { // the repair's chat reads by its own patterns; no model reads there (ADR-0136)
+    if (question.page in REPAIR_HELD) { // the repair's chat reads by its own patterns (ADR-0136); with a model, a planned request is the API's (ADR-0144, step 5)
       const held = REPAIR_HELD[question.page];
-      const routed: RepairAsk = readRepairAsk(text, held.report?.kind ?? "flush", asked);
-      asked = routed;
+      const routed: RepairAsk = routeRepairAsk(text, held.report?.kind ?? "flush", asked, modelReads);
+      asked = routed.route === "repair-plan" ? undefined : routed; // a plan's sentence is no reading a fragment leans on (repair-chat.tsx)
       last = { route: routed.route, said: repairAnswer(routed, held), routed };
       continue;
     }
-    if (question.page === "wing" || question.page === "wing-caps") { // the wing's chat reads by its own patterns; no model reads there yet (ADR-0128)
-      const routed = readWingAsk(text);
+    if (question.page === "wing" || question.page === "wing-caps") { // the wing's chat reads by its own patterns (ADR-0128); with a model, and the wing kept as on the hosted site, a planned request is the API's (ADR-0144, step 5)
+      const routed = routeWingAsk(text, modelReads);
       const shown = WING_ANSWERS[question.page];
       last = { route: routed.route, said: wingAnswer(routed, shown.report, shown.wing), routed };
       continue;

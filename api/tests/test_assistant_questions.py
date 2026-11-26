@@ -31,6 +31,13 @@ REACHED_BY = {
     "/v1/workspace/questions": lambda q: q["route"] == "general",  # the FEA assistant of a blank project (ADR-0124)
     "/v1/workspace/setup": lambda q: q.get("mcp", {}).get("tool") == "read_plate",  # the tools over a setup (ADR-0143): the MCP server's today
     "/v1/workspace/setup-changes": lambda q: q.get("mcp", {}).get("tool") == "preview_plate_change",
+    # a repair's plan (ADR-0144, step 5): on the repair's page, with a model reading, a sentence of a change or a sweep with a solve, the
+    # bond or an answer is planned with the repair the page holds; its card reads the plan again (after a 409), approves it and reports
+    # each answer step
+    "/v1/workspace/repair-plans": lambda q: q["route"] == "repair-plan",
+    "/v1/workspace/repair-plans/{plan_id}": lambda q: q["route"] == "repair-plan",
+    "/v1/workspace/repair-plans/{plan_id}/approve": lambda q: q["route"] == "repair-plan",
+    "/v1/workspace/repair-plans/{plan_id}/steps/{n}": lambda q: q["route"] == "repair-plan",
 }
 
 

@@ -8,10 +8,12 @@
   "ADR-0135",
   "ADR-0136",
   "ADR-0140",
-  "ADR-0141"
+  "ADR-0141",
+  "ADR-0144"
  ],
  "watches": [
   "lib/repair-chat.ts",
+  "lib/ask-words.ts",
   "components/workspace/repair-chat.tsx",
   "engine/src/anisotropy_engine/repair/changes.py",
   "engine/src/anisotropy_engine/repair/sweeps.py",
@@ -1277,6 +1279,107 @@
      "it still needs the laminate ply's four fracture energies"
     ]
    }
+  },
+  {
+   "ask": "find the smallest repair that stays elastic at 300 N/mm, then solve it",
+   "kind": "change",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-plan",
+   "offline": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "step_length",
+     "load": 300,
+     "load_unit": "N/mm"
+    }
+   },
+   "source": "the founder's sentence for the planner, ADR-0144"
+  },
+  {
+   "ask": "find the shortest step length that stays elastic at 300 N/mm and solve it",
+   "kind": "change",
+   "style": "plain",
+   "page": "repair",
+   "route": "repair-plan",
+   "offline": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "step_length",
+     "load": 300,
+     "load_unit": "N/mm"
+    }
+   },
+   "source": "the planner on the wing and the repair pages, ADR-0144 step 5, 2026-11-26"
+  },
+  {
+   "ask": "add a step and solve the slice",
+   "kind": "change",
+   "style": "terse",
+   "page": "repair",
+   "route": "repair-plan",
+   "offline": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "add_steps",
+     "count": 1
+    }
+   },
+   "source": "the planner on the wing and the repair pages, ADR-0144 step 5, 2026-11-26"
+  },
+  {
+   "ask": "ad a step and solve teh slice",
+   "kind": "change",
+   "style": "typo",
+   "page": "repair",
+   "route": "repair-plan",
+   "offline": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "add_steps",
+     "count": 1
+    }
+   },
+   "source": "the planner on the wing and the repair pages, ADR-0144 step 5, 2026-11-26"
+  },
+  {
+   "ask": "set the load to 300 N/mm and follow the bond",
+   "kind": "change",
+   "style": "units",
+   "page": "repair-bond",
+   "route": "repair-plan",
+   "offline": "repair-change",
+   "answer": {
+    "kind": "preview",
+    "change": {
+     "action": "set",
+     "quantity": "load",
+     "value": 300,
+     "unit": "N/mm"
+    }
+   },
+   "source": "the planner on the wing and the repair pages, ADR-0144 step 5, 2026-11-26"
+  },
+  {
+   "ask": "sweep the step length for 250 N/mm, use the pick and tell me what fails first",
+   "kind": "change",
+   "style": "loose",
+   "page": "repair",
+   "route": "repair-plan",
+   "offline": "repair-sweep",
+   "answer": {
+    "kind": "sweep",
+    "sweep": {
+     "quantity": "step_length",
+     "load": 250,
+     "load_unit": "N/mm"
+    }
+   },
+   "source": "the planner on the wing and the repair pages, ADR-0144 step 5, 2026-11-26"
   }
  ]
 }
