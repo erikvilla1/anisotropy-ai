@@ -86,7 +86,7 @@ RECORDS_HEADER = "X-Anisotropy-Records"
 ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 MODEL_PROGRAM_NAMES = {"abaqus": "Abaqus", "ansys": "Ansys"}  # as a refusal names them (ADR-0129)
-MODEL_NAME_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
+MODEL_FILE_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
 WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
 WAKE_HEADER = "X-Anisotropy-Wake"  # what the Worker reads on the answer to start a solver (worker/routing.ts)
 SOLVER_STATE = "/v1/solver/state"  # whether a solver container runs a job: the wake-up's question (ADR-0056 amendment 11)
@@ -194,7 +194,7 @@ app.add_middleware(
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
-    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_NAME_HEADER, "Location"],
+    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_FILE_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -729,7 +729,7 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
         "state": found.state, "designation": found.checklist.get("designation"), "program": program, "name": name, "units": found.head.get("units"),
         "bytes": len(found.content), "sha256": hashlib.sha256(found.content).hexdigest(), "nodes": found.head.get("nodes"),
         "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3)})
-    headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_NAME_HEADER: name, **(_run_header(run_id) or {})}
+    headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_FILE_HEADER: name, **(_run_header(run_id) or {})}
     return Response(content=found.content, media_type="text/plain; charset=utf-8", headers=headers)
 
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MODEL_FILE_LABELS, modelFile, StudioError, type ModelProgram } from "@/lib/studio-api";
+import { MODEL_FILE_LABELS, MODEL_FILE_OPENING, modelFile, StudioError, type ModelProgram } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
 import { workspaceValues } from "@/lib/tension-screen";
 import { remembered, RUN_BY_KEY } from "./local";
@@ -23,22 +23,24 @@ export function useModelDownload() {
   const [busy, setBusy] = useState<ModelProgram | null>(null);
   const [problem, setProblem] = useState("");
   const [saved, setSaved] = useState("");
+  const [opening, setOpening] = useState(""); // how the program opens the file just saved (ADR-0129 amendment 5)
   const download = useCallback(async (program: ModelProgram) => {
     if (!apiBaseUrl) { setProblem("The model file is not available here."); return; }
-    setBusy(program); setProblem(""); setSaved("");
+    setBusy(program); setProblem(""); setSaved(""); setOpening("");
     try {
       const rows = { ...form, filled_by: (form.filled_by ?? "").trim() || remembered(RUN_BY_KEY) }; // as the live solve names the file
       const values = workspaceValues(rows, plate, allTests || (offersAll && form.test !== PLATE_TEST)); // the rows a live solve sends
       const file = await modelFile(apiBaseUrl, values, program);
       save(file.text, file.name);
       setSaved(`Saved the ${MODEL_FILE_LABELS[program]}.`); // the file's kind, not its name: the name carries the program's (ADR-0091)
+      setOpening(MODEL_FILE_OPENING[program] ?? "");
     } catch (error) {
       setProblem(error instanceof StudioError ? error.message : "The model file could not be written. Your inputs are kept; try again.");
     } finally {
       setBusy(null);
     }
   }, [apiBaseUrl, form, plate, allTests, offersAll]);
-  return { busy, problem, saved, download };
+  return { busy, problem, saved, opening, download };
 }
 
 /** The programs offered to this visitor: the Ansys file where it is offered (ADR-0129). */
@@ -50,7 +52,7 @@ export function useModelPrograms(): ModelProgram[] {
 /** "Download model" over the model: a menu of the files offered. */
 export function ModelDownloadMenu() {
   const programs = useModelPrograms();
-  const { busy, problem, saved, download } = useModelDownload();
+  const { busy, problem, saved, opening, download } = useModelDownload();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -75,14 +77,19 @@ export function ModelDownloadMenu() {
         </span>
       ) : null}
       {problem ? <span className="studio-problem studio-model-note" role="alert" data-testid="model-download-problem">{problem}</span> : null}
-      {saved && !open ? <span className="studio-muted studio-model-note" role="status" data-testid="model-download-saved">{saved}</span> : null}
+      {saved && !open ? (
+        <span className="studio-muted studio-model-note">
+          <span role="status" data-testid="model-download-saved">{saved}</span>
+          {opening ? <span className="studio-model-opening" data-testid="model-download-opening">{opening}</span> : null}
+        </span>
+      ) : null}
     </span>
   );
 }
 
 /** The same downloads as buttons in the assistant's answer (ADR-0129): one per file the answer offers. */
 export function ModelFileButtons({ offers }: { offers: ModelProgram[] }) {
-  const { busy, problem, saved, download } = useModelDownload();
+  const { busy, problem, saved, opening, download } = useModelDownload();
   if (!offers.length) return null;
   return (
     <div data-testid="chat-model-file-buttons">
@@ -94,6 +101,7 @@ export function ModelFileButtons({ offers }: { offers: ModelProgram[] }) {
       </div>
       {problem ? <p className="studio-problem" role="alert" data-testid="chat-model-file-problem">{problem}</p> : null}
       {saved ? <p className="studio-muted" role="status">{saved}</p> : null}
+      {saved && opening ? <p className="studio-muted" data-testid="chat-model-file-opening">{opening}</p> : null}
     </div>
   );
 }

@@ -62,7 +62,7 @@ from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.tow_test import tow_answer
 from anisotropy_fea.units import deck_units_of
-from anisotropy_fea.write_abaqus import write_abaqus
+from anisotropy_fea.write_abaqus import write_abaqus, write_abaqus_download
 from anisotropy_fea.write_ansys import AnsysWriterError, write_ansys
 
 IMPORT_SECONDS = time.perf_counter() - _STARTED
@@ -70,7 +70,8 @@ IMPORT_SECONDS = time.perf_counter() - _STARTED
 # ahead without them; the checklist still says so, and the full run stays blocked until they are installed (ADR-0086).
 RUN_ONLY = ("solver", "document")
 # The programs a model is written for on request (ADR-0129): the writer and how the file's name ends.
-MODEL_PROGRAMS = {"abaqus": (write_abaqus, "-abaqus.inp"), "ansys": (write_ansys, "-ansys.cdb")}
+# The Abaqus file says first how Abaqus/CAE opens it (ADR-0129 amendment 5); the rest is the deck a run writes.
+MODEL_PROGRAMS = {"abaqus": (write_abaqus_download, "-abaqus.inp"), "ansys": (write_ansys, "-ansys.cdb")}
 
 
 def write_json(path: Path, data) -> Path:

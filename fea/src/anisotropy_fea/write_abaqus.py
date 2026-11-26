@@ -58,14 +58,30 @@ def _comment(line: str) -> list[str]:
     return pieces
 
 
-def write_abaqus(model: FEModel, units: str | None = None) -> str:
-    """The deck text."""
+# How Abaqus/CAE takes a file a person downloads (ADR-0129 amendment 5): File > Import > Part reads the mesh alone, and a job made from
+# that model has an empty assembly ("THIS MODEL HAS EITHER INCORRECT OR NO ELEMENT DEFINITIONS"). Said first in the file, as comments.
+OPENING = (
+    "To open this file in Abaqus/CAE: File > Import > Model. It makes a new model named after the file; create the job from that model.",
+    "File > Import > Part reads the mesh alone (no material, layup, step, boundary conditions or loads), so a job from it has no elements.",
+    "To run the file as it is: in the Job module, Create with Source: Input file. On a command line: abaqus job=<name> input=<this file>.",
+)
+
+
+def write_abaqus_download(model: FEModel, units: str | None = None) -> str:
+    """The deck as a person downloads it (ADR-0129): the deck a run writes, with how to open it said first (`OPENING`)."""
+    return write_abaqus(model, units, opening=True)
+
+
+def write_abaqus(model: FEModel, units: str | None = None, opening: bool = False) -> str:
+    """The deck text. `opening` puts how Abaqus/CAE opens the file first under the heading, for a file a person downloads."""
     units = units or deck_units_of(model.spec.units)  # a deck is written in a deck system, whatever the coupon is stated in (ADR-0061)
     length = lambda v: from_si(v, "length", units)  # noqa: E731
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
     force = lambda v: from_si(v, "force", units)  # noqa: E731
     mesh, spec, material = model.mesh, model.spec, model.material
     out: list[str] = ["*Heading"]
+    if opening:
+        out += [piece for line in OPENING for piece in _comment(line)]
     out += [piece for line in model.heading for piece in _comment(line)]
     out.append("*Preprint, echo=NO, model=NO, history=NO, contact=NO")
 

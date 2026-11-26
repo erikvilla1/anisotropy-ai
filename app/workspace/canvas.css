@@ -171,6 +171,7 @@
 .cv-project .studio-model-button { padding: 4px 9px; border: 0; border-radius: 8px; background: var(--cv-soft); font-size: 12px; }
 .cv-project .studio-model-button:hover { color: var(--text); background: var(--cv-soft-2); }
 .cv-card .studio-model-menu { top: auto; bottom: calc(100% + 6px); } /* the card is the window's foot: the menu opens upward, over the model */
+.cv-card .studio-model-note { position: static; flex-basis: 100%; width: auto; max-width: none; padding: 0; background: transparent; text-align: left; } /* the note after a save sits in the card's own column: hung below the button, the window's foot cut its second line */
 
 /* The legend: its title and what it is read at, the bar, its two ends; the whole sentence stays for a screen reader */
 .cv-legend { display: grid; gap: 0; min-width: 0; }

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from anisotropy_api.live import LiveSolver
-from anisotropy_api.main import MODEL_NAME_HEADER, app
+from anisotropy_api.main import app
 
 STAND_IN = r'''
 """A stand-in for fea/tools/studio_tool.py model and serve: the values choose what it does."""
@@ -80,7 +80,10 @@ def test_the_abaqus_file_is_everyones_and_comes_as_a_named_download(tool, tmp_pa
     assert answer.status_code == 200, answer.text
     assert answer.text == "*Heading\n" and answer.headers["content-type"].startswith("text/plain")
     assert answer.headers["content-disposition"] == 'attachment; filename="IM78552-UNT-L1-abaqus.inp"'
-    assert answer.headers[MODEL_NAME_HEADER] == "IM78552-UNT-L1-abaqus.inp"
+    # the header the page reads the name from (`MODEL_FILE_HEADER` in lib/studio-api.ts), by its own words: the import's header for a
+    # file's name once took this constant's place, and every download was saved as "model-abaqus.inp"
+    assert answer.headers["X-Anisotropy-Model-File"] == "IM78552-UNT-L1-abaqus.inp"
+    assert "X-Anisotropy-Model-Name" not in answer.headers
     assert not any((tmp_path / "live").iterdir()), "nothing of the model is kept once it is answered"
 
 
