@@ -40,6 +40,8 @@ export type CouponRun = {
   cancelLive(): void;
   check(values: StudioValues): Promise<CheckAnswer>;
   solve(values: StudioValues, runBy: string, replace: boolean): Promise<JobStatus>;
+  /** A run the server started (an approved plan, ADR-0144): followed and read as one this page started. */
+  follow(job: JobStatus): void;
   /** A changed setup: the check no longer stands. */
   clearChecked(): void;
   /** The results of the last run are left behind; a run still going keeps its progress. */
@@ -122,6 +124,13 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
     return started;
   }, [apiBaseUrl, projectId]);
 
+  const follow = useCallback((started: JobStatus) => {
+    setProblem(""); setFields(null); setExplanation(null); setLoadedJob(null); fieldsLoaded.current = null; readFor.current = null;
+    liveAbort.current?.abort("superseded"); liveAbort.current = null; setLiving(false); // as `solve`: the run supersedes a live answer on its way
+    retries.current = 0;
+    setJob(started);
+  }, []);
+
   const solveLive = useCallback(async (values: StudioValues, key: string) => {
     if (!apiBaseUrl) return;
     liveAbort.current?.abort("superseded");  // the rows moved on: the older answer is not wanted
@@ -200,5 +209,5 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   }, [job, apiBaseUrl, tick]);
 
   return { checking, checked, job, fields, explanation, loadedJob, problem, live, liveFor, living, liveAt, fieldsAt, solveLive, dropLive, cancelLive, check, solve,
-    clearChecked, clearResults, reset, setProblem };
+    follow, clearChecked, clearResults, reset, setProblem };
 }

@@ -29,8 +29,9 @@ export type PlateEdit = {
 type Option = { name: string; kind: "edge" | "area" };
 const SIDES = ["left", "right", "top", "bottom"] as const;
 const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
-/** A straight edge's outward normal in the plate's axes: the direction's number and the sign of a pull along it (as the API's guard). */
-const EDGE_NORMAL: Record<string, [number, number]> = { "Edge-Left": [1, -1], "Edge-Right": [1, 1], "Edge-Bottom": [2, -1], "Edge-Top": [2, 1] };
+/** A straight edge's outward normal in the plate's axes: the direction's number and the sign of a pull along it (as the API's guard and
+ * the setup tools' `EDGE_NORMAL`); a plan's force by sense is drawn along it (`lib/plan-steps.ts`). */
+export const EDGE_NORMAL: Record<string, [number, number]> = { "Edge-Left": [1, -1], "Edge-Right": [1, 1], "Edge-Bottom": [2, -1], "Edge-Top": [2, 1] };
 const AXIS: Record<string, number> = { x: 1, y: 2, z: 3 };
 const NAMED: [RegExp, number[]][] = [
   [/\bxsymm\b/, [1, 5, 6]], [/\bysymm\b/, [2, 4, 6]], [/\bzsymm\b/, [3, 4, 5]],
