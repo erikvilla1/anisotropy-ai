@@ -339,15 +339,24 @@ def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]
     return out
 
 
+FOLLOW_FROM = 0.5
+"""The deflection over the thickness past which a linear solve of a plate overstates it by about a tenth or more, so its shape is worth
+following (ADR-0142): the clamped plate of `tests/fixtures/studio-followed/` is 10 % over at a linear deflection of half its thickness."""
+
+
 def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
     """A result's answer in a few values, for a list of past runs (ADR-0109): whether a ply fails at the applied loading, the factor, the
-    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict."""
+    criterion that governs and the ply it names, on the verdict's basis. Picked from the summary as written; None without a verdict. A
+    followed plate's says so (`followed`): its answer does not scale with the load."""
     verdict = summary.get("verdict")
     if not verdict:
         return None
     first = summary["fpf_gauge" if verdict["basis"] == "gauge" else "fpf"][verdict["earliest"]]
-    return {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
-            "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
+    answer = {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
+              "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
+    if summary.get("followed"):  # a plate whose shape was followed (ADR-0142): the factor is one over the failure index, no multiple of the load
+        answer["followed"] = True
+    return answer
 
 
 def ply_extremes(stress_12: np.ndarray, mises: np.ndarray, elements: np.ndarray, angles: np.ndarray, shell: bool,
@@ -482,6 +491,12 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     }
     if "total_force" in applied:
         summary["applied"]["total_force"] = float(from_si(applied["total_force"], "force", units))
+    if shell:  # how far the plate leaves its plane against its thickness: what says whether its shape should be followed (ADR-0142)
+        out_of_plane = np.abs(displacement[:, 2])
+        thickness = min(sum(ply.thickness_m for ply in section.plies) for section in mesh.sections)
+        ratio = float(out_of_plane.max() / thickness)
+        summary["deflection"] = {"value": float(length(out_of_plane.max())), "thickness": float(length(thickness)), "ratio": ratio,
+                                 "past_linear": ratio > FOLLOW_FROM}
     summary["isotropic"] = isotropic_only(deck)
 
     def place_of(flat_index: int, array: np.ndarray) -> dict[str, Any]:

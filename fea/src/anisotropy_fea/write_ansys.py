@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 from .femodel import FEModel
+from .spec import follows_shape
 from .units import deck_units_of, from_si
 from .write_abaqus import SECTION_POINTS, number
 
@@ -131,8 +132,11 @@ def write_ansys(model: FEModel, units: str | None = None) -> str:
 
     out: list[str] = []
     out += [piece for line in model.heading for piece in _comment(line)]
+    followed = follows_shape(spec)  # the Analysis step's switch (ADR-0142): large deflection on, the load in ten equal substeps
     out += _comment("Ansys Mechanical APDL input, written as the model's Abaqus deck is: read it with /INPUT (File > Read Input from) or CDREAD,DB. "
-                    "It builds the model, solves one linear static load step and lists the reactions and the probes.")
+                    + ("It builds the model, solves one static load step that follows the plate's shape as the load rises (large deflection, in "
+                       "ten substeps: the answer does not scale with the load) and lists the reactions and the probes." if followed else
+                       "It builds the model, solves one linear static load step and lists the reactions and the probes."))
     out += _comment(f"A node set is the component N_<NAME>, an element set E_<NAME>. Units: {units} ({'mm, MPa, N' if units == 'mm-MPa' else 'm, Pa, N'}).")
     out.append("/PREP7")
     out.append("/TITLE," + re.sub(r"[^A-Za-z0-9 .;:()/\[\]+=_-]", " ", ascii_text(spec.title).replace(",", ";"))[:72].rstrip())
@@ -239,8 +243,13 @@ def write_ansys(model: FEModel, units: str | None = None) -> str:
             out.append(f"SFE,{component_name('E', pressure.elset)},2,PRES,,{number(stress(pressure.value))}")
     out.append("FINISH")
 
-    out += _comment("One linear static load step.")
-    out += ["/SOLU", "ANTYPE,STATIC", "NLGEOM,OFF", "OUTRES,ALL,ALL", "SOLVE", "FINISH"]
+    if followed:
+        out += _comment("One static load step with large deflection: the load rises in substeps of a tenth of it or less, each kept in the results file. "
+                        "A pressure follows the surface it presses on; a force keeps its direction.")
+        out += ["/SOLU", "ANTYPE,STATIC", "NLGEOM,ON", "AUTOTS,ON", "NSUBST,10,200,10", "KBC,0", "OUTRES,ALL,ALL", "SOLVE", "FINISH"]
+    else:
+        out += _comment("One linear static load step.")
+        out += ["/SOLU", "ANTYPE,STATIC", "NLGEOM,OFF", "OUTRES,ALL,ALL", "SOLVE", "FINISH"]
 
     out += _comment("The reactions of each support, with their totals, and the movement of each probe.")
     out += ["/POST1", "SET,LAST"]

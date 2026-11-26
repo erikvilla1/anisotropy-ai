@@ -1,0 +1,84 @@
+title = "An isotropic strip stretched 3 %: CalculiX's force is the small-strain law's times (1 + e)(1 + e / 2)"
+source = "The stretch rule, worked without the package by fea/tools/large_deflection_closed_forms.py: a strip 100 mm long and 20 mm wide, its ends moved 3 mm apart (e = 0.03), its sides free to narrow; EA = E b h = 1400000 N (E = 70000 MPa, nu = 0.3). CalculiX relates the second Piola-Kirchhoff stress to the Lagrangian strain by the small-strain constants (its manual, *ELASTIC), so the force on an end is EA e (1 + e / 2)(1 + e): 1.04545 times the small-strain law's 42000 N at the whole pull, exactly and whatever the Poisson's ratio. The state is uniform, so the mesh does not matter; the tolerance holds what CalculiX's layered bricks add at a laminate's free sides, 1.5 parts in 100,000 of the force with or without the shape followed. Other programs use other rules at such strains (ADR-0142): the case holds CalculiX to the rule it documents, and says nothing of which rule a material follows."
+
+[follow]
+first = 0.25
+at = [0.5, 1.0]
+
+[small_load]
+factor = 0.001
+tolerance = 1e-4
+kernel_tolerance = 1e-6
+
+[[expected]]
+name = "force on the moved end"
+what = "reaction"
+of = "Edge-Top"
+component = 2
+values = [21474.8625, 43908.9]
+tolerance = 0.0001
+
+[plate]
+title = "NOM-PLT-L5, plate: an isotropic strip stretched 3 % with its sides free"
+kind = "plate"
+units = "mm-MPa"
+
+[plate.coupon]
+designation = "NOM-PLT-L5"
+standard = "none"
+size_from = "the stretch rule"
+team_model = "not built yet"
+test_data = "none"
+
+[plate.geometry]
+length = 100.0
+width = 20.0
+
+[plate.mesh]
+mesher = "structured"
+element_order = 2
+nx = 4
+ny = 20
+
+[plate.layup]
+angles = [0]
+angles_from = "length"
+symmetric = false
+ply_thickness = 1.0
+
+[plate.material]
+E1 = 70000.0
+E2 = 70000.0
+G12 = 26923.076923076922
+nu12 = 0.3
+[plate.material.transverse]
+G13 = 26923.076923076922
+G23 = 26923.076923076922
+plane_stress = true
+transverse_isotropy = true
+
+[[plate.supports]]
+region = "Edge-Bottom"
+dofs = [2, 3]
+[[plate.supports]]
+region = "Edge-Top"
+dofs = [3]
+[[plate.supports]]
+region = "Edge-Top"
+dofs = [2]
+value = 3.0
+[[plate.supports]]
+region = "Corner-Origin"
+dofs = [1]
+
+[[plate.regions]]
+name = "Corner-Origin"
+x0 = 0.0
+x1 = 0.1
+y0 = 0.0
+y1 = 0.1
+
+[plate.output]
+fpf_criteria = []
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = false, el_print_global = true }

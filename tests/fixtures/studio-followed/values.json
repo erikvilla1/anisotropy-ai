@@ -1,0 +1,86 @@
+{
+ "form_version": "0.9",
+ "units": "mm-MPa",
+ "filled_by": null,
+ "date": null,
+ "notes": null,
+ "test": "plate",
+ "material_code": "IM78552",
+ "layup_code": "L1",
+ "standard": "none",
+ "size_from": "the dimensions you gave",
+ "team_model": "not built yet",
+ "test_data": "none",
+ "length": 200.0,
+ "width": 200.0,
+ "angles": [
+  45,
+  0,
+  -45,
+  90
+ ],
+ "symmetric": "yes",
+ "library": "im7-8552",
+ "G13": 4688.43,
+ "G23": 2987.73,
+ "criteria": "all",
+ "supports": [
+  {
+   "region": "Edge-Bottom",
+   "dofs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "value": 0.0
+  },
+  {
+   "region": "Edge-Top",
+   "dofs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "value": 0.0
+  },
+  {
+   "region": "Edge-Left",
+   "dofs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "value": 0.0
+  },
+  {
+   "region": "Edge-Right",
+   "dofs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "value": 0.0
+  }
+ ],
+ "loads": [
+  {
+   "region": "Face",
+   "pressure": 0.03
+  }
+ ],
+ "regions": [],
+ "nonlinear_geometry": true,
+ "element_size": 25.0
+}

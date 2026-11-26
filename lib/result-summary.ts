@@ -38,8 +38,10 @@ export function summaryAnswer(fields: Fields, asked: SummaryQuantity, print: (va
   if (asked === "displacement") {
     const d = s.max_displacement;
     const node = d.label.split(".").pop();
+    // a followed plate (ADR-0142): what a linear solve of the same plate gives beside it, and where every load level is
+    const linear = s.followed ? `With nonlinear geometry; a linear solve of the same plate gives ${print(Math.abs(s.followed.linear.largest))} ${lab.length ?? ""}. Every load level is in the table under Details.` : null;
     return { title: `Largest displacement: ${print(Math.abs(d.value))} ${lab.length ?? ""}`.trim(), found: true,
-      lines: [`node ${node}${d.axis ? `, along ${d.axis}` : ""}`] };
+      lines: [`node ${node}${d.axis ? `, along ${d.axis}` : ""}`, ...(linear ? [linear] : [])] };
   }
   const tm = s.test_method;
   const chord = tm?.strain?.chord;

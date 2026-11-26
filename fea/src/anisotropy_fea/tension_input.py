@@ -14,6 +14,7 @@ Only a values file that says `"input": "tension"` is completed; the Excel form a
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
@@ -29,6 +30,7 @@ INPUT = "tension"  # the values file's "input" word for the tension screen
 PLATE_INPUT = "plate"  # the same for a plate set up on the model tree: its size and what holds and loads it are the engineer's (ADR-0089 amendment 8)
 PLATE_TEST = "plate"
 PLATE_LONG, PLATE_SHORT, PLATE_MOST = 50, 12, 20_000  # the element size chosen for a plate: elements along its longer side, across its shorter, and at most
+FOLLOWED_BRICKS = 5_000  # a plate whose shape is followed (ADR-0142): the most solid elements, one per element and ply, CalculiX is given
 TEST = "unnotched tension"
 UNITS = "mm-MPa"
 D3039 = astm_d3039.DESIGNATION
@@ -217,10 +219,10 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     return out, tuple(built)
 
 
-def _plate_element_size(length: Any, width: Any) -> float | None:
+def _plate_element_size(length: Any, width: Any, most: int = PLATE_MOST) -> float | None:
     """The element size chosen for a plate, in the plate's own units, to two significant figures: PLATE_LONG elements along the longer
-    side or PLATE_SHORT across the shorter, whichever is finer, and coarser where that would pass PLATE_MOST elements. None when the size
-    is not two positive numbers (the check names the row)."""
+    side or PLATE_SHORT across the shorter, whichever is finer, and coarser where that would pass `most` elements (PLATE_MOST, or fewer
+    for a plate whose shape is followed). None when the size is not two positive numbers (the check names the row)."""
     try:
         long, short = max(float(length), float(width)), min(float(length), float(width))
     except (TypeError, ValueError):
@@ -228,11 +230,26 @@ def _plate_element_size(length: Any, width: Any) -> float | None:
     if not short > 0.0:
         return None
     size = min(long / PLATE_LONG, short / PLATE_SHORT)
-    size = max(size, (long * short / PLATE_MOST) ** 0.5)
-    return float(f"{size:.2g}")
+    floor = (long * short / most) ** 0.5
+    if size >= floor or most == PLATE_MOST:
+        return float(f"{max(size, floor):.2g}")
+    step = 10 ** (math.floor(math.log10(floor)) - 1)  # a tighter limit (a followed plate's): two figures rounded up, so the count stays within it
+    return float(f"{math.ceil(floor / step) * step:.2g}")
 
 
-def complete_plate(data: dict, today: date | None = None) -> tuple[dict, tuple[Built, ...]]:
+def _followed_most(data: dict) -> int:
+    """The most elements chosen for a plate whose shape is followed (ADR-0142): what keeps CalculiX's solid elements, one per element and
+    ply, within `FOLLOWED_BRICKS`. The plies are counted as sent; a count that cannot be read leaves the usual limit to the check."""
+    angles = data.get("angles")
+    plies = len(angles) if isinstance(angles, list) else sum(1 for i in range(1, 17) if not _blank(data.get(f"ply_{i}")))
+    if str(data.get("symmetric") or "").strip().lower() in ("yes", "true") or data.get("symmetric") is True:
+        plies *= 2
+    if not _blank(data.get("thickness")) and plies == 0:
+        plies = 1  # one isotropic material
+    return min(PLATE_MOST, FOLLOWED_BRICKS // plies) if plies else PLATE_MOST
+
+
+def complete_plate(data: dict, today: date | None = None, followed: bool = False) -> tuple[dict, tuple[Built, ...]]:
     """The values of a plate set up on the model tree with the rows the engineer is not asked for chosen, and the list of those choices
     (ADR-0089 amendment 8). The engineer gives the material, the layup, the size and what holds and loads it; chosen here, each with its
     reason, are who set it up and when, where the size comes from, the element size, G13 and G23 for a library material, and the
@@ -253,10 +270,11 @@ def complete_plate(data: dict, today: date | None = None) -> tuple[dict, tuple[B
     choose("filled_by", "workspace", "the plate was set up in the workspace")
     choose("date", (today or date.today()).isoformat(), "the day the plate was set up")
     choose("size_from", "the dimensions you gave", "a plate follows no test standard: its size is the engineer's")
-    size = _plate_element_size(out.get("length"), out.get("width"))
+    most = _followed_most(out) if followed else PLATE_MOST
+    size = _plate_element_size(out.get("length"), out.get("width"), most)
     if size is not None:
         choose("element_size", size, f"about {PLATE_LONG} elements along the longer side or {PLATE_SHORT} across the shorter, whichever is finer, "
-               f"and at most about {PLATE_MOST:,} elements")
+               f"and at most about {most:,} elements" + (", so that the solve with nonlinear geometry stays short" if followed else ""))
     record = _record(out)
     bends = "it matters where the plate bends and is thick for its span"
     if record is not None:

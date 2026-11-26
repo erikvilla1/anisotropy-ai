@@ -865,6 +865,130 @@ test.describe("the model tree", () => {
     expect(browserErrors).toEqual([]);
   });
 
+  test("a plate is solved with nonlinear geometry: the switch by the chat and on the tree, the run's own wording, and the load against deflection curve (ADR-0142)", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+    // the package's own clamped plate under pressure (tests/fixtures/studio-followed): its check, its linear preview, and the run that
+    // followed its shape, whose stages hold "the followed solve" and no report
+    const dir = "studio-followed";
+    const stages = ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the followed solve", "the result", "the outputs"];
+    const running = { ...fixture("job-running"), coupon: "IM78552-PLT-L1", stage: "the followed solve", stages, stages_done: stages.slice(0, 7) };
+    const done = { ...fixture("job-done"), coupon: "IM78552-PLT-L1", stage: "the outputs", stages, stages_done: stages.slice(0, 9), documents: "no report for a run with nonlinear geometry",
+      message: "nonlinear geometry, the shape followed by CalculiX 2.21; on the linear check of the model, 39 of 101 recorded values agree with CalculiX; no report for a run with nonlinear geometry",
+      result: "nonlinear geometry, the shape followed by CalculiX 2.21; on the linear check of the model, 39 of 101 recorded values agree with CalculiX",
+      outputs: { fields: "run/followed/fields.json", explanation: "run/followed/explanation.json", checklist: "run/studio/checklist.json", preview: "run/studio/preview.json", values: "run/studio/values.json" },
+      answer: { basis: "whole", criterion: "tsai_hill", fails: false, factor: 7.956, ply: 7, angle: 0, face: "top", followed: true } };
+    await mockApi(page, calls, { allTests: false, plates: true, jobs: (poll) => (poll < 3 ? running : done) });
+    let live = 0;
+    await page.route(API, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      const checked = { state: "ready", designation: "IM78552-PLT-L1", checklist: fixture("checklist", dir), preview: fixture("preview", dir) };
+      if (path === "/v1/coupon-jobs/check" && request.method() === "POST") { calls.checks.push(request.postDataJSON()); return json({ run_id: "run-f", ...checked }); }
+      if (path === "/v1/coupon-jobs/live" && request.method() === "POST") { // the preview stays our linear solve, whatever the switch says
+        live += 1;
+        return json({ run_id: "run-live", ...checked, solver: "kernel", warm: true, seconds: 0.4, timings: { check: 0.1, solve: 0.1 },
+          fields: fixture("linear-fields", dir), explanation: fixture("linear-explanation", dir) });
+      }
+      if (path.endsWith("/files/fields")) return json(fixture("fields", dir));
+      if (path.endsWith("/files/explanation")) return json(fixture("explanation", dir));
+      return route.fallback();
+    });
+    await page.goto("/workspace/fea?for=coupon");
+    const screen = page.getByTestId("tension-screen");
+    const step = page.getByTestId("panel-step");
+    const box = page.getByTestId("nonlinear-geometry");
+    // a coupon pulled along its length has no switch: the step says in one line why
+    await step.locator("summary").click();
+    await expect(step.locator(".ws-panel-note")).toHaveText("Static, linear");
+    await expect(page.getByTestId("tree-step-coupon")).toContainText("offered on a plate only");
+    await expect(box).toHaveCount(0);
+    await page.getByTestId("panel-test").locator("summary").click();
+    await screen.getByRole("radio", { name: "Plate", exact: true }).check();
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+    await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+    await page.locator("#studio-length").fill("200");
+    await page.locator("#studio-width").fill("200");
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    for (const said of ["clamp the left edge", "clamp the right edge", "clamp the top edge", "clamp the bottom edge", "0.03 MPa pressure on the face"]) {
+      await message.fill(said);
+      await message.press("Enter");
+      await expect(page.getByTestId("chat-plate-edit")).toHaveCount(["clamp the left edge", "clamp the right edge", "clamp the top edge", "clamp the bottom edge", "0.03 MPa pressure on the face"].indexOf(said) + 1);
+    }
+    // the linear preview says how far the plate leaves its plane, and names the switch
+    await expect(page.getByTestId("results")).toHaveAttribute("data-source", "live", { timeout: 30_000 });
+    await message.fill("do I need nonlinear geometry?");
+    await message.press("Enter");
+    const needed = page.getByTestId("chat-followed").last();
+    await expect(needed).toHaveAttribute("data-ask", "advice");
+    await expect(needed).toContainText("Largest displacement out of its plane 3.633 mm, thickness 1.463 mm");
+    await expect(page.getByTestId("coupon-chat")).toContainText("Yes: it deflects 2.5 times its thickness");
+    // said in the chat: the switch is set at once, the step's tab opened, and the setup checked with it
+    const before = calls.checks.length;
+    await message.fill("turn on nonlinear geometry");
+    await message.press("Enter");
+    await expect(page.getByTestId("chat-followed").last()).toContainText("the load rises in ten levels");
+    await expect(page.getByTestId("coupon-chat")).toContainText("Nonlinear geometry is on");
+    await expect(step).toHaveAttribute("open", "");
+    await expect(box).toBeChecked();
+    await expect(step.locator(".ws-panel-note")).toHaveText("Nonlinear geometry");
+    await expect.poll(() => calls.checks.length).toBeGreaterThan(before);
+    expect((calls.checks.at(-1) as { values: Record<string, unknown> }).values.nonlinear_geometry).toBe(true);
+    await page.screenshot({ path: ".local/website/screenshots/nonlinear-switch.png" });
+    // off and on again on the tree, as a tick
+    await box.uncheck();
+    await expect(step.locator(".ws-panel-note")).toHaveText("Static, linear");
+    await expect(page.getByTestId("tree-step-hint")).toContainText("more than about half its thickness");
+    await box.check();
+    await expect(page.getByTestId("tree-step")).toContainText("the answer does not scale with the load");
+    // the preview is still the linear solve, and says so
+    await expect(page.getByTestId("live-banner")).toContainText("Linear preview", { timeout: 30_000 });
+    await expect(page.getByTestId("live-banner")).toContainText("Nonlinear geometry is on");
+    expect(live).toBeGreaterThan(0);
+    // the run: its own wording while it solves, four steps and no report
+    await page.getByTestId("build-button").click();
+    await expect.poll(() => calls.solves.length).toBe(1);
+    expect((calls.solves[0] as { values: Record<string, unknown> }).values.nonlinear_geometry).toBe(true);
+    await expect(page.getByTestId("job-state")).toHaveText("Solving with nonlinear geometry");
+    await expect(page.getByTestId("job-progress").locator("ol li")).toHaveCount(4);
+    await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 30_000 });
+    await expect(page.getByTestId("results")).toHaveAttribute("data-source", "run", { timeout: 30_000 });
+    await expect(page.getByTestId("job-message")).toHaveText("Nonlinear geometry: one solver gives this answer, checked against published large-deflection problems. No second solver checks it.");
+    await expect(page.getByTestId("job-progress")).not.toContainText("Report");
+    // the answer does not scale: a failure index at the applied load, never a multiple of it
+    await expect(page.getByTestId("answer-short")).toContainText("Failure index 0.1257");
+    await expect(page.getByTestId("answer-short-followed")).toContainText("largest displacement 1.855 mm against 3.633 mm linear");
+    await page.screenshot({ path: ".local/website/screenshots/nonlinear-result.png" });
+    await openDetails(page);
+    const followed = page.getByTestId("followed");
+    await expect(followed).toBeVisible();
+    await expect(page.getByTestId("followed-line")).toContainText("Largest displacement 1.855 mm; a linear solve of the same plate gives 3.633 mm, so following the shape makes it 48.93 % smaller");
+    await expect(page.getByTestId("followed-curve").locator("[data-level]")).toHaveCount(10);
+    await expect(page.getByTestId("followed-curve")).toHaveAttribute("aria-label", /with nonlinear geometry 1\.855 mm at the full load, linear 3\.633 mm/);
+    await followed.getByTestId("followed-levels").locator("summary").click();
+    await expect(page.getByTestId("followed-table").locator("tbody tr")).toHaveCount(10);
+    await expect(page.getByTestId("followed-table").locator("tbody tr").nth(4)).toContainText("50 %");
+    await expect(page.getByTestId("followed-table").locator("tbody tr").nth(4)).toContainText("1.265");
+    await expect(followed.getByTestId("followed-mesh")).toContainText("No mesh study is made of this run"); // the study is the linear solve's
+    await expect(page.getByTestId("answer-rule")).toContainText("does not scale with the load");
+    await expect(page.getByTestId("answer-table")).toContainText("not reached");
+    await followed.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: ".local/website/screenshots/nonlinear-curve.png" });
+    // asked in the chat: from the levels of the result on the page
+    await message.fill("what is the deflection at half the load");
+    await message.press("Enter");
+    await expect(page.getByTestId("coupon-chat")).toContainText("1.265 mm at 50 % of the load");
+    await message.fill("which ply fails first");
+    await message.press("Enter");
+    await expect(page.getByTestId("coupon-chat")).toContainText("No ply fails: ply 7 (0°), top face is the closest");
+    const shown = (await page.locator("body").innerText()).toLowerCase();
+    for (const word of ["calculix", "abaqus", "× the applied", "times the applied"]) expect(shown, word).not.toContain(word);
+    expect(browserErrors).toEqual([]);
+  });
+
   test("an engineer applies boundary conditions of their own to a tension coupon, by a sentence or by the tree's button: the test's grips are kept (ADR-0089 amendment 8)", async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));

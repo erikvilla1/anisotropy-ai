@@ -1,0 +1,291 @@
+{
+ "units": "mm-MPa",
+ "labels": {
+  "area": "mm\u00b2",
+  "force": "N",
+  "length": "mm",
+  "stress": "MPa",
+  "force_per_length": "N/mm",
+  "modulus": "GPa",
+  "stiffness": "N/mm",
+  "per_length": "1/mm",
+  "moment": "N\u00b7mm/mm",
+  "rotation": "rad",
+  "strain": "-",
+  "ratio": "-"
+ },
+ "coupon": {
+  "designation": "IM78552-PLT-L1",
+  "title": "IM78552-PLT-L1, plate: IM7 / 8552 [45/0/-45/90]s, 4 supports, 1 load",
+  "kind": "plate",
+  "test": "plate",
+  "layup": "[45/0/-45/90]s"
+ },
+ "summary": {
+  "max_displacement": {
+   "value": 8.384478,
+   "node": 40,
+   "label": "Coupon-1.41",
+   "xy": [
+    100.0,
+    100.0
+   ],
+   "components": [
+    -1.856283e-16,
+    1.601276e-16,
+    -8.384478
+   ],
+   "axis": "z"
+  },
+  "reaction": {
+   "set": "the supports",
+   "value": 60055.760319999994,
+   "dof": 3,
+   "sense": "pushing the plate up"
+  },
+  "applied": {
+   "control": "pressure",
+   "value": 1.5,
+   "unit": "MPa",
+   "dof": 3,
+   "direction": "on the whole plate, against its normal",
+   "total_force": -60000.000000000015
+  },
+  "max_ply": {
+   "S11": {
+    "value": 1360.630291935517,
+    "element": 4,
+    "label": "Coupon-1.5",
+    "ply": 7,
+    "angle": 0.0,
+    "xy": [
+     112.49999999999999,
+     12.5
+    ],
+    "face": "top"
+   },
+   "S22": {
+    "value": 73.09196778262131,
+    "element": 31,
+    "label": "Coupon-1.32",
+    "ply": 7,
+    "angle": 0.0,
+    "xy": [
+     187.5,
+     87.49999999999999
+    ],
+    "face": "top"
+   },
+   "S12": {
+    "value": -43.386192081537324,
+    "element": 3,
+    "label": "Coupon-1.4",
+    "ply": 8,
+    "angle": 45.0,
+    "xy": [
+     87.5,
+     12.5
+    ],
+    "face": "top"
+   },
+   "mises": {
+    "value": 1348.5013550450344,
+    "element": 4,
+    "label": "Coupon-1.5",
+    "ply": 7,
+    "angle": 0.0,
+    "xy": [
+     112.49999999999999,
+     12.5
+    ],
+    "face": "top"
+   }
+  },
+  "fpf": {
+   "max_stress": {
+    "factor": 0.8763246796213547,
+    "index": 1.1411295644806938,
+    "element": 31,
+    "label": "Coupon-1.32",
+    "ply": 7,
+    "angle": 0.0,
+    "face": "top",
+    "mode": "transverse tension",
+    "place": "at the edge of a gripped tab",
+    "touches_grip": true,
+    "near_tab": false,
+    "tied_plies": [
+     7
+    ],
+    "xy": [
+     187.5,
+     87.49999999999999
+    ],
+    "fails": true,
+    "at_failure": {
+     "applied": 1.1760583384097423,
+     "unit": "MPa",
+     "reaction": 47079.75711372536,
+     "reaction_unit": "N",
+     "every_load": true,
+     "fraction": 0.7840388922731616,
+     "between": [
+      0.7,
+      0.8
+     ]
+    }
+   },
+   "tsai_hill": {
+    "factor": 0.8763614651878427,
+    "index": 1.141081665184418,
+    "element": 31,
+    "label": "Coupon-1.32",
+    "ply": 7,
+    "angle": 0.0,
+    "face": "top",
+    "mode": "interactive",
+    "place": "at the edge of a gripped tab",
+    "touches_grip": true,
+    "near_tab": false,
+    "tied_plies": [
+     7
+    ],
+    "xy": [
+     187.5,
+     87.49999999999999
+    ],
+    "fails": true,
+    "at_failure": {
+     "applied": 1.1761232097411047,
+     "unit": "MPa",
+     "reaction": 47082.35524837073,
+     "reaction_unit": "N",
+     "every_load": true,
+     "fraction": 0.7840821398274032,
+     "between": [
+      0.7,
+      0.8
+     ]
+    }
+   }
+  },
+  "equilibrium_residual": 55.7603199999794,
+  "free_residual": 0.0,
+  "deflection": {
+   "value": 8.384478,
+   "thickness": 1.46304,
+   "ratio": 5.7308604002624675,
+   "past_linear": true
+  },
+  "isotropic": false,
+  "gauge_reading": null,
+  "gauge_centre": null,
+  "earliest": "max_stress",
+  "fpf_gauge": {},
+  "earliest_gauge": null,
+  "verdict": {
+   "basis": "whole",
+   "earliest": "max_stress",
+   "factor": 0.8763246796213547,
+   "fails": true,
+   "outside_earlier": null
+  },
+  "followed": {
+   "solver": "CalculiX 2.21",
+   "seconds": 5.4,
+   "fractions": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9,
+    1.0
+   ],
+   "curve": {
+    "node": 40,
+    "label": "Coupon-1.41",
+    "xy": [
+     100.0,
+     100.0
+    ],
+    "axis": "z",
+    "unit": "mm",
+    "values": [
+     -3.679009,
+     -4.753212,
+     -5.49731,
+     -6.087132,
+     -6.584242,
+     -7.018386,
+     -7.406444,
+     -7.759043,
+     -8.083355,
+     -8.384478
+    ],
+    "linear": [
+     -18.16279588043555,
+     -36.3255917608711,
+     -54.48838764130665,
+     -72.6511835217422,
+     -90.81397940217775,
+     -108.9767752826133,
+     -127.13957116304884,
+     -145.3023670434844,
+     -163.46516292391996,
+     -181.6279588043555
+    ]
+   },
+   "reaction": [
+    6001.331740000001,
+    12004.08292,
+    18007.851860000002,
+    24012.532918,
+    30017.95428,
+    36024.143820000005,
+    42031.04716,
+    48038.63462,
+    54046.878840000005,
+    60055.76032000001
+   ],
+   "index": {
+    "max_stress": [
+     0.33343174298029854,
+     0.4847418550033616,
+     0.6006545024698263,
+     0.699088900734424,
+     0.7866735646212792,
+     0.8667236903545716,
+     0.9411509705906763,
+     1.0111769166943443,
+     1.077636608755078,
+     1.1411295644806938
+    ],
+    "tsai_hill": [
+     0.3335432610224973,
+     0.48480320727941933,
+     0.6006943932230734,
+     0.6991095591161891,
+     0.7866777527125616,
+     0.8667138683833893,
+     0.9411292260006712,
+     1.0111450154657988,
+     1.0775960579859762,
+     1.141081665184418
+    ]
+   },
+   "linear": {
+    "value": -181.6279588043555,
+    "largest": 181.6279588043555,
+    "ratio": 0.046162925879883514,
+    "change_percent": 95.38370741201166,
+    "change": "smaller"
+   },
+   "fit": 0.003172560986318656,
+   "law": "the Lagrangian strain and the second Piola-Kirchhoff stress, by the constants of small strain; a pressure follows the surface it presses on, a force keeps its direction"
+  }
+ }
+}

@@ -18,6 +18,7 @@ the last ply only (2026-11-08), and the validation table needs every ply at its 
 from __future__ import annotations
 
 from .femodel import FEModel
+from .spec import follows_shape
 from .units import deck_units_of, from_si
 
 SECTION_POINTS = 3  # Simpson integration points per layer, Abaqus's default for a composite shell; the middle of layer k is point 3k - 1
@@ -67,13 +68,22 @@ OPENING = (
 )
 
 
+# A plate whose shape is followed (ADR-0142, step 2): the step as the file a person downloads states it, in the tenths of the load our own
+# followed solve is read at. A pressure follows the surface in Abaqus as in CalculiX, and a force keeps its direction.
+FOLLOWED_STEP = ("*Step, name=Step-1, nlgeom=YES, inc=200", "*Static", "0.1, 1., 1e-06, 0.1")
+FOLLOWED_NOTE = ("The step follows the plate's shape as the load rises (nlgeom=YES), in increments of a tenth of the load: the answer is not "
+                 "a linear one and does not scale with the load.")
+
+
 def write_abaqus_download(model: FEModel, units: str | None = None) -> str:
-    """The deck as a person downloads it (ADR-0129): the deck a run writes, with how to open it said first (`OPENING`)."""
-    return write_abaqus(model, units, opening=True)
+    """The deck as a person downloads it (ADR-0129): the deck a run writes, with how to open it said first (`OPENING`), and its step
+    with nonlinear geometry on when the plate's Analysis step asks for it (ADR-0142)."""
+    return write_abaqus(model, units, opening=True, followed=follows_shape(model.spec))
 
 
-def write_abaqus(model: FEModel, units: str | None = None, opening: bool = False) -> str:
-    """The deck text. `opening` puts how Abaqus/CAE opens the file first under the heading, for a file a person downloads."""
+def write_abaqus(model: FEModel, units: str | None = None, opening: bool = False, followed: bool = False) -> str:
+    """The deck text. `opening` puts how Abaqus/CAE opens the file first under the heading, for a file a person downloads. `followed`
+    writes the step with nonlinear geometry on; the deck our own kernel reads never has it, the kernel being linear."""
     units = units or deck_units_of(model.spec.units)  # a deck is written in a deck system, whatever the coupon is stated in (ADR-0061)
     length = lambda v: from_si(v, "length", units)  # noqa: E731
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
@@ -82,6 +92,8 @@ def write_abaqus(model: FEModel, units: str | None = None, opening: bool = False
     out: list[str] = ["*Heading"]
     if opening:
         out += [piece for line in OPENING for piece in _comment(line)]
+    if followed:
+        out += _comment(FOLLOWED_NOTE)
     out += [piece for line in model.heading for piece in _comment(line)]
     out.append("*Preprint, echo=NO, model=NO, history=NO, contact=NO")
 
@@ -150,9 +162,12 @@ def write_abaqus(model: FEModel, units: str | None = None, opening: bool = False
         out.append("*Fail Stress")
         out.append(line)
 
-    out.append("*Step, name=Step-1, nlgeom=NO")
-    out.append("*Static")
-    out.append("1., 1., 1e-05, 1.")
+    if followed:
+        out += FOLLOWED_STEP
+    else:
+        out.append("*Step, name=Step-1, nlgeom=NO")
+        out.append("*Static")
+        out.append("1., 1., 1e-05, 1.")
     out.append("*Boundary")
     for boundary in model.boundaries:
         line = f"{boundary.target}, {boundary.dof_first}, {boundary.dof_last}"

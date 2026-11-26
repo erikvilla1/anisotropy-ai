@@ -31,7 +31,7 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 from . import __version__, enabled, forms, paths, tension_input
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
-from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
+from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, load_spec, parse_spec,
                    to_si)
 from .spec import test_name as test_word
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
@@ -50,6 +50,9 @@ UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
 assert set(TEST_ORDER) == set(IN_PLANE_KINDS) | set(BENDING_KINDS) | set(PLATE_KINDS)
 PLATE_LISTS = ("supports", "loads", "regions")  # the lists a plate carries beside the rows, sent by the workspace only (ADR-0054)
+FOLLOWED_KEY, FOLLOWED_LABEL = "nonlinear_geometry", "Nonlinear geometry"  # the Analysis step's switch, sent by the workspace only (ADR-0142)
+FOLLOWED_PLATE_ONLY = ("offered on a plate only: a coupon pulled along its length keeps its shape, and following it changes the answer only at "
+                       "strains past first failure, where solvers differ by the stress and strain they use")  # ADR-0142
 TESTS = {TEST_CODES[kind][1]: kind for kind in TEST_ORDER}  # the test's name on the form -> the spec's kind
 YES_NO = ("yes", "no")
 CONTROLS = ("displacement", "force")
@@ -673,6 +676,7 @@ class FormInput:
     version: str
     cells: dict[str, Any]
     lists: dict[str, list] = field(default_factory=dict)  # supports, loads, regions of a plate, as sent
+    followed: bool = False  # the Analysis step's switch: the shape followed as the load rises (ADR-0142)
     built: tuple = ()  # the rows the tension screen's input left to us, each with its value and reason (ADR-0090)
 
     @property
@@ -749,10 +753,15 @@ def read_values(path: Path | str) -> FormInput:
         raise IntakeError(f"{path.name}: form_version {version!r} is not one this tool reads ({', '.join(READ_VERSIONS)}); the current form is "
                           f"{FORM_VERSION} and the rows follow its definition")
     built: tuple = ()
+    followed = data.pop(FOLLOWED_KEY, None)
+    if isinstance(followed, str) and followed.strip().lower() in YES_NO:
+        followed = followed.strip().lower() == "yes"
+    if followed is not None and not isinstance(followed, bool):
+        raise IntakeError(f"{path.name}: {FOLLOWED_KEY} is true or false (the Analysis step's switch), not {followed!r}")
     screen = data.pop("input", None)
     if screen is not None:  # the tension screen sends the material and the layup; the rest is chosen, each choice stated (ADR-0090)
         if screen == tension_input.PLATE_INPUT:  # a plate set up on the model tree: its size, supports and loads are the engineer's (ADR-0089 amendment 8)
-            data, built = tension_input.complete_plate(data)
+            data, built = tension_input.complete_plate(data, followed=bool(followed))
         elif screen != tension_input.INPUT:
             raise IntakeError(f"{path.name}: input {screen!r} is not one this tool reads; the tension screen sends {tension_input.INPUT!r} "
                               f"and a plate on the model tree {tension_input.PLATE_INPUT!r}")
@@ -788,7 +797,7 @@ def read_values(path: Path | str) -> FormInput:
         elif isinstance(value, dict):
             raise IntakeError(f"{path.name}: {key} holds an object; a row holds one value")
         cells[key] = None if value is None or (isinstance(value, str) and not value.strip()) else value
-    return FormInput(path, str(version), cells, lists, built)
+    return FormInput(path, str(version), cells, lists, built=built, followed=bool(followed))
 
 
 def read_input(path: Path | str) -> FormInput:
@@ -873,6 +882,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
                       loads=[({"region": ld.region, "pressure": back(ld.pressure, S)} if ld.pressure is not None
                               else {"region": ld.region, "dof": ld.dof, "total": back(ld.total, F)}) for ld in spec.loads],
                       regions=[{"name": r.name, "x0": back(r.x0, L), "x1": back(r.x1, L), "y0": back(r.y0, L), "y1": back(r.y1, L)} for r in spec.regions])
+        if follows_shape(spec):
+            values[FOLLOWED_KEY] = True
     if m.y_seeds is not None:
         values.update(mesh_nx=m.nx, mesh_partitions=[back(p, L) for p in m.y_partitions], mesh_seeds=list(m.y_seeds))
     elif m.element_size is not None:
@@ -960,6 +971,7 @@ class Values:
     isotropic: dict[str, Any] | None = None  # one isotropic material with no plies (ADR-0075): thickness, E, nu, name, source
     dogbone: dict[str, float] | None = None  # a dumbbell outline: narrow_width, narrow_length, radius, and outer_radius when given
     chosen: tuple[tuple[str, str], ...] = ()  # the rows the tension screen chose, each with why (ADR-0090): the spec's comments say so
+    followed: bool = False  # a plate whose shape is followed as the load rises (ADR-0142)
 
     @property
     def test_code(self) -> str:
@@ -1114,6 +1126,8 @@ def check_form(form: FormInput) -> Values:
         supports, loads, regions = plate_lists(form, problems, tab_length, hole_diameter)
     elif any(form.lists.get(name) for name in PLATE_LISTS):
         problems.append("Supports, Loads and Regions: belong to a plate only")
+    if form.followed and kind and not plate:
+        problems.append(f"{FOLLOWED_LABEL}: {FOLLOWED_PLATE_ONLY}")
     hole = {"circumferential": number("hole_circumferential", whole=True), "radial_layers": number("hole_radial", whole=True),
             "ring_ratio": number("hole_ring"), "growth": number("hole_growth")}
     hole = {k: HOLE_DEFAULTS[k] if v is None else v for k, v in hole.items()}
@@ -1304,7 +1318,7 @@ def check_form(form: FormInput) -> Values:
                   span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None,
                   supports=supports, loads=loads, regions=regions, units=units, specimen=specimen, tab_thickness=tab_thickness, tab_bevel=tab_bevel,
                   tab_material=tab_material, strain_device=strain_device, strain_length=strain_length, isotropic=isotropic, dogbone=dogbone,
-                  chosen=tuple((b.row, b.reason) for b in form.built))
+                  chosen=tuple((b.row, b.reason) for b in form.built), followed=form.followed)
 
 
 def plate_regions_of(tab_length: float | None, hole_diameter: float | None, regions: list[dict]) -> list[str]:
@@ -1744,6 +1758,10 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
             data["regions"] = [dict(r) for r in values.regions]
         comments["supports"] = "what the plate holds, region by region, as stated in the studio (ADR-0054)"
         comments["loads"] = "what the plate carries: a force along a dof spread over a region, or a pressure on an area, positive against the normal"
+        if values.followed:
+            data["analysis"] = {"large_displacement": True}
+            comments["analysis.large_displacement"] = ("the plate's shape is followed as the load rises (nonlinear geometry): CalculiX solves it in increments and the plies "
+                                    "are read from its strains (ADR-0142)")
     if values.names or values.own or values.isotropic:  # the team's own material always carries the name they gave it into the deck
         deck_material = (values.isotropic["name"] if values.isotropic else values.own["name"] if values.own else values.library.upper())
         given = {**DEFAULT_NAMES, "material": deck_material, **(values.names or {})}

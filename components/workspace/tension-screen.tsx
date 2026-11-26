@@ -7,7 +7,8 @@ import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadable, runStatus,
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { appliedOf } from "@/lib/applied";
 import { builtFor, listLine, loadLine, meshLine, PLATE_SIZE_KEYS, plateMissing, sizeLine, tab, tabState, type TabId } from "@/lib/model-tree";
-import { fieldByKey, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest, type StudioForm } from "@/lib/studio-form";
+import { fieldByKey, FOLLOWED_KEY, FOLLOWED_WORDS, followedRow, followsShape, formDefinition, libraryOptions, NO_STANDARD, PLATE_TEST, PLY_KEYS, rowErrorsFrom, unitsOf, withTest,
+  type StudioForm } from "@/lib/studio-form";
 import { plateValues, type PlateLists } from "@/lib/studio-plate";
 import { canBecomePlate, ownWords, plateFromCoupon } from "@/lib/plate-edits";
 import {
@@ -260,8 +261,18 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
         {warned("layup")}
       </StepPanel>
 
-      <StepPanel id="step" title="Analysis step" step={5} open={false} note="Static, linear">
-        <p className="studio-hint" data-testid="tree-step">One static step, linear: the load is applied in one go and every result scales with it.</p>
+      <StepPanel id="step" title="Analysis step" step={5} open={false} note={followsShape(form) ? "Nonlinear geometry" : "Static, linear"}
+        state={errors[FOLLOWED_KEY] ? "fail" : "none"}>
+        {isPlate ? (
+          <label className="ws-tree-check" data-testid="tree-step-switch">
+            <input type="checkbox" checked={followsShape(form)} disabled={busy} onChange={(e) => edit(followedRow(e.target.checked))} data-testid="nonlinear-geometry" />
+            {" "}Nonlinear geometry
+          </label>
+        ) : null}
+        <p className="studio-hint" data-testid="tree-step">{followsShape(form) ? FOLLOWED_WORDS.on : FOLLOWED_WORDS.off}</p>
+        {isPlate && !followsShape(form) ? <p className="studio-hint" data-testid="tree-step-hint">{FOLLOWED_WORDS.hint}</p> : null}
+        {isPlate ? null : <p className="studio-hint" data-testid="tree-step-coupon">{FOLLOWED_WORDS.coupon}</p>}
+        {errors[FOLLOWED_KEY] ? <p className="chat-error" role="alert" data-testid="tree-step-error">{errors[FOLLOWED_KEY]}</p> : null}
       </StepPanel>
 
       <StepPanel id="conditions" title="Boundary conditions" step={6} state={isPlate && !plate.supports.length ? "missing" : state("conditions")} open={false}

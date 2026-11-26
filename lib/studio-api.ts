@@ -74,7 +74,18 @@ export type FirstPlyFailure = { factor: number; index: number; element: number; 
   /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
    * reaction, as the package wrote them; absent on older jobs. */
   fails?: boolean; at_failure?: AtFailure | null };
-export type AtFailure = { applied: number; unit: string; reaction: number; reaction_unit: string; every_load: boolean };
+export type AtFailure = { applied: number; unit: string; reaction: number; reaction_unit: string; every_load: boolean;
+  /** A plate solved with nonlinear geometry (ADR-0142): the share of the applied loading at which the ply reaches its limit, and the two
+   * load levels it lies between. Such a result has `at_failure` null for a ply that holds: its answer does not scale with the load. */
+  fraction?: number; between?: [number, number] };
+/** What only a solve with nonlinear geometry has (ADR-0142): the load levels the plate was read at, as fractions of the applied loading;
+ * the displacement of the node that moves most at each level beside the linear answer's straight line; the reaction and each
+ * criterion's failure index at each level; and the linear answer's largest displacement with the ratio of the two. */
+export type Followed = {
+  solver: string; seconds: number; fractions: number[];
+  curve: { node: number; label: string; xy: number[]; axis: string; unit: string; values: number[]; linear: number[] };
+  reaction: number[]; index: Record<string, number[]>;
+  linear: { value: number; largest: number; ratio: number | null; change_percent: number | null; change: "smaller" | "larger" | null }; fit: number; law: string };
 /** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
 export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
 export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
@@ -126,6 +137,12 @@ export type Fields = {
     gauge_centre?: { element: number; label: string; xy: number[]; basis: string } | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
+    /** present when the plate was solved with nonlinear geometry (ADR-0142) */
+    followed?: Followed | null;
+    /** A plate's largest displacement out of its plane against its thickness, `ratio` the one over the other, and whether that is past
+     * where a linear solve holds (about half the thickness); absent on a model solved in
+     * its plane and on a result solved before it (ADR-0142). */
+    deflection?: { value: number; thickness: number; ratio: number; past_linear: boolean } | null;
     /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */
     working?: Working | null;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */

@@ -17,6 +17,9 @@ export const modeWords = (mode: string) => MODE_SHORT[mode] ?? mode;
 export type AnswerRow = {
   criterion: string; name: string; fails: boolean; factor: number; index: number; ply: number; angle: number; face: string | null; tied: number[];
   mode: string; element: number; label: string; xy: number[]; place: string; applied: number | null; reaction: number | null; earliest: boolean;
+  /** With nonlinear geometry (ADR-0142), for a ply that reaches its limit before the applied loading: the share of that loading where it
+   * does, and the two load levels it lies between. Null otherwise. */
+  fraction: number | null; between: [number, number] | null;
 };
 export type Answer = {
   basis: "gauge" | "whole"; basisWords: string; rows: AnswerRow[]; earliest: AnswerRow; outside: (OutsideEarlier & { name: string }) | null;
@@ -24,6 +27,9 @@ export type Answer = {
   /** The loading as it is applied, beside the loading at first-ply failure: the applied quantity and the reaction with it, as the package
    * wrote them. Null where several loads are scaled together, since no one number is "the applied load" then. */
   appliedNow: { applied: number; reaction: number } | null;
+  /** The plate was solved with nonlinear geometry (ADR-0142): the answer does not scale with the load, so R is one over the failure index
+   * at the applied loading and no multiple of it, and a load at failure is given only for a ply that reached its limit on the way. */
+  followed: boolean;
 };
 
 function rowOf(criterion: string, f: FirstPlyFailure, earliest: string): AnswerRow | null {
@@ -32,6 +38,7 @@ function rowOf(criterion: string, f: FirstPlyFailure, earliest: string): AnswerR
     criterion, name: CRITERION_NAMES[criterion] ?? criterion, fails: f.fails, factor: f.factor, index: f.index, ply: f.ply, angle: f.angle,
     face: f.face ?? null, tied: f.tied_plies.filter((p) => p !== f.ply), mode: f.mode, element: f.element, label: f.label, xy: f.xy, place: f.place,
     applied: f.at_failure ? f.at_failure.applied : null, reaction: f.at_failure ? f.at_failure.reaction : null, earliest: criterion === earliest,
+    fraction: f.at_failure?.fraction ?? null, between: f.at_failure?.between ?? null,
   };
 }
 
@@ -50,13 +57,19 @@ export function answerOf(fields: Fields): Answer | null {
     basis: verdict.basis, basisWords: BASIS_WORDS[verdict.basis], rows, earliest, outside, control: s.applied.control,
     appliedUnit: first?.unit ?? s.applied.unit, forceUnit: first?.reaction_unit ?? fields.labels.force ?? "", reactionSet: s.reaction.set,
     everyLoad: Boolean(first?.every_load),
-    appliedNow: first?.every_load ? null : { applied: s.applied.value, reaction: s.reaction.value },
+    appliedNow: first?.every_load && !s.followed ? null : { applied: s.applied.value, reaction: s.reaction.value },
+    followed: Boolean(s.followed),
   };
 }
 
 /** The first-ply stat of the chat's Results card: the answer the page and the list of past analyses lead with (ADR-0085), read where the
  * package read it, and the earlier failure outside it in one short line. Null for a result without the package's answer. */
-export type AnswerStat = { fails: boolean; verdict: "Holds" | "Fails"; factor: string; facts: string; outside: string | null };
+export type AnswerStat = { fails: boolean; verdict: "Holds" | "Fails"; factor: string; facts: string; outside: string | null;
+  /** The number beside the verdict: "R = 1.033", or with nonlinear geometry "failure index 0.2143", since R is no multiple of the load then. */
+  measure: string; followed: boolean };
+
+/** A share of the load in percent, as the page prints it: "78.4 %". */
+export const percentOf = (fraction: number): string => `${Number((100 * fraction).toPrecision(3))} %`;
 
 export function answerStat(fields: Fields, print: (value: number) => string): AnswerStat | null {
   const a = answerOf(fields);
@@ -64,7 +77,9 @@ export function answerStat(fields: Fields, print: (value: number) => string): An
   const e = a.earliest, o = a.outside;
   const where = o ? (o.touches_grip ? "At a grip edge" : o.near_tab ? "Beside a tab line" : `Outside ${a.basisWords}`) : "";
   return {
-    fails: e.fails, verdict: e.fails ? "Fails" : "Holds", factor: print(e.factor), facts: `${e.name}, ply ${e.ply} · ${e.angle}°, ${a.basisWords}`,
+    fails: e.fails, verdict: e.fails ? "Fails" : "Holds", factor: print(e.factor),
+    facts: `${e.name}, ply ${e.ply} · ${e.angle}°, ${a.basisWords}${a.followed ? ", nonlinear geometry" : ""}`,
+    measure: a.followed ? `failure index ${print(e.index)}` : `R = ${print(e.factor)}`, followed: a.followed,
     outside: o ? `${where} R = ${print(o.factor)}${o.touches_grip || o.near_tab ? ", reported apart: stress there grows with a finer mesh." : ", reported apart."}` : null,
   };
 }

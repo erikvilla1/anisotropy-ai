@@ -1,0 +1,140 @@
+{
+ "items": [
+  {
+   "id": "identity",
+   "label": "Coupon",
+   "state": "pass",
+   "message": "IM7 / 8552, plate",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "units",
+   "label": "Units consistent",
+   "state": "pass",
+   "message": "every value in mm, MPa and N; results come back in the same units",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "geometry",
+   "label": "Geometry defined",
+   "state": "pass",
+   "message": "200 by 200 mm",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "standard",
+   "label": "Test standard",
+   "state": "pass",
+   "message": "no standard picked: the size comes from the dimensions you gave",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "material",
+   "label": "Material defined",
+   "state": "pass",
+   "message": "IM7 / 8552: Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16; strengths given",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "laminate",
+   "label": "Laminate assigned",
+   "state": "pass",
+   "message": "8 plies [45/0/-45/90]s, 1.46304 mm thick; symmetric, so stretching and bending do not couple",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "constraints",
+   "label": "Constraints defined",
+   "state": "pass",
+   "message": "Edge-Bottom (9 nodes) holds x, y, z, the tilt about x, the tilt about y, the rotation about z; Edge-Top (9 nodes) holds x, y, z, the tilt about x, the tilt about y, the rotation about z; Edge-Left (9 nodes) holds x, y, z, the tilt about x, the tilt about y, the rotation about z; Edge-Right (9 nodes) holds x, y, z, the tilt about x, the tilt about y, the rotation about z; no rigid-body motion is left",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "load",
+   "label": "Load applied",
+   "state": "pass",
+   "message": "a pressure of 0.03 MPa on Face against the normal (pushing toward -z)",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "mesh",
+   "label": "Mesh quality acceptable",
+   "state": "pass",
+   "message": "64 elements, 81 nodes (structured mesh, order 1); aspect ratio 1 at worst (warns above 10); smallest angle 90° at worst (warns below 10°); largest angle 90° at worst (warns above 160°); Jacobian ratio 1 at worst (warns below 0.1)",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "criterion",
+   "label": "Failure criterion",
+   "state": "pass",
+   "message": "first-ply failure by maximum stress and Tsai-Hill",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "probes",
+   "label": "Result points",
+   "state": "pass",
+   "message": "results are read at the coupon centre",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "solver",
+   "label": "Reference solver ready",
+   "state": "pass",
+   "message": "version 2.21; nonlinear geometry: the plate's shape is followed as the load rises, in 10 levels",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "document",
+   "label": "Report ready to write",
+   "state": "pass",
+   "message": "no report is written of a run with nonlinear geometry; its results are on the page",
+   "rows": [],
+   "requirements": []
+  }
+ ],
+ "designation": "IM78552-PLT-L1",
+ "coupon_exists": false,
+ "attempts": 0,
+ "state": "ready",
+ "problems": [],
+ "built": [
+  {
+   "row": "units",
+   "value": "mm-MPa",
+   "reason": "results and files use these units"
+  },
+  {
+   "row": "size_from",
+   "value": "the dimensions you gave",
+   "reason": "a plate follows no test standard: its size is the engineer's"
+  },
+  {
+   "row": "G13",
+   "value": 4688.43,
+   "reason": "not in the library: G13 = G12, a usual estimate; it matters where the plate bends and is thick for its span"
+  },
+  {
+   "row": "G23",
+   "value": 2987.73,
+   "reason": "not in the library: G23 = E2 / 3, a usual estimate for a tape; it matters where the plate bends and is thick for its span"
+  },
+  {
+   "row": "criteria",
+   "value": "all",
+   "reason": "all criteria the material's strengths allow"
+  }
+ ]
+}

@@ -14,12 +14,13 @@ import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { ownWords, plateFromCoupon, readPlateEdit } from "@/lib/plate-edits";
+import { followedAnswer, type FollowedAsk } from "@/lib/followed-ask";
 import { answerResultQuestion, comparisonNote, describeElement, extremeLines, extremeWords, questionFrom, RESULT_COLUMNS,
   resultOffer, resultUnit, thresholdVerdict, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
 import {
-  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
+  blankForm, buildValues, exampleForm, fieldByLabel, followedRow, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
   applyMessage, COMMON_MATERIALS, couponLines, isBending, unitsNamed, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
@@ -584,6 +585,23 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     ) });
   }
 
+  /** The Analysis step's switch by talking (ADR-0142): "turn on nonlinear geometry" sets it at once, as ticking it does, the step's tab
+   * is opened and the setup checked again, so a mesh too fine to follow is said under the switch; a question of it ("is it on?", "do I
+   * need it?") is answered from the setup and the result on the page, and changes nothing. */
+  function answerFollowed(text: string, ask: FollowedAsk) {
+    const said = followedAnswer(ask, formRef.current, shown.fields ?? null, printed, text);
+    add({ role: "user", text }, { role: "assistant", kind: "text", tone: said.problem ? "problem" : undefined, title: said.title, body: (
+      <div data-testid="chat-followed" data-ask={ask}>{said.lines.map((line) => <p key={line}>{line}</p>)}</div>
+    ) });
+    if (said.set === null) return;
+    const next: StudioForm = { ...formRef.current, ...followedRow(said.set) };
+    versions.attribute("assistant", text);
+    setForm(next);
+    clearRun();
+    revealTab("step");
+    void check(next, plateRef.current);
+  }
+
   /** The model as a file for the engineer's own program (ADR-0129): the menu's own downloads as buttons, in fixed words. The file is
    * written from the rows as they stand when a button is pressed; nothing changes. */
   function answerModelFile(text: string, program: ModelProgram | null) {
@@ -735,6 +753,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       case "model-file": answerModelFile(text, routed.program); return;
       case "term": answerTerm(text, routed.term); return;
       case "about": answerAbout(text, routed.topic); return;
+      case "followed": answerFollowed(text, routed.ask); return;
       case "working": showWorking(text); return;
       case "why": void answerWhy(text, factsOf(shown.explanation)!, shown.live); return;
       case "why-none":
@@ -1119,7 +1138,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
           <div><span>Largest displacement</span><strong>{printed(s.max_displacement.value)} {lab.length}</strong><small>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}</small></div>
           {stat ? (
             <div className={stat.fails ? "chat-stat-bad" : undefined} data-testid="chat-result-answer" data-fails={stat.fails}><span>First-ply failure</span><strong>{stat.verdict}</strong>
-              <small>R = {stat.factor}, {stat.facts}</small></div>
+              <small>{stat.measure}, {stat.facts}</small></div>
           ) : earliest ? (
             <div className={earliest.factor < 1 ? "chat-stat-bad" : undefined}><span>First-ply failure</span><strong>R = {printed(earliest.factor)}</strong>
               <small>{CRITERION_NAMES[s.earliest ?? ""] ?? s.earliest}, ply {earliest.ply} · {earliest.angle}°</small></div>
@@ -1193,10 +1212,14 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   function workingMessage(entry: Extract<Entry, { kind: "working" }>): ReactNode {
     const { found, from, preview } = entry;
     const figures = workingOf(from)?.digits.given ?? 6;
+    const index = from.summary.fpf[found.criterion]?.index;
     return (
       <div data-testid="chat-working" data-criterion={found.criterion} data-step={found.step?.id ?? "all"} data-source={preview ? "live" : "run"}>
         <h4>{found.step ? found.step.title : `The working: ${found.name}`}</h4>
-        <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading{found.step ? `, by ${found.name}` : ""}.</p>
+        {/* a followed plate's answer does not scale with the load (ADR-0142): its failure index at the applied load, never a multiple of it */}
+        {from.summary.followed && typeof index === "number"
+          ? <p data-testid="chat-working-where">{index >= 1 ? "The first ply to fail" : "The ply closest to failing"} in {found.basis}: {found.chain.where}, failure index {printed(index)} at the applied load{found.step ? `, by ${found.name}` : ""}. With nonlinear geometry it does not scale with the load.</p>
+          : <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading{found.step ? `, by ${found.name}` : ""}.</p>}
         {/* one step asked for: its title is the heading, so the step is not titled again */}
         <WorkingSteps chain={found.step ? { ...found.chain, steps: [found.step] } : found.chain} figures={figures} titled={!found.step} />
         <p className="chat-note" data-testid="chat-working-note">Inputs are shown to {figures} figures, results to 4.{preview ? " Preview: run the analysis to verify." : ""}</p>
