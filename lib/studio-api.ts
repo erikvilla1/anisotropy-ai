@@ -1022,3 +1022,104 @@ export function assistantInfo(apiBase: string): Promise<AssistantInfo | null> {
   }
   return assistantInfos.get(key)!;
 }
+
+/** The planner (ADR-0144): an engineer's sentence turned by the API into steps of typed tools, checked by the server, shown as a plan the
+ * engineer approves once; the approval applies the changes, keeps a version by the assistant and starts the run. The page carries the last
+ * two steps (`qa`, `answer`) and reports each. Keys the API adds are ignored. */
+export const PLAN_STATES = ["proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped"] as const;
+export type PlanState = (typeof PLAN_STATES)[number];
+export const STEP_STATES = ["planned", "running", "done", "failed", "skipped"] as const;
+export type StepState = (typeof STEP_STATES)[number];
+/** The roles a step is listed under, in the order the card shows them. */
+export const PLAN_ROLES = ["Geometry", "Setup", "Solver", "QA", "Report"] as const;
+export type PlanRole = (typeof PLAN_ROLES)[number];
+/** A typed change as the setup tools take it (ADR-0143): `action` names the tool, the rest its arguments. */
+export type PlanChange = { action: string } & Record<string, unknown>;
+export type PlanStep = { n: number; role: PlanRole; tool: string; line: string; quote: string | null; regions: string[]; change: PlanChange | null;
+  question: string | null; state: StepState; note: string | null };
+export type Plan = {
+  id: string; project: string; ask: string; state: PlanState; steps: PlanStep[];
+  /** the preview's lines of the changes, as the History will say them */
+  done: string[];
+  /** the digest of the setup the plan was worked out on, sent back with the approval */
+  base: string | null;
+  question: string | null; unread: UnreadPart[]; reason: string | null; writer: string; model: string | null; job: string | null;
+  /** the version the approval kept, as the server writes it; read with `readServerVersions` */
+  version: unknown; requests_left: number | null; created_at: string; approved_at: string | null;
+};
+/** An approval's answer: the plan as it now stands, the project with its new setup, the version kept, the run started and the check. */
+export type PlanApproval = { plan: Plan; project: ProjectRecord; version: unknown; job: JobStatus | null; check: Checklist | null };
+
+const wholeNumber = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+
+function readPlanStep(value: unknown): PlanStep | null {
+  if (!isObject(value) || !wholeNumber(value.n) || !isText(value.tool) || !isText(value.line)) return null;
+  const role: PlanRole = (PLAN_ROLES as readonly unknown[]).includes(value.role) ? value.role as PlanRole
+    : value.tool === "check" || value.tool === "run" ? "Solver" : value.tool === "qa" ? "QA" : value.tool === "answer" ? "Report" : "Setup";
+  const change = isObject(value.change) && isText(value.change.action) ? value.change as PlanChange : null;
+  return { n: value.n, role, tool: value.tool, line: value.line, quote: isText(value.quote) ? value.quote : null,
+    regions: Array.isArray(value.regions) ? value.regions.filter(isText) : [], change, question: isText(value.question) ? value.question : null,
+    state: (STEP_STATES as readonly unknown[]).includes(value.state) ? value.state as StepState : "planned", note: isText(value.note) ? value.note : null };
+}
+
+/** A plan as the API answers it, checked: its id, project, sentence and state are needed; a step the page cannot read is left out. */
+export function readPlanOutput(payload: unknown): Plan {
+  if (!isObject(payload) || !isText(payload.id) || !isText(payload.project) || !isText(payload.ask)
+    || !(PLAN_STATES as readonly unknown[]).includes(payload.state)) throw unreadable("the plan");
+  const steps = (Array.isArray(payload.steps) ? payload.steps : []).map(readPlanStep).filter((s): s is PlanStep => s !== null).sort((a, b) => a.n - b.n);
+  const unread = (Array.isArray(payload.unread) ? payload.unread : [])
+    .filter((u): u is UnreadPart => isObject(u) && isText(u.quote) && (UNREAD_REASONS as readonly unknown[]).includes(u.reason));
+  const textOr = (v: unknown) => (isText(v) ? v : null);
+  return {
+    id: payload.id, project: payload.project, ask: payload.ask, state: payload.state as PlanState, steps,
+    done: Array.isArray(payload.done) ? payload.done.filter(isText) : [], base: textOr(payload.base), question: textOr(payload.question), unread,
+    reason: textOr(payload.reason), writer: isText(payload.writer) ? payload.writer : "", model: textOr(payload.model), job: textOr(payload.job),
+    version: payload.version ?? null, requests_left: wholeNumber(payload.requests_left) ? payload.requests_left : null,
+    created_at: isText(payload.created_at) ? payload.created_at : "", approved_at: textOr(payload.approved_at),
+  };
+}
+
+/** An approval's answer, checked: the plan and the project are needed; the job and the check are read when the server sent them. */
+export function readPlanApproval(payload: unknown): PlanApproval {
+  if (!isObject(payload)) throw unreadable("the plan's approval");
+  const plan = readPlanOutput(payload.plan);
+  const project = readProjectRecord(payload.project);
+  const job = isObject(payload.job) ? readJob(payload.job) : null;
+  let check: Checklist | null = null;
+  const said = isObject(payload.check) ? (isObject(payload.check.checklist) ? payload.check.checklist : payload.check) : null;
+  if (said) { try { check = readChecklist(said); } catch { check = null; } }
+  return { plan, project, version: payload.version ?? null, job, check };
+}
+
+const plansOf = (apiBase: string, project: string) => `${base(apiBase)}${PROJECTS}/${encodeURIComponent(project)}/plans`;
+
+/** The engineer's sentence planned on the project's setup as the server holds it. A 404, or a 503 that says the API keeps no projects,
+ * means there is no planner here (`noPlanner`): the page reads the sentence as before. */
+export async function askPlan(apiBase: string, project: string, ask: string, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(plansOf(apiBase, project), { method: "POST", headers, body: JSON.stringify({ ask }), signal }, "the plan"));
+}
+
+/** A plan as it stands, its steps' states with it. */
+export async function readPlan(apiBase: string, project: string, plan: string, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}`, { method: "GET", headers, signal }, "reading the plan"));
+}
+
+/** The plan approved on the setup it was worked out on (`digest`, the plan's `base`): a 409 when the model changed since, or the plan
+ * was approved already. */
+export async function approvePlan(apiBase: string, project: string, plan: string, digest: string | null, signal?: AbortSignal): Promise<PlanApproval> {
+  const payload = await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}/approve`,
+    { method: "POST", headers, body: JSON.stringify({ base: digest }), signal }, "approving the plan");
+  return readPlanApproval(payload);
+}
+
+/** A step the page carries (`qa`, `answer`) reported to the plan, with its line; the plan as it then stands, when the server sends one. */
+export async function reportPlanStep(apiBase: string, project: string, plan: string, n: number, state: StepState, note: string | null,
+  signal?: AbortSignal): Promise<Plan | null> {
+  const payload = await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}/steps/${n}`,
+    { method: "POST", headers, body: JSON.stringify({ state, note }), signal }, "reporting the plan's step");
+  try { return readPlanOutput(payload); } catch { return null; }
+}
+
+/** True when an answer means there is no planner here and the page reads the sentence as before: no such route (404), or an API that
+ * keeps no projects (`noProjectStore`). */
+export const noPlanner = (error: unknown): boolean => noProjectStore(error) || (error instanceof StudioError && error.status === 404);

@@ -113,7 +113,7 @@ export type Question = {
   after?: string[];
   /** The element clicked on the model, by its number. */
   picked?: number;
-  /** The step the chat's open question asks ("name" for "Who is running it?"). */
+  /** The step the chat's open question asks ("name" for "Who is running it?", "plan" for a plan's question back, ADR-0144). */
   asking?: string;
   /** The Ansys file is offered to whoever asks, as to a founder's sign-in (ADR-0129); a customer's view without it. */
   ansys?: boolean;
@@ -201,8 +201,11 @@ export function scene(question: Question, modelReads: boolean): Scene {
     ansys: question.ansys === true,
     state: {
       form, readOnly: question.page === "imported" || question.page === "past", results: !!fields, facts: !!results?.facts, api: true, modelReads,
-      onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: (question.asking as ChatState["step"]) ?? null,
+      onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: question.asking === "plan" ? null : (question.asking as ChatState["step"]) ?? null,
       about: null, thread: null, sections: true, plates: true, plate: emptyPlate(), here: [],
+      // the project is kept on the server, as on the hosted site, so a sentence of a change and a run is planned there once it holds a
+      // setup (ADR-0144); a blank coupon is filled by the setup's readers first
+      kept: hasWork(newProject(form)), planAsks: question.asking === "plan",
     },
   };
 }
@@ -259,6 +262,8 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
       const answer = aboutAnswer(routed.topic, text, { form: s.form, results: !!s.fields, readOnly: s.state.readOnly });
       return said("about", answer.title, answer.lines, { topic: routed.topic });
     }
+    // the API writes the plan (ADR-0144); nothing changes until the engineer approves it, so the page's own answer is the card's heading
+    case "plan": return said("plan", routed.reply ? "Planning again with your answer" : "A plan to approve", [], { reply: routed.reply });
     case "working": {
       const found = workingFor(s.fields, text);
       if (!s.fields || !found) return said("none", "No working to show yet");

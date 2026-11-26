@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, answerGeneral, answerResult, DAILY_LIMIT_REASON, offeredHere, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, sameResults, StudioError, type AssistantInfo, type CheckAnswer, type ImportedModel, type CouponSummary, type Fields,
-  type GeneralAnswer, type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
+  type GeneralAnswer, type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart, approvePlan, askPlan, noPlanner, putProject, readPlan, type Plan } from "@/lib/studio-api";
+import { planDrawing } from "@/lib/plan-steps";
+import { newFlow, PlanCard, type PlanFlow } from "./plan-card";
 import { confirmsFailure, contradictsFailure, decidesNote, failureAnswer, failureLines, failureVerdict, marginNote, plyWords, type FailureAnswer } from "@/lib/result-failure";
 import { summaryAnswer, type SummaryQuantity } from "@/lib/result-summary";
 import { factsOf, generalLines, headed, readAt, whyLines } from "@/lib/result-why";
@@ -37,7 +39,7 @@ import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/
 import { tab, TAB_OF_STEP, tabOfKey, tabToFix, type TabId } from "@/lib/model-tree";
 import { revealPanel, showPanel } from "@/components/workspace/panels/step-panel";
 import { takeHandoff } from "@/lib/handoff";
-import { hasWork } from "@/lib/project-store";
+import { hasWork, isUuid, projectOfRecord, uploadOf } from "@/lib/project-store";
 import { saysMore, TARGET_TITLES } from "@/lib/work-intent";
 import { SwitchAsk } from "@/components/workspace/switch-ask";
 import { tabStorage, useProject } from "./project-context";
@@ -79,11 +81,13 @@ type Entry = { stage?: boolean } & (
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
   | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean; place: string | null }
   // another section asked for while the coupon holds work: one tap to go, the coupon kept (ADR-0124)
-  | { id: number; role: "assistant"; kind: "switch"; target: Switchable; carried: string });
+  | { id: number; role: "assistant"; kind: "switch"; target: Switchable; carried: string }
+  // a plan made by the API from the engineer's sentence (ADR-0144), where it stands, and the words it was made from
+  | { id: number; role: "assistant"; kind: "plan"; flow: PlanFlow; said: string });
 /** The sections a coupon's chat opens on request (ADR-0124), and the wing's page under FEA (ADR-0118 amendment 1). */
 type Switchable = "laminate" | "cad" | "wing";
-/** The project's own cards: a question, a check, a run and its results, a proposal. Their buttons act on the project. */
-const PROJECT_KINDS = new Set(["ask", "check", "job", "result", "proposal"]);
+/** The project's own cards: a question, a check, a run and its results, a proposal, a plan. Their buttons act on the project. */
+const PROJECT_KINDS = new Set(["ask", "check", "job", "result", "proposal", "plan"]);
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -184,6 +188,13 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
   const [model, setModel] = useState<AssistantInfo | null>(null); // a model that reads messages, when the API has one (ADR-0088)
   const [reading, setReading] = useState(false);
+  // the planner (ADR-0144): off for the session once the API says it has none or today's plans are used; the sentence of a plan that
+  // asked a question back, which the next message answers; and the runs approved plans started, which their cards follow
+  const [planning, setPlanning] = useState(false);
+  const plannerOff = useRef(false);
+  const planAsking = useRef<string | null>(null);
+  const planJobs = useRef(new Set<string>());
+  const composer = useRef<HTMLTextAreaElement>(null);
   const nextId = useRef(1);
   const body = useRef<HTMLDivElement>(null);
   const formRef = useRef(form);
@@ -284,7 +295,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     return () => controller.abort("replaced");
   }, [apiBaseUrl]);
 
-  useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields, reading]);
+  useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields, reading, planning]);
 
   // a row typed on a panel answers the open question: move on, and when nothing is missing offer the check
   useEffect(() => {
@@ -441,8 +452,9 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
   }
 
   useEffect(() => {
-    // a run started here or on the panels (the tension screen's Run analysis): the conversation follows it, once per job (ADR-0091)
-    if (!job) return;
+    // a run started here or on the panels (the tension screen's Run analysis): the conversation follows it, once per job (ADR-0091); an
+    // approved plan's run is followed on its card (ADR-0144)
+    if (!job || planJobs.current.has(job.job_id)) return;
     if (live.current.entries.some((e) => e.role === "assistant" && e.kind === "job" && e.job === job.job_id)) return;
     setActive(null);
     add({ role: "assistant", kind: "job", job: job.job_id });
@@ -450,7 +462,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
 
   useEffect(() => {
     // once per job, as soon as its fields are read: the entry follows the fields themselves, not the hook's bookkeeping of first reads
-    if (!fields || !job) return;
+    if (!fields || !job || planJobs.current.has(job.job_id)) return;
     if (!live.current.entries.some((e) => e.role === "assistant" && e.kind === "result" && e.job === job.job_id)) add({ role: "assistant", kind: "result", job: job.job_id });
   }, [fields, job, add]);
 
@@ -717,24 +729,31 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     add({ role: "user", text }, { role: "assistant", kind: "text", title: said.title, body: <p data-testid="chat-setup" data-term={term.id}>{said.body}</p> });
   }
 
-  function send(value = input) {
+  /** `usual` when the planner is not to read it: it said it has none here, or the engineer asked for the message to be read as before. */
+  function send(value = input, usual = false) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     lastSaid.current = text;
     const current = entries.find((e) => e.id === active);
+    const asked = planAsking.current; // a plan's question back is answered by this message, or by none
+    planAsking.current = null;
     // who answers is the page's fixed order (ADR-0121), in one place the question banks try (lib/chat-route.ts)
     const routed = routeMessage(text, {
       form: formRef.current, readOnly: shown.readOnly, results: !!shown.fields, facts: !!factsOf(shown.explanation), api: !!apiBaseUrl,
       modelReads: !!model?.proposes, onPlate: onPlateNow, ready: checked?.state === "ready", about: about.current, thread: thread.current, sections: !!onSwitch,
       plates: allTests || plates, plate: plateRef.current, here: here().map((r) => r.name),
       step: current && current.role === "assistant" && current.kind === "ask" ? current.step : null,
+      // a sentence of a change and a run is planned by the API on a project it keeps, once the project holds a setup (ADR-0144)
+      kept: !usual && !plannerOff.current && isUuid(projectRef.current.id) && hasWork(projectRef.current), planAsks: asked !== null,
     });
     switch (routed.route) {
       case "start-over": add({ role: "user", text }); startOver(); return;
       case "model-file": answerModelFile(text, routed.program); return;
       case "term": answerTerm(text, routed.term); return;
       case "about": answerAbout(text, routed.topic); return;
+      // a reply to the plan's question is planned again with the sentence it answers
+      case "plan": void planFor(text, routed.reply && asked ? `${asked.replace(/[.\s]+$/, "")}. ${text}` : text); return;
       case "working": showWorking(text); return;
       case "why": void answerWhy(text, factsOf(shown.explanation)!, shown.live); return;
       case "why-none":
@@ -879,6 +898,91 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     clearRun();
     revealTab(allTests ? "loads" : edit.tab);
     void check(rows, edit.lists);
+  }
+
+  /** A sentence of a change and a run or an answer, planned by the API on the project as it stands (ADR-0144): the project goes to the
+   * server first, so the plan is worked out on what the page shows, then the plan comes back as a card and the regions it holds and loads
+   * are drawn dashed. Nothing changes until it is approved. With no planner here (no model, or an API that keeps no projects) the
+   * sentence is read as before, and the planner is not asked again this session. `said` is the engineer's message, shown as typed;
+   * `ask` is the sentence planned (with the answer to a question back), and `said` is null when a plan is asked again from its card. */
+  async function planFor(said: string | null, ask: string) {
+    const [echo] = said ? add({ role: "user", text: said }) : [];
+    const usual = () => { // read as before: the echo goes, since the reading that follows says the message again
+      plannerOff.current = true;
+      if (echo) setEntries((list) => list.filter((e) => e.id !== echo.id));
+      send(said ?? ask, true);
+    };
+    setActive(null);
+    setPlanning(true);
+    const id = projectRef.current.id;
+    let plan: Plan;
+    try {
+      await putProject(apiBaseUrl, id, uploadOf(projectRef.current));
+      plan = await askPlan(apiBaseUrl, id, ask);
+    } catch (error) {
+      setPlanning(false);
+      if (noPlanner(error)) { usual(); return; }
+      add({ role: "assistant", kind: "text", tone: "problem", title: "No plan right now",
+        body: <p data-testid="plan-failed">{error instanceof StudioError ? error.message : "The plan could not be made. Try again."}</p> });
+      return;
+    }
+    setPlanning(false);
+    if (plan.state === "unavailable") { usual(); return; }
+    if (plan.state === "capped") plannerOff.current = true; // the day's plans are used: messages are read as before until tomorrow
+    if (plan.state === "question") planAsking.current = ask;
+    add({ role: "assistant", kind: "plan", flow: newFlow(plan), said: said ?? ask });
+    if (plan.state === "proposed") setProposed(planDrawing(plan)); // drawn dashed before anything applies (ADR-0110)
+  }
+
+  const updateFlow = useCallback((id: number, update: (flow: PlanFlow) => PlanFlow) => {
+    setEntries((list) => list.map((e) => (e.id === id && e.role === "assistant" && e.kind === "plan" ? { ...e, flow: update(e.flow) } : e)));
+  }, []);
+
+  /** The plan approved (ADR-0144): the server applies its changes, keeps the version by the assistant with the sentence as why, checks
+   * the setup and starts the run, all at once. The model tree takes the setup the server answers with, and the page follows the run as
+   * one it started; the card ticks each step off. A model changed since the plan (409) applies nothing, and the plan can be made again. */
+  async function approvePlanOf(entryId: number) {
+    const entry = live.current.entries.find((e) => e.id === entryId);
+    if (!entry || entry.role !== "assistant" || entry.kind !== "plan" || entry.flow.stage !== "proposed") return;
+    const plan = entry.flow.plan;
+    updateFlow(entryId, (f) => ({ ...f, stage: "approving", problem: null }));
+    try {
+      const approval = await approvePlan(apiBaseUrl, projectRef.current.id, plan.id, plan.base);
+      const record = projectOfRecord(approval.project);
+      setProposed(null);
+      if (record && record.kind === "fea") {
+        versions.attribute("assistant", plan.ask);
+        setForm(record.form);
+        setPlate(record.plate);
+        clearRun();
+      }
+      if (approval.job) { planJobs.current.add(approval.job.job_id); runner.follow(approval.job); }
+      updateFlow(entryId, (f) => ({ ...f, stage: "approved", plan: approval.plan, job: approval.job?.job_id ?? null,
+        blocked: approval.job ? [] : (approval.check?.problems ?? []).map((line) => customerText(line)).filter((line): line is string => !!line) }));
+      const actions = new Set(plan.steps.map((s) => s.change?.action));
+      if (["hold", "move", "free"].some((a) => actions.has(a))) revealTab(allTests ? "loads" : "conditions");
+      else if (["force", "pressure", "unload"].some((a) => actions.has(a))) revealTab("loads");
+      else reveal(plan.steps.flatMap((s) => (s.change?.action === "row" && typeof s.change.key === "string" ? [s.change.key] : [])));
+    } catch (error) {
+      if (error instanceof StudioError && error.status === 409) {
+        let now: Plan | null = null;
+        try { now = await readPlan(apiBaseUrl, projectRef.current.id, plan.id); } catch { /* said as a changed model */ }
+        const already = now !== null && (now.approved_at !== null || !["proposed", "question"].includes(now.state));
+        setProposed(null);
+        updateFlow(entryId, (f) => ({ ...f, stage: "stale", problem: already ? "This plan was approved already."
+          : "The model changed since this plan was made, so nothing was applied. Plan it again on the model as it is now." }));
+        return;
+      }
+      updateFlow(entryId, (f) => ({ ...f, stage: "proposed", problem: error instanceof StudioError ? error.message : "The plan could not be approved. Try again." }));
+    }
+  }
+
+  /** The sentence planned back in the message box, to change and send again; the plan is set aside and its regions no longer drawn. */
+  function editPlan(entryId: number, said: string) {
+    updateFlow(entryId, (f) => (f.stage === "proposed" ? { ...f, stage: "edited" } : f));
+    setProposed(null);
+    setInput(said);
+    window.setTimeout(() => composer.current?.focus(), 0);
   }
 
   /** The plate's own regions the clicked element belongs to, on the mesh the page shows: what "here" means in a message (ADR-0101). */
@@ -1393,6 +1497,11 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       content = <SwitchAsk target={entry.target} kept="coupon" onGo={() => onSwitch?.(entry.target, entry.carried)}
         onStay={() => add({ role: "assistant", kind: "text", title: "Staying here", body: <p>Your coupon is as it was.</p> })} />;
     }
+    else if (entry.kind === "plan") {
+      const id = entry.id, said = entry.said;
+      content = <PlanCard flow={entry.flow} onFlow={(update) => updateFlow(id, update)} onApprove={() => void approvePlanOf(id)}
+        onEdit={() => editPlan(id, entry.flow.plan.ask)} onPlanAgain={() => void planFor(null, entry.flow.plan.ask)} onUsual={() => send(said, true)} />;
+    }
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
@@ -1424,6 +1533,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
         {entries.map((e) => render(e, latestCheck))}
         {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
+        {planning ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-planning">Planning the steps…</p></div></div> : null}
         {checking && !shown.readOnly ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
         {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
@@ -1432,7 +1542,7 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
         <p className="chat-note chat-here" data-testid="chat-here">“Here” is the element you clicked: {hereNow.map((r) => r.name).join(", ")}.</p>
       ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-        <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
+        <textarea ref={composer} aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
           placeholder={shown.imported ? "Ask about this model’s results, e.g. “where is the stress highest?”" : shown.past ? "Ask about this run’s results, e.g. “which ply fails first?”" : plateNow ? "Hold or load a region, e.g. “fix the left edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">

@@ -48,7 +48,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
-export const ROUTES = ["start-over", "model-file", "term", "about", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
+export const ROUTES = ["start-over", "model-file", "term", "about", "plan", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
   "ready", "plate-edit", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 /** What the coupon chat opens when asked for by name (ADR-0124): another section, or the wing's page under FEA (ADR-0118 amendment 1). */
@@ -59,6 +59,9 @@ export type ChatRoute =
   | { route: "model-file"; program: ModelProgram | null } // the model as a file for the engineer's own program, by the same buttons as the menu (ADR-0129)
   | { route: "term"; term: TermQuestion } // what an Abaqus word means, or this model's boundary conditions and loads (ADR-0110)
   | { route: "about"; topic: AboutTopic } // who the assistant is, the units, what is offered: fixed words (ADR-0121 amendment 2)
+  // a change and a run or an answer asked in one sentence, planned by the API into steps the engineer approves once (ADR-0144); `reply`
+  // when it answers the plan's own question, and is planned again with the sentence it answers
+  | { route: "plan"; reply: boolean }
   | { route: "working" } // the formula or the proof behind the answer (ADR-0103)
   | { route: "why" } // a question of why, answered in words from the results and the theory pages (ADR-0102)
   | { route: "why-none" } // a question of why with no result (or no API) to answer from
@@ -112,7 +115,34 @@ export type ChatState = {
   thread: ResultQuestion | null;
   /** Another section (Laminate, CAD) can be opened from here (ADR-0124). */
   sections: boolean;
+  /** The project is kept on the server and holds a setup, so the API can plan a change to it (ADR-0144); false for a blank coupon, which
+   * the setup's readers fill, and where no planner answers. */
+  kept?: boolean;
+  /** The last plan asked a question back, which the next message answers (ADR-0144). */
+  planAsks?: boolean;
 };
+
+/** A sentence that asks for a change to the setup and, in the same breath, for a run or an answer (ADR-0144): "clamp the bottom edge,
+ * pull the top with 2 kN and tell me if it holds", "set the width to 30 mm and run it". The change is one the page reads (a row, a plate's
+ * support or load) or a verb of changing that opens a clause; the run or the answer is asked in words. A single edit ("fix the left edge")
+ * stays with the page's own readers, and a question is never a plan. */
+const CHANGES = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+|(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+)?|let'?s\s+)?(?:set|make|change|use|switch|increase|decrease|reduce|raise|lower|refine|add|remove|apply|put|clamp|fix|hold|pin|pull|push|load|press|move|rotate|turn)\b/i;
+const RUNS = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:re-?run|run|solve|analy[sz]e)\b/i;
+const ANSWERS = new RegExp([
+  /\b(?:tell|show|give)\s+me\b|\blet\s+me\s+know\b/.source,
+  /\b(?:see|check|find\s+out|determine|work\s+out|find|report)\s+(?:if|whether|how|what|which|where)\b/.source,
+  /\b(?:does|will|would|whether|if)\s+it\s+(?:holds?|fails?|breaks?|survives?|pass(?:es)?|yields?)\b/.source,
+  /\bfirst[- ]ply[- ]failure\b|\bfpf\b/.source,
+].join("|"), "i");
+/** "never mind", "cancel": no answer to the plan's question, and no plan. */
+const DROPS = /^\s*(?:no\b|nope\b|cancel\b|never\s*mind\b|forget\s+(?:it|that)\b|stop\b)/i;
+
+export function asksPlan(typed: string, form: StudioForm, plate: PlateLists = emptyPlate(), here: string[] = []): boolean {
+  const text = spelled(typed);
+  if (isQuestion(text) || !(RUNS.test(text) || ANSWERS.test(text))) return false;
+  if (CHANGES.test(text) || applyMessage(form, text).understood.length > 0) return true;
+  return form.test === PLATE_TEST ? readPlateEdit(text, form, plate, here) !== null : asksPlateEdit(text, form);
+}
 
 /** A question of what something is or means ("what is the ABD matrix?", "explain first ply failure", "what does tsai-hill mean"), with
  * no number in it: a number makes it a value or a change. */
@@ -155,6 +185,12 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   // ("can I use inches?" switched the units before; ADR-0121 amendment 2)
   const topic = aboutAsked(text, s.readOnly);
   if (topic) return { route: "about", topic };
+  // a change and a run or an answer in one sentence is planned by the API, where a model reads and the project is kept there (ADR-0144):
+  // the plan is shown before anything changes. A reply to the plan's own question is planned again with the sentence it answers
+  if (s.kept && s.modelReads && s.api && !s.readOnly) {
+    if (asksPlan(text, s.form, s.plate, s.here)) return { route: "plan", reply: false };
+    if (s.planAsks && !isQuestion(text) && !DROPS.test(text)) return { route: "plan", reply: true };
+  }
   // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103);
   // a question about a number of the answer is no new load: "how did you get 16740 N" (ADR-0121 amendment 2)
   if (asksWorking(text) && (!edits() || isQuestion(text))) return { route: "working" };
