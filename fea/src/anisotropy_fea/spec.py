@@ -340,10 +340,16 @@ def parse_spec(text: str, source_path: str | None = None) -> CouponSpec:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise SpecError(f"spec is not valid TOML: {exc}") from None
+    return spec_from_table(data, hashlib.sha256(text.encode("utf-8")).hexdigest(), source_path)
+
+
+def spec_from_table(data: dict, source_sha256: str, source_path: str | None = None) -> CouponSpec:
+    """The spec a TOML table states, validated as `parse_spec` validates a file: a file's whole text, or the table of a file that holds a
+    spec beside something else (a large-displacement case, ADR-0142). `source_sha256` is the hash of the file's text."""
     loader_keys = [key for key in ("si", "source_sha256", "source_path") if key in data]
     if loader_keys:
         raise SpecError(f"spec: {', '.join(loader_keys)} {'is' if len(loader_keys) == 1 else 'are'} set by the loader, not written in a file")
-    data["source_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    data["source_sha256"] = source_sha256
     data["source_path"] = source_path
     if isinstance(data.get("layup"), dict) and "angles_from" not in data["layup"]:  # an isotropic material has no layup to count from
         raise SpecError(f"spec: {ANGLES_FROM_HINT}")

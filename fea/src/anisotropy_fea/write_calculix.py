@@ -76,9 +76,32 @@ def tied_grips(model: FEModel) -> tuple[TiedGrip, ...]:
     return tuple(out)
 
 
-def write_calculix(model: FEModel, units: str | None = None, el_print_coord: bool = True) -> str:
+@dataclass(frozen=True)
+class LargeDisplacement:
+    """A step that follows the shape as it deforms (ADR-0142): `*STEP, NLGEOM`, the load raised from nothing to the model's own in increments
+    CalculiX sizes itself from `first` (a fraction of the load), at most `most` of them. `at` names the fractions of the load at which the
+    results are printed (the last, 1, is always one of them); empty prints every increment CalculiX takes."""
+
+    first: float = 0.1
+    most: int = 200
+    at: tuple[float, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not 0.0 < self.first <= 1.0:
+            raise CalculixWriterError(f"the first increment is a fraction of the load, above 0 and at most 1; got {self.first:g}")
+        if self.most < 1:
+            raise CalculixWriterError(f"at least one increment; got {self.most}")
+        if any(not 0.0 < f <= 1.0 for f in self.at) or list(self.at) != sorted(set(self.at)):
+            raise CalculixWriterError(f"the fractions the results are printed at rise from above 0 to at most 1; got {list(self.at)}")
+
+
+TIME_POINTS = "Printed"  # the name of the fractions of the load a large-displacement step prints at
+
+
+def write_calculix(model: FEModel, units: str | None = None, el_print_coord: bool = True, large: LargeDisplacement | None = None) -> str:
     """The deck text. `el_print_coord` adds COORD to the element print so each integration point carries its z, which is how a
-    result is mapped to its ply; it is on by default because every comparison needs it."""
+    result is mapped to its ply; it is on by default because every comparison needs it. `large` makes the step a large-displacement
+    one (ADR-0142); without it the step is linear, as every run's checking deck is."""
     units = units or deck_units_of(model.spec.units)  # a deck is written in a deck system, whatever the coupon is stated in (ADR-0061)
     mesh, spec, material, section = model.mesh, model.spec, model.material, model.section
     if mesh.order != 2:
@@ -134,8 +157,20 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
     if fixed:
         out.append("*BOUNDARY")
         out += [f"{onto.get(b.target, b.target)}, {b.dof_first}, {b.dof_last}" for b in fixed]
-    out.append("*STEP")
-    out.append("*STATIC")
+    printed = ""
+    if large is None:
+        out.append("*STEP")
+        out.append("*STATIC")
+    else:
+        # CalculiX relates the second Piola-Kirchhoff stress to the Lagrangian strain by the same constants (its manual, *ELASTIC), follows
+        # the shape in increments it sizes itself, and prints the true stress and the Lagrangian strain (fea/docs/theory.md, Section 14)
+        if large.at:
+            out.append(f"*TIME POINTS, NAME={TIME_POINTS}")
+            out += [", ".join(number(f) for f in large.at[i:i + 8]) for i in range(0, len(large.at), 8)]
+            printed = f", TIME POINTS={TIME_POINTS}"
+        out.append(f"*STEP, NLGEOM, INC={large.most}")
+        out.append("*STATIC")
+        out.append(f"{number(large.first)}, 1.")
     if moving:
         out.append("*BOUNDARY")
         out += [f"{b.target}, {b.dof_first}, {b.dof_last}, {number(length(b.value) if b.dof_last <= 3 else b.value)}" for b in moving]
@@ -157,19 +192,19 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
     if requests.node_print:
         for grip in model.support_sets:
             if grip in model.node_sets:
-                out.append(f"*NODE PRINT, NSET={grip}, TOTALS=YES")
+                out.append(f"*NODE PRINT, NSET={grip}, TOTALS=YES{printed}")
                 out.append("RF")
         for name in model.probe_nodes:
-            out.append(f"*NODE PRINT, NSET=Probe-{name}")
+            out.append(f"*NODE PRINT, NSET=Probe-{name}{printed}")
             out.append("U")
     if requests.el_print:
         for name in model.probe_elements:
-            out.append(f"*EL PRINT, ELSET=Probe-{name}" + (", GLOBAL=YES" if requests.el_print_global else ""))
+            out.append(f"*EL PRINT, ELSET=Probe-{name}" + (", GLOBAL=YES" if requests.el_print_global else "") + printed)
             out.append("S, E" + (", COORD" if el_print_coord else ""))
     if requests.frd:
-        out.append("*NODE FILE")
+        out.append(f"*NODE FILE{printed}")
         out.append("U")
-        out.append("*EL FILE")
+        out.append(f"*EL FILE{printed}")
         out.append("S, E")
     out.append("*END STEP")
     return "\n".join(out) + "\n"

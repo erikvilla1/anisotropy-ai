@@ -6,7 +6,7 @@ from pathlib import Path
 
 THEORY = Path(__file__).parents[1] / "docs" / "theory.md"
 MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",
-           "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond", "ply_damage", "repair_plies")
+           "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond", "ply_damage", "repair_plies", "large_displacement")
 # The same two patterns as docs/manual/build.py.
 CODE_MARKER = re.compile(r"<!--\s*code:\s*(.+?)\s*-->")
 FUNCTION_REFERENCE = re.compile(r"(?:[Cc]omputed|[Cc]hecked) by ((?:`[\w.]+`(?:,\s*|\s+and\s+)?)+)")
