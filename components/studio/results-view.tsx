@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { explainJob, sameResults, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
-import { answerOf, answerStat, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
+import { answerOf, answerStat, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, outsideWhere, type AnswerRow } from "@/lib/studio-answer";
 import { customerText, downloadable, setWords, shownSentence } from "@/lib/studio-copy";
 import { useAllTests, type FieldView, type Place } from "./project-context";
 import { DEFAULT_PALETTE, isPalette, legendGradient, legendTicks, overlayColors, PALETTES, percentChange, printed, scaleFor, settled, type Palette, type Scale } from "@/lib/studio-colors";
@@ -402,6 +402,8 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
   const who = (r: { ply: number; angle: number; face: string | null }) => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
   const extremes = fields.summary.ply_extremes;
   const reading = fields.summary.gauge_reading;
+  const corners = fields.summary.held_corners;
+  const outside = a.outside ? outsideWhere(a.outside, a.basisWords) : null;
   return (
     <div className="studio-panel studio-answer" data-testid="answer" data-basis={a.basis} data-fails={e.fails}>
       <h3>First-ply failure <span className="studio-badge">{a.basisWords}</span></h3>
@@ -434,11 +436,16 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
           The gauge section is read at least {printed(reading.stand_off)} {L} from each tab line, a quarter of the {reading.of}, the same distance on every mesh.
         </p>
       ) : null}
-      {a.outside ? (
+      {a.basis === "away" && corners ? (
+        <p className="studio-muted" data-testid="answer-corner-reading">
+          The plate is read at least {printed(corners.stand_off)} {L} from each held corner, where a held edge meets a free one, a quarter of its {corners.of}, the same distance on every mesh.
+        </p>
+      ) : null}
+      {a.outside && outside ? (
         <p className="studio-answer-outside" data-testid="answer-outside">
-          {a.outside.touches_grip ? "At a grip edge" : a.outside.near_tab ? "Beside a tab line" : `Outside ${a.basisWords}`}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
+          {outside.where}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, {modeWords(a.outside.mode)}, element{" "}
           {a.outside.label.split(".").pop()} {where(a.outside.xy, L)}.
-          {a.outside.touches_grip || a.outside.near_tab ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
+          {outside.singular ? " Stress there grows as the mesh is refined, so it is reported separately." : ""}{" "}
           <button type="button" className="studio-text-button" onClick={() => onShow(a.outside!.element, a.outside!.ply, a.outside!.criterion, a.outside!.face)}>Show</button>
         </p>
       ) : null}

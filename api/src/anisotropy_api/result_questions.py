@@ -41,7 +41,7 @@ QUANTITIES: dict[str, str] = {
     "E12": "ply engineering shear strain, γ₁₂",
 }
 REGIONS: dict[str, str] = {
-    "default": "no region named: the gauge section where the model has one, else the whole model",
+    "default": "no region named: the gauge section where the model has one, a plate away from its held corners, else the whole model",
     "gauge": "the gauge section, away from the grips",
     "whole": "the whole model, the grips' clamped edges included",
 }

@@ -285,7 +285,7 @@ def answer_of_outcome(outcome: dict | None) -> dict | None:
         return None
     try:
         factor, face = float(answer["factor"]), answer.get("face")
-        if not math.isfinite(factor) or answer["basis"] not in ("gauge", "whole") or not isinstance(answer["fails"], bool):
+        if not math.isfinite(factor) or answer["basis"] not in ("gauge", "away", "whole") or not isinstance(answer["fails"], bool):
             return None
         return {"basis": answer["basis"], "criterion": str(answer["criterion"]), "fails": answer["fails"], "factor": factor,
                 "ply": int(answer["ply"]), "angle": float(answer["angle"]), "face": None if face is None else str(face)}

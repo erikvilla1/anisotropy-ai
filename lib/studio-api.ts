@@ -60,7 +60,7 @@ export type WorkingRow = { symbol: string; value: number; unit: string; what: st
 export type WorkingEquation = { formula: string | null; substituted: string; result: { symbol: string; value: number; unit: string } | null };
 export type WorkingStep = { id: string; title: string; source: string; text: string; given: WorkingRow[]; equations: WorkingEquation[]; note?: string };
 export type WorkingChain = { ply: number; angle: number; element: string; face: string | null; where: string; factor: number; steps: WorkingStep[] };
-export type Working = { basis: "gauge" | "whole"; digits: { given: number; result: number }; criteria: Record<string, WorkingChain> };
+export type Working = { basis: Basis; digits: { given: number; result: number }; criteria: Record<string, WorkingChain> };
 export type QualitySummary = { elements: number; acceptable: boolean; measures: Record<string, { word: string; worst: number; element: number; threshold: number; warns: string; over: number }> };
 /** One value per ply (a membrane solve), or one per face of the ply, bottom then top (a shell solve, ADR-0053); `Fields.mesh.faces` says which. */
 export type Faced<T> = T | T[];
@@ -71,22 +71,30 @@ export type FirstPlyFailure = { factor: number; index: number; element: number; 
   touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null;
   /** ADR-0108: inside the stand-off from a tab line without touching a gripped node; absent on a result solved before it. */
   near_tab?: boolean;
+  /** ADR-0108 amendment 2: within the stand-off from a plate's held corner; absent on a result solved before it. */
+  near_corner?: boolean;
   /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
    * reaction, as the package wrote them; absent on older jobs. */
   fails?: boolean; at_failure?: AtFailure | null };
 export type AtFailure = { applied: number; unit: string; reaction: number; reaction_unit: string; every_load: boolean };
-/** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
-export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
+/** Where the answer is read (ADR-0085): the gauge section when the coupon has one, a plate away from its held corners when it has one (ADR-0108
+ * amendment 2), the whole model otherwise. */
+export type Basis = "gauge" | "away" | "whole";
+/** The answer's basis and earliest criterion (ADR-0085); an earlier failure outside the basis apart. */
+export type Verdict = { basis: Basis; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
 export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
-  mode: string; place: string; touches_grip: boolean; near_tab?: boolean; xy: number[] };
+  mode: string; place: string; touches_grip: boolean; near_tab?: boolean; near_corner?: boolean; xy: number[] };
 /** Where the gauge section is read (ADR-0108): at least `stand_off` (the result's length unit) from each tab line, a `fraction` of the coupon's width
  * or of its gauge length (`of`), with the number of `Gauge` elements read and left out. */
 export type GaugeReading = { stand_off: number; fraction: number; of: "width" | "gauge length"; tab_lines: number[]; elements: number; left_out: number };
+/** Where a plate is read (ADR-0108 amendment 2): at least `stand_off` (the result's length unit) from each held corner, a point on an edge where a
+ * run of nodes held in the plane ends; a `fraction` of the plate's width or length (`of`), the corners, and the number of elements read and left out. */
+export type HeldCorners = { stand_off: number; fraction: number; of: "width" | "length"; corners: number[][]; elements: number; left_out: number };
 /** A ply stress at its largest of one sign (or magnitude), with where it is; `ply` and `angle` on the extremes over every ply. Null when never reached. */
 export type PlyExtreme = { value: number; element: number; label: string; xy: number[]; face: string | null; ply?: number; angle?: number } | null;
 export type ExtremeSet = { S11: { tension: PlyExtreme; compression: PlyExtreme }; S22: { tension: PlyExtreme; compression: PlyExtreme };
   S12: { largest: PlyExtreme }; mises: { largest: PlyExtreme } };
-export type PlyExtremes = { basis: "gauge" | "whole"; plies: ({ ply: number; angle: number } & ExtremeSet)[]; overall: ExtremeSet };
+export type PlyExtremes = { basis: Basis; plies: ({ ply: number; angle: number } & ExtremeSet)[]; overall: ExtremeSet };
 export type Fields = {
   units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
@@ -94,6 +102,9 @@ export type Fields = {
     faces?: string[] | null; translations?: number;
     /** The elements the gauge section is read at (ADR-0108), null for a model without one; absent on a result solved before it. */
     gauge_elements?: number[] | null;
+    /** The elements a plate is read at, away from its held corners (ADR-0108 amendment 2); null for a model with a gauge section or no held
+     * corner; absent on a result solved before it. */
+    away_elements?: number[] | null;
     /** The elements clamped inside a grip (ADR-0063 amendment 4): their strain and stress are the clamp's, drawn as the grip, not by value;
      * absent on a result solved before it. */
     held_elements?: number[] };
@@ -121,6 +132,8 @@ export type Fields = {
     /** The same over the gauge section alone, read past the stand-off from each tab line (`gauge_reading`, ADR-0108; before it, the Gauge elements
      * that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null; gauge_reading?: GaugeReading | null;
+    /** The same over a plate away from its held corners (`held_corners`, ADR-0108 amendment 2); empty for a model without one, absent on older jobs. */
+    fpf_away?: Record<string, FirstPlyFailure>; earliest_away?: string | null; held_corners?: HeldCorners | null;
     /** The gauge-centre element (ADR-0099 amendment 3): the one the hand check and the Verification table read, which a question that names
      * no place is answered at. Null for a model without a gauge section or with a hole at its centre; absent on a result solved before it. */
     gauge_centre?: { element: number; label: string; xy: number[]; basis: string } | null;

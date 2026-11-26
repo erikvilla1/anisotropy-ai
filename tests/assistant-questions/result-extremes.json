@@ -1,9 +1,10 @@
 {
   "feature": "result-extremes",
   "title": "Where a stress or a strain is largest",
-  "records": ["ADR-0100", "ADR-0108"],
+  "records": ["ADR-0100", "ADR-0108", "ADR-0108 amendment 2"],
   "watches": ["lib/result-question.ts", "mcp-server/src/anisotropy_mcp/results.py"],
   "questions": [
+    {"ask": "where is sigma 2 highest", "kind": "which", "style": "jargon", "page": "plate-results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₂: 37.22 MPa", "says": ["plate away from its held corners"]}},
     {"ask": "where is the shear stress highest?", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest |τ₁₂|: −45.86 MPa", "says": ["gauge section"]}, "mcp": {"tool": "result_extreme", "args": {"quantities": ["S12"], "sense": "magnitude"}, "says": ["\"value\":-45.8611282", "\"tied_plies\":[3,6,8]"]}},
     {"ask": "max sigma 2", "kind": "which", "style": "terse", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₂: 60.6 MPa"}},
     {"ask": "highest transverse stress", "kind": "which", "style": "plain", "page": "results", "route": "value", "answer": {"kind": "extremes", "heading": "Largest σ₂: 60.6 MPa"}},

@@ -32,8 +32,10 @@ AXIS_WORDS = {"x": "across the coupon", "y": "along the coupon", "z": "out of th
 STRESS_WORDS = {"S11": "sigma_1 along the fibres", "S22": "sigma_2 across the fibres", "S12": "tau_12 in-plane shear"}
 # an isotropic material is one layer whose axis 1 runs along the coupon (ADR-0075): no fibres to name
 ISOTROPIC_WORDS = {"S11": "sigma_1 along the coupon", "S22": "sigma_2 across it", "S12": "tau_12 in-plane shear"}
-# where the answer is read (ADR-0085): the gauge section away from the clamped edges, or the whole model of a coupon without one
-BASIS_WORDS = {"gauge": "the gauge section", "whole": "the whole model"}
+# where the answer is read (ADR-0085): the gauge section away from the clamped edges, a plate away from its held corners (ADR-0108
+# amendment 2), or the whole model of a coupon without either
+BASIS_WORDS = {"gauge": "the gauge section", "away": "the plate away from its held corners", "whole": "the whole model"}
+BASIS_TABLES = {"gauge": "fpf_gauge", "away": "fpf_away", "whole": "fpf"}
 EXTREME_WORDS = {("S11", "tension"): "the largest tension along the fibres (sigma_1)", ("S11", "compression"): "the largest compression along the fibres (sigma_1)",
                  ("S22", "tension"): "the largest tension across the fibres (sigma_2)", ("S22", "compression"): "the largest compression across the fibres (sigma_2)",
                  ("S12", "largest"): "the largest in-plane shear (tau_12)"}
@@ -84,11 +86,13 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         facts[f"max_{name}_angle"] = printed(float(m["angle"]))
         facts[f"max_{name}_element"] = m["label"].rsplit(".", 1)[-1]
         facts[f"max_{name}_face"] = m.get("face")
-    # the answer is given on the verdict's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise
+    # the answer is given on the verdict's basis (ADR-0085): the gauge section when the coupon has one, a plate away from its held
+    # corners (ADR-0108 amendment 2), the whole model otherwise
     verdict = summary.get("verdict")
-    gauge = bool(verdict and verdict["basis"] == "gauge")
-    table = summary.get("fpf_gauge", {}) if gauge else summary["fpf"]
-    facts["basis"] = BASIS_WORDS["gauge" if gauge else "whole"]
+    basis = verdict["basis"] if verdict and verdict["basis"] in BASIS_TABLES else "whole"
+    gauge = basis == "gauge"
+    table = summary.get(BASIS_TABLES[basis]) or {} if basis != "whole" else summary["fpf"]
+    facts["basis"] = BASIS_WORDS[basis]
     facts["criteria"] = list(table)
     facts["earliest"] = verdict["earliest"] if verdict else summary.get("earliest")
     for criterion, f in table.items():
@@ -114,10 +118,13 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
     if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip or inside the stand-off (ADR-0108): reported apart
         facts.update(outside_criterion=outside["criterion"], outside_factor=printed(float(outside["factor"])),
                      outside_element=outside["label"].rsplit(".", 1)[-1], outside_place=outside["place"], outside_touches_grip=bool(outside["touches_grip"]),
-                     outside_near_tab=bool(outside.get("near_tab", False)))
+                     outside_near_tab=bool(outside.get("near_tab", False)), outside_near_corner=bool(outside.get("near_corner", False)))
     reading = summary.get("gauge_reading")
     if gauge and reading:  # where the gauge section is read (ADR-0108): the stand-off from each tab line, in the result's length unit
         facts.update(gauge_stand_off=printed(float(reading["stand_off"])), gauge_stand_off_of=reading["of"])
+    corners = summary.get("held_corners")
+    if basis == "away" and corners:  # where a plate is read (ADR-0108 amendment 2): the stand-off from each held corner
+        facts.update(corner_stand_off=printed(float(corners["stand_off"])), corner_stand_off_of=corners["of"])
     extremes = summary.get("ply_extremes")
     if extremes:  # the largest ply stresses on the same basis, tension and compression apart (ADR-0085)
         for name, picks in (("S11", ("tension", "compression")), ("S22", ("tension", "compression")), ("S12", ("largest",))):
@@ -215,10 +222,15 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
                    + (": the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer."
                       if facts["outside_touches_grip"] else
                       ": inside the stand-off from a tab line, where the corner of the grip sets the stress and it grows as the mesh is refined, "
-                      "so it is reported apart from the answer." if facts.get("outside_near_tab") else "."))
+                      "so it is reported apart from the answer." if facts.get("outside_near_tab") else
+                      ": beside a held corner, where a held edge meets a free one and the stress grows as the mesh is refined, so it is reported "
+                      "apart from the answer." if facts.get("outside_near_corner") else "."))
     if "gauge_stand_off" in facts:
         out.append(f"The gauge section is read at least {number(facts['gauge_stand_off'])} {facts['length_unit']} from each tab line, a quarter of the "
                    f"{facts['gauge_stand_off_of']}, the same distance on every mesh.")
+    if "corner_stand_off" in facts:
+        out.append(f"The plate is read at least {number(facts['corner_stand_off'])} {facts['length_unit']} from each held corner, a quarter of its "
+                   f"{facts['corner_stand_off_of']}, the same distance on every mesh.")
     return out + context + method_sentences(facts)
 
 

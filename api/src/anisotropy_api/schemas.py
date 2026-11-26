@@ -494,10 +494,11 @@ class CouponJobRequest(Contract):
 
 
 class JobAnswer(Contract):
-    """A done run's answer in a few values (ADR-0109), as the fea package wrote it: on the gauge section or the whole model, by the
-    criterion that governs, whether a ply fails at the applied loading, the factor on that loading at first-ply failure, and the ply."""
+    """A done run's answer in a few values (ADR-0109), as the fea package wrote it: on the gauge section, a plate away from its held
+    corners (ADR-0108 amendment 2) or the whole model, by the criterion that governs, whether a ply fails at the applied loading, the
+    factor on that loading at first-ply failure, and the ply."""
 
-    basis: Literal["gauge", "whole"]
+    basis: Literal["gauge", "away", "whole"]
     criterion: str
     fails: bool
     factor: float

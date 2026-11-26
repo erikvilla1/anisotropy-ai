@@ -38,8 +38,8 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps", "repair", "repair-solved", "repair-external", "repair-bond",
-  "repair-plies"] as const;
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "plate-results", "start", "wing", "wing-caps", "repair", "repair-solved",
+  "repair-external", "repair-bond", "repair-plies"] as const;
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
  * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
  * `lib/wing-chat.ts`, ADR-0128), then the repair's chat (pages "repair", "repair-solved" with its slice solved, "repair-external" and
@@ -185,6 +185,9 @@ const REPAIR_HELD: Record<string, RepairHeld> = {
 };
 const RESULTS = { fields: studio("fields.json") as Fields, facts: !!studio("explanation.json").facts, explanation: studio("explanation.json") };
 const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported("explanation.json").facts, explanation: imported("explanation.json") };
+/** A plate's results (page "plate-results"): a strip clamped at its bottom end and pulled along its top, read away from its held corners (ADR-0108 amendment 2). */
+const clamped = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio-plate-clamped/${name}`, "utf8"));
+const PLATE_RESULTS = { fields: clamped("fields.json") as Fields, facts: !!clamped("explanation.json").facts, explanation: clamped("explanation.json") };
 
 /** The page a question is asked on: the setup, the results shown and the chat's state, with or without a model reading. */
 export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<string, unknown> | null; state: ChatState; past: boolean; imported: boolean;
@@ -192,8 +195,10 @@ export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<str
 
 export function scene(question: Question, modelReads: boolean): Scene {
   const example = exampleForm("2026-11-19");
-  const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED : null;
-  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } : example; // a plate with a hole, so the hole can be held
+  const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED
+    : question.page === "plate-results" ? PLATE_RESULTS : null;
+  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } // a plate with a hole, so the hole can be held
+    : question.page === "plate-results" ? { ...example, test: PLATE_TEST } : example;
   const fields = results?.fields ?? null;
   const picked = question.picked !== undefined && fields ? fields.mesh.element_labels.findIndex((l) => l.split(".").pop() === String(question.picked)) : -1;
   return {

@@ -3,6 +3,7 @@ pressure plate reproduces the Navier case; the spec refuses what it must by name
 the rigid-body motions."""
 
 import json
+import math
 
 import numpy as np
 import pytest
@@ -10,6 +11,8 @@ import pytest
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.cases import load_case
+from anisotropy_fea.explain import explanation
+from anisotropy_fea.fields import run_answer
 from anisotropy_fea.checks import rigid_modes_left, setup_checklist
 from anisotropy_fea.femodel import build_model, consistent_area_loads
 from anisotropy_fea.intake import FORM_VERSION, IntakeError, check_form, read_values, spec_from_values, values_of_spec
@@ -178,3 +181,77 @@ def test_a_values_file_without_lists_is_still_the_form(tmp_path):
     path.write_text(json.dumps({**data, "form_version": FORM_VERSION}), encoding="utf-8")
     with pytest.raises(IntakeError, match="supports must be a list of objects"):
         read_values(path)
+
+
+# ---------------------------------------------------------------------------------- a plate read away from its held corners (ADR-0108 amendment 2)
+
+PULLED_PLATE = {"form_version": FORM_VERSION, "test": "plate", "library": "im7-8552", "angles": [45, 0, -45, 90], "symmetric": "yes", "length": 250,
+                "width": 25, "units": "mm-MPa", "filled_by": "a test", "date": "2026-11-26", "size_from": "a test", "element_size": 4.2, "G13": 4688.43,
+                "G23": 2987.73, "criteria": "all", "supports": [{"region": "Edge-Bottom", "dofs": [1, 2, 3, 4, 5, 6]}],
+                "loads": [{"region": "Edge-Top", "dof": 2, "total": 10000}]}
+
+
+def solved_plate(tmp_path, **changes):
+    from anisotropy_fea.fields import field_data, held_corners
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps({**PULLED_PLATE, **changes}), encoding="utf-8")
+    values = check_form(read_values(path))
+    spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+    deck_path = tmp_path / "plate.inp"
+    deck_path.write_text(write_abaqus(build_model(spec)), encoding="utf-8")
+    deck = read_deck(deck_path, spec.units)
+    solution = solve_deck(deck)
+    return held_corners(deck, solution), field_data(deck, solution, "mm-MPa")
+
+
+def test_a_plate_clamped_at_one_end_is_read_away_from_the_two_corners_where_the_clamp_meets_a_free_edge(tmp_path):
+    corners, data = solved_plate(tmp_path)
+    assert sorted(map(tuple, corners["points"])) == [(0.0, 0.0), (0.025, 0.0)]  # SI: the clamped end's two corners, not the loaded end's
+    assert corners["stand_off"] == pytest.approx(0.25 * 0.025) and corners["of"] == "width"
+    s = data["summary"]
+    assert s["gauge_reading"] is None and s["held_corners"]["corners"] == [[0.0, 0.0], [25.0, 0.0]] and s["held_corners"]["stand_off"] == pytest.approx(6.25)
+    assert s["held_corners"]["elements"] + s["held_corners"]["left_out"] == data["mesh"]["element_count"]
+    verdict = s["verdict"]
+    assert verdict["basis"] == "away" and verdict["earliest"] == s["earliest_away"] and verdict["factor"] == s["fpf_away"][verdict["earliest"]]["factor"]
+    # the whole model's earliest failure is at a clamped corner, earlier than the answer, and reported apart
+    whole = s["fpf"][s["earliest"]]
+    assert whole["near_corner"] and whole["factor"] < verdict["factor"]
+    assert verdict["outside_earlier"]["near_corner"] and verdict["outside_earlier"]["factor"] == whole["factor"]
+    assert all(not f["near_corner"] for f in s["fpf_away"].values()) and s["ply_extremes"]["basis"] == "away"
+    assert all(min(math.dist(f["xy"], c) for c in s["held_corners"]["corners"]) >= 6.25 for f in s["fpf_away"].values())
+    assert s["working"]["basis"] == "away"
+    sentences = explanation(s, {"designation": "IM7-PLT-L1", "test": "plate"}, "mm-MPa", data["labels"])["sentences"]
+    assert any("in the plate away from its held corners" in t for t in sentences)
+    assert any("beside a held corner, where a held edge meets a free one" in t for t in sentences)
+    assert any(t.startswith("The plate is read at least 6.25 mm from each held corner, a quarter of its width") for t in sentences)
+    assert run_answer(s)["basis"] == "away" and run_answer(s)["factor"] == verdict["factor"]
+
+
+def test_two_held_edges_that_meet_hold_their_corner_together_and_a_plate_held_all_round_is_read_whole(tmp_path):
+    corners, _ = solved_plate(tmp_path, supports=[{"region": "Edge-Bottom", "dofs": [1, 2, 3, 4, 5, 6]}, {"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}])
+    assert sorted(map(tuple, corners["points"])) == [(0.0, 0.25), (0.025, 0.0)]  # the left edge's top end and the bottom edge's right end
+    # held the same way on all four edges, a plate has no end to a held run: read whole, as before
+    none, data = solved_plate(tmp_path, supports=[{"region": edge, "dofs": [1, 2, 3]} for edge in ("Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right")],
+                              loads=[{"region": "Face", "pressure": 0.01}])
+    assert none is None and data["summary"]["held_corners"] is None and data["summary"]["fpf_away"] == {}
+    assert data["summary"]["verdict"]["basis"] == "whole" and data["summary"]["verdict"]["outside_earlier"] is None
+    # nor has a plate held in its plane at single points only, to stop it sliding (the public plate under pressure)
+    values = check_form(read_values(PLATE_VALUES))
+    spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+    deck_path = tmp_path / "points.inp"
+    deck_path.write_text(write_abaqus(build_model(spec)), encoding="utf-8")
+    deck = read_deck(deck_path, spec.units)
+    from anisotropy_fea.fields import held_corners
+    assert held_corners(deck, solve_deck(deck)) is None
+
+
+def test_a_plate_with_a_gauge_section_keeps_the_gauge_rule(tmp_path):
+    spec = to_si(parse_spec(unt_as_plate(), "plate-unt.toml"))
+    deck_path = tmp_path / "plate.inp"
+    deck_path.write_text(write_abaqus(build_model(spec)), encoding="utf-8")
+    deck = read_deck(deck_path, spec.units)
+    from anisotropy_fea.fields import field_data, held_corners
+    solution = solve_deck(deck)
+    assert held_corners(deck, solution) is None  # its tabs bound a gauge section, read a quarter width from the tabs (ADR-0108)
+    summary = field_data(deck, solution, "mm-MPa")["summary"]
+    assert summary["held_corners"] is None and summary["verdict"]["basis"] == "gauge"

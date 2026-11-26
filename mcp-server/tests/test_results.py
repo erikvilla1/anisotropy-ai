@@ -160,3 +160,18 @@ def test_the_first_element_in_the_meshs_order_and_the_first_ply_hold_a_tie():
     least, = results.extremes(one, ["S11"], "smallest")["extremes"]
     assert (least["ply"], least["element"], least["value"], least["tied_plies"]) == (1, "1", 1.0, [])
     assert results.extremes(one, ["S11"])["region"] == "the whole model" and "failure" not in results.values_at(one, 2)["rows"][0]
+
+
+PLATE = fixture("fields.json", REPO / "tests" / "fixtures" / "studio-plate-clamped")
+
+
+def test_a_plate_with_held_corners_is_read_away_from_them_when_no_region_is_named():
+    """ADR-0108 amendment 2: the elements the package wrote, none derived here; the whole model still reaches the clamped corner."""
+    away = results.extremes(PLATE, ["S22"], "largest")
+    assert away["region"] == "the plate away from its held corners" and away["elements"] == PLATE["summary"]["held_corners"]["elements"]
+    package = PLATE["summary"]["ply_extremes"]["overall"]["S22"]["tension"]  # the package's own extreme on the answer's basis, full precision
+    assert away["extremes"][0]["value"] == pytest.approx(package["value"], rel=1e-8)  # the mirror element ties at 9 digits
+    whole = results.extremes(PLATE, ["S22"], "largest", "whole")
+    assert whole["region"] == "the whole model" and whole["extremes"][0]["value"] > away["extremes"][0]["value"]
+    older = {**PLATE, "mesh": {key: value for key, value in PLATE["mesh"].items() if key != "away_elements"}}
+    assert results.extremes(older, ["S22"], "largest")["region"] == "the whole model"

@@ -2,7 +2,7 @@
  * calculated?". The package wrote every step with its values (`fields.summary.working`); the page finds the chain asked for and shows
  * it. No model reads the request or writes a number. */
 import { formatNumber } from "./number-format";
-import { CRITERION_NAMES } from "./studio-answer";
+import { BASIS_WORDS, CRITERION_NAMES } from "./studio-answer";
 import type { Fields, Working, WorkingChain } from "./studio-api";
 
 const THING = "(?:formulas?|formulae|equations?|proof|derivation|working|workings|calculations?|maths?|steps)";
@@ -56,7 +56,7 @@ function isChain(v: unknown): v is WorkingChain {
 /** The working a result carries, read only in its own shape; null on a result solved before it or where none is written. */
 export function workingOf(fields: Pick<Fields, "summary"> | null | undefined): Working | null {
   const working = fields?.summary.working;
-  if (!isObject(working) || !isObject(working.criteria) || (working.basis !== "gauge" && working.basis !== "whole")) return null;
+  if (!isObject(working) || !isObject(working.criteria) || !["gauge", "away", "whole"].includes(working.basis as string)) return null;
   const criteria = Object.fromEntries(Object.entries(working.criteria).filter(([, chain]) => isChain(chain)));
   return Object.keys(criteria).length ? { ...(working as Working), criteria: criteria as Record<string, WorkingChain> } : null;
 }
@@ -75,11 +75,12 @@ export function workingFor(fields: Pick<Fields, "summary"> | null | undefined, t
   const nameOf = (criterion: string) => CRITERION_NAMES[criterion] ?? criterion;
   const named = criterionNamed(text);
   if (named && !written.includes(named)) return { kind: "not-worked", name: nameOf(named), others: written.map(nameOf) };
-  const earliest = fields.summary.verdict?.earliest ?? (working.basis === "gauge" ? fields.summary.earliest_gauge : fields.summary.earliest);
+  const earliest = fields.summary.verdict?.earliest
+    ?? (working.basis === "gauge" ? fields.summary.earliest_gauge : working.basis === "away" ? fields.summary.earliest_away : fields.summary.earliest);
   const criterion = named ?? (earliest && written.includes(earliest) ? earliest : written[0]);
   const chain = working.criteria[criterion];
   const asked = stepAsked(text);
-  return { kind: "chain", criterion, name: nameOf(criterion), chain, basis: working.basis === "gauge" ? "the gauge section" : "the whole model",
+  return { kind: "chain", criterion, name: nameOf(criterion), chain, basis: BASIS_WORDS[working.basis],
     others: written.filter((c) => c !== criterion).map(nameOf), step: asked ? chain.steps.find((s) => s.id === asked) ?? null : null };
 }
 

@@ -36,6 +36,8 @@ test("the answer's words are the package's values, picked and printed: nothing i
   assert.deepEqual(answerWords(readJobAnswer(ANSWER), printed), { verdict: "Holds", loading: "1.033 × the applied load", facts: ["ply 4 (90°)", "Tsai-Hill", "gauge section"] });
   assert.deepEqual(answerWords(readJobAnswer({ ...ANSWER, fails: true, factor: 0.9274, basis: "whole", criterion: "max_stress", face: "top", ply: 1, angle: -45 }), printed),
     { verdict: "Fails", loading: "0.9274 × the applied load", facts: ["ply 1 (-45°), top face", "Maximum stress", "whole model"] });
+  assert.deepEqual(answerWords(readJobAnswer({ ...ANSWER, basis: "away", factor: 1.6812 }), printed)?.facts,
+    ["ply 4 (90°)", "Tsai-Hill", "plate away from its held corners"], "a plate's answer, read away from its held corners (ADR-0108 amendment 2)");
   assert.equal(answerWords(null, printed), null);
 });
 

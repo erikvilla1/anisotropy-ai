@@ -32,7 +32,7 @@ import { modelFileAnswer } from "@/lib/model-file";
 import type { ModelProgram } from "@/lib/studio-api";
 import { ModelFileButtons } from "./model-download";
 import { printed } from "@/lib/studio-colors";
-import { answerStat, CRITERION_NAMES, modeWords } from "@/lib/studio-answer";
+import { answerStat, CRITERION_NAMES, modeWords, outsideWhere } from "@/lib/studio-answer";
 import { panel, panelOfKey, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
 import { tab, TAB_OF_STEP, tabOfKey, tabToFix, type TabId } from "@/lib/model-tree";
 import { revealPanel, showPanel } from "@/components/workspace/panels/step-panel";
@@ -1263,7 +1263,9 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
     const margin = marginNote(asked, found, printed);
     const decides = decidesNote(asked); // "is it safe?": the verdict, and that the decision is the engineer's (ADR-0139)
     const reading = answer.basis === "gauge" ? from.summary.gauge_reading : null;
+    const corners = answer.basis === "away" ? from.summary.held_corners : null;
     const outside = answer.outside;
+    const at = outside ? outsideWhere(outside, answer.basisWords) : null;
     return (
       <div data-testid="chat-failure" data-reader={reader} data-source={preview ? "live" : "run"} data-basis={answer.basis} data-criterion={row.criterion} data-fails={row.fails}>
         {entry.confirmed && lines.confirmed ? <><h4 data-testid="chat-failure-yes">Yes</h4><p data-testid="chat-failure-loading"><strong>{lines.confirmed}</strong></p></>
@@ -1291,7 +1293,8 @@ export function CouponChat({ apiBaseUrl, onSwitch }: {
           <p className="chat-note" data-testid="chat-failure-note">
             R is the load factor at first-ply failure, the onset of damage.
             {reading ? ` Read at least ${printed(reading.stand_off)} ${L} from each tab line.` : ""}
-            {outside ? ` ${outside.touches_grip ? "At a grip edge" : outside.near_tab ? "Beside a tab line" : `Outside ${answer.basisWords}`} ${outside.name} is reached at ${printed(outside.factor)} ×, in ${plyWords(outside)}${outside.touches_grip || outside.near_tab ? "; that value grows with a finer mesh, so it is not the answer" : ""}.` : ""}
+            {corners ? ` Read at least ${printed(corners.stand_off)} ${L} from each held corner.` : ""}
+            {outside && at ? ` ${at.where} ${outside.name} is reached at ${printed(outside.factor)} ×, in ${plyWords(outside)}${at.singular ? "; that value grows with a finer mesh, so it is not the answer" : ""}.` : ""}
           </p>
         </details>
         <Chips>
