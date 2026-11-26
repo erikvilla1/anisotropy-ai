@@ -420,7 +420,6 @@ def test_a_reason_names_a_short_word_and_never_a_long_sentence_of_the_models():
 
 BANKS = ROOT / "tests" / "assistant-questions"
 BANKED = [(path.stem, q) for path in sorted(BANKS.glob("*.json")) for q in json.loads(path.read_text(encoding="utf-8"))["questions"]]
-UNIT_GAP = "plan: a coupon's load or displacement written with its unit"
 
 
 def test_every_plan_a_bank_expects_is_one_the_contract_allows():
@@ -439,20 +438,23 @@ def test_every_plan_a_bank_expects_is_one_the_contract_allows():
         assert len(want.get("tools", [])) <= planner.MAX_STEPS, where
 
 
-def test_the_planners_known_gap_is_still_open_and_the_banks_mark_it():
-    """A coupon's load or displacement written with its unit is refused whichever way the model gives it: `Value` is a pure number of the
-    tools' (ADR-0143) and the planner wants the unit written. When this fails the gap is closed: take the "plan:" marks off the banks."""
+def test_a_coupons_load_or_travel_written_with_its_unit_is_planned_and_one_without_it_is_not():
+    """A coupon's Value takes the unit the sentence writes beside its number, by the Loading type set before it (ADR-0143's `row`); the
+    same number without its unit is still refused, since 2 N is not the 2 kN the sentence asks for. The banks mark no "plan:" gap now."""
     pulled = "pull it with 2 kN and tell me if it holds"
-    for unit in ("kN", None):
-        raw = plan(step("row", "pull it with 2 kN", key="control", value="force"), step("row", "pull it with 2 kN", key="value", value="2", unit=unit),
-                   step("run", "tell me if it holds"), step("answer", "tell me if it holds", question="Does it hold at 2 kN?"))
-        assert not planner.check_plan(raw, pulled, COUPON).ok
+    def pull(unit):
+        return plan(step("row", "pull it with 2 kN", key="control", value="force"), step("row", "pull it with 2 kN", key="value", value="2", unit=unit),
+                    step("run", "tell me if it holds"), step("answer", "tell me if it holds", question="Does it hold at 2 kN?"))
+    kept = planner.check_plan(pull("kN"), pulled, COUPON)
+    assert kept.ok, kept.reasons
+    assert not planner.check_plan(pull(None), pulled, COUPON).ok
     moved = "set the applied displacement to 2 mm and run it"
-    for unit in ("mm", None):
-        raw = plan(step("row", "set the applied displacement to 2 mm", key="value", value="2", unit=unit), step("run", "run it"))
-        assert not planner.check_plan(raw, moved, COUPON).ok
-    marked = [q for _, q in BANKED if str(q.get("gap", "")).startswith("plan:")]
-    assert marked and all(q["gap"].startswith(UNIT_GAP) for q in marked)
+    def move(unit):
+        return plan(step("row", "set the applied displacement to 2 mm", key="value", value="2", unit=unit), step("run", "run it"))
+    assert planner.check_plan(move("mm"), moved, COUPON).ok
+    assert not planner.check_plan(plan(step("row", "pull it with 2 kN", key="value", value="2", unit="kN"), step("run", "tell me if it holds")),
+                                  pulled, COUPON).ok  # a force on a coupon pulled by travel: the Loading type comes first
+    assert not [q for _, q in BANKED if str(q.get("gap", "")).startswith("plan:")]
 
 
 # ------------------------------------------------------------------------------------------- the fixture and what "untouched" means

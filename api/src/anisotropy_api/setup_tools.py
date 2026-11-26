@@ -415,6 +415,20 @@ def _row_change(change: dict[str, Any], form: dict[str, str]) -> tuple[str, str]
                 return f"a ply's angle is in degrees, not {change.get('unit')}"
             if abs(number) > 90:
                 return f"{text} is not an angle from -90 to 90 degrees"
+        elif f.get("unit") == "amount" and _text(change.get("unit")).strip():
+            # a coupon's Value is a travel under displacement and a force under force (the Loading type row, set first)
+            control = _text(form.get("control")).strip()
+            quantity = COUPON_UNITS.get(unit_named(_text(change.get("unit"))) or "", ("",))[0]
+            wanted = "force" if control == "force" else "length" if control == "displacement" else None
+            if wanted is None:
+                return f"{f['label']} is a travel or a force by the Loading type, which is not set: set the Loading type first"
+            if quantity != wanted:
+                return (f"{f['label']} is a {'force' if wanted == 'force' else 'travel'} under {control} loading, and {change.get('unit')} is not: "
+                        f"set the Loading type to {'displacement' if wanted == 'force' else 'force'} first, or give the value in {labels[wanted]}")
+            converted = _converted(number, change.get("unit"), labels[wanted])
+            if isinstance(converted, str):
+                return converted
+            number = converted
         elif f.get("unit") in labels:
             converted = _converted(number, change.get("unit"), labels[f["unit"]])
             if isinstance(converted, str):

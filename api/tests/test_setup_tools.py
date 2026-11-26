@@ -56,6 +56,21 @@ def test_a_force_on_a_held_direction_is_refused_as_the_page_notes_it():
                                                       "free Edge-Bottom or hold it along other directions first"}]
 
 
+def test_a_coupons_value_takes_its_unit_by_the_loading_type():
+    """Value is a travel under displacement and a force under force; a unit of the other quantity asks for the Loading type first."""
+    pulled = tools.change_setup(COUPON, [{"action": "row", "key": "control", "value": "force"},
+                                         {"action": "row", "key": "value", "value": "2", "unit": "kN"}])
+    assert pulled.ok and pulled.content["form"]["value"] == "2000"
+    assert pulled.done == ["Loading type: displacement → force", "Value (mm or N): 1 → 2000"]
+    moved = tools.change_setup(COUPON, [{"action": "row", "key": "value", "value": "0.5", "unit": "mm"}])
+    assert moved.ok and moved.content["form"]["value"] == "0.5"
+    wrong = tools.change_setup(COUPON, [{"action": "row", "key": "value", "value": "2", "unit": "kN"}])
+    assert wrong.refused == [{"change": 1, "reason": "Value (mm or N) is a travel under displacement loading, and kN is not: set the Loading type "
+                                                    "to force first, or give the value in mm"}]
+    inches = tools.change_setup(COUPON, [{"action": "row", "key": "value", "value": "0.02", "unit": "in"}])
+    assert not inches.ok and "US units" in inches.refused[0]["reason"]
+
+
 def test_a_coupons_values_are_not_a_plates():
     with pytest.raises(ValueError, match="a plate's values"):
         tools.plate_values(COUPON)
