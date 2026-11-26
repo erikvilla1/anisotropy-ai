@@ -50,6 +50,23 @@ def test_the_manual_build_searches_the_same_modules():
     assert tuple(re.findall(r'"([\w.]+)"', listed.group(1))) == MODULES
 
 
+def test_a_table_row_that_opens_with_a_layup_stays_text_in_the_manual():
+    """LaTeX reads a bracket after a line break or a rule as its optional length, so a row that opened with `[0/90]s` stopped the
+    manual with "Illegal unit of measure" (the decision records of ADR-0142, 2026-11-25). Every row of the manual's own table and
+    every decision record's table is checked, as the build converts them."""
+    import importlib.util
+
+    docs = Path(__file__).parents[2] / "docs"
+    found = importlib.util.spec_from_file_location("manual_build", docs / "manual" / "build.py")
+    build = importlib.util.module_from_spec(found)
+    found.loader.exec_module(build)
+    rows = build.table(["Case", "Difference"], [["[0/90]s strip", "0.1 %"], ["plain", "[45/-45]"]]).splitlines()
+    assert rows[6].startswith("{}[0/90]s strip & ") and rows[7].startswith("plain & [45/-45]")
+    for record in sorted((docs / "decisions").glob("ADR-*.md")):
+        for line in build.convert(record.read_text(encoding="utf-8")).splitlines():
+            assert not line.lstrip().startswith("["), f"{record.name}: a line of the manual opens with a bracket: {line[:60]}"
+
+
 def test_theory_has_the_sections_the_manual_expects():
     text = THEORY.read_text(encoding="utf-8")
     for heading in ("## Conventions", "## Checks", "## Not modeled yet"):

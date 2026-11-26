@@ -196,6 +196,12 @@ def blocks(md: str):
             yield "paragraph", " ".join(paragraph)
 
 
+def row_start(row: str) -> str:
+    """A table row that opens with a bracket, such as the layup [0/90]s, would be read as the optional length of the
+    line break or the rule before it ("Illegal unit of measure"); an empty group in front keeps it text."""
+    return "{}" + row if row.lstrip().startswith("[") else row
+
+
 def table(header: list[str], rows: list[list[str]], keep: list[str] | None = None, size: str = r"\small",
           spec: str | None = None) -> str:
     columns = [header.index(name) for name in keep] if keep else list(range(len(header)))
@@ -210,7 +216,7 @@ def table(header: list[str], rows: list[list[str]], keep: list[str] | None = Non
         if len(header) > 5:
             size = r"\footnotesize"
     head = " & ".join(r"\textbf{" + inline(cell) + "}" for cell in header) + r" \\"
-    body = [" & ".join(inline(cell) for cell in row) + r" \\" for row in rows]
+    body = [row_start(" & ".join(inline(cell) for cell in row)) + r" \\" for row in rows]
     return "\n".join(["{" + size, rf"\begin{{xltabular}}{{\linewidth}}{{{spec}}}", r"\toprule", head,
                       r"\midrule", r"\endhead", *body, r"\bottomrule", r"\end{xltabular}", "}"])
 
