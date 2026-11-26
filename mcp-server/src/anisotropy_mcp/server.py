@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import results
 from .api import Api, ApiRefused
@@ -64,7 +64,34 @@ A bonded patch repair: the repair tools read a repair file on this machine by it
 17. No tool gives the repair's strength, a failure load, a margin, an allowable or a verdict. The load at which the adhesive reaches its elastic limit is where it starts to yield, not where the repair fails: say "the adhesive reaches its elastic limit at ...", never "the repair carries", "is good for", "restores" or "is strong enough for". Asked whether a repair is strong enough or safe, say in one line that these tools give no strength or verdict, then what they do give.
 18. A change is previewed with preview_repair_change, one change at a time: a quantity set to a value, with the unit as the engineer wrote it (the engine converts; you never do), or steps added, removed or regrouped. Pass only what the engineer stated; when the value is missing, ask for it. Report the engine's sentence and the numbers before and after. Nothing is applied: the engineer applies it on the repair's page or in the file.
 19. A sweep (sweep_repair) works the repair by hand at every value of one quantity. With a load named it picks the smallest repair whose adhesive is still elastic at that load, and the tool solves that pick as a slice. Give the tool's `answer`, then what its `check` says, then its `cautions`, each as written. A pick is the model's answer: never call it a design, a recommendation, a minimum step length or a strength.
-20. For why, how or what a thing is (why the shear peaks at the ends of a step, peel stress, what a pick means), use search_repair_references and answer from its sections, naming the section. A value is never taken from a section."""
+20. For why, how or what a thing is (why the shear peaks at the ends of a step, peel stress, what a pick means), use search_repair_references and answer from its sections, naming the section. A value is never taken from a section.
+
+A plate: a setup whose test is plate is held and loaded on named regions, as the workspace's model tree holds it. Its setup is the form's rows as text and its lists of supports, loads and drawn boxes.
+21. Read a plate with read_plate before changing it. Its length runs along y: its ends are Edge-Bottom and Edge-Top (and the tabs there), and a pull or push along the plate acts on them; Edge-Left and Edge-Right are its long sides, and a force on them acts across the width. When the engineer's words could mean either (pull the left and right), say which you read and ask before going on.
+22. A change is previewed with preview_plate_change, every change or none, never applied: holds by their directions (1 to 3 along x, y, z; 4 to 6 about them), a force with its direction or as tension or compression on a straight edge, a pressure on an area, a set move, a hold or load taken away, or a row set. Pass each value with the unit the engineer wrote; never convert. Report the lines of what changed, or each refusal's reason as written. Its `values` are what check_setup and solve_coupon take for the plate as changed. The engineer applies a change on the workspace page."""
+
+PLATE_SETUP = ("The model as the workspace keeps it: {\"form\": the coupon form's rows by key, each as text, with \"test\": \"plate\" "
+               "(\"length\": \"250\", \"ply_1\": \"45\", ...), \"plate\": {\"supports\": [...], \"loads\": [...], \"regions\": [...]}}; "
+               "a new plate's lists are empty, and a setup_after from preview_plate_change is passed back as it came")
+
+
+class PlateChange(BaseModel):
+    """One change to a plate (ADR-0143), as the API's tools take it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["hold", "move", "force", "pressure", "free", "unload", "row"] = Field(description=(
+        "hold: the region holds dofs, in place of its hold. move: the region moved along dof 1-3 or turned about dof 4-6 by value. force: "
+        "value, the total over the region, along dof 1-3 signed, or with sense tension or compression on a straight edge. pressure: value "
+        "on an area, positive pressing down. free: the region's holds removed. unload: its loads removed. row: the form's row key set to value"))
+    region: str | None = Field(default=None, max_length=80, description="A region read_plate names: Edge-Bottom, Edge-Top, Edge-Left, Edge-Right, Face, ...")
+    dofs: list[int] | None = Field(default=None, max_length=6, description="For hold: the directions held, each once: 1 to 3 along x, y, z; 4 to 6 about them")
+    dof: int | None = Field(default=None, ge=1, le=6, description="For move (1-6) or a signed force (1-3): the direction")
+    sense: Literal["tension", "compression"] | None = Field(default=None, description="For a force on a straight edge, instead of dof")
+    value: float | str | None = Field(default=None, description="The value as the engineer wrote it; blank for a row clears it")
+    unit: str | None = Field(default=None, max_length=20, description="The unit the engineer wrote (kN, MPa, mm, degrees, ...); leave out for the model's own. Never convert")
+    key: str | None = Field(default=None, max_length=40, description="For row: the row's key, as describe_coupon_form names it")
+
 
 Step = Literal["strain", "stress", "criterion", "loading"]  # the steps of the fea package's working, in order (ADR-0103)
 Quantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
@@ -421,6 +448,34 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
         full run would judge it, with the rows to change where an item fails."""
         found = ask(api.post, "/v1/coupon-jobs/check", {"values": values_sent(values)})
         return said({"setup": setup_of(found.get("checklist") or {}), **as_read(found)})
+
+    def setup_sent(setup: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(setup, dict) or not isinstance(setup.get("form"), dict) or not setup["form"]:
+            raise ToolError("setup is the model as the workspace keeps it: {\"form\": the rows by key, each as text, \"plate\": its supports, "
+                            "loads and regions}. A new plate's lists are empty.")
+        plate = setup.get("plate") if isinstance(setup.get("plate"), dict) else {}
+        return {"form": {key: str(value) for key, value in setup["form"].items() if value is not None},
+                "plate": {key: plate.get(key) or [] for key in ("supports", "loads", "regions")}}
+
+    @server.tool(annotations=READS, structured_output=False)
+    def read_plate(setup: Annotated[dict[str, Any], Field(description=PLATE_SETUP)]) -> str:
+        """Read a plate as the workspace reads it: its units and size, every region it can be held and loaded on with where it lies and
+        whether it is an end (across the width, where a pull along the plate acts) or a side (along the length), and what is held and
+        loaded, one line each. The rows as written: nothing is computed."""
+        return said(ask(api.post, "/v1/workspace/setup", {"content": setup_sent(setup)}))
+
+    @server.tool(annotations=READS, structured_output=False)
+    def preview_plate_change(setup: Annotated[dict[str, Any], Field(description=PLATE_SETUP)],
+                             changes: Annotated[list[PlateChange], Field(min_length=1, max_length=24, description="The changes, made in order")]) -> str:
+        """Preview changes to a plate's supports, loads or rows, never applied: every change is made on a copy, or none, with the reason
+        for each refused one. Returns the lines of what changed, the setup after, and its values for check_setup and solve_coupon."""
+        sent = [change.model_dump(exclude_none=True) for change in changes]
+        found = ask(api.post, "/v1/workspace/setup-changes", {"content": setup_sent(setup), "changes": sent})
+        return said({"ok": found.get("ok"), "done": found.get("done"), "refused": found.get("refused"), "applied": False,
+                     "setup_after": found.get("content"), "values": found.get("values"), "held": (found.get("setup") or {}).get("held"),
+                     "loaded": (found.get("setup") or {}).get("loaded"),
+                     "note": "Nothing is applied. With ok false nothing was changed: say each refusal's reason. The engineer applies a change "
+                             "on the workspace page; values are the plate as changed, for check_setup or solve_coupon."})
 
     @server.tool(annotations=ASKS, structured_output=False)
     def solve_coupon(values: Annotated[dict[str, Any], Field(description="The setup: the coupon form's rows by key (describe_coupon_form)")]) -> str:

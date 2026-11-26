@@ -296,6 +296,52 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .proposal-unread .proposal-quote { padding-left: 0; }
 .proposal-dropped summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .proposal-dropped ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: #d9c2b9; display: grid; gap: 2px; }
+/* a plan made from the engineer's sentence (ADR-0144): its steps under their roles, ticked off as the run goes */
+.plan-card { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #34507e; border-radius: 12px; background: #131b28; min-width: 0; }
+.plan-card[data-state="approved"], .plan-card[data-state="edited"], .plan-card[data-state="stale"] { border-color: #2a2d33; background: #15171a; }
+.plan-card h4 { margin: 0 !important; }
+.plan-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 10px; }
+.plan-aside { font-size: 11.5px; color: #9cc2ff; }
+.plan-card[data-state="approved"] .plan-aside, .plan-card[data-state="edited"] .plan-aside { color: var(--muted); }
+.plan-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan-steps li { display: grid; grid-template-columns: 16px auto minmax(0, 1fr); gap: 8px; align-items: start; font-size: 13px; line-height: 1.45; color: #d9d9d9; }
+.plan-steps li[data-state="skipped"] .plan-line { color: var(--muted); }
+.plan-mark { display: inline-flex; margin-top: 2px; color: #5b616b; }
+.plan-mark-done { color: #86efac; }
+.plan-mark-running { color: #9cc2ff; }
+.plan-mark-failed { color: #f6bba9; }
+.plan-spin { animation: plan-spin 1s linear infinite; }
+@keyframes plan-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .plan-spin { animation: none; } }
+.plan-role { flex: none; padding: 0 6px; border: 1px solid; border-radius: 6px; font-size: 11px; line-height: 19px; white-space: nowrap; }
+.plan-role-geometry { color: #5eead4; border-color: #2c5f59; }
+.plan-role-setup { color: #93c5fd; border-color: #2d4a6e; }
+.plan-role-solver { color: #c4b5fd; border-color: #4a3f75; }
+.plan-role-qa { color: #86efac; border-color: #2f5c3f; }
+.plan-role-report { color: #d1d5db; border-color: #4b5058; }
+.plan-line { min-width: 0; overflow-wrap: anywhere; }
+.plan-note { display: block; font-size: 12px; color: var(--muted); }
+.plan-qa { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; color: #d1d1d1; }
+.plan-qa li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; align-items: start; }
+.plan-qa li svg { margin-top: 3px; }
+.plan-qa-pass svg { color: #86efac; }
+.plan-qa-warning { padding: 6px 8px; border: 1px solid #5c4a1f; border-radius: 8px; background: #1c170c; }
+.plan-qa-warning svg { color: #fbbf24; }
+.plan-qa-stop { padding: 6px 8px; border: 1px solid #5a3e35; border-radius: 8px; background: #1f1411; }
+.plan-qa-stop svg { color: #f6bba9; }
+.plan-answer-heading { margin: 0 !important; font-size: 14px !important; color: var(--text) !important; }
+/* a wing's and a repair's plan (ADR-0144, step 5): the wait while the approval carries the runs, a refusal's reasons, what each run gave */
+.plan-waiting { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 10px; border: 1px solid #34507e; border-radius: 8px; background: #0f1622; font-size: 12.5px; line-height: 1.5; color: #d1d1d1; }
+.plan-waiting svg { margin-top: 3px; color: #9cc2ff; }
+.plan-waiting-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan-reasons { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; line-height: 1.5; color: #d9d9d9; }
+.plan-run { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid #2a2d33; min-width: 0; }
+.plan-card h4 { color: var(--text); } /* as on the coupon's card, also inside a panel whose headings are muted */
+.plan-run h4 { font-size: 13.5px !important; }
+.plan-run p { margin: 0 !important; }
+.plan-run .chat-details p + p { margin-top: 6px !important; }
+.plan-run-check { padding: 6px 8px; border: 1px solid #2f5c3f; border-radius: 8px; background: #0f1a13; }
+.plan-run-check-no { border-color: #5c4a1f; background: #1c170c; }
 .chat-issues { list-style: none; padding: 0; margin: 6px 0 10px; display: grid; gap: 6px; }
 .chat-issues li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 8px 10px; border-radius: 6px; background: #241a17; border: 1px solid #5a3e35; color: #f0d6cc; }
 .chat-issues li svg { color: #e66767; transform: translateY(2px); }

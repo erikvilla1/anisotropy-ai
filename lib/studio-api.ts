@@ -546,6 +546,27 @@ export async function getProject(apiBase: string, id: string, signal?: AbortSign
   return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "GET", headers, signal }, "the project"));
 }
 
+/** A version of a project's model as the server keeps it (ADR-0113, on the server since ADR-0143): checked by `readServerVersions`
+ * in `lib/model-versions.ts` before the history shows it. */
+export type VersionUpload = { by: "you" | "assistant"; why: string | null; changes: string[]; form: Record<string, string>; plate: Record<string, unknown> };
+const versionsOf = (apiBase: string, id: string) => `${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}/versions`;
+
+/** A project's last versions on the server, the oldest first, as the API wrote them (unchecked). */
+export async function listVersions(apiBase: string, id: string, signal?: AbortSignal): Promise<unknown> {
+  return call(versionsOf(apiBase, id), { method: "GET", headers, signal }, "the model's versions");
+}
+
+/** A version the page settled, kept by the server and numbered after the project's last; the last one when the setup is the same. */
+export async function addVersion(apiBase: string, id: string, version: VersionUpload, signal?: AbortSignal): Promise<unknown> {
+  return call(versionsOf(apiBase, id), { method: "POST", headers, body: JSON.stringify(version), signal }, "keeping the version");
+}
+
+/** The run made from version `n`, and its answer once the page has read it. */
+export async function markVersionRun(apiBase: string, id: string, n: number, run: { job: string; result: Record<string, string> | null },
+  signal?: AbortSignal): Promise<unknown> {
+  return call(`${versionsOf(apiBase, id)}/${n}/run`, { method: "PUT", headers, body: JSON.stringify(run), signal }, "marking the version's run");
+}
+
 export async function renameProject(apiBase: string, id: string, name: string, signal?: AbortSignal): Promise<ProjectRecord> {
   return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "PATCH", headers, body: JSON.stringify({ name }), signal }, "renaming the project"));
 }
@@ -681,7 +702,11 @@ export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal
 /** The wing workspace's hand calculation (ADR-0118): the description as it stands, or a wing file's text; the engine reads it, works
  * every case its values allow and answers with the report and what the page draws. A refusal names the value that is wrong. */
 export async function analyzeWing(apiBaseUrl: string, request: { wing: WingDescription } | { toml: string }, signal?: AbortSignal): Promise<WingAnswer> {
-  const payload = await call(`${base(apiBaseUrl)}/v1/wings/analyze`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing calculation");
+  return readWingAnswer(await call(`${base(apiBaseUrl)}/v1/wings/analyze`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the wing calculation"));
+}
+
+/** The wing's hand calculation as `/v1/wings/analyze` answers it, checked; a plan's `analyze` run answers the same (ADR-0144, step 5). */
+export function readWingAnswer(payload: unknown): WingAnswer {
   if (!isObject(payload) || !isObject(payload.wing) || !isObject(payload.report) || !isObject(payload.views)
     || !Array.isArray(payload.report.cases) || !Array.isArray(payload.views.cases) || !Array.isArray(payload.views.walls)) {
     throw unreadable("the wing calculation: not a wing answer");
@@ -715,7 +740,11 @@ export async function analyzeRepair(apiBaseUrl: string, request: { repair: Repai
  * says so. */
 export async function solveRepair(apiBaseUrl: string, repair: RepairDescription, cutFaces: "open" | "bonded" = "open", signal?: AbortSignal): Promise<RepairSolve> {
   const body = JSON.stringify({ repair, cut_faces: cutFaces });
-  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/solve`, { method: "POST", headers, body, signal }, "the solve of the slice");
+  return readRepairSolve(await call(`${base(apiBaseUrl)}/v1/repairs/solve`, { method: "POST", headers, body, signal }, "the solve of the slice"));
+}
+
+/** A solved slice as `/v1/repairs/solve` answers it, checked; a plan's `solve` run answers the same, with no run id (ADR-0144, step 5). */
+export function readRepairSolve(payload: unknown): RepairSolve {
   const report = isObject(payload) ? payload.report : null;
   if (!isObject(payload) || typeof payload.headline !== "string" || !isObject(report) || !isObject(report.bond) || !Array.isArray(report.bond.lines)
     || !isObject(report.model) || !isObject(report.checks) || !isObject(report.forces) || !Array.isArray(report.boundaries) || !Array.isArray(report.plies)) {
@@ -728,7 +757,11 @@ export async function solveRepair(apiBaseUrl: string, repair: RepairDescription,
  * repair that lacks the bond's strengths or fracture energies is refused with the list, and a run that fails one of its checks in
  * the solver's words. It needs no load: the load is what the run finds. */
 export async function followRepairBond(apiBaseUrl: string, repair: RepairDescription, signal?: AbortSignal): Promise<RepairBond> {
-  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/bond`, { method: "POST", headers, body: JSON.stringify({ repair }), signal }, "the bond's run");
+  return readRepairBond(await call(`${base(apiBaseUrl)}/v1/repairs/bond`, { method: "POST", headers, body: JSON.stringify({ repair }), signal }, "the bond's run"));
+}
+
+/** A followed bond as `/v1/repairs/bond` answers it, checked; a plan's `bond` run answers the same (ADR-0144, step 5). */
+export function readRepairBond(payload: unknown): RepairBond {
   if (!isObject(payload) || typeof payload.headline !== "string" || !isObject(payload.report) || !isObject(payload.report.onset) || !isObject(payload.report.curve)
     || !isObject(payload.report.model) || !isObject(payload.report.largest)) throw unreadable("the bond's run: not a followed bond");
   return payload as unknown as RepairBond;
@@ -787,7 +820,12 @@ export async function previewRepairChange(apiBaseUrl: string, repair: RepairDesc
 export async function sweepRepair(apiBaseUrl: string, repair: RepairDescription, sweep: RepairSweep, cutFaces: "open" | "bonded" = "open",
   signal?: AbortSignal): Promise<RepairSweepAnswer> {
   const body = JSON.stringify({ repair, sweep, cut_faces: cutFaces });
-  const payload = await call(`${base(apiBaseUrl)}/v1/repairs/sweeps`, { method: "POST", headers, body, signal }, "the sweep");
+  return readRepairSweep(await call(`${base(apiBaseUrl)}/v1/repairs/sweeps`, { method: "POST", headers, body, signal }, "the sweep"));
+}
+
+/** A sweep as `/v1/repairs/sweeps` answers it, checked; a plan's `sweep` run answers the same, its pick solved by the plan's own solve
+ * step (ADR-0144, step 5). */
+export function readRepairSweep(payload: unknown): RepairSweepAnswer {
   if (!isObject(payload) || !Array.isArray(payload.rows) || !Array.isArray(payload.words) || !Array.isArray(payload.cautions) || !isObject(payload.quantity)
     || !isObject(payload.units) || (payload.check !== null && !(isObject(payload.check) && Array.isArray(payload.check.words)))) throw unreadable("the sweep: not a sweep's answer");
   return payload as unknown as RepairSweepAnswer;
@@ -1017,4 +1055,170 @@ export function assistantInfo(apiBase: string): Promise<AssistantInfo | null> {
       .catch(() => null));
   }
   return assistantInfos.get(key)!;
+}
+
+/** The planner (ADR-0144): an engineer's sentence turned by the API into steps of typed tools, checked by the server, shown as a plan the
+ * engineer approves once; the approval applies the changes, keeps a version by the assistant and starts the run. The page carries the last
+ * two steps (`qa`, `answer`) and reports each. Keys the API adds are ignored. */
+export const PLAN_STATES = ["proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped"] as const;
+export type PlanState = (typeof PLAN_STATES)[number];
+export const STEP_STATES = ["planned", "running", "done", "failed", "skipped"] as const;
+export type StepState = (typeof STEP_STATES)[number];
+/** The roles a step is listed under, in the order the card shows them. */
+export const PLAN_ROLES = ["Geometry", "Setup", "Solver", "QA", "Report"] as const;
+export type PlanRole = (typeof PLAN_ROLES)[number];
+/** A typed change as the setup tools take it (ADR-0143): `action` names the tool, the rest its arguments. On a wing a change of plies
+ * (the engine's `PlyChange`) and on a repair the engine's `RepairChange`; a repair's sweep holds its `RepairSweep` and its solve
+ * `{cut_faces}`, which name no action (ADR-0144, step 5). */
+export type PlanChange = { action?: string } & Record<string, unknown>;
+export type PlanStep = { n: number; role: PlanRole; tool: string; line: string; quote: string | null; regions: string[]; change: PlanChange | null;
+  question: string | null; state: StepState; note: string | null };
+/** What a plan plans on: a coupon's or a plate's setup, a wing project, or the repair the page holds (ADR-0144, step 5). */
+export const PLAN_KINDS = ["coupon", "plate", "wing", "repair"] as const;
+export type PlanKind = (typeof PLAN_KINDS)[number];
+export type Plan = {
+  id: string;
+  /** null on a plan made before the API named its kind */
+  kind: PlanKind | null;
+  /** the project it plans on; null for a repair's, which is not a kept project */
+  project: string | null;
+  ask: string; state: PlanState; steps: PlanStep[];
+  /** the preview's lines of the changes, as the History will say them */
+  done: string[];
+  /** the digest of the setup the plan was worked out on, sent back with the approval */
+  base: string | null;
+  question: string | null; unread: UnreadPart[]; reason: string | null; writer: string; model: string | null; job: string | null;
+  /** the version the approval kept, as the server writes it; read with `readServerVersions` */
+  version: unknown; requests_left: number | null; created_at: string; approved_at: string | null;
+};
+/** A run an approval carried (ADR-0144, step 5): the step's number, its tool, and what that tool's own route answers. On a wing:
+ * `analyze` (as `/v1/wings/analyze`) and `check` (as `/v1/wings/checks`, queued). On a repair: `sweep` (as `/v1/repairs/sweeps`),
+ * `solve` (`{headline, report}`, and after the sweep's pick its `check`) and `bond` (`{headline, report}`). Read with the tool's reader. */
+export type PlanRun = { n: number; tool: string; answer: unknown };
+/** An approval's answer: the plan as it now stands, the project with its new setup, the version kept, the run started and the check; on
+ * a wing, the runs it carried. */
+export type PlanApproval = { plan: Plan; project: ProjectRecord; version: unknown; job: JobStatus | null; check: Checklist | null; runs: PlanRun[] };
+
+const wholeNumber = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+const SOLVER_TOOLS = new Set(["check", "run", "analyze", "sweep", "solve", "bond"]);
+
+function readPlanStep(value: unknown): PlanStep | null {
+  if (!isObject(value) || !wholeNumber(value.n) || !isText(value.tool) || !isText(value.line)) return null;
+  const role: PlanRole = (PLAN_ROLES as readonly unknown[]).includes(value.role) ? value.role as PlanRole
+    : SOLVER_TOOLS.has(value.tool) ? "Solver" : value.tool === "qa" ? "QA" : value.tool === "answer" ? "Report" : value.tool === "use_pick" ? "Geometry" : "Setup";
+  const change = isObject(value.change) ? value.change as PlanChange : null;
+  return { n: value.n, role, tool: value.tool, line: value.line, quote: isText(value.quote) ? value.quote : null,
+    regions: Array.isArray(value.regions) ? value.regions.filter(isText) : [], change, question: isText(value.question) ? value.question : null,
+    state: (STEP_STATES as readonly unknown[]).includes(value.state) ? value.state as StepState : "planned", note: isText(value.note) ? value.note : null };
+}
+
+/** A plan as the API answers it, checked: its id, sentence and state are needed, and its project unless it plans on a repair; a step the
+ * page cannot read is left out. */
+export function readPlanOutput(payload: unknown): Plan {
+  const kind = isObject(payload) && (PLAN_KINDS as readonly unknown[]).includes(payload.kind) ? payload.kind as PlanKind : null;
+  if (!isObject(payload) || !isText(payload.id) || !(isText(payload.project) || (kind === "repair" && payload.project === null)) || !isText(payload.ask)
+    || !(PLAN_STATES as readonly unknown[]).includes(payload.state)) throw unreadable("the plan");
+  const steps = (Array.isArray(payload.steps) ? payload.steps : []).map(readPlanStep).filter((s): s is PlanStep => s !== null).sort((a, b) => a.n - b.n);
+  const unread = (Array.isArray(payload.unread) ? payload.unread : [])
+    .filter((u): u is UnreadPart => isObject(u) && isText(u.quote) && (UNREAD_REASONS as readonly unknown[]).includes(u.reason));
+  const textOr = (v: unknown) => (isText(v) ? v : null);
+  return {
+    id: payload.id, kind, project: isText(payload.project) ? payload.project : null, ask: payload.ask, state: payload.state as PlanState, steps,
+    done: Array.isArray(payload.done) ? payload.done.filter(isText) : [], base: textOr(payload.base), question: textOr(payload.question), unread,
+    reason: textOr(payload.reason), writer: isText(payload.writer) ? payload.writer : "", model: textOr(payload.model), job: textOr(payload.job),
+    version: payload.version ?? null, requests_left: wholeNumber(payload.requests_left) ? payload.requests_left : null,
+    created_at: isText(payload.created_at) ? payload.created_at : "", approved_at: textOr(payload.approved_at),
+  };
+}
+
+/** An approval's answer, checked: the plan and the project are needed; the job and the check are read when the server sent them. */
+export function readPlanApproval(payload: unknown): PlanApproval {
+  if (!isObject(payload)) throw unreadable("the plan's approval");
+  const plan = readPlanOutput(payload.plan);
+  const project = readProjectRecord(payload.project);
+  const job = isObject(payload.job) ? readJob(payload.job) : null;
+  let check: Checklist | null = null;
+  const said = isObject(payload.check) ? (isObject(payload.check.checklist) ? payload.check.checklist : payload.check) : null;
+  if (said) { try { check = readChecklist(said); } catch { check = null; } }
+  return { plan, project, version: payload.version ?? null, job, check, runs: readPlanRuns(payload.runs) };
+}
+
+/** The runs an approval carried, in order; a run the page cannot read is left out. */
+function readPlanRuns(value: unknown): PlanRun[] {
+  return (Array.isArray(value) ? value : []).filter((r): r is PlanRun => isObject(r) && wholeNumber(r.n) && isText(r.tool) && "answer" in r)
+    .map((r) => ({ n: r.n, tool: r.tool, answer: r.answer }));
+}
+
+/** A repair plan's approval: the plan as it stands, the repair it leaves (the page's repair from then on: the sweep's pick, after the
+ * changes) and each run's answer. */
+export type RepairPlanApproval = { plan: Plan; repair: RepairDescription; runs: PlanRun[] };
+
+export function readRepairPlanApproval(payload: unknown): RepairPlanApproval {
+  if (!isObject(payload) || !isObject(payload.repair) || Array.isArray(payload.repair)) throw unreadable("the plan's approval");
+  return { plan: readPlanOutput(payload.plan), repair: payload.repair as RepairDescription, runs: readPlanRuns(payload.runs) };
+}
+
+const plansOf = (apiBase: string, project: string) => `${base(apiBase)}${PROJECTS}/${encodeURIComponent(project)}/plans`;
+
+/** The engineer's sentence planned on the project's setup as the server holds it. A 404, or a 503 that says the API keeps no projects,
+ * means there is no planner here (`noPlanner`): the page reads the sentence as before. */
+export async function askPlan(apiBase: string, project: string, ask: string, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(plansOf(apiBase, project), { method: "POST", headers, body: JSON.stringify({ ask }), signal }, "the plan"));
+}
+
+/** A plan as it stands, its steps' states with it. */
+export async function readPlan(apiBase: string, project: string, plan: string, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}`, { method: "GET", headers, signal }, "reading the plan"));
+}
+
+/** The plan approved on the setup it was worked out on (`digest`, the plan's `base`): a 409 when the model changed since, or the plan
+ * was approved already. */
+export async function approvePlan(apiBase: string, project: string, plan: string, digest: string | null, signal?: AbortSignal): Promise<PlanApproval> {
+  const payload = await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}/approve`,
+    { method: "POST", headers, body: JSON.stringify({ base: digest }), signal }, "approving the plan");
+  return readPlanApproval(payload);
+}
+
+/** A step the page carries (`qa`, `answer`) reported to the plan, with its line; the plan as it then stands, when the server sends one. */
+export async function reportPlanStep(apiBase: string, project: string, plan: string, n: number, state: StepState, note: string | null,
+  signal?: AbortSignal): Promise<Plan | null> {
+  const payload = await call(`${plansOf(apiBase, project)}/${encodeURIComponent(plan)}/steps/${n}`,
+    { method: "POST", headers, body: JSON.stringify({ state, note }), signal }, "reporting the plan's step");
+  try { return readPlanOutput(payload); } catch { return null; }
+}
+
+/** True when an answer means there is no planner here and the page reads the sentence as before: no such route (404), or an API that
+ * keeps no projects (`noProjectStore`). */
+export const noPlanner = (error: unknown): boolean => noProjectStore(error) || (error instanceof StudioError && error.status === 404);
+
+const REPAIR_PLANS = "/v1/workspace/repair-plans";
+const repairPlanOf = (apiBase: string, plan: string) => `${base(apiBase)}${REPAIR_PLANS}/${encodeURIComponent(plan)}`;
+
+/** The engineer's sentence planned on the repair the page holds (ADR-0144, step 5): a repair is not a kept project, so the description
+ * goes with the sentence. A 422 says, in the engine's words, why the repair cannot be read. */
+export async function askRepairPlan(apiBase: string, ask: string, repair: RepairDescription, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(`${base(apiBase)}${REPAIR_PLANS}`, { method: "POST", headers, body: JSON.stringify({ ask, repair }), signal }, "the plan"));
+}
+
+/** A repair's plan as it stands, its steps' states with it. */
+export async function readRepairPlan(apiBase: string, plan: string, signal?: AbortSignal): Promise<Plan> {
+  return readPlanOutput(await call(repairPlanOf(apiBase, plan), { method: "GET", headers, signal }, "reading the plan"));
+}
+
+/** A repair's plan approved with the repair the page holds and the plan's `base`: the server carries every step but the answers inside
+ * the request (a solve or a bond takes seconds, up to about two minutes). A 409 when the repair changed since, or the plan was approved
+ * already. */
+export async function approveRepairPlan(apiBase: string, plan: string, repair: RepairDescription, digest: string | null,
+  signal?: AbortSignal): Promise<RepairPlanApproval> {
+  const payload = await call(`${repairPlanOf(apiBase, plan)}/approve`, { method: "POST", headers, body: JSON.stringify({ repair, base: digest }), signal },
+    "approving the plan");
+  return readRepairPlanApproval(payload);
+}
+
+/** A repair plan's answer step reported, with its line; the plan as it then stands, when the server sends one. */
+export async function reportRepairPlanStep(apiBase: string, plan: string, n: number, state: StepState, note: string | null,
+  signal?: AbortSignal): Promise<Plan | null> {
+  const payload = await call(`${repairPlanOf(apiBase, plan)}/steps/${n}`, { method: "POST", headers, body: JSON.stringify({ state, note }), signal },
+    "reporting the plan's step");
+  try { return readPlanOutput(payload); } catch { return null; }
 }

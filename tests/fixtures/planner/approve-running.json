@@ -1,0 +1,267 @@
+{
+ "plan": {
+  "id": "5d1f2c3a-7777-4888-9999-aaaabbbbcccc",
+  "project": "0b3c6a1e-1111-4222-8333-944455556666",
+  "ask": "clamp the bottom edge, pull the top edge with 2 kN and tell me if it holds",
+  "state": "running",
+  "steps": [
+   {
+    "n": 1,
+    "role": "Setup",
+    "tool": "hold",
+    "line": "Edge-Bottom: fixed (encastre)",
+    "quote": "clamp the bottom edge",
+    "regions": [
+     "Edge-Bottom"
+    ],
+    "change": {
+     "action": "hold",
+     "region": "Edge-Bottom",
+     "dofs": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ]
+    },
+    "question": null,
+    "state": "done",
+    "note": null
+   },
+   {
+    "n": 2,
+    "role": "Setup",
+    "tool": "force",
+    "line": "Edge-Top: force of 2000 N along y (tension)",
+    "quote": "pull the top edge with 2 kN",
+    "regions": [
+     "Edge-Top"
+    ],
+    "change": {
+     "action": "force",
+     "region": "Edge-Top",
+     "sense": "tension",
+     "value": "2",
+     "unit": "kN"
+    },
+    "question": null,
+    "state": "done",
+    "note": null
+   },
+   {
+    "n": 3,
+    "role": "Solver",
+    "tool": "check",
+    "line": "Check the setup before the run",
+    "quote": null,
+    "regions": [],
+    "change": null,
+    "question": null,
+    "state": "done",
+    "note": null
+   },
+   {
+    "n": 4,
+    "role": "Solver",
+    "tool": "run",
+    "line": "Run the analysis",
+    "quote": "tell me if it holds",
+    "regions": [],
+    "change": null,
+    "question": null,
+    "state": "running",
+    "note": null
+   },
+   {
+    "n": 5,
+    "role": "QA",
+    "tool": "qa",
+    "line": "Check the result: reference solver, mesh study, equilibrium, held corners",
+    "quote": null,
+    "regions": [],
+    "change": null,
+    "question": null,
+    "state": "planned",
+    "note": null
+   },
+   {
+    "n": 6,
+    "role": "Report",
+    "tool": "answer",
+    "line": "Answer: does it hold at 2 kN?",
+    "quote": "tell me if it holds",
+    "regions": [],
+    "change": null,
+    "question": "Does it hold at 2 kN?",
+    "state": "planned",
+    "note": null
+   }
+  ],
+  "done": [
+   "Edge-Bottom: fixed (encastre)",
+   "Edge-Top: force of 2000 N along y (tension)"
+  ],
+  "base": "9f1c000000000000000000000000000000000000000000000000000000000000",
+  "question": null,
+  "unread": [],
+  "reason": null,
+  "writer": "anthropic",
+  "model": "claude-opus-5-5",
+  "job": "7a7a7a7a-1111-4222-8333-944455556666",
+  "version": {
+   "n": 4,
+   "at": "2026-11-26T07:01:00+00:00",
+   "by": "assistant",
+   "why": "clamp the bottom edge, pull the top edge with 2 kN and tell me if it holds",
+   "changes": [
+    "Edge-Bottom: fixed (encastre)",
+    "Edge-Top: force of 2000 N along y (tension)"
+   ],
+   "form": {
+    "test": "plate",
+    "units": "mm-MPa"
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "value": ""
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "kind": "force",
+      "dof": 2,
+      "total": "2000"
+     }
+    ],
+    "regions": []
+   },
+   "run": {
+    "job": "7a7a7a7a-1111-4222-8333-944455556666",
+    "result": null
+   }
+  },
+  "requests_left": 29,
+  "created_at": "2026-11-26T07:00:00+00:00",
+  "approved_at": "2026-11-26T07:01:00+00:00"
+ },
+ "project": {
+  "id": "0b3c6a1e-1111-4222-8333-944455556666",
+  "kind": "fea",
+  "name": "Plate",
+  "actor": "web",
+  "user_email": null,
+  "content": {
+   "form": {
+    "test": "plate",
+    "units": "mm-MPa"
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "value": ""
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "kind": "force",
+      "dof": 2,
+      "total": "2000"
+     }
+    ],
+    "regions": []
+   }
+  },
+  "form_version": null,
+  "units": "mm-MPa",
+  "designation": null,
+  "last_check_run_id": null,
+  "created_at": "2026-11-26T06:50:00+00:00",
+  "updated_at": "2026-11-26T07:01:00+00:00",
+  "jobs": []
+ },
+ "version": {
+  "n": 4,
+  "at": "2026-11-26T07:01:00+00:00",
+  "by": "assistant",
+  "why": "clamp the bottom edge, pull the top edge with 2 kN and tell me if it holds",
+  "changes": [
+   "Edge-Bottom: fixed (encastre)",
+   "Edge-Top: force of 2000 N along y (tension)"
+  ],
+  "form": {
+   "test": "plate",
+   "units": "mm-MPa"
+  },
+  "plate": {
+   "supports": [
+    {
+     "region": "Edge-Bottom",
+     "dofs": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "value": ""
+    }
+   ],
+   "loads": [
+    {
+     "region": "Edge-Top",
+     "kind": "force",
+     "dof": 2,
+     "total": "2000"
+    }
+   ],
+   "regions": []
+  },
+  "run": {
+   "job": "7a7a7a7a-1111-4222-8333-944455556666",
+   "result": null
+  }
+ },
+ "job": {
+  "job_id": "7a7a7a7a-1111-4222-8333-944455556666",
+  "state": "queued",
+  "actor": "web",
+  "started_at": "2026-11-26T07:01:00+00:00",
+  "finished_at": null,
+  "coupon": null,
+  "attempt": null,
+  "message": "waiting for a solver",
+  "stage": null,
+  "stages_done": [],
+  "stages": [],
+  "outputs": {},
+  "run_id": null,
+  "log_tail": [],
+  "user_email": null,
+  "project_id": "0b3c6a1e-1111-4222-8333-944455556666"
+ },
+ "check": null
+}

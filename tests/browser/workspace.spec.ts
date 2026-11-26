@@ -11,7 +11,9 @@ const SERVER_PROJECT = {
 
 /** The API answers the workspace needs to open: the coupon list, and the project store with one project kept on the server (part 6); the
  * setup check and the jobs are the studio scenarios' business. `store` holds what the page PUT. */
-async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}, questions: unknown[] = []) {
+type Kept = Record<string, unknown> & { n: number; form: Record<string, string>; plate: unknown };
+async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}, questions: unknown[] = [],
+  versions: Record<string, Kept[]> = {}) {
   store[SERVER_PROJECT.id] = SERVER_PROJECT;
   await page.route(API, (route) => {
     const request = route.request();
@@ -34,6 +36,18 @@ async function quietApi(page: import("@playwright/test").Page, store: Record<str
       return json(store[id], kept ? 200 : 201);
     }
     if (one && request.method() === "GET") return store[one[1]] ? json(store[one[1]]) : json({ detail: "No project of yours" }, 404);
+    // a model's versions, kept with its project (ADR-0143): numbered after the last, the last again when the setup is the same
+    const many = /^\/v1\/projects\/([^/]+)\/versions$/.exec(path);
+    if (many && !store[many[1]]) return json({ detail: "No project of yours" }, 404);
+    if (many && request.method() === "GET") return json(versions[many[1]] ?? []);
+    if (many && request.method() === "POST") {
+      const kept = (versions[many[1]] ??= []);
+      const sent = request.postDataJSON() as Kept, last = kept[kept.length - 1];
+      if (last && JSON.stringify([last.form, last.plate]) === JSON.stringify([sent.form, sent.plate])) return json(last);
+      const made = { ...sent, n: (last?.n ?? 0) + 1, at: new Date().toISOString(), run: null };
+      kept.push(made);
+      return json(made, 201);
+    }
     return json({ detail: "not in this scenario" }, 404);
   });
 }
@@ -294,6 +308,28 @@ test("FEA answers a question before anything is set up, and is set up as a coupo
     .not.toHaveProperty("analysis"); // kept on the server as a coupon
 });
 
+test("a model's versions are kept on the server with its project, so a change made elsewhere is in its history (ADR-0143)", async ({ page }) => {
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  await page.goto("/workspace");
+  await page.getByTestId("workspace-tiles").locator("[data-workspace=fea]").click();
+  await page.getByTestId("fea-start-kinds").locator("[data-kind=coupon]").click();
+  await page.getByTestId("chat-question").getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  // the project reaches the server a moment after it is made, and its versions after it, numbered there
+  await expect.poll(() => Object.values(versions).flat().some((v) => v.form.library === "im7-8552"), { timeout: 20_000 }).toBe(true);
+  const id = Object.keys(versions)[0];
+  expect(store[id]).toBeTruthy();
+  expect(versions[id].map((v) => v.n)).toEqual(versions[id].map((_, i) => i + 1));
+  // a change the workspace's tools made, kept on the server as the next version; this browser's own copy then cleared, as on another computer
+  const last = versions[id][versions[id].length - 1];
+  versions[id].push({ ...last, n: last.n + 1, by: "assistant", why: "use 3 mm elements", changes: ["Element size (mm): blank → 3"], form: { ...last.form, element_size: "3" } });
+  await page.evaluate((key) => window.localStorage.removeItem(key), `anisotropy.versions.${id}`);
+  await page.reload();
+  const history = page.getByTestId("tree-history");
+  await expect(history.locator("li[data-by=assistant]").filter({ hasText: "use 3 mm elements" })).toHaveCount(1, { timeout: 20_000 });
+});
+
 test("a switch to another section goes at once from an empty project and asks first when work is open (ADR-0124)", async ({ page }) => {
   await quietApi(page);
   await page.goto("/workspace");
@@ -328,4 +364,186 @@ test("a switch to another section goes at once from an empty project and asks fi
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("coupon-chat").getByTestId("chat-set-up")).toBeVisible();
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // a new coupon: the one with work is kept apart
+});
+
+test.describe("the planner (ADR-0144)", () => {
+  const SHOTS = process.env.PLANNER_SHOTS ?? ".local/website/screenshots";
+
+  test.describe("pictured", () => {
+    test.use({ deviceScaleFactor: 2 }); // the card's pictures are read at twice the pixels
+
+    test("a change and a run asked in one sentence is planned, drawn dashed, approved once, and its steps tick off to the answer (ADR-0144)", async ({ page }) => {
+      const browserErrors: string[] = [];
+      page.on("pageerror", (error) => browserErrors.push(error.message));
+      const store: Record<string, Record<string, unknown>> = {};
+      const versions: Record<string, Kept[]> = {};
+      await quietApi(page, store, [], versions);
+      // the API's side, played from the contract's fixtures (tests/fixtures/planner/) and the plate's stored results (tests/fixtures/studio-plate/)
+      const planner = (name: string) => JSON.parse(readFileSync(`tests/fixtures/planner/${name}.json`, "utf8"));
+      const stored = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
+      const proposed = planner("plan-proposed"), running = planner("approve-running");
+      const JOB = running.job.job_id as string;
+      const asked: unknown[] = [], approved: unknown[] = [], reported: { n: number; state: string; note: string | null }[] = [], answered: { question: string }[] = [];
+      let polls = 0;
+      await page.route(API, async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+        if (path === "/v1/coupon-tests") return json({ all: false, plates: true, ansys_model: false }); // the product's view: the plate on the model tree
+        if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+        if (path === "/v1/wake") return json({ waking: false }, 202);
+        if (path === "/v1/coupon-jobs/live") return; // a kernel slower than the scenario: the plan's own run is what it follows
+        if (path === "/v1/coupon-jobs/check") {
+          return json({ run_id: "run-4", state: "ready", designation: "NOM-PLT-L1", checklist: stored("checklist", "studio-plate"), preview: stored("preview", "studio-plate") });
+        }
+        const plans = /^\/v1\/projects\/([^/]+)\/plans(?:\/([^/]+))?(\/approve|\/steps\/(\d+))?$/.exec(path);
+        if (plans) {
+          const [, id, planId, tail, n] = plans;
+          if (!planId) { asked.push(request.postDataJSON()); return json({ ...proposed, project: id }); }
+          if (tail === "/approve") { // the changes, a version by the assistant and the run, at once (the server's side of ADR-0144)
+            approved.push(request.postDataJSON());
+            const kept = store[id] as { content: { form: Record<string, string> } };
+            const content = { form: kept.content.form, plate: running.project.content.plate };
+            store[id] = { ...kept, content, updated_at: new Date().toISOString() };
+            const list = (versions[id] ??= []);
+            const version = { ...running.version, n: (list[list.length - 1]?.n ?? 0) + 1, form: content.form, plate: content.plate };
+            list.push(version);
+            return json({ ...running, plan: { ...running.plan, project: id, version }, project: store[id], version });
+          }
+          if (n) { reported.push({ n: Number(n), ...(request.postDataJSON() as { state: string; note: string | null }) }); return json({ ...running.plan, project: id }); }
+          return json({ ...proposed, project: id });
+        }
+        if (path === `/v1/coupon-jobs/${JOB}`) { // the run the approval started, as the studio's runs go: our solve, the reference solver, done
+          polls += 1;
+          const at = polls < 2 ? "job-running" : polls < 3 ? "job-engine-done" : polls < 4 ? "job-result-in" : "job-done";
+          return json({ ...stored(at), job_id: JOB });
+        }
+        if (path === `/v1/coupon-jobs/${JOB}/files/fields`) return json(stored("fields", "studio-plate"));
+        if (path === `/v1/coupon-jobs/${JOB}/files/explanation`) return json(stored("explanation", "studio-plate"));
+        if (path === "/v1/workspace/result-answers") { // the answer step's question, answered from the result's fact sheet (ADR-0102)
+          answered.push(request.postDataJSON() as { question: string });
+          return json({ run_id: "run-a", writer: "anthropic", model: "claude-stand-in", prose: ["Yes, it holds at 2 kN.", "No ply reaches its strength under this load."],
+            sources: [], covered: false, withheld: false, reason: null });
+        }
+        return route.fallback();
+      });
+
+      await page.goto("/workspace/fea?for=coupon");
+      await page.getByTestId("panel-test").locator("summary").click();
+      await page.getByTestId("tension-screen").getByRole("radio", { name: "Plate", exact: true }).check();
+      await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+      const layup = page.getByLabel("Layup, bottom ply first", { exact: true });
+      await layup.fill("[45/0/-45/90]s");
+      await layup.press("Enter");
+      await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+      await page.locator("#studio-length").fill("100");
+      await page.locator("#studio-width").fill("100");
+      const message = page.getByLabel("Message the coupon assistant", { exact: true });
+      await message.fill("check"); // the model drawn, so the plan's regions can be drawn on it
+      await message.press("Enter");
+      await expect(page.getByTestId("preview")).toBeVisible();
+
+      // the sentence: planned by the API on the project as the page holds it, shown before anything changes
+      const sentence = "clamp the bottom edge, pull the top edge with 2 kN and tell me if it holds";
+      await message.fill(sentence);
+      await message.press("Enter");
+      const card = page.getByTestId("plan-card").last();
+      await expect(card).toHaveAttribute("data-state", "proposed", { timeout: 15_000 }); // the project saved, then the plan asked for
+      expect(asked).toEqual([{ ask: sentence }]);
+      await expect(card.getByTestId("plan-heading")).toHaveText("Plan · 6 steps");
+      await expect(card.locator(".plan-role")).toHaveText(["Setup", "Setup", "Solver", "Solver", "QA", "Report"]);
+      await expect(card.locator("[data-tool=hold]")).toContainText("Edge-Bottom: fixed (encastre)");
+      await expect(card.locator("[data-tool=force]")).toContainText("Edge-Top: force of 2000 N along y (tension)");
+      const dashed = page.getByTestId("applied-proposed"); // drawn dashed on the model and listed apart from what is applied (ADR-0110)
+      await expect(dashed).toContainText("Edge-Bottom");
+      await expect(dashed).toContainText("Edge-Top: force 2 kN along +y");
+      await expect(page.getByTestId("plate-words-supports")).toHaveCount(0); // nothing applied yet
+      await card.scrollIntoViewIfNeeded();
+      await card.screenshot({ path: `${SHOTS}/planner-card.png` });
+
+      // one approval: the model tree takes the setup the server answers with, the History a version by the assistant, and the run is followed
+      await card.getByTestId("plan-approve").click();
+      await expect(card).toHaveAttribute("data-state", "approved", { timeout: 15_000 });
+      expect(approved).toEqual([{ base: proposed.base }]);
+      await expect(dashed).toHaveCount(0);
+      await expect(page.getByTestId("plate-words-supports")).toContainText("Edge-Bottom holds x, y, z, tilt about x, tilt about y, rotation about z");
+      await expect(page.getByTestId("plate-words-loads")).toContainText("Edge-Top");
+      await expect(card.locator("[data-tool=hold]")).toHaveAttribute("data-state", "done");
+      await expect(card.locator("[data-tool=check]")).toHaveAttribute("data-state", "done");
+      await expect(card.locator("[data-tool=run]")).toHaveAttribute("data-state", "running");
+      await expect(page.getByTestId("tree-history").locator("li[data-by=assistant]").filter({ hasText: sentence })).not.toHaveCount(0, { timeout: 10_000 });
+
+      // the steps tick off as the run goes; its results open, the QA reads the result's own checks, and the answer is said short
+      await expect(card.locator("[data-tool=run]")).toHaveAttribute("data-state", "done", { timeout: 30_000 });
+      await expect(page.getByTestId("panel-outputs")).toHaveAttribute("open", "");
+      const qa = card.getByTestId("plan-qa");
+      await expect(qa.locator("[data-check=reference]")).toHaveAttribute("data-verdict", "pass");
+      await expect(qa.locator("[data-check=reference]")).toContainText("Verified against reference solver: 57 of 57 values agree");
+      await expect(qa.locator("[data-check=mesh]")).toHaveAttribute("data-verdict", "warning");
+      await expect(qa.locator("[data-check=equilibrium]")).toContainText("Equilibrium: reaction 100 N");
+      await expect(card.locator("[data-tool=qa]")).toHaveAttribute("data-state", "done");
+      await expect(card.getByTestId("plan-answer-heading")).toHaveText("Yes, it holds at 2 kN.");
+      await expect(card.locator("[data-tool=answer]")).toHaveAttribute("data-state", "done");
+      await expect(card.getByTestId("plan-heading")).toHaveText("Plan done · 6 of 6 steps");
+      expect(answered.map((a) => a.question)).toEqual(["Does it hold at 2 kN?"]);
+      await expect.poll(() => reported.map((r) => `${r.n} ${r.state}`).sort()).toEqual(["5 done", "6 done", "6 running"]);
+      expect(reported.find((r) => r.n === 5)?.note).toMatch(/^Pass with a warning\. Mesh study: /);
+      await expect(page.getByTestId("chat-job")).toHaveCount(0); // the plan's card follows its run; no second card says it
+      const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+      expect(said).not.toMatch(/calculix|anthropic|claude|\bapi\b/); // the product's own words (ADR-0091)
+      await card.scrollIntoViewIfNeeded();
+      await card.screenshot({ path: `${SHOTS}/planner-steps-done.png` });
+      expect(browserErrors).toEqual([]);
+    });
+  });
+
+  test("a model changed since the plan applies nothing and offers to plan again; a question back is answered and planned again (ADR-0144)", async ({ page }) => {
+    const store: Record<string, Record<string, unknown>> = {};
+    await quietApi(page, store);
+    const planner = (name: string) => JSON.parse(readFileSync(`tests/fixtures/planner/${name}.json`, "utf8"));
+    const asked: string[] = [];
+    await page.route(API, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/v1/coupon-tests") return json({ all: false, plates: true, ansys_model: false });
+      if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+      if (path === "/v1/coupon-jobs/live" || path === "/v1/wake") return;
+      const plans = /^\/v1\/projects\/([^/]+)\/plans(?:\/([^/]+))?(\/approve)?$/.exec(path);
+      if (plans && !plans[2]) {
+        const ask = (request.postDataJSON() as { ask: string }).ask;
+        asked.push(ask);
+        return json({ ...planner(asked.length === 1 ? "plan-question" : "plan-proposed"), project: plans[1], ask });
+      }
+      if (plans && plans[3]) return json({ detail: "The model changed since this plan was made. Plan it again." }, 409);
+      if (plans) return json({ ...planner("plan-proposed"), project: plans[1] });
+      return route.fallback();
+    });
+    await page.goto("/workspace/fea?for=coupon");
+    await page.getByTestId("panel-test").locator("summary").click();
+    await page.getByTestId("tension-screen").getByRole("radio", { name: "Plate", exact: true }).check();
+    await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+    await page.locator("#studio-length").fill("100");
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await message.fill("fix the end and pull it with 2 kN, then run it");
+    await message.press("Enter");
+    const asking = page.getByTestId("plan-card").last();
+    await expect(asking).toHaveAttribute("data-state", "question", { timeout: 15_000 }); // the project saved, then the plan asked for
+    await expect(asking.getByTestId("plan-question")).toContainText("Which end do you mean");
+    await message.fill("the bottom one");
+    await message.press("Enter");
+    await expect(page.getByTestId("plan-card")).toHaveCount(2, { timeout: 15_000 });
+    expect(asked).toEqual(["fix the end and pull it with 2 kN, then run it", "fix the end and pull it with 2 kN, then run it. the bottom one"]);
+    const card = page.getByTestId("plan-card").last();
+    await card.getByTestId("plan-approve").click();
+    await expect(card).toHaveAttribute("data-state", "stale", { timeout: 15_000 });
+    await expect(card.getByTestId("plan-problem")).toContainText("The model changed since this plan was made");
+    await expect(page.getByTestId("plate-words-supports")).toHaveCount(0); // nothing applied
+    await card.getByTestId("plan-again").click();
+    await expect(page.getByTestId("plan-card")).toHaveCount(3, { timeout: 15_000 });
+    // Edit puts the sentence back in the message box
+    await page.getByTestId("plan-card").last().getByTestId("plan-edit").click();
+    await expect(message).toHaveValue("fix the end and pull it with 2 kN, then run it. the bottom one");
+    await expect(page.getByTestId("plan-card").last()).toHaveAttribute("data-state", "edited");
+  });
 });

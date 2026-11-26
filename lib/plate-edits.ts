@@ -29,8 +29,9 @@ export type PlateEdit = {
 type Option = { name: string; kind: "edge" | "area" };
 const SIDES = ["left", "right", "top", "bottom"] as const;
 const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
-/** A straight edge's outward normal in the plate's axes: the direction's number and the sign of a pull along it (as the API's guard). */
-const EDGE_NORMAL: Record<string, [number, number]> = { "Edge-Left": [1, -1], "Edge-Right": [1, 1], "Edge-Bottom": [2, -1], "Edge-Top": [2, 1] };
+/** A straight edge's outward normal in the plate's axes: the direction's number and the sign of a pull along it (as the API's guard and
+ * the setup tools' `EDGE_NORMAL`); a plan's force by sense is drawn along it (`lib/plan-steps.ts`). */
+export const EDGE_NORMAL: Record<string, [number, number]> = { "Edge-Left": [1, -1], "Edge-Right": [1, 1], "Edge-Bottom": [2, -1], "Edge-Top": [2, 1] };
 const AXIS: Record<string, number> = { x: 1, y: 2, z: 3 };
 const NAMED: [RegExp, number[]][] = [
   [/\bxsymm\b/, [1, 5, 6]], [/\bysymm\b/, [2, 4, 6]], [/\bzsymm\b/, [3, 4, 5]],
@@ -186,7 +187,9 @@ function parts(clause: string, options: Option[], here: string[]): string[] {
 /**
  * The plate's lists after a message, or null when the message is not, clause for clause, a change this reads. A new hold on a region takes
  * the place of the one it had, and a new force along a direction, or a new pressure, of the one that was there: the engineer is changing
- * a boundary condition, and two that disagree on one region are never what was meant.
+ * a boundary condition, and two that disagree on one region are never what was meant. So a force along a direction takes the place of a
+ * set move along it, and a set move of a force, since the move would carry the force (ADR-0143 amendment 1); a force along a direction the
+ * region is held in is noted, not made.
  */
 export function readPlateEdit(text: string, form: StudioForm, current: PlateLists, here: string[] = []): PlateEdit | null {
   const message = plain(text);
@@ -266,9 +269,18 @@ export function readPlateEdit(text: string, form: StudioForm, current: PlateList
           if (direction === null) return null;
           if ("problem" in direction) { notes.push(direction.problem); continue; }
           const total = written(direction.sense ? Math.abs(value) * direction.sign : value * direction.sign);
+          const along = dofWord(direction.dof);
+          if (lists.supports.some((s) => s.region === region && !s.value.trim() && s.dofs.includes(direction.dof))) {
+            notes.push(`${region} is held along ${along}, so a force along ${along} there would go into the support: free ${region} or hold it along other directions first`);
+            continue;
+          }
+          // one way of driving a direction of a region: the force takes the place of a set move along it, which would otherwise carry it
+          const moves = lists.supports.filter((s) => s.region === region && s.value.trim() && s.dofs[0] === direction.dof);
           const load: PlateLoad = { region, kind: "force", dof: direction.dof, total };
-          lists = { ...lists, loads: [...lists.loads.filter((l) => !(l.region === region && l.kind === "force" && l.dof === direction.dof)), load] };
-          done.push(`${region}: force of ${total} ${labels.force} along ${dofWord(direction.dof)}${direction.sense ? ` (${direction.sense})` : ""}`);
+          lists = { ...lists, supports: lists.supports.filter((s) => !moves.includes(s)),
+            loads: [...lists.loads.filter((l) => !(l.region === region && l.kind === "force" && l.dof === direction.dof)), load] };
+          done.push(`${region}: force of ${total} ${labels.force} along ${along}${direction.sense ? ` (${direction.sense})` : ""}`
+            + (moves.length ? `, in place of its move of ${moves[moves.length - 1].value.trim()} ${labels.length} along ${along}` : ""));
         }
         tab = tab ?? "loads";
         continue;
@@ -284,8 +296,11 @@ export function readPlateEdit(text: string, form: StudioForm, current: PlateList
         const kept = lists.supports.filter((s) => s.region !== region || !s.dofs.includes(direction.dof))
           .concat(lists.supports.filter((s) => s.region === region && s.dofs.includes(direction.dof) && !s.value.trim() && s.dofs.length > 1)
             .map((s) => ({ ...s, dofs: s.dofs.filter((d) => d !== direction.dof) })));
-        lists = { ...lists, supports: [...kept, { region, dofs: [direction.dof], value: moved }] };
-        done.push(`${region}: ${kind === "angle" ? "turned" : "moved"} ${moved} ${kind === "angle" ? "rad" : labels.length} ${kind === "angle" ? "about" : "along"} ${kind === "angle" ? "xyz"[direction.dof - 4] : dofWord(direction.dof)}`);
+        // and a set move takes the place of a force of the region along its direction, which the move would carry
+        const forces = lists.loads.filter((l): l is Extract<PlateLoad, { kind: "force" }> => l.region === region && l.kind === "force" && l.dof === direction.dof);
+        lists = { ...lists, supports: [...kept, { region, dofs: [direction.dof], value: moved }], loads: lists.loads.filter((l) => !(forces as PlateLoad[]).includes(l)) };
+        const replaced = forces.length ? `, in place of its force of ${forces[forces.length - 1].total.trim()} ${labels.force} along ${dofWord(direction.dof)}` : "";
+        done.push(`${region}: ${kind === "angle" ? "turned" : "moved"} ${moved} ${kind === "angle" ? "rad" : labels.length} ${kind === "angle" ? "about" : "along"} ${kind === "angle" ? "xyz"[direction.dof - 4] : dofWord(direction.dof)}${replaced}`);
       }
       tab = tab ?? "conditions";
       continue;

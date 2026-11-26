@@ -12,9 +12,11 @@ import {
   NOT_THE_STRENGTH, PANEL_FIELDS, peakPlace, pliesNeedsWords, pliesWords, plyBefore, REPAIR_UNIT_LABELS, shown, sliceWords, unitsOf, unitText, valueAt,
   type BondReport, type PliesReport, type RepairDescription, type RepairField, type RepairKind, type RepairReport, type SliceReport, type SolveNeed,
 } from "./repair";
+import { ANSWERS, clauses, isQuestion } from "./ask-words";
 
-/** Every way the repair's chat answers a message. */
-export const REPAIR_ROUTES = ["repair-change", "repair-sweep", "repair-result", "repair-reference", "repair-command", "repair-unread"] as const;
+/** Every way the repair's chat answers a message; `repair-plan` is a change or a sweep and another step in one sentence, planned by the
+ * API where a model reads (ADR-0144, step 5). */
+export const REPAIR_ROUTES = ["repair-change", "repair-sweep", "repair-result", "repair-reference", "repair-command", "repair-unread", "repair-plan"] as const;
 export type RepairRoute = (typeof REPAIR_ROUTES)[number];
 
 /** What a change may set, by the engine's names. */
@@ -45,7 +47,9 @@ export type RepairAsk =
   /** A question of why, how or what a thing is: the reference pages answer it, beside the repair's own number on what it names. */
   | { route: "repair-reference"; topic: RepairTopic | null }
   | { route: "repair-command"; command: "solve" | "bond" | "plies" | "report" | "shape" | "undo" }
-  | { route: "repair-unread" };
+  | { route: "repair-unread" }
+  /** A change or a sweep and, in the same sentence, a sweep, the solve, the bond or an answer: the API plans it (ADR-0144, step 5). */
+  | { route: "repair-plan" };
 
 export const QUANTITY_WORDS: Record<RepairQuantity | "steps", string> = {
   step_length: "the step length", bondline: "the bondline's thickness", load: "the load", damage: "the damage's diameter",
@@ -404,6 +408,39 @@ export function readRepairAsk(message: string, kind: RepairKind = "flush", befor
   return { route: "repair-unread" };
 }
 
+/** The verbs that open the second half of a planned request on a repair: a sweep, the solve, the bond, an answer, the pick used, or a change. */
+const REPAIR_STEP_VERBS = String.raw`re-?solve|solve|follow|run|sweep|find|use|apply|take|keep|tell|show|give|let|see|check|report|set|make|change|add|remove|increase|reduce|regroup|cut|pick|choose`;
+const SOLVES = /^(?:please\s+)?(?:re-?)?solve\b|\bsolve (?:it|that|this|the (?:slice|pick|repair|result))\b|\b(?:run|do) (?:the )?(?:slice|solve)\b/;
+const BONDS = /\bfollow (?:the |its )?bond\b|\b(?:until|till|where|when) (?:it|the bond) lets? go\b|\bde-?bond|\bbond (?:to failure|until)\b/;
+/** The sweep's pick taken as the repair: "use it", "apply the pick". */
+const USES = /^(?:please\s+)?(?:use|apply|take|keep)(?: it| that| this| the pick| its pick| that one)?$/;
+
+/** Whether a sentence asks for a change or a sweep and, in the same breath, another step: the sweep's pick used, the solve of the slice,
+ * the bond followed until it lets go, or an answer ("find the smallest repair that stays elastic at 300 N/mm, then solve it", "add a
+ * step and follow the bond"). The API plans it where a model reads (ADR-0144, step 5). A single change, a sweep alone and a command
+ * alone stay with the page's patterns, and a question is never a plan. */
+export function asksRepairPlan(message: string, kind: RepairKind = "flush"): boolean {
+  if (isQuestion(plain(message))) return false;
+  const text = plain(message).replace(/[?!.]+$/, "").trim();
+  const asks = new Set(clauses(text, REPAIR_STEP_VERBS).map((part) => {
+    if (USES.test(part)) return "use";
+    if (sweepOf(part, kind)) return "sweep";
+    if (SOLVES.test(part)) return "solve";
+    if (BONDS.test(part)) return "bond";
+    if (ANSWERS.test(part)) return "answer";
+    const changed = changeOf(part, kind);
+    return changed?.route === "repair-change" && (changed.change !== null || changed.asks) ? "change" : null;
+  }));
+  const runs = asks.has("solve") || asks.has("bond") || asks.has("answer");
+  return ((asks.has("change") || asks.has("use")) && (asks.has("sweep") || runs)) || (asks.has("sweep") && runs);
+}
+
+/** Who answers a message on the repair's page: the planner first, for a change or a sweep and another step in one sentence, where a
+ * model reads (`planner`); then the page's own patterns (`readRepairAsk`), a fragment leaning on the message before. */
+export function routeRepairAsk(message: string, kind: RepairKind, before: RepairAsk | undefined, planner: boolean): RepairAsk {
+  return planner && asksRepairPlan(message, kind) ? { route: "repair-plan" } : readRepairAsk(message, kind, before);
+}
+
 // ---------------------------------------------------------------------------------------------------- the page's answers
 
 /** What the chat says: its kind, the answer as the heading, the lines under it (the basis first), what it read, the step it points to
@@ -759,6 +796,8 @@ export function repairAnswer(ask: RepairAsk, held: RepairHeld): RepairSaid {
       return said("reference", "Answered from our reference pages", ask.topic ? whyFacts(ask.topic, held) : [], { topic: ask.topic });
     case "repair-unread":
       return said("redirect", "Not a message I can read yet", [REPAIR_EXAMPLES]);
+    case "repair-plan":
+      return said("plan", "A plan to approve", ["Nothing changes until you approve it."]);
     default:
       if (!held.report) return said("none", "The repair is being worked", ["Ask again once its answer is shown."]);
       return resultAnswer(ask, held, held.report);

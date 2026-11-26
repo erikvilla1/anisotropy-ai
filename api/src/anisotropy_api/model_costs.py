@@ -25,6 +25,7 @@ FEATURES = (
     "read_question",  # a question about a result read into a lookup on the page (ADR-0100)
     "answer_question",  # a "why" question answered in words from the fact sheet and the theory pages (ADR-0102)
     "choose_tools",  # the Abaqus round trip's steps chosen from a message (ADR-0094 part 8; a local command, never recorded)
+    "plan_steps",  # an engineer's sentence read into a plan of typed tool steps (ADR-0144)
 )
 
 # US dollars per million tokens, from https://platform.claude.com/docs/en/about-claude/pricing.md read on PRICES_AS_OF:

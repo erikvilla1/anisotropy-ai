@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  changeLine, previewPlace, previewRows, readRepairAsk, repairAnswer, REPAIR_EXAMPLES, REPAIR_ROUTES, sweepHeading, sweepLine, sweepTable,
+  changeLine, previewPlace, previewRows, readRepairAsk, repairAnswer, REPAIR_EXAMPLES, REPAIR_ROUTES, routeRepairAsk, sweepHeading, sweepLine, sweepTable,
   type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSweepAnswer,
 } from "../lib/repair-chat";
 import {
@@ -464,9 +464,10 @@ test("a command is started or pointed to, and what cannot be read is said with e
 test("every route is reached, and no answer names a tool or calls a number a strength", () => {
   const messages: Record<(typeof REPAIR_ROUTES)[number], string> = {
     "repair-change": "add a step", "repair-sweep": "sweep the step length", "repair-result": "what is the largest shear?", "repair-reference": "why does the shear peak?",
-    "repair-command": "solve the slice", "repair-unread": "hello",
+    "repair-command": "solve the slice", "repair-unread": "hello", "repair-plan": "add a step and solve the slice",
   };
-  for (const route of REPAIR_ROUTES) assert.equal(readRepairAsk(messages[route]).route, route);
+  // a planned request goes to the planner only where a model reads (ADR-0144, step 5); the rest read the same with or without one
+  for (const route of REPAIR_ROUTES) assert.equal(routeRepairAsk(messages[route], "flush", undefined, true).route, route);
   const asked = ["what is the largest shear?", "what is the elastic limit load", "what is the peel stress", "what fails first", "which ply fails first", "how wide is the repair",
     "how much load does the patch carry", "is it strong enough?", "can it carry 200 N/mm?", "is the adhesive still elastic at 200 N/mm?", "add a step", "double the step length",
     "smallest repair", "sweep the load", "solve the slice", "open the report", "hello", "why is it not the strength", "what is the largest load it carries", "which plies crack",

@@ -69,9 +69,12 @@ def node(script: str, *args: str) -> Any:
 
 def ask_readers(questions: list[dict[str, Any]], store: Store, spend: Spend, client: Any, batch: bool, dry: bool) -> tuple[dict[str, list], dict[str, Any]]:
     """Each question's requests through the API, in the page's order: a question of the results first, the setup's proposals only when
-    that reading kept nothing. Returns the readings by question; on a dry run, none, and the first round's requests still to pay for."""
+    that reading kept nothing. A sentence of a change and a run goes to the planner (ADR-0144) as the plans route calls it, on the setup the
+    page holds: the route itself keeps the project in the database, which this run has none of, and nothing is approved or run.
+    Returns the readings by question; on a dry run, none, and the first round's requests still to pay for."""
     from fastapi.testclient import TestClient
 
+    from anisotropy_api import planner
     from anisotropy_api.assistant import ClaudeAssistant
     from anisotropy_api.main import app
 
@@ -79,7 +82,15 @@ def ask_readers(questions: list[dict[str, Any]], store: Store, spend: Spend, cli
     app.state.assistant = ClaudeAssistant((os.environ.get("ANISOTROPY_ASSISTANT_MODEL") or READERS_MODEL), client=model)
     api = TestClient(app, headers={"X-Anisotropy-Actor": "studio"})  # no lifespan: nothing recorded, no database
 
+    def plans(body: dict[str, Any]) -> dict[str, Any]:
+        """The plan the route would answer, in the keys of its answer the page reads: one call, one more with the reasons (ADR-0144)."""
+        made = planner.make_plan(app.state.assistant, body["ask"], body["content"], [])
+        return {"state": made.state, "steps": made.steps, "done": planner.done_lines(made.steps), "question": made.question, "unread": made.unread,
+                "reason": made.reason, "writer": made.writer, "model": made.model}
+
     def post(request: dict[str, Any]) -> dict[str, Any]:
+        if request["reader"] == "plans":
+            return plans(request["body"])
         response = api.post(f"/v1/workspace/{request['reader']}", json=request["body"])
         if response.status_code != 200:
             raise RuntimeError(f"/v1/workspace/{request['reader']} answered {response.status_code}: {response.text[:300]}")

@@ -14,7 +14,8 @@ import { OTHERS_LINES, PRIVATE_TITLES, privateAsked } from "./chat-private";
  * Nothing here names a tool, a vendor or a model (ADR-0091), and nothing here is a number of a result. */
 
 export type AboutTopic = "identity" | "abilities" | "instructions" | "other-program" | "units" | "units-other" | "own-material" | "layup-advice"
-  | "needs" | "mises" | "setup-value" | "model-file-what" | "model-file-open" | "report" | "bring-in" | "others";
+  | "needs" | "mises" | "setup-value" | "model-file-what" | "model-file-open" | "report" | "bring-in" | "others" | "what-if" | "dropped"
+  | "control";
 
 const IDENTITY = [
   /^\s*(?:who|what)\s+(?:are|r)\s+(?:you|u)\b/i,
@@ -51,6 +52,24 @@ const NEEDS = [
   /^\s*what(?:'s|’s|\s+is)\s+needed\b/i,
   /^\s*where\s+do\s+i\s+(?:start|begin)\b/i,
 ];
+/** The planner's real-model run (ADR-0144, build step 4, 2026-11-26) found three of these read as changes or as nothing: "what happens if I
+ * set the width to 30 mm and run it?" proposed the width, "never mind" after a plan's question was answered "Not sure what to change", and
+ * "switch to force control" was told it is not something to set. A question of what a change would do changes nothing and says how to
+ * ask for it; a message that drops what was asked says nothing changed; the loading type alone says it is set with its value. */
+const WHAT_IF = new RegExp(String.raw`^\s*(?:what\s+(?:happens|would\s+happen|will\s+happen|happen)\s+(?:if|when)|what\s+if)\s+`
+  + String.raw`(?:i|we|you)\s+(?:were\s+to\s+|then\s+)?((?:set|make|change|use|switch|increase|decrease|reduce|raise|lower|refine|add|remove|`
+  + String.raw`apply|put|clamp|fix|hold|pin|pull|push|load|press|move|rotate|turn|double|halve)\b.*?)\s*\?*\s*$`, "i");
+const RUN_ASKED = /\b(?:re-?run|run|solve|analy[sz]e)\b/i;
+const DROPPED = /^\s*(?:never\s*mind|nvm|cancel(?:\s+(?:it|that))?|forget\s+(?:it|that|about\s+it)|no\s+thanks?|that'?s\s+(?:all|it))\s*[.!]*\s*$/i;
+const CONTROL = /^\s*(?:please\s+)?(?:switch|change|go|move|set|make|put)\s+(?:it\s+|the\s+(?:loading|load|test)\s+)?(?:to|into|in|on)\s+(?:a\s+)?(force|displacement)(?:[- ](?:control(?:led)?|loading|driven))\s*[.!]*\s*$|^\s*(?:use\s+)?(force|displacement)[- ]control(?:led)?(?:\s+loading)?\s*[.!]*\s*$/i;
+/** The change a question of what it would do asks about, said as a request with a run: "what happens if I clamp the bottom edge?" ->
+ * "clamp the bottom edge and run it". */
+export function whatIfAsked(text: string): string | null {
+  const change = WHAT_IF.exec(text)?.[1]?.trim();
+  if (!change) return null;
+  return RUN_ASKED.test(change) ? change : `${change} and run it`;
+}
+
 /** What a model file is ("what is an Abaqus input file?", "whats a cdb"): a question about the file, not a request for it (ADR-0129 amendment 1). */
 const FILE_WHAT = /^\s*what(?:'s|’s|s|\s+is|\s+are)\s+(?:an?\s+|the\s+|this\s+)?(?:(?:abaqus|abqus|ansys|apdl|solver)\s+)?(?:input\s+files?|\.?inp(?:\s+files?)?|\.?cdb(?:\s+files?)?|input\s+decks?|decks?|model\s+files?)\s*(?:for)?\s*\??\s*$/i;
 /** How the downloaded file is opened in the engineer's own Abaqus, or the error a job gives when only its mesh was brought in ("how do I
@@ -107,6 +126,9 @@ export function aboutAsked(text: string, readOnly = false): AboutTopic | null {
   if (MISES.test(text) && MISES_ASKS.test(text) && !/^\s*why\b/i.test(text)) return "mises";
   if (UNITS.some((p) => p.test(text))) return "units";
   if (readOnly) return null;
+  if (whatIfAsked(text) && !OWN_MATERIAL.test(text) && !unitsNamed(text)) return "what-if";
+  if (DROPPED.test(text)) return "dropped";
+  if (CONTROL.test(text)) return "control";
   if (setupRowAsked(text)) return "setup-value";
   if (unitsNamed(text) && CAN_USE.test(text) && !/\d/.test(text)) return "units-other";
   if (OWN_MATERIAL.test(text) && OWN_ASKS.test(text) && !/\d/.test(text)) return "own-material";
@@ -202,6 +224,19 @@ export function aboutAnswer(topic: AboutTopic, text: string, c: AboutContext): {
       return value
         ? { title: `${name}: ${value}`, lines: [`From the setup. Say a new ${name.toLowerCase()} to change it.`] }
         : { title: `No ${name.toLowerCase()} yet`, lines: [`Say one to set it.`] };
+    }
+    case "what-if":
+      return { title: "A run tells, and nothing is changed yet", lines: [`To try it, say “${whatIfAsked(text)}”.`] };
+    case "dropped":
+      return { title: "Nothing changed", lines: ["Say a change or ask a question when you are ready."] };
+    case "control": {
+      const wanted = (CONTROL.exec(text)?.[1] ?? CONTROL.exec(text)?.[2] ?? "force").toLowerCase();
+      const us = units === "in-psi" || units === "in-ksi";
+      const example = wanted === "force" ? (us ? "2000 lbf" : "10 kN") : `${us ? "0.04 in" : "1 mm"} displacement`;
+      const what = wanted === "force" ? "a force" : "a displacement";
+      return c.form.control === wanted && c.form.value?.trim()
+        ? { title: `It is under ${wanted} control now`, lines: [`Say a new value to change it, for example “${example}”.`] }
+        : { title: `${wanted === "force" ? "Force" : "Displacement"} control takes ${what}`, lines: [`Say one, for example “${example}”: the loading becomes ${what} with it.`] };
     }
     case "needs":
       return { title: "A material, a layup, a size and a load", lines: [

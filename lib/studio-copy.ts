@@ -25,6 +25,13 @@ export const FAILED_WORDS: Record<string, string> = {
   "the analyses": "The analyses could not be loaded",
   "the projects": "Your projects could not be loaded",
   "saving the project": "The project could not be saved",
+  "the model's versions": "The model's history could not be loaded",
+  "keeping the version": "This change could not be kept in the model's history",
+  "marking the version's run": "The run could not be noted in the model's history",
+  "the plan": "The plan could not be made",
+  "reading the plan": "The plan could not be read",
+  "approving the plan": "The plan could not be approved",
+  "reporting the plan's step": "The step could not be noted in the plan",
   "the project": "This project could not be opened",
   "renaming the project": "The project could not be renamed",
   "the coupons": "The coupons could not be loaded",
@@ -91,6 +98,13 @@ export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
 /** The one phrase that names a banned tool and may still be shown: the customer's solver file, which opens in Abaqus (the audit's D18:
  * "Abaqus input file (.inp)" on the site and in the workspace, the founder's "accept" of 2026-11-12). */
 export const ALLOWED_PHRASE = /Abaqus input file \(\.inp\)/g;
+
+/** A section of our reference pages as the chats show it: its paragraphs of plain prose, its sources last; headings, equations, tables
+ * and lists of code are left to the page they come from. */
+export function sectionProse(text: string): string[] {
+  return text.split(/\n{2,}/).map((p) => p.trim().replace(/\s*\n\s*/g, " "))
+    .filter((p) => p && !/^(?:#|\||```|\$\$|- |\d+\. )/.test(p) && !/\$|\\[a-z]+|`/.test(p));
+}
 
 /** The banned terms a text holds, by label; empty when it is fit to show. */
 export function bannedIn(text: string): string[] {

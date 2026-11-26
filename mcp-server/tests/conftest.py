@@ -93,6 +93,16 @@ class FakeApi:
             return httpx.Response(200, json={"run_id": None, "state": "ready", "designation": "IM7-UNT-L1", "solver": "kernel", "warm": True, "seconds": 0.7,
                                              "timings": {}, "checklist": fixture("checklist.json"), "preview": fixture("preview.json"),
                                              "fields": fixture("fields.json"), "explanation": fixture("explanation.json")})
+        if path in ("/v1/workspace/setup", "/v1/workspace/setup-changes"):  # the API's own answers for one plate (ADR-0143)
+            held = fixture("plate-setup.json", FIXTURES)
+            if body["content"] != held["setup"]:
+                return httpx.Response(422, json={"detail": "not in this stand-in"})
+            if path == "/v1/workspace/setup":
+                return httpx.Response(200, json=held["read"])
+            for asked, answer in ((held["changes"], held["preview"]), (held["refused_changes"], held["refused"])):
+                if body["changes"] == asked:
+                    return httpx.Response(200, json=answer)
+            return httpx.Response(422, json={"detail": "not in this stand-in"})
         if path == "/v1/workspace/theory-sections":
             if body.get("about") == "wing":  # the wing's questions: the API's own search of the wing's pages
                 return httpx.Response(200, json={"run_id": None, "sections": wing_sections(body["question"], body.get("limit", 2))})

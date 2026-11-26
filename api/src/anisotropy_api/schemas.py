@@ -1282,6 +1282,284 @@ class ProjectOutput(Contract):
                    created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat(), jobs=[ProjectJobOutput.of(job) for job in jobs])
 
 
+class SetupChange(Contract):
+    """One typed change to a model's setup (ADR-0143), as `setup_tools.change_setup` takes it: `action` and the fields it uses. A value
+    is a number or its text, in the model's own units unless `unit` names another unit of the same system."""
+
+    action: Literal["hold", "move", "force", "pressure", "free", "unload", "row"]
+    region: Annotated[str, Field(max_length=80)] | None = None
+    dofs: Annotated[list[int], Field(max_length=6)] | None = None
+    dof: int | None = None
+    sense: Literal["tension", "compression"] | None = None
+    value: int | float | Annotated[str, Field(max_length=40)] | None = None
+    unit: Annotated[str, Field(max_length=20)] | None = None
+    key: Annotated[str, Field(max_length=40)] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
+class SetupContent(Contract):
+    """A model's setup as the page keeps it in a project's content: the form's rows as text and a plate's lists."""
+
+    form: dict[str, str]
+    plate: dict[str, Any] = {}
+
+    @model_validator(mode="after")
+    def small(self) -> Self:
+        size = len(json.dumps(self.model_dump(), ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the setup is {size} bytes; a model's rows and lists are far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class SetupReadRequest(Contract):
+    content: SetupContent
+
+
+class SetupChangesRequest(Contract):
+    """Changes previewed on a setup the request carries (ADR-0143): nothing is kept."""
+
+    content: SetupContent
+    changes: Annotated[list[SetupChange], Field(min_length=1, max_length=24)]
+
+
+class ProjectChangesRequest(Contract):
+    """Changes to a kept project's setup (ADR-0143): previewed, or with `apply` made and kept as a new version. `base` is the `digest`
+    the preview gave: the change is applied only to the setup it was worked out on."""
+
+    changes: Annotated[list[SetupChange], Field(min_length=1, max_length=24)]
+    apply: bool = False
+    base: Annotated[str, Field(min_length=64, max_length=64)] | None = None
+    by: Literal["you", "assistant"] = "assistant"
+    why: Annotated[str, Field(max_length=400)] | None = None
+
+
+class SetupChangesOutput(Contract):
+    """What the changes make of the setup: `ok` when every one can be made (none is made otherwise), the lines of what changed, the
+    changes refused by their place in the list (from 1) with the reason, the setup after (or as it was) read as `read_setup` reads it,
+    and its content. `digest` is the setup's before the changes. `values` are a plate's values as the fea package takes them (the page's
+    `plateTreeValues`), to check or solve the setup as it now stands. With `apply`, the project and the version made."""
+
+    ok: bool
+    done: list[str]
+    refused: list[dict[str, Any]]
+    digest: str
+    setup: dict[str, Any]
+    content: dict[str, Any]
+    values: dict[str, Any] | None = None
+    project: "ProjectOutput | None" = None
+    version: "ModelVersionOutput | None" = None
+
+
+class VersionResult(Contract):
+    """A run's answer as a version keeps it: the package's reaction, largest displacement and first-ply failure, as the page printed them."""
+
+    reaction: Annotated[str, Field(max_length=120)]
+    displacement: Annotated[str, Field(max_length=120)]
+    failure: Annotated[str, Field(max_length=120)]
+
+
+class VersionRun(Contract):
+    job: Annotated[str, Field(min_length=1, max_length=64)]
+    result: VersionResult | None = None
+
+
+class ModelVersionInput(Contract):
+    """A version of a project's model as the page settled it (ADR-0113, kept by the server since ADR-0143)."""
+
+    by: Literal["you", "assistant"] = "you"
+    why: Annotated[str, Field(max_length=400)] | None = None
+    changes: Annotated[list[Annotated[str, Field(max_length=400)]], Field(max_length=80)]
+    form: dict[str, str]
+    plate: dict[str, Any]
+
+    @model_validator(mode="after")
+    def small(self) -> Self:
+        size = len(json.dumps({"form": self.form, "plate": self.plate}, ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the setup is {size} bytes; a model's rows and lists are far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class ModelVersionOutput(Contract):
+    """A version as the page's history lists it (`ModelVersion` in `lib/model-versions.ts`)."""
+
+    n: int
+    at: str
+    by: Literal["you", "assistant"]
+    why: str | None
+    changes: list[str]
+    form: dict[str, Any]
+    plate: dict[str, Any]
+    run: VersionRun | None = None
+
+    @classmethod
+    def of(cls, row) -> "ModelVersionOutput":
+        content = dict(row.content)
+        run = None if row.job_id is None else VersionRun(job=row.job_id, result=None if row.result is None else VersionResult(**row.result))
+        return cls(n=row.n, at=row.created_at.isoformat(), by=row.made_by, why=row.why, changes=list(row.changes),
+                   form=dict(content.get("form") or {}), plate=dict(content.get("plate") or {}), run=run)
+
+
+SetupChangesOutput.model_rebuild()
+
+
+# ----------------------------------------------------------------------------- the workspace's planner (ADR-0144)
+
+class PlanRequest(Contract):
+    """An engineer's sentence for the planner (ADR-0144): one call to the model reads it into a plan of typed tool steps."""
+
+    ask: Annotated[str, Field(min_length=1, max_length=1000)]
+
+    @model_validator(mode="after")
+    def words(self) -> Self:
+        if not self.ask.strip():
+            raise ValueError("ask holds no words")
+        return self
+
+
+class PlanStep(Contract):
+    """One step of a plan (`tests/fixtures/planner/`): its number from 1, the role it is shown under, the tool, the one line it shows (a
+    change's line is the preview's), the engineer's words that ask for it (none for the server's `check` and `qa`), the regions it draws
+    (a wing's: the part it changes), the typed change it makes (ADR-0143; a wing's `PlyChange`, a repair's `RepairChange`, ADR-0128 and
+    ADR-0136) or a run's own request (a repair's `sweep` its `RepairSweep`, a `solve` its cut faces), the question an `answer` answers, and
+    its state with a note once it has one. A coupon's `check` is the server's setup check; a wing's is its finite element check."""
+
+    n: int
+    role: Literal["Geometry", "Setup", "Solver", "QA", "Report"]
+    tool: Literal["hold", "move", "force", "pressure", "free", "unload", "row", "check", "run", "qa", "answer",
+                  "add_plies", "remove_plies", "analyze",
+                  "set", "add_steps", "remove_steps", "set_steps", "regroup", "regroup_steps", "sweep", "use_pick", "solve", "bond"]
+    line: str
+    quote: str | None
+    regions: list[str]
+    change: dict[str, Any] | None
+    question: str | None
+    state: Literal["planned", "running", "done", "failed", "skipped"]
+    note: str | None
+
+
+PlanState = Literal["proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped"]
+# The tools whose steps change the model, the wing or the repair: their lines are a plan's `done`. A run's `change` is its own request.
+CHANGING_TOOLS = frozenset({"hold", "move", "force", "pressure", "free", "unload", "row", "add_plies", "remove_plies", "set", "add_steps",
+                            "remove_steps", "set_steps", "regroup", "regroup_steps", "use_pick"})
+
+
+class PlanOutput(Contract):
+    """A plan as the page reads it (`plan-proposed.json`, `plan-question.json`, `wing-plan-proposed.json`, `repair-plan-proposed.json`):
+    what it plans on (`kind`: a coupon, a plate, a wing or a repair) and its project (null for a repair, which the page holds), its steps
+    and the preview's lines (`done`), the digest of the setup or the repair's description it was worked out on (`base`), the question
+    asked back or why there is no plan (`reason`), the words not read, who wrote it, the job and version its approval made (a wing's
+    check is its job; a wing's versions are the browser's), and how many planned requests the person has left today, every kind together
+    (null when none are counted: a service token, or a server that keeps no count). `withheld` is true when the model's plans failed the
+    checks (`refused`), as the guards' weekly view reads it (ADR-0139); `run_id` names the run record of the request that answered with it."""
+
+    id: str
+    kind: Literal["coupon", "plate", "wing", "repair"]
+    project: str | None
+    ask: str
+    state: PlanState
+    steps: list[PlanStep]
+    done: list[str]
+    base: str
+    question: str | None
+    unread: list[UnreadPart]
+    reason: str | None
+    writer: str
+    model: str | None
+    job: str | None
+    version: ModelVersionOutput | None
+    requests_left: int | None
+    created_at: str
+    approved_at: str | None
+    withheld: bool = False
+    run_id: str | None = None
+
+    @classmethod
+    def of(cls, row, version=None, requests_left: int | None = None) -> "PlanOutput":
+        steps = [PlanStep(**step) for step in row.steps]
+        return cls(id=str(row.id), kind=row.kind, project=None if row.project_id is None else str(row.project_id), ask=row.ask, state=row.state,
+                   steps=steps, done=[step.line for step in steps if step.change is not None and step.tool in CHANGING_TOOLS], base=row.base,
+                   question=row.question,
+                   unread=[UnreadPart(**part) for part in row.unread], reason=row.reason, writer=row.writer, model=row.model, job=row.job_id,
+                   version=None if version is None else ModelVersionOutput.of(version), requests_left=requests_left,
+                   created_at=row.created_at.isoformat(), approved_at=None if row.approved_at is None else row.approved_at.isoformat(),
+                   withheld=row.state == "refused")
+
+
+class ApproveRequest(Contract):
+    """A plan approved (ADR-0144): `base` is the plan's own, so the changes apply only to the setup they were worked out on."""
+
+    base: Annotated[str, Field(min_length=64, max_length=64)]
+
+
+class PlanRun(Contract):
+    """A run an approval carried, by its step: a wing's hand calculation (`analyze`, as `/v1/wings/analyze` answers it) or its finite
+    element check as started (`check`: the job as `/v1/wings/checks` answers it, polled there by its id), a repair's sweep (as
+    `/v1/repairs/sweeps` answers it, never solved there: a solve is a step of its own), its solve (`headline` and `report`, as
+    `/v1/repairs/solve`, and after the sweep's pick `check`, what the slice makes of the pick, as the sweep's own check) or its bond
+    (`headline` and `report`, as `/v1/repairs/bond`). Every number is the engine's or the solver's."""
+
+    n: int
+    tool: Literal["analyze", "check", "sweep", "solve", "bond"]
+    answer: dict[str, Any]
+
+
+class ApproveOutput(Contract):
+    """What an approval did (`approve-running.json`, `wing-approve.json`): the plan as it then stands, the project with its new setup, the
+    version kept (null for a wing, whose versions are the browser's, ADR-0122), the coupon job started (null when the plan stopped before
+    its run, or has none), the setup check (null when none ran) and the runs the server carried (a wing's hand calculation and check)."""
+
+    plan: PlanOutput
+    project: ProjectOutput
+    version: ModelVersionOutput | None
+    job: CouponJobOutput | None
+    check: CouponCheckResponse | None
+    runs: list[PlanRun] = []
+    run_id: str | None = None
+
+
+class RepairPlanRequest(PlanRequest):
+    """An engineer's sentence on a repair (ADR-0144, build step 5) with the repair's description as the page holds it (the JSON object of a
+    repair file, ADR-0135): a repair is not a kept project, so the description comes with the sentence."""
+
+    repair: dict[str, Any]
+
+    @model_validator(mode="after")
+    def stated(self) -> Self:
+        if not self.repair:
+            raise ValueError("repair holds the repair's description as the page holds it; the object is empty")
+        size = len(json.dumps(self.repair, ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the repair is {size} bytes; a repair's description is far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class RepairApproveRequest(Contract):
+    """A repair's plan approved: the description as the page holds it now, whose digest must be the plan's `base`, and that `base`."""
+
+    repair: dict[str, Any]
+    base: Annotated[str, Field(min_length=64, max_length=64)]
+
+
+class RepairApproveOutput(Contract):
+    """What a repair's approval did (`repair-approve.json`): the plan as it then stands, the repair's description after its changes and
+    the sweep's pick, which the page takes as the repair it holds, and the answer of each run the server carried (`runs`)."""
+
+    plan: PlanOutput
+    repair: dict[str, Any]
+    runs: list[PlanRun]
+    run_id: str | None = None
+
+
+class StepReport(Contract):
+    """A step the page carries (`run`, `qa`, `answer`) reported as it goes: its state and a note of at most 400 characters."""
+
+    state: Literal["running", "done", "failed", "skipped"]
+    note: Annotated[str, Field(max_length=400)] | None = None
+
+
 class CouponValuesOutput(Contract):
     """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
 

@@ -1,0 +1,1409 @@
+{
+ "about": "What the page writes for a plate (lib/tension-screen.ts workspaceValues) and what its sentence reader makes of a change (lib/plate-edits.ts readPlateEdit), with the typed change the API's tools take for the same sentence (api/src/anisotropy_api/setup_tools.py, ADR-0143). tests/setup-tools.test.ts holds the page to it; api/tests/test_setup_tools.py holds the API's tools to it. `coupons`: what the page sends for a coupon's run, which the planner's run sends too (api/tests/test_planner.py, ADR-0144).",
+ "values": [
+  {
+   "name": "a plate held at one end and pulled at the other",
+   "form": {
+    "filled_by": "",
+    "date": "2026-11-26",
+    "notes": "",
+    "units": "mm-MPa",
+    "test": "plate",
+    "material_code": "",
+    "layup_code": "",
+    "standard": "none",
+    "specimen": "",
+    "size_from": "",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": "250",
+    "width": "25",
+    "tab_length": "",
+    "narrow_width": "",
+    "narrow_length": "",
+    "radius": "",
+    "outer_radius": "",
+    "tab_thickness": "",
+    "tab_bevel": "",
+    "tab_material": "",
+    "strain_device": "",
+    "strain_length": "",
+    "span": "",
+    "overhang": "0",
+    "load_span": "",
+    "hole_diameter": "",
+    "hole_circumferential": "32",
+    "hole_radial": "6",
+    "hole_ring": "2",
+    "hole_growth": "1.2",
+    "material_kind": "plies",
+    "thickness": "",
+    "own_E": "",
+    "own_nu": "",
+    "ply_1": "45",
+    "ply_2": "0",
+    "ply_3": "-45",
+    "ply_4": "90",
+    "ply_5": "",
+    "ply_6": "",
+    "ply_7": "",
+    "ply_8": "",
+    "ply_9": "",
+    "ply_10": "",
+    "ply_11": "",
+    "ply_12": "",
+    "ply_13": "",
+    "ply_14": "",
+    "ply_15": "",
+    "ply_16": "",
+    "symmetric": "yes",
+    "ply_thickness": "",
+    "library": "im7-8552",
+    "own_name": "",
+    "own_E1": "",
+    "own_E2": "",
+    "own_G12": "",
+    "own_nu12": "",
+    "own_F1t": "",
+    "own_F1c": "",
+    "own_F2t": "",
+    "own_F2c": "",
+    "own_F6": "",
+    "own_source": "",
+    "G13": "",
+    "G23": "",
+    "criteria": "all",
+    "f12_star": "",
+    "control": "",
+    "value": "",
+    "element_size": "2.10",
+    "mesh_nx": "",
+    "mesh_partitions": "",
+    "mesh_seeds": "",
+    "grips": "coupling",
+    "region": "tabs",
+    "name_part": "",
+    "name_instance": "",
+    "name_material": "",
+    "name_layup": "",
+    "name_section": ""
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "value": ""
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "kind": "force",
+      "dof": 2,
+      "total": "10000"
+     }
+    ],
+    "regions": []
+   },
+   "values": {
+    "form_version": "0.9",
+    "date": "2026-11-26",
+    "units": "mm-MPa",
+    "test": "plate",
+    "standard": "none",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": 250,
+    "width": 25,
+    "hole_circumferential": 32,
+    "hole_radial": 6,
+    "hole_ring": 2,
+    "hole_growth": 1.2,
+    "ply_1": 45,
+    "ply_2": 0,
+    "ply_3": -45,
+    "ply_4": 90,
+    "symmetric": "yes",
+    "library": "im7-8552",
+    "criteria": "all",
+    "element_size": 2.1,
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "dof": 2,
+      "total": 10000
+     }
+    ],
+    "regions": [],
+    "input": "plate"
+   }
+  },
+  {
+   "name": "a plate with a hole, tabs, a box and an own material in in-psi",
+   "form": {
+    "filled_by": "",
+    "date": "2026-11-26",
+    "notes": "",
+    "units": "in-psi",
+    "test": "plate",
+    "material_code": "",
+    "layup_code": "",
+    "standard": "none",
+    "specimen": "",
+    "size_from": "",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": "10",
+    "width": "1.5",
+    "tab_length": "1.25",
+    "narrow_width": "",
+    "narrow_length": "",
+    "radius": "",
+    "outer_radius": "",
+    "tab_thickness": "",
+    "tab_bevel": "",
+    "tab_material": "",
+    "strain_device": "",
+    "strain_length": "",
+    "span": "",
+    "overhang": "0",
+    "load_span": "",
+    "hole_diameter": "0.25",
+    "hole_circumferential": "32",
+    "hole_radial": "6",
+    "hole_ring": "2",
+    "hole_growth": "1.2",
+    "material_kind": "plies",
+    "thickness": "",
+    "own_E": "",
+    "own_nu": "",
+    "ply_1": "0",
+    "ply_2": "90",
+    "ply_3": "",
+    "ply_4": "",
+    "ply_5": "",
+    "ply_6": "",
+    "ply_7": "",
+    "ply_8": "",
+    "ply_9": "",
+    "ply_10": "",
+    "ply_11": "",
+    "ply_12": "",
+    "ply_13": "",
+    "ply_14": "",
+    "ply_15": "",
+    "ply_16": "",
+    "symmetric": "no",
+    "ply_thickness": "0.0055",
+    "library": "",
+    "own_name": "Test tape",
+    "own_E1": "2.0e7",
+    "own_E2": "1.3e6",
+    "own_G12": "7.5e5",
+    "own_nu12": "0.3",
+    "own_F1t": "300000",
+    "own_F1c": "200000",
+    "own_F2t": "8000",
+    "own_F2c": "30000",
+    "own_F6": "12000",
+    "own_source": "",
+    "G13": "",
+    "G23": "",
+    "criteria": "tsai-wu",
+    "f12_star": "-0.5",
+    "control": "",
+    "value": "",
+    "element_size": "0.07874015748031496",
+    "mesh_nx": "",
+    "mesh_partitions": "",
+    "mesh_seeds": "",
+    "grips": "coupling",
+    "region": "tabs",
+    "name_part": "",
+    "name_instance": "",
+    "name_material": "",
+    "name_layup": "",
+    "name_section": ""
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Tab-Bottom",
+      "dofs": [
+       1,
+       2,
+       3
+      ],
+      "value": ""
+     },
+     {
+      "region": "Tab-Top",
+      "dofs": [
+       2
+      ],
+      "value": "0.01"
+     },
+     {
+      "region": "Edge-Left",
+      "dofs": [
+       6
+      ],
+      "value": "0.002"
+     }
+    ],
+    "loads": [
+     {
+      "region": "Patch",
+      "kind": "pressure",
+      "pressure": "-5"
+     },
+     {
+      "region": "Hole",
+      "kind": "force",
+      "dof": 3,
+      "total": "1.5"
+     }
+    ],
+    "regions": [
+     {
+      "name": "Patch",
+      "x0": "0.25",
+      "x1": "1.25",
+      "y0": "4",
+      "y1": "6"
+     }
+    ]
+   },
+   "values": {
+    "form_version": "0.9",
+    "date": "2026-11-26",
+    "units": "in-psi",
+    "test": "plate",
+    "standard": "none",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": 10,
+    "width": 1.5,
+    "tab_length": 1.25,
+    "hole_diameter": 0.25,
+    "hole_circumferential": 32,
+    "hole_radial": 6,
+    "hole_ring": 2,
+    "hole_growth": 1.2,
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "no",
+    "ply_thickness": 0.0055,
+    "own_name": "Test tape",
+    "own_E1": 20000000,
+    "own_E2": 1300000,
+    "own_G12": 750000,
+    "own_nu12": 0.3,
+    "own_F1t": 300000,
+    "own_F1c": 200000,
+    "own_F2t": 8000,
+    "own_F2c": 30000,
+    "own_F6": 12000,
+    "criteria": "tsai-wu",
+    "f12_star": -0.5,
+    "element_size": 0.07874015748031496,
+    "supports": [
+     {
+      "region": "Tab-Bottom",
+      "dofs": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "region": "Tab-Top",
+      "dofs": [
+       2
+      ],
+      "value": 0.01
+     },
+     {
+      "region": "Edge-Left",
+      "dofs": [
+       6
+      ],
+      "value": 0.002
+     }
+    ],
+    "loads": [
+     {
+      "region": "Patch",
+      "pressure": -5
+     },
+     {
+      "region": "Hole",
+      "dof": 3,
+      "total": 1.5
+     }
+    ],
+    "regions": [
+     {
+      "name": "Patch",
+      "x0": 0.25,
+      "x1": 1.25,
+      "y0": 4,
+      "y1": 6
+     }
+    ],
+    "input": "plate"
+   }
+  },
+  {
+   "name": "text left where a number belongs, and a value left blank",
+   "form": {
+    "filled_by": "",
+    "date": "2026-11-26",
+    "notes": "",
+    "units": "mm-MPa",
+    "test": "plate",
+    "material_code": "",
+    "layup_code": "",
+    "standard": "none",
+    "specimen": "",
+    "size_from": "",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": "250",
+    "width": "wide",
+    "tab_length": "",
+    "narrow_width": "",
+    "narrow_length": "",
+    "radius": "",
+    "outer_radius": "",
+    "tab_thickness": "",
+    "tab_bevel": "",
+    "tab_material": "",
+    "strain_device": "",
+    "strain_length": "",
+    "span": "",
+    "overhang": "0",
+    "load_span": "",
+    "hole_diameter": "",
+    "hole_circumferential": "32",
+    "hole_radial": "6",
+    "hole_ring": "2",
+    "hole_growth": "1.2",
+    "material_kind": "plies",
+    "thickness": "",
+    "own_E": "",
+    "own_nu": "",
+    "ply_1": "45",
+    "ply_2": "0",
+    "ply_3": "-45",
+    "ply_4": "90",
+    "ply_5": "",
+    "ply_6": "",
+    "ply_7": "",
+    "ply_8": "",
+    "ply_9": "",
+    "ply_10": "",
+    "ply_11": "",
+    "ply_12": "",
+    "ply_13": "",
+    "ply_14": "",
+    "ply_15": "",
+    "ply_16": "",
+    "symmetric": "yes",
+    "ply_thickness": "",
+    "library": "im7-8552",
+    "own_name": "",
+    "own_E1": "",
+    "own_E2": "",
+    "own_G12": "",
+    "own_nu12": "",
+    "own_F1t": "",
+    "own_F1c": "",
+    "own_F2t": "",
+    "own_F2c": "",
+    "own_F6": "",
+    "own_source": "",
+    "G13": "",
+    "G23": "",
+    "criteria": "all",
+    "f12_star": "",
+    "control": "",
+    "value": "",
+    "element_size": "",
+    "mesh_nx": "",
+    "mesh_partitions": "",
+    "mesh_seeds": "",
+    "grips": "coupling",
+    "region": "tabs",
+    "name_part": "",
+    "name_instance": "",
+    "name_material": "",
+    "name_layup": "",
+    "name_section": ""
+   },
+   "plate": {
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3
+      ],
+      "value": ""
+     },
+     {
+      "region": "Edge-Top",
+      "dofs": [
+       2
+      ],
+      "value": ""
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "kind": "force",
+      "dof": 2,
+      "total": ""
+     }
+    ],
+    "regions": []
+   },
+   "values": {
+    "form_version": "0.9",
+    "date": "2026-11-26",
+    "units": "mm-MPa",
+    "test": "plate",
+    "standard": "none",
+    "team_model": "not built yet",
+    "test_data": "none",
+    "length": 250,
+    "width": "wide",
+    "hole_circumferential": 32,
+    "hole_radial": 6,
+    "hole_ring": 2,
+    "hole_growth": 1.2,
+    "ply_1": 45,
+    "ply_2": 0,
+    "ply_3": -45,
+    "ply_4": 90,
+    "symmetric": "yes",
+    "library": "im7-8552",
+    "criteria": "all",
+    "supports": [
+     {
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "region": "Edge-Top",
+      "dofs": [
+       2
+      ]
+     }
+    ],
+    "loads": [
+     {
+      "region": "Edge-Top",
+      "dof": 2,
+      "total": ""
+     }
+    ],
+    "regions": [],
+    "input": "plate"
+   }
+  }
+ ],
+ "edits": {
+  "form": {
+   "filled_by": "",
+   "date": "2026-11-26",
+   "notes": "",
+   "units": "mm-MPa",
+   "test": "plate",
+   "material_code": "",
+   "layup_code": "",
+   "standard": "none",
+   "specimen": "",
+   "size_from": "",
+   "team_model": "not built yet",
+   "test_data": "none",
+   "length": "250",
+   "width": "25",
+   "tab_length": "50",
+   "narrow_width": "",
+   "narrow_length": "",
+   "radius": "",
+   "outer_radius": "",
+   "tab_thickness": "",
+   "tab_bevel": "",
+   "tab_material": "",
+   "strain_device": "",
+   "strain_length": "",
+   "span": "",
+   "overhang": "0",
+   "load_span": "",
+   "hole_diameter": "6",
+   "hole_circumferential": "32",
+   "hole_radial": "6",
+   "hole_ring": "2",
+   "hole_growth": "1.2",
+   "material_kind": "plies",
+   "thickness": "",
+   "own_E": "",
+   "own_nu": "",
+   "ply_1": "45",
+   "ply_2": "0",
+   "ply_3": "-45",
+   "ply_4": "90",
+   "ply_5": "",
+   "ply_6": "",
+   "ply_7": "",
+   "ply_8": "",
+   "ply_9": "",
+   "ply_10": "",
+   "ply_11": "",
+   "ply_12": "",
+   "ply_13": "",
+   "ply_14": "",
+   "ply_15": "",
+   "ply_16": "",
+   "symmetric": "yes",
+   "ply_thickness": "",
+   "library": "im7-8552",
+   "own_name": "",
+   "own_E1": "",
+   "own_E2": "",
+   "own_G12": "",
+   "own_nu12": "",
+   "own_F1t": "",
+   "own_F1c": "",
+   "own_F2t": "",
+   "own_F2c": "",
+   "own_F6": "",
+   "own_source": "",
+   "G13": "",
+   "G23": "",
+   "criteria": "all",
+   "f12_star": "",
+   "control": "",
+   "value": "",
+   "element_size": "2",
+   "mesh_nx": "",
+   "mesh_partitions": "",
+   "mesh_seeds": "",
+   "grips": "coupling",
+   "region": "tabs",
+   "name_part": "",
+   "name_instance": "",
+   "name_material": "",
+   "name_layup": "",
+   "name_section": ""
+  },
+  "start": {
+   "supports": [
+    {
+     "region": "Edge-Bottom",
+     "dofs": [
+      1,
+      2,
+      3
+     ],
+     "value": ""
+    },
+    {
+     "region": "Edge-Top",
+     "dofs": [
+      2
+     ],
+     "value": "1"
+    }
+   ],
+   "loads": [
+    {
+     "region": "Edge-Top",
+     "kind": "force",
+     "dof": 2,
+     "total": "500"
+    }
+   ],
+   "regions": []
+  },
+  "cases": [
+   {
+    "text": "clamp the bottom edge",
+    "changes": [
+     {
+      "action": "hold",
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    ],
+    "done": [
+     "Edge-Bottom: fixed (encastre)"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      },
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "fix the left edge",
+    "changes": [
+     {
+      "action": "hold",
+      "region": "Edge-Left",
+      "dofs": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "done": [
+     "Edge-Left: held along x, y, z (pinned)"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      },
+      {
+       "region": "Edge-Left",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "XSYMM on the right edge",
+    "changes": [
+     {
+      "action": "hold",
+      "region": "Edge-Right",
+      "dofs": [
+       1,
+       5,
+       6
+      ]
+     }
+    ],
+    "done": [
+     "Edge-Right: held along x, tilt about y, rotation about z (XSYMM)"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      },
+      {
+       "region": "Edge-Right",
+       "dofs": [
+        1,
+        5,
+        6
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "hold the top edge in x and z",
+    "changes": [
+     {
+      "action": "hold",
+      "region": "Edge-Top",
+      "dofs": [
+       1,
+       3
+      ]
+     }
+    ],
+    "done": [
+     "Edge-Top: held along x, z"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        1,
+        3
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "pull the top edge with 10 kN",
+    "changes": [
+     {
+      "action": "force",
+      "region": "Edge-Top",
+      "sense": "tension",
+      "value": "10",
+      "unit": "kN"
+     }
+    ],
+    "done": [
+     "Edge-Top: force of 10000 N along y (tension), in place of its move of 1 mm along y"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "10000"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "push the right edge with 500 N",
+    "changes": [
+     {
+      "action": "force",
+      "region": "Edge-Right",
+      "sense": "compression",
+      "value": "500",
+      "unit": "N"
+     }
+    ],
+    "done": [
+     "Edge-Right: force of -500 N along x (compression)"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      },
+      {
+       "region": "Edge-Right",
+       "kind": "force",
+       "dof": 1,
+       "total": "-500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "apply 200 N downward on the hole",
+    "changes": [
+     {
+      "action": "force",
+      "region": "Hole",
+      "dof": 3,
+      "value": "-200",
+      "unit": "N"
+     }
+    ],
+    "done": [
+     "Hole: force of -200 N along z"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      },
+      {
+       "region": "Hole",
+       "kind": "force",
+       "dof": 3,
+       "total": "-200"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "pressure of 0.1 MPa on the face",
+    "changes": [
+     {
+      "action": "pressure",
+      "region": "Face",
+      "value": "0.1",
+      "unit": "MPa"
+     }
+    ],
+    "done": [
+     "Face: pressure of 0.1 MPa, pressing down on the plate"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      },
+      {
+       "region": "Face",
+       "kind": "pressure",
+       "pressure": "0.1"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "suction of 20 kPa on the top tab",
+    "changes": [
+     {
+      "action": "pressure",
+      "region": "Tab-Top",
+      "value": "-20",
+      "unit": "kPa"
+     }
+    ],
+    "done": [
+     "Tab-Top: pressure of -0.02 MPa, lifting the plate"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      },
+      {
+       "region": "Tab-Top",
+       "kind": "pressure",
+       "pressure": "-0.02"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "move the top edge 2 mm along y",
+    "changes": [
+     {
+      "action": "move",
+      "region": "Edge-Top",
+      "dof": 2,
+      "value": "2",
+      "unit": "mm"
+     }
+    ],
+    "done": [
+     "Edge-Top: moved 2 mm along y, in place of its force of 500 N along y"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "2"
+      }
+     ],
+     "loads": [],
+     "regions": []
+    }
+   },
+   {
+    "text": "move the bottom edge 0.5 mm along x",
+    "changes": [
+     {
+      "action": "move",
+      "region": "Edge-Bottom",
+      "dof": 1,
+      "value": "0.5",
+      "unit": "mm"
+     }
+    ],
+    "done": [
+     "Edge-Bottom: moved 0.5 mm along x"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      },
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1
+       ],
+       "value": "0.5"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "remove the load on the top edge",
+    "changes": [
+     {
+      "action": "unload",
+      "region": "Edge-Top"
+     }
+    ],
+    "done": [
+     "Edge-Top: load removed"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3
+       ],
+       "value": ""
+      },
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [],
+     "regions": []
+    }
+   },
+   {
+    "text": "free the bottom edge",
+    "changes": [
+     {
+      "action": "free",
+      "region": "Edge-Bottom"
+     }
+    ],
+    "done": [
+     "Edge-Bottom: no longer held"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Top",
+       "dofs": [
+        2
+       ],
+       "value": "1"
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "500"
+      }
+     ],
+     "regions": []
+    }
+   },
+   {
+    "text": "clamp the bottom edge and pull the top edge with 2 kN",
+    "changes": [
+     {
+      "action": "hold",
+      "region": "Edge-Bottom",
+      "dofs": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "action": "force",
+      "region": "Edge-Top",
+      "sense": "tension",
+      "value": "2",
+      "unit": "kN"
+     }
+    ],
+    "done": [
+     "Edge-Bottom: fixed (encastre)",
+     "Edge-Top: force of 2000 N along y (tension), in place of its move of 1 mm along y"
+    ],
+    "after": {
+     "supports": [
+      {
+       "region": "Edge-Bottom",
+       "dofs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ],
+       "value": ""
+      }
+     ],
+     "loads": [
+      {
+       "region": "Edge-Top",
+       "kind": "force",
+       "dof": 2,
+       "total": "2000"
+      }
+     ],
+     "regions": []
+    }
+   }
+  ]
+ },
+ "coupons": [
+  {
+   "name": "a tension coupon of a library material",
+   "form": {
+    "test": "unnotched tension",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": "1",
+    "filled_by": ""
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": 1,
+    "length": 250,
+    "width": 25
+   }
+  },
+  {
+   "name": "a tension coupon with an element size, an own G13 and no standard",
+   "form": {
+    "test": "unnotched tension",
+    "units": "mm-MPa",
+    "length": "250",
+    "width": "25",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "displacement",
+    "value": "1",
+    "filled_by": "",
+    "element_size": "1.5",
+    "own_E1": "160000",
+    "G13": "5000",
+    "standard": "none"
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "standard": "none",
+    "G13": 5000,
+    "control": "displacement",
+    "value": 1,
+    "length": 250,
+    "width": 25,
+    "element_size": 1.5
+   }
+  },
+  {
+   "name": "a tension coupon in inches pulled by a force",
+   "form": {
+    "test": "unnotched tension",
+    "units": "in-psi",
+    "length": "10",
+    "width": "1",
+    "library": "im7-8552",
+    "ply_1": "0",
+    "ply_2": "90",
+    "symmetric": "yes",
+    "control": "force",
+    "value": "2000",
+    "filled_by": ""
+   },
+   "values": {
+    "form_version": "0.9",
+    "input": "tension",
+    "units": "in-psi",
+    "library": "im7-8552",
+    "ply_1": 0,
+    "ply_2": 90,
+    "symmetric": "yes",
+    "control": "force",
+    "value": 2000,
+    "length": 10,
+    "width": 1
+   }
+  }
+ ]
+}

@@ -1,8 +1,8 @@
 name: Assistant check
 
 # The real-model check of the assistant (ADR-0121, check 2), started by hand from the Actions tab before a feature is merged: every
-# question of the banks that a model reads is asked of the API's readers and of an MCP client with the site's models, and the report
-# lands on the run's page. Answers are kept from one run to the next (the run's "assistant-answers" artifact), so a run pays only for
+# question of the banks that a model reads is asked of the API's readers (its planner among them, ADR-0144: a plan is made, never approved)
+# and of an MCP client with the site's models, and the report lands on the run's page. Answers are kept from one run to the next (the run's "assistant-answers" artifact), so a run pays only for
 # the questions, instructions or models that changed; the rest goes in one batch at half price, or with "fast" all at once at full
 # price, for a report in minutes rather than when the batch ends. It needs the repository secret
 # ANTHROPIC_API_KEY_QUESTION_CHECKER (or ANTHROPIC_API_KEY), which only the founder sets: a key of its own, with its own spend limit.

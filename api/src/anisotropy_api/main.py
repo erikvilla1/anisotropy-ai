@@ -22,13 +22,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
-from anisotropy_engine.repair import bond_needs, pick_check, ply_needs, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
+from anisotropy_engine.repair import RepairChange, RepairSweep, bond_needs, pick_check, ply_needs, preview_change as preview_repair_change, repair_from_dict, repair_report, repair_views, solve_needs, sweep_repair
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 from anisotropy_engine.wing.analysis import analyze_wing
@@ -52,8 +52,8 @@ from .processes import run_tool
 from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, OWNERS_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NoDocument, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, REPAIR_PLIES, WING, is_repair_plies, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_plies_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
-from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
-                      model_calls_since,
+from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, add_version, apply_setup, check_ready, list_versions, mark_version_run, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+                      model_calls_since, PlanTaken, STALE_PLAN, STALE_REPAIR, add_plan, approve_plan, approve_repair_plan, edit_plan, fetch_plan, fetch_repair_plan, fetch_version, owns_plan, plans_since, update_plan,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
@@ -73,8 +73,10 @@ from .schemas import (
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
     GeneralAnswerResponse, GeneralQuestionRequest, ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySection, TheorySectionsRequest, TheorySectionsResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
-    VerificationResponse,
+    VerificationResponse, ModelVersionInput, ModelVersionOutput, ProjectChangesRequest, SetupChangesOutput, SetupChangesRequest, SetupReadRequest, VersionRun,
+    ApproveOutput, ApproveRequest, PlanOutput, PlanRequest, PlanRun, RepairApproveOutput, RepairApproveRequest, RepairPlanRequest, StepReport,
 )
+from . import planner, planner_kinds, setup_tools
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
 # What a request's calls to the model cost, on the answer to a request with no signed-in email only: the site check's service token (ADR-0138)
@@ -265,18 +267,20 @@ LinkActor = Annotated[str, Depends(actor_of_a_link)]
 
 
 def _record(request: Request, actor: str, problem: BaseModel, *, response: dict | None = None,
-            error: str | None = None, llm: tuple[str | None, str | None] = (None, None)) -> uuid.UUID | None:
+            error: str | None = None, llm: tuple[str | None, str | None] = (None, None), endpoint: str | None = None) -> uuid.UUID | None:
     """Write the run and return its id; None when recording is switched off.
 
     `inputs` is the request as received: only the fields the client sent. When the row cannot be
     written the result is withheld (503) rather than returned without a receipt, the same policy
-    as refusing to start (ADR-0026).
+    as refusing to start (ADR-0026). `endpoint` is the route as recorded, the path asked by default;
+    a route under a project's plans names its template, which the ids would make too long to keep
+    and the weekly views would split by project (ADR-0144).
     """
     engine = getattr(request.app.state, "records", None)
     if engine is None:
         return None
     try:
-        return record_run(engine, actor=actor, endpoint=request.url.path,
+        return record_run(engine, actor=actor, endpoint=endpoint or request.url.path,
                           inputs=problem.model_dump(mode="json", exclude_unset=True),
                           engine_version=version("anisotropy-engine"), api_version=version("anisotropy-api"),
                           git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error,
@@ -327,14 +331,17 @@ Body = TypeVar("Body", bound=BaseModel)
 
 
 def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body],
-             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None, calls: list[ModelCall] | None = None) -> Body:
+             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None, calls: list[ModelCall] | None = None,
+             endpoint: str | None = None, recorded: Callable[[Body], dict] | None = None) -> Body:
     """Compute, record the outcome, and attach the run id (ADR-0026).
 
     A 422 raised while computing is recorded as a rejection and re-raised with the run id in its
-    header; a successful body is recorded as returned, without run_id, and returned with it. `llm_of`
+    header; a successful body is recorded as returned, without run_id, and returned with it, or as
+    `recorded` sums it up (a plan's runs as each run's own route keeps them, never their drawings). `llm_of`
     names the language model whose draft the body holds, for the record (ADR-0052). `calls` is filled by
     `compute` with each call to the model it made; they are written after the run, naming it, however
-    the request ends (ADR-0120): a call that was made was billed.
+    the request ends (ADR-0120): a call that was made was billed. `endpoint` is the route as recorded
+    (`_record`).
     """
     run_id: uuid.UUID | None = None
     try:
@@ -343,10 +350,10 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
         except HTTPException as exc:
             if exc.status_code != 422:
                 raise
-            run_id = _record(request, actor, problem, error=str(exc.detail))
+            run_id = _record(request, actor, problem, error=str(exc.detail), endpoint=endpoint)
             raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
-        run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}),
-                         llm=llm_of(body) if llm_of is not None else (None, None))
+        run_id = _record(request, actor, problem, response=recorded(body) if recorded is not None else body.model_dump(mode="json", exclude={"run_id"}),
+                         llm=llm_of(body) if llm_of is not None else (None, None), endpoint=endpoint)
     finally:
         if calls:
             _record_calls(request, actor, calls, run_id)
@@ -540,27 +547,36 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     and the answer's X-Anisotropy-Enqueue header tells the Worker to queue it.
     """
     jobs = _coupon_jobs(request)
-    form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
-    values = job_request.values_bytes() if job_request.values is not None else None
     project_id = _own_project_id(request, actor, job_request.project_id)
     if job_request.coupon is not None:
         _their_coupon(request, jobs, job_request.coupon)
     try:
-        # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
-        options = [*job_request.options(), *EVERY_TEST[_every_for(request, values)]]
-        job = jobs.start(actor, job_request.recorded_inputs(), options, form=form, coupon=job_request.coupon, values=values,
-                         user_email=getattr(request.state, "user_email", None), project_id=project_id)
+        job = _start_job(request, actor, jobs, job_request, response, project_id)
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobLimited as exc:  # the hosted tier's per-user limit (ADR-0056): the reason is what the studio shows
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except JobRefused as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+def _start_job(request: Request, actor: str, jobs: CouponJobs, job_request: CouponJobRequest, response: Response,
+               project_id: uuid.UUID | None) -> Job:
+    """A coupon job started as `POST /v1/coupon-jobs` starts it, for that route and for a plan's approval (ADR-0144): the same options,
+    the same per-user limits, and the same headers on the answer (where to poll it, and with the queue the id the Worker queues).
+    JobBusy, JobLimited and JobRefused are the caller's to answer."""
+    form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
+    values = job_request.values_bytes() if job_request.values is not None else None
+    # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
+    options = [*job_request.options(), *EVERY_TEST[_every_for(request, values)]]
+    job = jobs.start(actor, job_request.recorded_inputs(), options, form=form, coupon=job_request.coupon, values=values,
+                     user_email=getattr(request.state, "user_email", None), project_id=project_id)
     response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
     if job.state == "queued":
         response.headers[ENQUEUE_HEADER] = str(job.id)
-    with jobs.lock:
-        return CouponJobOutput.of(job)
+    return job
 
 
 @app.post(WAKE, status_code=202)
@@ -909,6 +925,426 @@ def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, r
     except SQLAlchemyError as exc:
         raise _database_error(exc) from exc
     return ProjectOutput.of(row)
+
+
+# ----------------------------------------------------------------------------- the workspace's tools and a model's versions (ADR-0143)
+
+SETUP = "/v1/workspace/setup"
+SETUP_CHANGES = "/v1/workspace/setup-changes"
+
+
+def _changes_output(content: dict, changes: list) -> SetupChangesOutput:
+    """Typed changes worked out on a setup (`setup_tools.change_setup`): every one or none, and the setup as it then reads."""
+    changed = setup_tools.change_setup(content, [c.as_dict() for c in changes])
+    plate = setup_tools.form_of(changed.content).get("test") == setup_tools.plate_test()
+    return SetupChangesOutput(ok=changed.ok, done=changed.done, refused=changed.refused, digest=setup_tools.content_digest(content),
+                              setup=setup_tools.read_setup(changed.content), content=changed.content,
+                              values=setup_tools.plate_values(changed.content) if plate else None)
+
+
+@app.post(SETUP)
+def read_setup_endpoint(problem: SetupReadRequest, actor: Actor) -> dict[str, Any]:
+    """A model's setup as a reader with no page sees it (ADR-0143): its test, units and size, a plate's regions with where each lies and
+    whether it is an end or a side, and what is held and loaded, one line each. The rows as written; nothing is computed or kept."""
+    return setup_tools.read_setup(problem.content.model_dump())
+
+
+@app.post(SETUP_CHANGES, response_model=SetupChangesOutput)
+def preview_setup_changes(problem: SetupChangesRequest, actor: Actor) -> SetupChangesOutput:
+    """Typed changes to a setup the request carries, previewed (ADR-0143): every change made on a copy, or none with the reason for each
+    refused one. Nothing is kept; the MCP server previews here, and a kept project is changed at `/v1/projects/{id}/setup-changes`."""
+    return _changes_output(problem.content.model_dump(), problem.changes)
+
+
+@app.post(PROJECTS + "/{project_id}/setup-changes", response_model=SetupChangesOutput)
+def change_project_setup(project_id: uuid.UUID, problem: ProjectChangesRequest, actor: Actor, request: Request) -> SetupChangesOutput:
+    """Typed changes to one of the requester's projects (ADR-0143). Without `apply`, a preview. With `apply` and the `digest` of the
+    preview as `base`, the project's content is replaced and the setup kept as a new version, by `by` and for `why`, in one transaction:
+    409 when the project changed since the preview, 422 with the reasons when a change is refused. Only a model's setup changes here;
+    a run is started as always (`POST /v1/coupon-jobs`)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    if row.kind != "fea":
+        raise HTTPException(status_code=422, detail=f"a {row.kind} project has no setup of supports and loads; these changes are a model's")
+    content = dict(row.content)
+    out = _changes_output(content, problem.changes)
+    if not problem.apply:
+        return out
+    if not out.ok:
+        raise HTTPException(status_code=422, detail="; ".join(f"change {r['change']}: {r['reason']}" for r in out.refused))
+    if problem.base is None:
+        raise HTTPException(status_code=422, detail="an applied change names the setup it was worked out on: pass the preview's digest as base")
+    try:
+        kept = apply_setup(engine, row.id, base=problem.base, digest_of=setup_tools.content_digest, content=out.content, made_by=problem.by,
+                           why=problem.why, changes=out.done, version_digest=setup_tools.setup_key(out.content), now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if kept is None:
+        raise HTTPException(status_code=409, detail="The model changed since this change was worked out. Look at it again and redo the change.")
+    project, version = kept
+    return out.model_copy(update={"project": ProjectOutput.of(project), "version": ModelVersionOutput.of(version)})
+
+
+@app.get(PROJECTS + "/{project_id}/versions", response_model=list[ModelVersionOutput])
+def project_versions(project_id: uuid.UUID, actor: Actor, request: Request,
+                     limit: Annotated[int, Query(ge=1, le=200)] = 50) -> list[ModelVersionOutput]:
+    """A project's last versions, the oldest of them first (ADR-0113, kept by the server since ADR-0143)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        return [ModelVersionOutput.of(v) for v in list_versions(engine, row.id, limit)]
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+
+
+@app.post(PROJECTS + "/{project_id}/versions", status_code=201, response_model=ModelVersionOutput)
+def add_project_version(project_id: uuid.UUID, version: ModelVersionInput, actor: Actor, request: Request, response: Response) -> ModelVersionOutput:
+    """A version the page settled, numbered after the project's last: 201 when it is new, 200 with the last one when the setup is the
+    same as the last's."""
+    engine, row = _requesters_project(request, actor, project_id)
+    content = {"form": version.form, "plate": version.plate}
+    try:
+        kept, made = add_version(engine, row.id, made_by=version.by, why=version.why, changes=version.changes, content=content,
+                                 digest=setup_tools.setup_key(content), now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    response.status_code = 201 if made else 200
+    return ModelVersionOutput.of(kept)
+
+
+@app.put(PROJECTS + "/{project_id}/versions/{n}/run", response_model=ModelVersionOutput)
+def mark_project_version_run(project_id: uuid.UUID, n: int, run: VersionRun, actor: Actor, request: Request) -> ModelVersionOutput:
+    """The run made from a version, and its answer once the page has read it."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        marked = mark_version_run(engine, row.id, n, job_id=run.job, result=None if run.result is None else run.result.model_dump())
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if marked is None:
+        raise HTTPException(status_code=404, detail=f"No version {n} of this project")
+    return ModelVersionOutput.of(marked)
+
+
+# ----------------------------------------------------------------------------- the workspace's planner (ADR-0144)
+
+PLANS = PROJECTS + "/{project_id}/plans"
+STALE_WING = "The wing changed since this plan was made. Ask again for a new plan."
+
+
+def _plans_left(request: Request, engine, email: str | None) -> int | None:
+    """How many planned requests the signed-in person has left today (ADR-0144), counted since midnight UTC; None when nothing is
+    counted: a request with no email, which behind Access is a service token of ours (as ADR-0139), and locally the one user."""
+    if email is None:
+        return None
+    settings = getattr(request.app.state, "settings", None)
+    cap = getattr(settings, "agent_requests_per_user_per_day", planner.AGENT_REQUESTS_DEFAULT)
+    midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        return max(cap - plans_since(engine, email, midnight), 0)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+
+
+def _requesters_plan(request: Request, actor: str, project_id: uuid.UUID, plan_id: uuid.UUID):
+    """A plan of one of the requester's projects; 404 otherwise, in the same words for another's as for none."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        plan = fetch_plan(engine, row.id, plan_id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours")
+    return engine, row, plan
+
+
+def _plan_output(request: Request, engine, plan, version=None) -> PlanOutput:
+    try:
+        if version is None and plan.version_n is not None:
+            version = fetch_version(engine, plan.project_id, plan.version_n)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return PlanOutput.of(plan, version, requests_left=_plans_left(request, engine, _email(request)))
+
+
+def _plan_and_keep(request: Request, actor: str, engine, ask: str, *, kind: str, project_id: uuid.UUID | None, base: str,
+                   make: Callable[[Any], planner.Planned], calls: list[ModelCall]) -> PlanOutput:
+    """One planned request of any kind, kept as a row: `capped` with no call past the day's planned requests (every kind counted together),
+    else the plan `make` makes with the request's writer. The answer says how many are left today."""
+    email = _email(request)
+    left = _plans_left(request, engine, email)
+    if left is not None and left <= 0:
+        print(f"plan capped for the actor {actor}: the day's planned requests are used", flush=True)
+        made = planner.Planned("capped", reason=planner.PLAN_LIMIT_REASON)
+    else:
+        made = make(_assistant(request, actor))
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        kept = add_plan(engine, kind=kind, project_id=project_id, user_email=email, actor=actor, ask=ask, state=made.state, steps=made.steps,
+                        base=base, question=made.question, unread=made.unread, reason=made.reason, writer=made.writer, model=made.model,
+                        created_at=now, updated_at=now)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    counted = made.state not in planner.UNCOUNTED
+    return PlanOutput.of(kept, requests_left=None if left is None else max(left - counted, 0))
+
+
+def _plan_llm(body: PlanOutput) -> tuple[str | None, str | None]:
+    return (body.writer, body.model) if body.model else (None, None)
+
+
+@app.post(PLANS, response_model=PlanOutput)
+def plan_a_request(project_id: uuid.UUID, problem: PlanRequest, actor: Actor, request: Request, response: Response) -> PlanOutput:
+    """An engineer's sentence read into a plan of typed tool steps (ADR-0144), on a kept `fea` project or, since build step 5, a kept
+    `wing` project (its plies changed, its hand calculation and its finite element check, `planner_kinds.py`): one call to the model, one
+    more with the reasons when its plan fails the planner's checks, then the plan (`proposed`), the question it asks back (`question`) or
+    why there is none (`refused`). With no model, `unavailable`, and the page reads the sentence as before. A signed-in person past the
+    day's planned requests is answered `capped` and no model is called. Nothing changes here: the plan waits for its approval. Recorded
+    as a run (ADR-0026), and each call to the model as a row of `model_calls` (ADR-0120)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    content = dict(row.content)
+    calls: list[ModelCall] = []
+
+    def compute() -> PlanOutput:
+        if row.kind == "wing":
+            wing = content.get("wing")
+            try:
+                wing_from_dict(wing)
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                raise HTTPException(status_code=422, detail=f"The wing cannot be read, so it cannot be planned on: {exc}") from exc
+            return _plan_and_keep(request, actor, engine, problem.ask, kind="wing", project_id=row.id, base=setup_tools.content_digest(content),
+                                  make=lambda assistant: planner_kinds.make_wing_plan(assistant, problem.ask, wing, calls), calls=calls)
+        if row.kind != "fea":
+            raise HTTPException(status_code=422, detail=f"a {row.kind} project has no model to plan on; the planner reads a model's setup")
+        return _plan_and_keep(request, actor, engine, problem.ask, kind=planner.kind_of(content), project_id=row.id,
+                              base=setup_tools.content_digest(content),
+                              make=lambda assistant: planner.make_plan(assistant, problem.ask, content, calls), calls=calls)
+
+    return _deliver(request, response, actor, problem, compute, llm_of=_plan_llm, calls=calls, endpoint=PLANS)
+
+
+@app.get(PLANS + "/{plan_id}", response_model=PlanOutput)
+def read_plan(project_id: uuid.UUID, plan_id: uuid.UUID, actor: Actor, request: Request) -> PlanOutput:
+    """A plan as it stands (ADR-0144): its steps with their states and notes as they ran and as the page reported them."""
+    engine, _, plan = _requesters_plan(request, actor, project_id, plan_id)
+    return _plan_output(request, engine, plan)
+
+
+@app.post(PLANS + "/{plan_id}/approve", response_model=ApproveOutput)
+def approve_a_plan(project_id: uuid.UUID, plan_id: uuid.UUID, approval: ApproveRequest, actor: Actor, request: Request,
+                   response: Response) -> ApproveOutput:
+    """A plan approved, once (ADR-0144). In order: its changes applied and kept as a version by `assistant` with the ask as why, in one
+    transaction (409 when it is no plan to approve, or the project changed since `base`); the setup check of the values the page would
+    send (a check that does not pass stops the plan at its check step, with its lines as the note, and nothing runs); the run, started as
+    `POST /v1/coupon-jobs` starts one, with its limits and headers (a start refused, by a busy solver or the day's cap on analyses, stops
+    the plan at its run step with the reason, answered 200). The answer is the plan, the project, the version, the job and the check."""
+    engine, row, plan = _requesters_plan(request, actor, project_id, plan_id)
+    if plan.state != "proposed":
+        raise HTTPException(status_code=409, detail="This plan was approved already, or it is not a plan to approve. Ask again for a new one.")
+    content = dict(row.content)
+    if approval.base != plan.base or setup_tools.content_digest(content) != plan.base:
+        raise HTTPException(status_code=409, detail=STALE_WING if plan.kind == "wing" else "The model changed since this plan was made. Ask again for a new plan.")
+    steps = [dict(step) for step in plan.steps]
+    if plan.kind == "wing":
+        return _approve_wing_plan(request, actor, response, approval, engine, row, plan, content, steps)
+    runs = planner.step_of(steps, "run") is not None
+    jobs = _coupon_jobs(request) if runs else None  # 503 before anything is applied when this server runs no analysis
+
+    def compute() -> ApproveOutput:
+        now = dt.datetime.now(dt.timezone.utc)
+        changes = planner.changes_of(steps)
+        changed = setup_tools.change_setup(content, changes) if changes else None
+        if changed is not None and not changed.ok:  # the setup is the plan's own, so its preview stands; a refusal here is a changed model
+            raise HTTPException(status_code=409, detail="The model changed since this plan was made. Ask again for a new plan.")
+        planner.settle(steps, planner.CHANGE_TOOLS, "done")
+        try:
+            kept, project, version = approve_plan(
+                engine, plan.id, row.id, base=plan.base, digest_of=setup_tools.content_digest, content=None if changed is None else changed.content,
+                why=plan.ask, changes=[] if changed is None else changed.done, version_digest=None if changed is None else setup_tools.setup_key(changed.content),
+                steps=steps, now=now)
+        except PlanTaken as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        check, job = None, None
+        if jobs is not None:
+            check, job = _check_and_run(request, actor, jobs, response, steps, dict(project.content), row.id)
+        try:
+            if job is not None and version is not None:
+                version = mark_version_run(engine, row.id, version.n, job_id=str(job.id), result=None) or version
+            if check is not None and check.designation and check.designation != project.designation:
+                project = update_project(engine, row.id, designation=check.designation)
+            kept = update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), job_id=None if job is None else str(job.id),
+                               updated_at=dt.datetime.now(dt.timezone.utc))
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        except LookupError as exc:  # the project and its plans were deleted meanwhile
+            raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours") from exc
+        job_output = None
+        if job is not None:
+            with jobs.lock:
+                job_output = CouponJobOutput.of(job)
+        return ApproveOutput(plan=_plan_output(request, engine, kept, version), project=ProjectOutput.of(project),
+                             version=None if version is None else ModelVersionOutput.of(version), job=job_output, check=check)
+
+    return _deliver(request, response, actor, approval, compute, endpoint=PLANS + "/{plan_id}/approve")
+
+
+def _check_and_run(request: Request, actor: str, jobs: CouponJobs, response: Response, steps: list[dict[str, Any]], content: dict[str, Any],
+                   project_id: uuid.UUID) -> tuple[CouponCheckResponse | None, Job | None]:
+    """An approved plan's check and run, with its steps set in place as they end: the setup check of the values the page sends for the
+    setup as it now stands (`workspaceValues`); when it passes, the run, as the page starts it (by the form's Filled in by or "studio",
+    over the coupon's earlier attempts when it has some, and no PDF). A check that does not pass, or a start refused, stops the plan at
+    that step with the reason."""
+    check_n = planner.step_of(steps, "check")["n"]
+    run_n = planner.step_of(steps, "run")["n"]
+    values = planner.run_values(content, _every_test(request))
+    try:
+        asked = CouponCheckRequest(values=values, project_id=str(project_id))
+        found = jobs.check(asked.values_bytes(), every=_every_for(request, asked.values_bytes), user_email=_email(request))
+    except (ValidationError, ValueError, CheckTimedOut, JobRefused) as exc:
+        planner.stop_at(steps, check_n, str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__)
+        return None, None
+    checklist = found["checklist"]
+    check = CouponCheckResponse(run_id=None, state=checklist["state"], designation=checklist.get("designation"), checklist=checklist,
+                                preview=found["preview"])
+    if check.state != "ready":
+        planner.stop_at(steps, check_n, planner.check_note(checklist))
+        return check, None
+    planner.settle(steps, ("check",), "done")
+    try:
+        job_request = CouponJobRequest(values=values, run_by=planner.run_by(content), replace=bool(checklist.get("coupon_exists")), pdf=False,
+                                       project_id=str(project_id))
+        job = _start_job(request, actor, jobs, job_request, response, project_id)
+    except (JobBusy, JobLimited, JobRefused, ValidationError) as exc:
+        planner.stop_at(steps, run_n, str(exc).splitlines()[0])
+        return check, None
+    planner.settle(steps, ("run",), "running")
+    return check, job
+
+
+def _approve_wing_plan(request: Request, actor: str, response: Response, approval: ApproveRequest, engine, row, plan, content: dict[str, Any],
+                       steps: list[dict[str, Any]]) -> ApproveOutput:
+    """A wing's plan approved, once (ADR-0144, build step 5). In order: its changes of plies made by the engine (`change_wing`) and the
+    wing project's content replaced, in one transaction with the stale check (409 when the project changed since `base`); no version is
+    kept here, since a wing's versions are the browser's (ADR-0122): the page keeps one by `assistant` with the ask as why; then each run
+    in its order, the hand calculation (its report and views among the runs) and the finite element check, started as `POST
+    /v1/wings/checks` starts one, for this project, with its limits and headers (a start refused, by a busy solver or the day's cap on
+    analyses, stops the plan at its check step with the reason). The page polls the check at `/v1/wings/checks/{job}` and reports it."""
+    jobs = _coupon_jobs(request) if planner.step_of(steps, "check") is not None else None  # 503 before anything changes with no solver here
+
+    def compute() -> ApproveOutput:
+        try:
+            wing = planner_kinds.changed_wing(content["wing"], steps)
+        except (ValueError, TypeError, KeyError, ValidationError) as exc:  # the plan's own wing took its changes: a refusal here is a changed one
+            raise HTTPException(status_code=409, detail=STALE_WING) from exc
+        planner.settle(steps, planner_kinds.WING_CHANGES, "done")
+        try:
+            kept, project, _ = approve_plan(engine, plan.id, row.id, base=plan.base, digest_of=setup_tools.content_digest,
+                                            content=None if wing is None else {**content, "wing": wing}, why=plan.ask, changes=[], version_digest=None,
+                                            steps=steps, now=dt.datetime.now(dt.timezone.utc), versioned=False)
+        except PlanTaken as exc:
+            raise HTTPException(status_code=409, detail=STALE_WING if str(exc) == STALE_PLAN else str(exc)) from exc
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        runs, job = _wing_runs(request, actor, jobs, response, steps, dict(project.content["wing"]), row.id)
+        try:
+            kept = update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), job_id=None if job is None else str(job.id),
+                               updated_at=dt.datetime.now(dt.timezone.utc))
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        except LookupError as exc:  # the project and its plans were deleted meanwhile
+            raise HTTPException(status_code=404, detail=f"No plan {plan.id} of yours") from exc
+        return ApproveOutput(plan=_plan_output(request, engine, kept), project=ProjectOutput.of(project), version=None, job=None, check=None,
+                             runs=runs)
+
+    return _deliver(request, response, actor, approval, compute, endpoint=PLANS + "/{plan_id}/approve", recorded=_approval_summary)
+
+
+def _approval_summary(body: BaseModel) -> dict[str, Any]:
+    """An approval's record: the plan as it then stands, the project's or the repair's description, and each run as its own route keeps it."""
+    kept = body.model_dump(mode="json", exclude={"run_id", "runs", "project"})
+    project = getattr(body, "project", None)
+    if project is not None:
+        kept["project"] = {"id": project.id, "kind": project.kind, "content": project.content}
+    kept["runs"] = [{"n": run.n, "tool": run.tool, "answer": planner_kinds.run_summary(run.tool, run.answer)} for run in body.runs]
+    return kept
+
+
+def _wing_runs(request: Request, actor: str, jobs: CouponJobs | None, response: Response, steps: list[dict[str, Any]], wing: dict[str, Any],
+               project_id: uuid.UUID) -> tuple[list[PlanRun], Job | None]:
+    """A wing plan's runs in their order, with their steps set in place as they end: the hand calculation worked by the engine at once,
+    and the finite element check started as a job for the project, its step `running` until the page reports it. A run that cannot be
+    made stops the plan at its step with the reason, and nothing after it runs."""
+    runs: list[PlanRun] = []
+    job = None
+    for step in steps:
+        if step["tool"] not in planner_kinds.WING_RUNS or step["state"] != "planned":
+            continue
+        n = step["n"]
+        try:
+            stated, envelope = wing_from_dict(wing)
+        except (ValueError, TypeError, KeyError) as exc:
+            planner.stop_at(steps, n, str(exc) or exc.__class__.__name__)
+            break
+        if step["tool"] == "analyze":
+            try:
+                result = analyze_wing(stated, envelope)
+                report = wing_report(result, wing["units"], wing["envelope"]["speed_unit"])
+                views = wing_views(result, wing["units"])
+                if not (_finite(report) and _finite(views)):
+                    raise FloatingPointError("Non-finite result")
+            except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError, ZeroDivisionError) as exc:
+                planner.stop_at(steps, n, "These values do not give a finite, solvable wing. Check the values and their units."
+                                if isinstance(exc, (FloatingPointError, OverflowError, ZeroDivisionError, np.linalg.LinAlgError)) else str(exc))
+                break
+            runs.append(PlanRun(n=n, tool="analyze", answer=WingAnswer(engine_version=version("anisotropy-engine"), wing=wing, report=report, views=views)
+                                .model_dump(mode="json", exclude={"run_id"})))
+            planner.settle([step], ("analyze",), "done")
+            continue
+        try:
+            job = jobs.start_wing(actor, {"kind": WING, "wing": stated.name, "description": wing}, user_email=_email(request), project_id=project_id)
+        except (JobBusy, JobLimited) as exc:
+            planner.stop_at(steps, n, str(exc).splitlines()[0])
+            break
+        except JobRefused as exc:
+            print(f"a plan's wing check not started: {exc}", flush=True)
+            planner.stop_at(steps, n, "The check could not be started right now. Try again in a minute.")
+            break
+        response.headers["Location"] = f"{WING_CHECKS}/{job.id}"
+        if job.state == "queued":
+            response.headers[ENQUEUE_HEADER] = str(job.id)
+        runs.append(PlanRun(n=n, tool="check", answer=_wing_check_output(jobs, job).model_dump(mode="json")))
+        planner.settle([step], ("check",), "running")
+    return runs, job
+
+
+def _reported_by(kind: str) -> tuple[str, ...]:
+    """The steps the page carries and reports, by what the plan plans on."""
+    return planner_kinds.REPORTED.get(kind, planner.REPORTED)
+
+
+@app.post(PLANS + "/{plan_id}/steps/{n}", response_model=PlanOutput)
+def report_plan_step(project_id: uuid.UUID, plan_id: uuid.UUID, n: int, report: StepReport, actor: Actor, request: Request) -> PlanOutput:
+    """A step the page carries reported as it goes (ADR-0144): the run as its job ends, the `qa` read from the result's own checks, the
+    `answer` through the result answers; on a wing, its finite element check as its job ends and its answers. A failed step stops the
+    plan and skips the steps after it; once every step is done or skipped the plan is `done`. 409 for a plan not yet approved, a step of
+    the server's (a coupon's `check`, a change, a wing's hand calculation) or a step that ended otherwise."""
+    engine, _, plan = _requesters_plan(request, actor, project_id, plan_id)
+    if plan.state not in ("approved", "running", "done", "stopped"):
+        raise HTTPException(status_code=409, detail="This plan is not approved, so it has no step to report.")
+
+    def edit(steps: list[dict[str, Any]]) -> str:
+        return planner.report_step(steps, n, report.state, report.note, _reported_by(plan.kind))
+
+    try:
+        edited = edit_plan(engine, plan.id, edit, dt.datetime.now(dt.timezone.utc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except planner.StepRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if edited is None:
+        raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours")
+    return _plan_output(request, engine, edited)
 
 
 # ----------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)
@@ -2237,6 +2673,175 @@ def repair_shape_endpoint(problem: RepairRequest, actor: Actor, request: Request
     if run_id is not None:
         response.headers[RUN_ID_HEADER] = str(run_id)
     return RepairShapeAnswer(run_id=None if run_id is None else str(run_id), step=step, parts=parts)
+
+
+# ----------------------------------------------------------------------------- a repair's plans (ADR-0144, build step 5)
+
+REPAIR_PLANS = "/v1/workspace/repair-plans"
+SOLVER_ABSENT = "The solver is not installed here"
+
+
+def _requesters_repair_plan(request: Request, actor: str, plan_id: uuid.UUID):
+    """A repair's plan when it is the requester's (`owns_plan`); 404 otherwise, in the same words for another's as for none."""
+    engine = _records_engine(request)
+    try:
+        plan = fetch_repair_plan(engine, plan_id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if plan is None or not owns_plan(plan, actor, _email(request)):
+        raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours")
+    return engine, plan
+
+
+@app.post(REPAIR_PLANS, response_model=PlanOutput)
+def plan_a_repair(problem: RepairPlanRequest, actor: Actor, request: Request, response: Response) -> PlanOutput:
+    """An engineer's sentence on a repair read into a plan of typed tool steps (ADR-0144, build step 5): the repair's changes, a sweep and
+    the use of its own pick, the solve of its slice, its bond followed until it lets go, and answers (`planner_kinds.py`). A repair is not
+    a kept project, so the description comes with the sentence as the page holds it; the engine reads it first and refuses it in its
+    words (422). Then as a project's plan: one call to the model, one more with the reasons, then `proposed`, `question` or `refused`;
+    `unavailable` with no model; `capped` past the day's planned requests, every kind counted together. The plan's `base` is the
+    description's digest. Nothing changes here. Recorded as a run, and each call to the model as a row of `model_calls`."""
+    engine = _records_engine(request)
+    repair = dict(problem.repair)
+    calls: list[ModelCall] = []
+
+    def compute() -> PlanOutput:
+        try:
+            repair_from_dict(repair)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc) or exc.__class__.__name__) from exc
+        return _plan_and_keep(request, actor, engine, problem.ask, kind="repair", project_id=None, base=planner_kinds.repair_digest(repair),
+                              make=lambda assistant: planner_kinds.make_repair_plan(assistant, problem.ask, repair, calls), calls=calls)
+
+    return _deliver(request, response, actor, problem, compute, llm_of=_plan_llm, calls=calls, endpoint=REPAIR_PLANS)
+
+
+@app.get(REPAIR_PLANS + "/{plan_id}", response_model=PlanOutput)
+def read_repair_plan(plan_id: uuid.UUID, actor: Actor, request: Request) -> PlanOutput:
+    """A repair's plan as it stands: its steps with their states and notes as they ran and as the page reported them."""
+    engine, plan = _requesters_repair_plan(request, actor, plan_id)
+    return _plan_output(request, engine, plan)
+
+
+@app.post(REPAIR_PLANS + "/{plan_id}/approve", response_model=RepairApproveOutput)
+def approve_a_repair_plan(plan_id: uuid.UUID, approval: RepairApproveRequest, actor: Actor, request: Request, response: Response) -> RepairApproveOutput:
+    """A repair's plan approved, once, with the description the page holds now: 409 when the plan is not `proposed`, or when that
+    description's digest, or the `base` sent, is not the plan's. The server then carries every step but the answers, in order, on the
+    description: each change made by the engine, the sweep worked by hand at every value (never solved there), the sweep's own pick
+    taken as the repair, the slice solved (after the pick, the pick held to the load the sweep named, as the sweep's own check) and the
+    bond followed. A step that cannot be carried (the sweep picks nothing, the solve needs a value, the solver refuses) stops the plan
+    there with the reason, and nothing after it runs. The answer is the plan, the description it leaves, which the page takes as its
+    repair, and each run's answer. 503 before anything is approved when a solve or a bond is planned and this server has no solver."""
+    engine, plan = _requesters_repair_plan(request, actor, plan_id)
+    if plan.state != "proposed":
+        raise HTTPException(status_code=409, detail="This plan was approved already, or it is not a plan to approve. Ask again for a new one.")
+    if approval.base != plan.base or planner_kinds.repair_digest(approval.repair) != plan.base:
+        raise HTTPException(status_code=409, detail=STALE_REPAIR)
+    steps = [dict(step) for step in plan.steps]
+    for tool, command in (("solve", repair_model_command), ("bond", repair_bond_command)):
+        if planner.step_of(steps, tool) is not None and command() is None:
+            raise HTTPException(status_code=503, detail=SOLVER_ABSENT)
+
+    def compute() -> RepairApproveOutput:
+        try:
+            approve_repair_plan(engine, plan.id, base=plan.base, steps=steps, now=dt.datetime.now(dt.timezone.utc))
+        except PlanTaken as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        repair, runs = _repair_runs(steps, dict(approval.repair))
+        try:
+            kept = update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), updated_at=dt.datetime.now(dt.timezone.utc))
+        except SQLAlchemyError as exc:
+            raise _database_error(exc) from exc
+        return RepairApproveOutput(plan=_plan_output(request, engine, kept), repair=repair, runs=runs)
+
+    return _deliver(request, response, actor, approval, compute, endpoint=REPAIR_PLANS + "/{plan_id}/approve", recorded=_approval_summary)
+
+
+def _tool_ended(ended: str, report: Any, what: str, not_now: str) -> str:
+    """Why a repair tool's run did not answer, in the words its own route gives (the cause of a failure stays in the log)."""
+    if ended == "refused":
+        return str(report)
+    if ended == "absent":
+        return SOLVER_ABSENT
+    if ended == "slow":
+        return f"{what} took too long"
+    return not_now
+
+
+def _repair_runs(steps: list[dict[str, Any]], repair: dict[str, Any]) -> tuple[dict[str, Any], list[PlanRun]]:
+    """A repair plan's steps carried in order on the description, each set in place as it ends: the description they leave and each
+    run's answer. A step that cannot be carried stops the plan at it with the reason in the engine's or the tool's words."""
+    runs: list[PlanRun] = []
+    found, target = None, None
+    for step in steps:
+        tool, n = step["tool"], step["n"]
+        if step["state"] != "planned" or tool not in (*planner_kinds.REPAIR_CHANGES, "sweep", "use_pick", "solve", "bond"):
+            continue
+        try:
+            if tool in planner_kinds.REPAIR_CHANGES:
+                repair = preview_repair_change(repair, RepairChange(**step["change"]))["repair"]
+            elif tool == "sweep":
+                found = sweep_repair(repair, RepairSweep(**step["change"]))
+                runs.append(PlanRun(n=n, tool="sweep", answer=RepairSweepAnswer(engine_version=version("anisotropy-engine"), check=None, **found)
+                                    .model_dump(mode="json", exclude={"run_id"})))
+            elif tool == "use_pick":
+                if found is None or found["pick"] is None:
+                    planner.stop_at(steps, n, " ".join(found["answer"]) if found else "The plan's sweep did not run, so there is no pick to use.")
+                    break
+                repair, target = found["picked"], found["target"]
+            else:
+                missing = planner_kinds.tool_needs(tool, repair)
+                if missing:
+                    planner.stop_at(steps, n, missing)
+                    break
+                if tool == "solve":
+                    ended, report = _slice_solved(repair, step["change"]["cut_faces"], REPAIR_SOLVE_TIMEOUT_S)
+                else:
+                    ended, report = _repair_tool_report(repair_bond_command(), repair, REPAIR_BOND_OPTIONS, REPAIR_BOND_REPORT, "the repair's bond run",
+                                                        REPAIR_BOND_TIMEOUT_S)
+                if ended != "solved":
+                    planner.stop_at(steps, n, _tool_ended(ended, report, "The solve of the slice" if tool == "solve" else "Following the bond",
+                                                          SLICE_NOT_NOW if tool == "solve" else BOND_NOT_NOW))
+                    break
+                headline = report.pop("headline")
+                answer: dict[str, Any] = {"headline": headline, "report": report}
+                if tool == "solve" and target is not None:
+                    try:
+                        answer["check"] = pick_check(target, report) | {"headline": headline}
+                    except (KeyError, TypeError, ValueError):  # a report without what the check reads: the pick stays unchecked
+                        answer["check"] = {"state": "failed", "holds": None, "words": [PICK_NOT_CHECKED]}
+                runs.append(PlanRun(n=n, tool=tool, answer=answer))
+        except (ValueError, TypeError, KeyError, ArithmeticError, ValidationError) as exc:
+            planner.stop_at(steps, n, str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__)
+            break
+        planner.settle([step], (tool,), "done")
+    return repair, runs
+
+
+@app.post(REPAIR_PLANS + "/{plan_id}/steps/{n}", response_model=PlanOutput)
+def report_repair_plan_step(plan_id: uuid.UUID, n: int, report: StepReport, actor: Actor, request: Request) -> PlanOutput:
+    """A step the page carries on a repair's plan reported as it goes: its answers. As a project's plan: a failed step stops the plan,
+    and 409 for a plan not yet approved, a step of the server's or a step that ended otherwise."""
+    engine, plan = _requesters_repair_plan(request, actor, plan_id)
+    if plan.state not in ("approved", "running", "done", "stopped"):
+        raise HTTPException(status_code=409, detail="This plan is not approved, so it has no step to report.")
+
+    def edit(steps: list[dict[str, Any]]) -> str:
+        return planner.report_step(steps, n, report.state, report.note, _reported_by(plan.kind))
+
+    try:
+        edited = edit_plan(engine, plan.id, edit, dt.datetime.now(dt.timezone.utc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except planner.StepRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if edited is None:
+        raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours")
+    return _plan_output(request, engine, edited)
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

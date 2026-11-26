@@ -1,4 +1,4 @@
-# Component card: MCP server | version 0.1 | updated 2026-11-17
+# Component card: MCP server | version 0.2 | updated 2026-11-26
 
 ## Purpose and intended use
 
@@ -30,12 +30,14 @@ Out, per tool, as compact JSON text:
 | `sweep_repair` | One quantity worked by hand over a range: `answer`, `cautions`, the rows, and with a load named the pick and the `check` of it by a solved slice |
 | `search_repair_references` | The sections of the repair's theory and of the page "Bonded repairs" a question's words find, with their text |
 | `show_working` | The working of ADR-0103: each formula, the formula with the numbers put in, and its result; one step alone with `step` (ADR-0107 amendment 4) |
+| `read_plate` | A plate as the workspace reads it (ADR-0143): its units and size, every region it can be held and loaded on with where it lies and whether it is an end or a side, and what is held and loaded, one line each |
+| `preview_plate_change` | Typed changes to a plate's supports, loads or rows made on a copy, every one or none (ADR-0143): what changed, one line each, or why each refused change cannot be made, the setup after and its values for `check_setup` and `solve_coupon`. Nothing is applied |
 
 The server also sends the client's model its rules (`INSTRUCTIONS` in `server.py`): the answer first in one line and at most three lines of basis; only what was asked; no tool, program, vendor, path or model named to the engineer; numbers only from tool results, as written, with units, to four significant figures at most; every missing row asked for in one message; say when a value was the example's; say once that the solve is a preview; the gauge section's answer, with a criterion reached first at a gripped edge said apart; answer a why in one to three sentences from the facts and sections only (ADR-0107 amendment 1). What a tool returns names none of this machine's programs or paths: the full run's own setup items are left out and the package's aside about another program's viewer is cut.
 
 ## Dependencies and connections
 
-- The API on the same machine, at `ANISOTROPY_API_URL` (default `http://127.0.0.1:8000`), with the actor `assistant` (ADR-0026): `GET /v1/materials`, `GET /v1/materials/{id}`, `GET /v1/coupon-tests`, `POST /v1/coupon-jobs/check`, `POST /v1/coupon-jobs/live`, `POST /v1/workspace/theory-sections`, and for a repair `POST /v1/repairs/analyze`, `/solve`, `/changes` and `/sweeps`.
+- The API on the same machine, at `ANISOTROPY_API_URL` (default `http://127.0.0.1:8000`), with the actor `assistant` (ADR-0026): `GET /v1/materials`, `GET /v1/materials/{id}`, `GET /v1/coupon-tests`, `POST /v1/coupon-jobs/check`, `POST /v1/coupon-jobs/live`, `POST /v1/workspace/theory-sections`, for a repair `POST /v1/repairs/analyze`, `/solve`, `/changes` and `/sweeps`, and for a plate's setup `POST /v1/workspace/setup` and `/v1/workspace/setup-changes` (ADR-0143).
 - `lib/coupon-form-definition.json` in the checkout, for the form's rows.
 - The `mcp` Python SDK (2.3 or later, below 3) and `httpx`; `uv` to run it.
 - No port, no file written, no sign-in. The last 8 solves are held in memory until the client closes the server.
@@ -53,7 +55,7 @@ The repair's five tools (ADR-0136, 2026-11-21): `tests/test_server.py` asks them
 - A local API only. The hosted site's sign-in is not carried.
 - The client's model can still state a number no tool returned; the rules ask it not to and nothing checks.
 - The lookup rules are a second copy of the page's (`lib/result-question.ts`); a change to one must be made in the other.
-- The working is written for the first ply to fail by maximum stress and Tsai-Hill (ADR-0103); a model brought in as an Abaqus file (ADR-0105) and a plate's supports and loads (ADR-0101) are not reachable through the tools.
+- The working is written for the first ply to fail by maximum stress and Tsai-Hill (ADR-0103); a model brought in as an Abaqus file (ADR-0105) is not reachable through the tools. A plate's supports and loads are read and a change previewed (ADR-0143); the engineer applies it on the page.
 
 ## Owner
 

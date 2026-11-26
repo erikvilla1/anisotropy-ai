@@ -1,0 +1,196 @@
+{
+ "plan": {
+  "id": "5d1f2c3a-7777-4888-9999-000000000001",
+  "kind": "wing",
+  "project": "5d1f2c3a-7777-4888-9999-000000000002",
+  "ask": "add 2 0-degree plies to the spar caps and run the check",
+  "state": "running",
+  "steps": [
+   {
+    "n": 1,
+    "role": "Setup",
+    "tool": "add_plies",
+    "line": "Two 0° plies added to the spar caps along the whole span, beside the 0° plies: [0/0/0/45/-45/0]s there.",
+    "quote": "add 2 0-degree plies to the spar caps",
+    "regions": [
+     "spar_caps"
+    ],
+    "change": {
+     "end": 1.0,
+     "part": "spar_caps",
+     "angle": 0.0,
+     "count": 2,
+     "start": 0.0,
+     "action": "add_plies",
+     "placement": "beside"
+    },
+    "question": null,
+    "state": "done",
+    "note": null
+   },
+   {
+    "n": 2,
+    "role": "Solver",
+    "tool": "check",
+    "line": "Run the finite element check of the wing beside the hand calculation",
+    "quote": "run the check",
+    "regions": [],
+    "change": null,
+    "question": null,
+    "state": "running",
+    "note": null
+   }
+  ],
+  "done": [
+   "Two 0° plies added to the spar caps along the whole span, beside the 0° plies: [0/0/0/45/-45/0]s there."
+  ],
+  "base": "c29e4c03114e49863b566c40d0df343082518011cac03ea8760ebe516a982bb5",
+  "question": null,
+  "unread": [],
+  "reason": null,
+  "writer": "anthropic",
+  "model": "claude-opus-5-5",
+  "job": "5d1f2c3a-7777-4888-9999-000000000003",
+  "version": null,
+  "requests_left": 29,
+  "created_at": "2026-11-26T09:00:00+00:00",
+  "approved_at": "2026-11-26T09:00:00+00:00",
+  "withheld": false,
+  "run_id": null
+ },
+ "project": {
+  "id": "5d1f2c3a-7777-4888-9999-000000000002",
+  "kind": "wing",
+  "name": "Bracket for the north site",
+  "actor": "browser",
+  "user_email": "engineer@example.com",
+  "content": {
+   "wing": {
+    "rib": {
+     "half_stack": [
+      45,
+      -45
+     ]
+    },
+    "skin": {
+     "core": "divinycell-h45",
+     "half_stack": [
+      0,
+      45,
+      -45,
+      0
+     ],
+     "core_thickness": 6.0
+    },
+    "spar": {
+     "half_stack": [
+      45,
+      -45,
+      0,
+      0
+     ]
+    },
+    "title": "Example straight wing",
+    "units": "SI",
+    "source": "An example made for the engine's tests and documents, not a design of ours or of anyone's. Every number is a round value chosen for the example; the material comes from the library.",
+    "envelope": {
+     "gust": {
+      "wing_area": 1.8,
+      "dive_gust_speed": 7.62,
+      "cruise_gust_speed": 15.24,
+      "lift_curve_slope_per_rad": 5.0
+     },
+     "speeds": {
+      "dive": 70.0,
+      "cruise": 50.0,
+      "flutter": 84.0,
+      "stall_clean": 23.0,
+      "stall_flaps": 20.0,
+      "negative_maneuver": 28.4,
+      "positive_maneuver": 44.8
+     },
+     "aileron": {
+      "span_end": 1.9,
+      "span_start": 1.2,
+      "up_delta_cl": -0.3,
+      "up_delta_cm": 0.06,
+      "down_delta_cl": 0.3,
+      "down_delta_cm": -0.06,
+      "roll_pull_up_fraction": 0.6667
+     },
+     "airspeed": "equivalent",
+     "altitudes": [
+      0.0,
+      3000.0
+     ],
+     "criterion": "max_stress",
+     "speed_unit": "m/s",
+     "gross_weight": 2700.0,
+     "proof_factor": 1.25,
+     "ultimate_factor": 1.5,
+     "negative_load_factor": -1.52,
+     "positive_load_factor": 3.8
+    },
+    "geometry": {
+     "chord": 0.45,
+     "airfoil": "naca-2412",
+     "half_span": 2.0,
+     "rear_spar": 0.65,
+     "front_spar": 0.25,
+     "rib_spacing": 0.5
+    },
+    "material": {
+     "library": "im7-8552",
+     "strengths": "B-basis"
+    },
+    "spar_caps": {
+     "half_stack": [
+      0.0,
+      0.0,
+      0.0,
+      45.0,
+      -45.0,
+      0.0
+     ],
+     "rear_width": 0.045,
+     "front_width": 0.045
+    },
+    "aerodynamics": {
+     "lift_curve_slope": 6.0,
+     "aerodynamic_center": 0.25,
+     "pitching_moment_coefficient": -0.05
+    }
+   }
+  },
+  "form_version": null,
+  "units": null,
+  "designation": null,
+  "last_check_run_id": null,
+  "created_at": "2026-11-26T09:00:00+00:00",
+  "updated_at": "2026-11-26T09:00:00+00:00",
+  "jobs": []
+ },
+ "version": null,
+ "job": null,
+ "check": null,
+ "runs": [
+  {
+   "n": 2,
+   "tool": "check",
+   "answer": {
+    "job_id": "5d1f2c3a-7777-4888-9999-000000000003",
+    "state": "queued",
+    "wing": "Example straight wing",
+    "started_at": "2026-11-26T09:00:00+00:00",
+    "finished_at": null,
+    "stage": null,
+    "stages_done": [],
+    "stages": [],
+    "message": "queued",
+    "run_id": null,
+    "report": null
+   }
+  }
+ ],
+ "run_id": "5d1f2c3a-7777-4888-9999-000000000004"
+}

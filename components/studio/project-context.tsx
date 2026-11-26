@@ -157,7 +157,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const [view, setView] = useState<FieldView | null>(null);
   const showField = useCallback((next: Omit<FieldView, "at">) => setView((last) => ({ ...next, at: (last?.at ?? 0) + 1 })), []);
   const [shownField, setShownField] = useState<{ id: string; ply: number } | null>(null);
-  const versions = useVersions(project.id, project.form, project.plate, run, setForm, setPlate, browserStorage);
+  const versions = useVersions(apiBaseUrl, project.id, project.form, project.plate, run, setForm, setPlate, browserStorage);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
   const offersAll = allTests || (plates && project.form.test === PLATE_TEST); // a founder's plate is offered every row (ADR-0089 amendment 7)
   useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests, offersAll); // our kernel answers each settled edit (ADR-0086)

@@ -58,3 +58,31 @@ test("versions are kept per project in this browser, and a blocked or odd store 
   assert.deepEqual(readVersions(storage, "p3"), []);
   assert.deepEqual(readVersions(null, "p1"), []);
 });
+
+test("the server's versions are read in their shape only, and this browser's newer ones follow them, numbered after (ADR-0143)", async () => {
+  const { mergeVersions, readServerVersions, runsToSend, unsent, versionUpload } = await import("../lib/model-versions");
+  let local = withVersion([], form, emptyPlate(), "you", null, at);
+  local = withVersion(local, { ...form, element_size: "4" }, emptyPlate(), "you", null, at);
+  local = withRun(local, "job-4");
+  const server = readServerVersions([
+    { n: 7, at, by: "assistant", why: "clamp the bottom edge", changes: ["Added: Edge-Bottom holds x, y, z, rx, ry, rz"], form, plate: emptyPlate(), run: null },
+    { n: 8, at, by: "you", why: null, changes: ["Element size (mm): 2 → 4"], form: { ...form, element_size: "4" }, plate: emptyPlate() },
+    { n: "9", at, by: "you", why: null, changes: [], form, plate: emptyPlate() }, // not a version: left out
+    { n: 10, at, by: "robot", why: null, changes: [], form, plate: emptyPlate() },
+  ]);
+  assert.deepEqual(server.map((v) => v.n), [7, 8]);
+  assert.deepEqual(readServerVersions({ detail: "no" }), []);
+  // the server holds this browser's last setup: nothing to send, and the run marked here is kept on the server's version until it hears of it
+  assert.deepEqual(unsent(local, server), []);
+  const merged = mergeVersions(server, local);
+  assert.deepEqual(merged.map((v) => [v.n, v.by, v.run?.job ?? null]), [[7, "assistant", null], [8, "you", "job-4"]]);
+  assert.deepEqual(runsToSend(server, merged), [{ n: 8, job: "job-4", result: null }]);
+  // a change made here after the server's last is sent, and shown numbered after it
+  local = withVersion(local, { ...form, element_size: "1" }, emptyPlate(), "you", null, at);
+  assert.deepEqual(unsent(local, server).map((v) => v.form.element_size), ["1"]);
+  assert.deepEqual(mergeVersions(server, local).map((v) => v.n), [7, 8, 9]);
+  // a server with none takes every version this browser holds; a server whose last this browser never held takes the current setup only
+  assert.equal(unsent(local, []).length, 3);
+  assert.deepEqual(unsent(local, [{ ...server[0], form: { ...form, element_size: "9" } }]).map((v) => v.form.element_size), ["1"]);
+  assert.deepEqual(Object.keys(versionUpload(local[0])).sort(), ["by", "changes", "form", "plate", "why"]);
+});

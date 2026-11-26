@@ -1,0 +1,22 @@
+{
+ "id": "5d1f2c3a-7777-4888-9999-000000000001",
+ "kind": "wing",
+ "project": "5d1f2c3a-7777-4888-9999-000000000002",
+ "ask": "remove 2 90-degree plies from the skin and run the check",
+ "state": "refused",
+ "steps": [],
+ "done": [],
+ "base": "c29e4c03114e49863b566c40d0df343082518011cac03ea8760ebe516a982bb5",
+ "question": null,
+ "unread": [],
+ "reason": "step 1: [0/45/-45/0]s has 0 plies at 90°: 2 cannot be taken out.",
+ "writer": "template",
+ "model": null,
+ "job": null,
+ "version": null,
+ "requests_left": 29,
+ "created_at": "2026-11-26T09:00:00+00:00",
+ "approved_at": null,
+ "withheld": true,
+ "run_id": "5d1f2c3a-7777-4888-9999-000000000003"
+}

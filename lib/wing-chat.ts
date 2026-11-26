@@ -10,9 +10,11 @@ import {
   type WingCase, type WingCheckName, type WingDescription, type WingPart, type WingReport, type WingRule, type WingRuleName,
   type WingStrengthBasis,
 } from "./wing";
+import { ANSWERS, clauses, isQuestion } from "./ask-words";
 
-/** Every way the wing's chat answers a message. */
-export const WING_ROUTES = ["wing-change", "wing-result", "wing-rules", "wing-strengths", "wing-reference", "wing-command", "wing-unread"] as const;
+/** Every way the wing's chat answers a message; `wing-plan` is a change of plies and a run or an answer in one sentence, planned by the
+ * API where a model reads (ADR-0144, step 5). */
+export const WING_ROUTES = ["wing-change", "wing-result", "wing-rules", "wing-strengths", "wing-reference", "wing-command", "wing-unread", "wing-plan"] as const;
 export type WingRoute = (typeof WING_ROUTES)[number];
 
 /** The parts whose plies a message may change, by the wing file's table. */
@@ -36,7 +38,9 @@ export type WingAsk =
   /** A question of why, how or which test: the reference pages answer it, beside the wing's own facts on what it names. */
   | { route: "wing-reference"; topic: ResultTopic | null }
   | { route: "wing-command"; command: "step" | "check" }
-  | { route: "wing-unread" };
+  | { route: "wing-unread" }
+  /** A change of plies and, in the same sentence, the hand calculation, the finite element check or an answer: the API plans it (ADR-0144). */
+  | { route: "wing-plan" };
 
 export const PART_WORDS: Record<PlyPart, string> = { skin: "the skin", spar: "the spar webs", spar_caps: "the spar caps" };
 const RULE_PART_WORDS: Record<WingPart, string> = { skin: "the skin", spar: "the spar webs", cap: "the spar caps", rib: "the ribs" };
@@ -189,6 +193,29 @@ export function readWingAsk(message: string): WingAsk {
   if (topic) return { route: "wing-result", topic, yesNo, ...(topic === "verdict" && DECIDES.test(text) ? { decides: true } : {}) };
   if (/\?$/.test(text) || /^(?:what|how|when|where|which|should)\b/.test(text)) return { route: "wing-reference", topic: null };
   return { route: "wing-unread" };
+}
+
+/** The verbs that open the second half of a planned request on a wing: a run, the check, an answer, or another change. */
+const WING_STEP_VERBS = String.raw`re-?run|run|check|analy[sz]e|work|solve|tell|show|give|let|see|find|report|add|remove|take|put`;
+/** The hand calculation, the finite element check or a run of either, asked in words. */
+const WING_RUNS = /\b(?:re-?)?run\b|\banaly[sz](?:e|is)\b|\bhand calc(?:ulation)?\b|\bwork (?:it|the wing|that)\b|\bcheck\b|\bfinite[- ]element\b|\bfea?\b|\bsolve\b/;
+
+/** Whether a sentence asks for a change of plies and, in the same breath, the hand calculation, the finite element check or an answer
+ * ("add 2 0-degree plies to the spar caps and run the check"): the API plans it where a model reads (ADR-0144, step 5). A change alone
+ * ("add 2 0 plies to the spar caps from the root to 40% span") stays with the page's patterns and the Apply tap, and a question is never
+ * a plan. */
+export function asksWingPlan(message: string): boolean {
+  const text = plain(message);
+  if (isQuestion(text)) return false;
+  const parts = clauses(text, WING_STEP_VERBS);
+  const changed = parts.findIndex((part) => changeOf(part) !== null);
+  return changed >= 0 && parts.some((part, i) => i !== changed && (WING_RUNS.test(part) || ANSWERS.test(part)));
+}
+
+/** Who answers a message on the wing's page: the planner first, for a change and a run or an answer in one sentence, where a model reads
+ * and the wing is a project the API keeps (`planner`); then the page's own patterns (`readWingAsk`). */
+export function routeWingAsk(message: string, planner: boolean): WingAsk {
+  return planner && asksWingPlan(message) ? { route: "wing-plan" } : readWingAsk(message);
 }
 
 /** Whether the wing is safe, airworthy, certified or may be signed off: answered with the margins, never with a Yes (ADR-0139). */
@@ -440,6 +467,8 @@ export function wingAnswer(ask: WingAsk, report: WingReport | null, wing: WingDe
         : said("said", "The finite element check is under the results", ["Start it there: it checks the wing as it stands, in the background."], { command: "check" });
     case "wing-reference":
       return said("reference", "Answered from our reference pages", report && ask.topic ? whyFacts(ask.topic, report) : [], { topic: ask.topic });
+    case "wing-plan":
+      return said("plan", "A plan to approve", ["Nothing changes until you approve it."]);
     case "wing-unread":
       return said("redirect", "Not a question I can read yet", ["Ask “which part fails first?”, “does the skin meet the 10% rule?” or “add 2 0° plies to the spar caps from the root to 40% span”."]);
     default:
