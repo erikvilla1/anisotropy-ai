@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, Circle, CircleAlert, LoaderCircle, Minus, X } from "lucide-react";
 import { answerResult, reportPlanStep, type Plan, type StepState } from "@/lib/studio-api";
 import { planCount, planDrawing, stepsToReport, stepViews, type StepView } from "@/lib/plan-steps";
@@ -27,11 +27,13 @@ export type PlanFlow = {
   /** the setup check's lines when the server stopped the plan at its check */
   blocked: string[];
   qa: QaReading | null;
-  answer: { state: "running" | "done" | "failed"; heading: string | null; more: string[]; note: string | null } | null;
+  answer: PlanAnswerShown | null;
   reported: Record<number, StepState>;
   /** whether the Results tab was opened for this plan's run */
   opened: boolean;
 };
+/** An answer step as the card shows it: under way, given (its heading first, the rest under Details) or not given. */
+export type PlanAnswerShown = { state: "running" | "done" | "failed"; heading: string | null; more: string[]; note: string | null };
 
 export const newFlow = (plan: Plan): PlanFlow => ({ plan, stage: "proposed", job: null, problem: null, blocked: [], qa: null, answer: null, reported: {}, opened: false });
 
@@ -67,7 +69,6 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
   if (job) lastJob.current = job;
   const views = useMemo(() => stepViews(plan, { approved: stage === "approved", job: job ?? (stage === "approved" ? lastJob.current : null), qa: flow.qa,
     answer: flow.answer ? { state: flow.answer.state, line: flow.answer.heading } : null }), [plan, stage, job, flow.qa, flow.answer]);
-  const count = planCount(views);
   const results = ours && run.loadedJob === flow.job ? run.fields : null;
 
   // the Results tab opens once the run's results are read
@@ -117,6 +118,80 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
     onFlow((f) => ({ ...f, reported: { ...f.reported, ...Object.fromEntries(due.map((r) => [r.n, r.state])) } }));
   }, [views, stage, flow.reported, flow.qa, apiBaseUrl, project.id, plan.id, plan.steps, onFlow]);
 
+  return (
+    <PlanFrame plan={plan} stage={stage} views={views} problem={flow.problem} blocked={flow.blocked} drawn={stage === "proposed" && planDrawing(plan) !== null}
+      approveLabel={plan.steps.some((s) => s.tool === "run") ? "Approve and run" : "Approve"} onApprove={onApprove} onEdit={onEdit} onPlanAgain={onPlanAgain}
+      onUsual={() => { onFlow((f) => ({ ...f, stage: "edited" })); onUsual(); }}>
+      {flow.qa ? (
+        <ul className="plan-qa" data-testid="plan-qa" data-verdict={flow.qa.verdict}>
+          {flow.qa.checks.map((c) => <li key={c.id} data-check={c.id} data-verdict={c.verdict} className={`plan-qa-${c.verdict}`}>{QA_MARK[c.verdict]} <span>{c.line}</span></li>)}
+        </ul>
+      ) : null}
+      {flow.answer && flow.answer.state !== "running" ? <PlanAnswerBlock answer={flow.answer} /> : null}
+    </PlanFrame>
+  );
+}
+
+/** What a plan's card shows while its approval carries runs inside the request (ADR-0144, step 5): what runs, about how long, and the
+ * seconds so far, so a solve that takes a minute is plainly under way. */
+export function PlanWaiting({ words, since }: { words: string; since: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = since === null ? 0 : Math.max(0, Math.floor((now - since) / 1000));
+  return (
+    <div className="plan-waiting" data-testid="plan-waiting" role="status">
+      <LoaderCircle size={14} className="plan-spin" aria-hidden="true" />
+      <span>{words}</span>
+      <span className="plan-waiting-time" data-testid="plan-waiting-time">{seconds} s</span>
+    </div>
+  );
+}
+
+/** An answer step given in words, as a plan's card shows it: its heading first, the rest under Details. */
+export function PlanAnswerBlock({ answer, n, children }: { answer: PlanAnswerShown; n?: number; children?: ReactNode }) {
+  return (
+    <div className="plan-answer" data-testid="plan-answer" data-state={answer.state} data-step={n}>
+      <p className="plan-answer-heading" data-testid="plan-answer-heading"><strong>{answer.heading}</strong></p>
+      {answer.more.length || answer.note || children ? (
+        <details className="chat-details"><summary>Details</summary>
+          {answer.more.map((line, i) => <p key={i}>{line}</p>)}
+          {answer.note ? <p className="chat-note">{answer.note}</p> : null}
+          {children}
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+/** The card a plan is shown on (ADR-0144), the same on every page that plans: a question back; a refused or capped plan with its reason
+ * and the ways on; or the steps under their roles, one plain line each, ticking off as they run, with Approve and Edit before the
+ * approval and Plan again once the setup changed under it. Each page passes the steps as they stand (`views`) and, under them, what its
+ * runs show (`children`); `waiting` is shown while the approval runs. */
+export function PlanFrame({ plan, stage, views, problem, blocked = [], reasons, drawn = false, approveLabel, waiting, children, onApprove, onEdit, onPlanAgain,
+  onUsual }: {
+  plan: Plan;
+  stage: PlanFlow["stage"];
+  views: StepView[];
+  problem: string | null;
+  /** the setup check's lines when the server stopped the plan at its check */
+  blocked?: string[];
+  /** a refused or capped plan's reason, a line each; by default the plan's own reason as it is written, when fit to show */
+  reasons?: string[];
+  /** the regions it holds and loads are drawn dashed on the model */
+  drawn?: boolean;
+  approveLabel: string;
+  waiting?: ReactNode;
+  children?: ReactNode;
+  onApprove: () => void;
+  /** the sentence back in the message box */
+  onEdit: () => void;
+  onPlanAgain: () => void;
+  /** the message read as before; the card is set aside */
+  onUsual: () => void;
+}) {
   if (plan.state === "question") {
     return (
       <div className="plan-card" data-testid="plan-card" data-state="question">
@@ -127,16 +202,18 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
     );
   }
   if (plan.state === "refused" || plan.state === "capped") {
-    const said = customerText(plan.reason);
+    const said = reasons ?? [customerText(plan.reason)].filter((line): line is string => !!line);
+    const fallback = plan.state === "capped" ? "Today's plans are used. Messages are read the usual way until midnight UTC." : "It could not be done with the steps on offer.";
     return (
       <div className="plan-card" data-testid="plan-card" data-state={plan.state}>
         <h4>{plan.state === "capped" ? "No more plans today" : "No plan for that"}</h4>
-        <p data-testid="plan-reason">{said ?? (plan.state === "capped" ? "Today's plans are used. Messages are read the usual way until midnight UTC."
-          : "It could not be done with the steps on offer.")}</p>
+        {said.length > 1
+          ? <ul className="plan-reasons" data-testid="plan-reason">{said.map((line) => <li key={line}>{line}</li>)}</ul>
+          : <p data-testid="plan-reason">{said[0] ?? fallback}</p>}
         <UnreadList lines={unreadLines(plan.unread)} />
         {stage === "edited" ? null : (
           <div className="chat-chips">
-            <button type="button" data-testid="plan-usual" onClick={() => { onFlow((f) => ({ ...f, stage: "edited" })); onUsual(); }}>Read it the usual way</button>
+            <button type="button" data-testid="plan-usual" onClick={onUsual}>Read it the usual way</button>
             <button type="button" data-testid="plan-edit" onClick={onEdit}>Edit the message</button>
           </div>
         )}
@@ -144,8 +221,7 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
     );
   }
 
-  const drawn = stage === "proposed" && planDrawing(plan) !== null;
-  const hasRun = plan.steps.some((s) => s.tool === "run");
+  const count = planCount(views);
   const heading = stage === "approved" ? (count.ended ? `Plan done · ${count.done} of ${count.of} steps` : `Plan running · ${count.done} of ${count.of} done`)
     : `Plan · ${plan.steps.length} ${plan.steps.length === 1 ? "step" : "steps"}`;
   const aside = stage === "proposed" ? "Nothing changes until you approve" : stage === "approving" ? "Approving…" : stage === "approved" ? "Approved by you"
@@ -163,28 +239,14 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
         ))}
       </ol>
       {drawn ? <p className="chat-note" data-testid="plan-drawn">The regions it holds and loads are drawn dashed on the model.</p> : null}
-      {flow.blocked.length ? <ul className="chat-understood" data-testid="plan-blocked">{flow.blocked.map((line) => <li key={line}>{line}</li>)}</ul> : null}
-      {flow.problem ? <p className="chat-problem" data-testid="plan-problem">{flow.problem}</p> : null}
-      {flow.qa ? (
-        <ul className="plan-qa" data-testid="plan-qa" data-verdict={flow.qa.verdict}>
-          {flow.qa.checks.map((c) => <li key={c.id} data-check={c.id} data-verdict={c.verdict} className={`plan-qa-${c.verdict}`}>{QA_MARK[c.verdict]} <span>{c.line}</span></li>)}
-        </ul>
-      ) : null}
-      {flow.answer && flow.answer.state !== "running" ? (
-        <div className="plan-answer" data-testid="plan-answer" data-state={flow.answer.state}>
-          <p className="plan-answer-heading" data-testid="plan-answer-heading"><strong>{flow.answer.heading}</strong></p>
-          {flow.answer.more.length || flow.answer.note ? (
-            <details className="chat-details"><summary>Details</summary>
-              {flow.answer.more.map((line, i) => <p key={i}>{line}</p>)}
-              {flow.answer.note ? <p className="chat-note">{flow.answer.note}</p> : null}
-            </details>
-          ) : null}
-        </div>
-      ) : null}
+      {blocked.length ? <ul className="chat-understood" data-testid="plan-blocked">{blocked.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+      {problem ? <p className="chat-problem" data-testid="plan-problem">{problem}</p> : null}
+      {stage === "approving" ? waiting : null}
+      {children}
       {stage === "proposed" || stage === "approving" ? (
         <div className="chat-actions">
           <button type="button" className="chat-primary" data-testid="plan-approve" disabled={stage === "approving"} onClick={onApprove}>
-            <Check size={14} /> {hasRun ? "Approve and run" : "Approve"}</button>
+            <Check size={14} /> {approveLabel}</button>
           <button type="button" className="chat-secondary" data-testid="plan-edit" disabled={stage === "approving"} onClick={onEdit}>Edit</button>
         </div>
       ) : stage === "stale" ? (

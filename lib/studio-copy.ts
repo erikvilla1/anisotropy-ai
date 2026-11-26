@@ -99,6 +99,13 @@ export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
  * "Abaqus input file (.inp)" on the site and in the workspace, the founder's "accept" of 2026-11-12). */
 export const ALLOWED_PHRASE = /Abaqus input file \(\.inp\)/g;
 
+/** A section of our reference pages as the chats show it: its paragraphs of plain prose, its sources last; headings, equations, tables
+ * and lists of code are left to the page they come from. */
+export function sectionProse(text: string): string[] {
+  return text.split(/\n{2,}/).map((p) => p.trim().replace(/\s*\n\s*/g, " "))
+    .filter((p) => p && !/^(?:#|\||```|\$\$|- |\d+\. )/.test(p) && !/\$|\\[a-z]+|`/.test(p));
+}
+
 /** The banned terms a text holds, by label; empty when it is fit to show. */
 export function bannedIn(text: string): string[] {
   const shown = text.replace(ALLOWED_PHRASE, "");

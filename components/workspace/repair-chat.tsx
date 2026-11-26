@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUp, MessagesSquare } from "lucide-react";
-import { previewRepairChange, repairReferences, StudioError, sweepRepair, type ReferenceSection } from "@/lib/studio-api";
+import { approveRepairPlan, askRepairPlan, assistantInfo, noPlanner, previewRepairChange, readRepairPlan, repairReferences, StudioError, sweepRepair,
+  type AssistantInfo, type Plan, type ReferenceSection } from "@/lib/studio-api";
 import {
-  previewPlace, previewRows, readRepairAsk, repairAnswer, sweepHeading, sweepTable,
-  type RepairAsk, type RepairChangePreview, type RepairHeld, type RepairSaid, type RepairSweepAnswer,
+  previewPlace, previewRows, readRepairAsk, repairAnswer, routeRepairAsk,
+  type RepairAsk, type RepairChangePreview, type RepairSaid, type RepairSweepAnswer,
 } from "@/lib/repair-chat";
+import { newKindFlow, repairRuns, type KindFlow } from "@/lib/plan-kinds";
 import { bondWords, CARRIES_IS_NOT_THE_STRENGTH, kindOf, LET_GO_IS_NOT_THE_STRENGTH, NOT_THE_STRENGTH, PLIES_NO_ANSWER, pliesProgress, pliesWords, sameRepair, sliceWords,
   type RepairDescription } from "@/lib/repair";
-import { bannedIn } from "@/lib/studio-copy";
+import { bannedIn, sectionProse as prose } from "@/lib/studio-copy";
 import { REPAIR_HREF } from "@/lib/workspaces";
-import { pliesUnderWay, useRepair } from "./repair-context";
+import { heldOf, pliesUnderWay, useRepair } from "./repair-context";
+import { RepairPlanCard } from "./repair-plan";
+import { Outcome, Sweep, type Worked } from "./repair-sweep";
 import { showPanel } from "./panels/step-panel";
 
 const PANEL_TITLES: Record<string, string> = {
@@ -31,30 +35,54 @@ type Entry =
     /** a solve, or a run of the bond, started from the chat has ended */
     solved?: boolean;
     problem?: string; waiting?: boolean;
-  };
+  }
+  /** a sentence planned by the API (ADR-0144, step 5), its card and where it stands; `said` is the message as typed */
+  | { id: number; role: "plan"; said: string; flow: KindFlow }
+  /** a plan that could not be made, in the page's words */
+  | { id: number; role: "problem"; title: string; text: string };
 type Said = Extract<Entry, { role: "assistant" }>;
 
 /** The repair's chat (ADR-0136), under the answer in words: a change is read from the message and previewed by the engine on a copy of
  * the repair, which changes only when the engineer taps Apply, and an applied change can be undone; a sweep is worked by hand at every
  * value, and its pick, solved as a slice, is applied the same way; a question about the result is answered from the report and the
  * solved slice the page holds, one about the bond letting go from the bond followed (ADR-0140) and one about the load the repair
- * carries from the run with its plies damaging (ADR-0141), both of which the chat can start; a question of why, how or what a thing is from our reference pages. No model reads a message here:
- * what the patterns cannot read is said plainly, with examples. */
+ * carries from the run with its plies damaging (ADR-0141), both of which the chat can start; a question of why, how or what a thing is from our reference pages.
+ * Where a model reads, a sentence of a change or a sweep with a solve, the bond or an answer is planned by the API with the repair the
+ * page holds (ADR-0144, step 5) and shown on the plan's card, approved once; a change or a sweep alone stays with the patterns and the
+ * Apply tap. What the patterns cannot read is said plainly, with examples. */
 export function RepairChat() {
-  const { apiBaseUrl, repair, answer, replace, solve, solveStale, solveSlice, cutFaces, bond, bondStale, bondNeeds, followBond,
-    plies, pliesFiner, pliesStale, pliesNeeds, carryPlies } = useRepair();
+  const repairContext = useRepair();
+  const { apiBaseUrl, repair, answer, replace, cutFaces, adoptPlan } = repairContext;
+  const { solveSlice, followBond, carryPlies } = repairContext;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
+  const [model, setModel] = useState<AssistantInfo | null>(null);
+  const [planning, setPlanning] = useState(false);
   const next = useRef(1);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const last = useRef<RepairAsk | undefined>(undefined); // what the message before was read as
+  const plannerOff = useRef(false); // no planner here, or the day's plans are used: messages are read as before
+  const planAsking = useRef<string | null>(null); // the sentence a plan's question back belongs to
+  const live = useRef({ entries, repair });
+  live.current = { entries, repair };
   // a message just sent is brought to the top of the column, so its answer is read from its first line as it arrives
   const newest = useRef<HTMLDivElement>(null);
   const asked = entries.filter((e) => e.role === "user").length;
-  const arrived = entries.filter((e) => e.role === "assistant" && !e.waiting).length; // an answer that came after its message grows the column
+  const arrived = entries.filter((e) => e.role !== "user" && !(e.role === "assistant" && e.waiting)).length; // an answer that came after its message grows the column
   useEffect(() => { if (asked) newest.current?.scrollIntoView({ block: "start", behavior: "auto" }); }, [asked, arrived]);
   const lastAsked = [...entries].reverse().find((e) => e.role === "user")?.id;
   const update = (id: number, change: Partial<Said>) => setEntries((list) => list.map((e) => (e.id === id && e.role === "assistant" ? { ...e, ...change } : e)));
+  const updateFlow = useCallback((id: number, change: (flow: KindFlow) => KindFlow) =>
+    setEntries((list) => list.map((e) => (e.id === id && e.role === "plan" ? { ...e, flow: change(e.flow) } : e))), []);
+  const nextId = () => { next.current += 1; return next.current; };
   const offline = "The analysis service is not set up on this page.";
+
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+    let current = true;
+    void assistantInfo(apiBaseUrl).then((info) => { if (current) setModel(info); });
+    return () => { current = false; };
+  }, [apiBaseUrl]);
 
   function startSolve(id?: number) {
     showPanel("repair-solve");
@@ -83,15 +111,21 @@ export function RepairChat() {
     const message = input.trim();
     if (!message) return;
     setInput("");
-    const ask: RepairAsk = readRepairAsk(message, kindOf(repair), last.current); // a fragment leans on the message before it
+    const planner = !!apiBaseUrl && !!model?.proposes && !plannerOff.current;
+    const asking = planAsking.current; // a plan's question back is answered by this message
+    planAsking.current = null;
+    if (planner && asking) { last.current = undefined; void planFor(message, `${asking.replace(/[.\s]+$/, "")}. ${message}`); return; }
+    const ask: RepairAsk = routeRepairAsk(message, kindOf(repair), last.current, planner); // a fragment leans on the message before it
+    if (ask.route === "repair-plan") { last.current = undefined; void planFor(message, message); return; }
+    answerUsual(message, ask);
+  }
+
+  /** A message read by the page's own patterns, as before the planner. */
+  function answerUsual(message: string, ask: RepairAsk = readRepairAsk(message, kindOf(repair), last.current)) {
     last.current = ask;
-    const held: RepairHeld = { repair, report: answer?.report ?? null, slice: solve && !solveStale ? solve.report : null, sliceStale: !!solve && solveStale, needs: answer?.needs ?? [],
-      bond: bond && !bondStale ? bond.report : null, bondStale: !!bond && bondStale, bondNeeds,
-      plies: plies?.state === "done" && !pliesStale ? plies.report : null, pliesFiner: pliesFiner?.state === "done" && !pliesStale ? pliesFiner.report : null,
-      pliesStale: !!plies && pliesStale, pliesNeeds, pliesRunning: pliesUnderWay(plies) && !pliesStale ? pliesProgress(plies as NonNullable<typeof plies>) : null };
-    let said = repairAnswer(ask, held);
-    const id = next.current + 1;
+    let said = repairAnswer(ask, heldOf(repairContext));
     next.current += 2;
+    const id = next.current;
     if (said.kind === "undo") {
       const undone = undo();
       said = { ...said, heading: undone ? "Undone" : "Nothing to undo", lines: [undone ? `The repair is as it was before “${undone.message}”.` : "No change from this chat is applied."] };
@@ -118,6 +152,68 @@ export function RepairChat() {
     }
   }
 
+  /** A sentence planned by the API on the repair the page holds (ADR-0144, step 5): a repair is not a kept project, so the description
+   * goes with it. With no planner here the sentence is read as before, and the planner is not asked again this session. `said` is the
+   * message as typed, null when a plan is asked again from its card; `ask` is the sentence planned. */
+  async function planFor(said: string | null, ask: string) {
+    const echo = said === null ? null : nextId();
+    if (echo !== null) setEntries((list) => [...list, { id: echo, role: "user", text: said! }]);
+    const usual = () => {
+      plannerOff.current = true;
+      if (echo !== null) setEntries((list) => list.filter((e) => e.id !== echo));
+      answerUsual(said ?? ask);
+    };
+    setPlanning(true);
+    let plan: Plan;
+    try {
+      plan = await askRepairPlan(apiBaseUrl, ask, live.current.repair);
+    } catch (error) {
+      setPlanning(false);
+      if (noPlanner(error)) { usual(); return; }
+      setEntries((list) => [...list, { id: nextId(), role: "problem", title: "No plan right now",
+        text: error instanceof StudioError ? error.message : "The plan could not be made. Try again." }]);
+      return;
+    }
+    setPlanning(false);
+    if (plan.state === "unavailable") { usual(); return; }
+    if (plan.state === "capped") plannerOff.current = true; // the day's plans are used: messages are read as before until tomorrow
+    if (plan.state === "question") planAsking.current = ask;
+    setEntries((list) => [...list, { id: nextId(), role: "plan", said: said ?? ask, flow: newKindFlow(plan) }]);
+  }
+
+  /** The plan approved (ADR-0144, step 5) with the repair the page holds: the server makes the changes, works the sweep, takes its pick,
+   * solves the slice and follows the bond inside the request, seconds up to about two minutes; the repair it leaves becomes the page's,
+   * with the solve and the bond kept as the page keeps its own. A repair changed since the plan (409) changes nothing. */
+  async function approve(id: number) {
+    const entry = live.current.entries.find((e) => e.id === id);
+    if (!entry || entry.role !== "plan" || entry.flow.stage !== "proposed") return;
+    const plan = entry.flow.plan;
+    updateFlow(id, (f) => ({ ...f, stage: "approving", problem: null, since: Date.now() }));
+    try {
+      const approval = await approveRepairPlan(apiBaseUrl, plan.id, live.current.repair, plan.base);
+      const runs = repairRuns(approval.plan, approval.runs);
+      adoptPlan({ repair: approval.repair, solve: runs.solve ? { cutFaces: runs.cutFaces, solve: runs.solve } : null, bond: runs.bond });
+      updateFlow(id, (f) => ({ ...f, stage: "approved", plan: approval.plan, runs: approval.runs, left: JSON.stringify(approval.repair) }));
+    } catch (error) {
+      if (error instanceof StudioError && error.status === 409) {
+        let now: Plan | null = null;
+        try { now = await readRepairPlan(apiBaseUrl, plan.id); } catch { /* said as a changed repair */ }
+        const already = now !== null && (now.approved_at !== null || !["proposed", "question"].includes(now.state));
+        updateFlow(id, (f) => ({ ...f, stage: "stale", problem: already ? "This plan was approved already."
+          : "The repair changed since this plan was made, so nothing was changed. Plan it again on the repair as it is now." }));
+        return;
+      }
+      updateFlow(id, (f) => ({ ...f, stage: "proposed", problem: error instanceof StudioError ? error.message : "The plan could not be approved. Try again." }));
+    }
+  }
+
+  /** The sentence planned back in the message box, to change and send again. */
+  function edit(id: number, said: string) {
+    updateFlow(id, (f) => (f.stage === "proposed" ? { ...f, stage: "edited" } : f));
+    setInput(said);
+    window.setTimeout(() => composer.current?.focus(), 0);
+  }
+
   function apply(entry: Said, next: RepairDescription | null | undefined) {
     if (!next) return;
     replace(next);
@@ -126,28 +222,39 @@ export function RepairChat() {
 
   return (
     <div className="wing-chat repair-chat" data-testid="repair-chat">
-      {entries.length ? (
+      {entries.length || planning ? (
         <div className="wing-chat-scroll" aria-live="polite" aria-relevant="additions">
           {entries.map((e) => e.role === "user"
             ? <div className="chat-user" key={e.id} ref={e.id === lastAsked ? newest : undefined}>{e.text}</div>
             : (
-              <div className="chat-assistant" key={e.id} data-testid="repair-chat-answer" data-kind={e.said.kind}>
+              <div className="chat-assistant" key={e.id} data-testid="repair-chat-answer" data-kind={e.role === "assistant" ? e.said.kind : e.role}>
                 <span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
                 <div>
-                  <Answer entry={e} stale={!!e.from && !e.outcome && !sameRepair(e.from, repair)} current={sameRepair(repair, e.preview?.repair ?? e.sweep?.picked ?? repair)}
-                    onApply={(next) => apply(e, next)} onDismiss={() => update(e.id, { outcome: "dismissed" })}
-                    onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} onFollow={() => startBond()} onCarry={() => startPlies()} />
+                  {e.role === "plan" ? (
+                    <RepairPlanCard flow={e.flow} onFlow={(change) => updateFlow(e.id, change)} onApprove={() => void approve(e.id)}
+                      onEdit={() => edit(e.id, e.flow.plan.ask)} onPlanAgain={() => void planFor(null, e.flow.plan.ask)} onUsual={() => answerUsual(e.said)} />
+                  ) : e.role === "problem" ? (
+                    <><h4>{e.title}</h4><p className="chat-problem" role="alert" data-testid="plan-failed">{e.text}</p></>
+                  ) : (
+                    <Answer entry={e} stale={!!e.from && !e.outcome && !sameRepair(e.from, repair)} current={sameRepair(repair, e.preview?.repair ?? e.sweep?.picked ?? repair)}
+                      onApply={(next) => apply(e, next)} onDismiss={() => update(e.id, { outcome: "dismissed" })}
+                      onUndo={() => { if (e.from) { replace(e.from); update(e.id, { outcome: "undone" }); } }} onSolve={() => startSolve()} onFollow={() => startBond()} onCarry={() => startPlies()} />
+                  )}
                 </div>
               </div>
             ))}
+          {planning ? (
+            <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
+              <div><p className="chat-typing" data-testid="chat-planning">Planning the steps…</p></div></div>
+          ) : null}
         </div>
       ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-        <textarea aria-label="Message the repair assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
+        <textarea ref={composer} aria-label="Message the repair assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about the repair, one change, or a sweep, e.g. “add a step” or “make each step 0.5 in”"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
-          <span className="chat-note">Nothing changes until you tap Apply</span>
+          <span className="chat-note">Nothing changes until you tap Apply or Approve</span>
           <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><ArrowUp size={18} /></button>
         </div>
       </form>
@@ -162,7 +269,9 @@ function Answer({ entry, stale, current, onApply, onDismiss, onUndo, onSolve, on
   if (said.kind === "preview" || said.kind === "sweep") {
     if (entry.problem) return <><h4>{said.kind === "sweep" ? "Not swept" : "Not previewed"}</h4><p className="chat-problem" role="alert" data-testid="repair-chat-problem">{entry.problem}</p></>;
     if (entry.preview) return <Preview preview={entry.preview} outcome={entry.outcome} stale={stale} current={current} onApply={() => onApply(entry.preview?.repair)} onDismiss={onDismiss} onUndo={onUndo} />;
-    if (entry.sweep) return <Sweep sweep={entry.sweep} outcome={entry.outcome} stale={stale} current={current} onApply={() => onApply(entry.sweep?.picked)} onDismiss={onDismiss} onUndo={onUndo} />;
+    if (entry.sweep) {
+      return <Sweep sweep={entry.sweep} worked={{ outcome: entry.outcome, stale, current, onApply: () => onApply(entry.sweep?.picked), onDismiss, onUndo }} />;
+    }
     const loaded = said.kind === "sweep" && !!(said.data.sweep as { load?: number } | undefined)?.load;
     return (
       <><h4>{said.heading}</h4><p>{said.lines[0]}</p>
@@ -257,27 +366,6 @@ function Carried({ entry }: { entry: Said }) {
   );
 }
 
-type Worked = { outcome?: "applied" | "dismissed" | "undone"; stale: boolean; current: boolean; onApply(): void; onDismiss(): void; onUndo(): void };
-
-/** What the engineer may do with a preview or a pick: apply it or not; once applied, undo it while the repair is still the one applied. */
-function Outcome({ outcome, stale, current, pick, onApply, onDismiss, onUndo }: Worked & { pick?: boolean }) {
-  if (outcome === "applied") {
-    return (
-      <p className="chat-note" data-testid="repair-applied">Applied: the repair is worked again.{" "}
-        {current ? <button type="button" className="studio-text-button" onClick={onUndo} data-testid="repair-undo">Undo</button> : "It has changed since."}</p>
-    );
-  }
-  if (outcome === "undone") return <p className="chat-note" data-testid="repair-undone">Undone: the repair is as it was.</p>;
-  if (outcome === "dismissed") return null;
-  if (stale) return <p className="chat-note">The repair changed after this was worked: ask again to work it on the repair as it stands.</p>;
-  return (
-    <div className="chat-actions">
-      <button type="button" className="studio-button" onClick={onApply} data-testid="repair-apply">{pick ? "Apply the pick" : "Apply"}</button>
-      <button type="button" className="studio-text-button" onClick={onDismiss}>Dismiss</button>
-    </div>
-  );
-}
-
 function Preview({ preview, outcome, stale, current, onApply, onDismiss, onUndo }: { preview: RepairChangePreview } & Worked) {
   const rows = previewRows(preview);
   return (
@@ -300,41 +388,3 @@ function Preview({ preview, outcome, stale, current, onApply, onDismiss, onUndo 
   );
 }
 
-function Sweep({ sweep, outcome, stale, current, onApply, onDismiss, onUndo }: { sweep: RepairSweepAnswer } & Worked) {
-  const table = sweepTable(sweep);
-  // the answer first, in a sentence or two; what was swept, what could not be worked and the rest are folded under it with the table
-  const rest = sweep.words.filter((line) => !sweep.answer.includes(line));
-  return (
-    <div data-testid="repair-sweep">
-      <h4 data-testid="repair-sweep-heading">{sweepHeading(sweep)}</h4>
-      {sweep.answer.map((line) => <p key={line} data-testid="repair-sweep-words">{line}</p>)}
-      {sweep.check ? <p data-testid="repair-sweep-check" data-holds={sweep.check.close ? "close" : sweep.check.holds === null ? "unchecked" : String(sweep.check.holds)}>{sweep.check.words.join(" ")}</p> : null}
-      {sweep.cautions.map((line) => <p key={line} className="chat-note" data-testid="repair-sweep-caution">{line}</p>)}
-      <details className="chat-details" open={sweep.answer.length === 0 ? true : undefined}>
-        <summary>Details: the {table.rows.length} values</summary>
-        {rest.map((line) => <p key={line} className="chat-note" data-testid="repair-sweep-rest">{line}</p>)}
-        <div className="studio-table-scroll">
-          <table className="studio-table studio-table-num studio-table-compact" data-testid="repair-sweep-table">
-            <thead><tr>{table.head.map((h, i) => <th key={h} scope="col" className={i ? "studio-num-head" : undefined}>{h}</th>)}</tr></thead>
-            <tbody>{table.rows.map((row) => (
-              <tr key={row.cells[0]} data-pick={row.pick ? "true" : undefined} data-current={row.current ? "true" : undefined}>
-                <th scope="row" className="studio-text-cell">{row.cells[0]}{row.pick ? " (pick)" : row.current ? " (as it is)" : ""}</th>
-                {row.refused !== null
-                  ? <td className="studio-text-cell" colSpan={table.head.length - 1}>Not worked: {row.refused}</td>
-                  : row.cells.slice(1).map((cell, i) => <td key={`${table.head[i + 1]}`} className="studio-num">{cell}</td>)}
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      </details>
-      {sweep.pick !== null ? <Outcome outcome={outcome} stale={stale} current={current} pick onApply={onApply} onDismiss={onDismiss} onUndo={onUndo} /> : null}
-    </div>
-  );
-}
-
-/** A section's paragraphs of plain prose, its sources last: headings, equations, tables and lists of code are left to the page they
- * come from. */
-function prose(text: string): string[] {
-  return text.split(/\n{2,}/).map((p) => p.trim().replace(/\s*\n\s*/g, " "))
-    .filter((p) => p && !/^(?:#|\||```|\$\$|- |\d+\. )/.test(p) && !/\$|\\[a-z]+|`/.test(p));
-}

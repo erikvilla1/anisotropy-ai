@@ -306,7 +306,8 @@ def fixed(body: dict) -> dict:
 
 def contract(name: str, body: dict) -> dict:
     """The contract's file for this answer, written from it with ANISOTROPY_WRITE_PLANNER_FIXTURES=1, and held to it otherwise: the same
-    keys and values (numbers to a part in a billion), every id and time aside, and the engine's version, which moves with each release."""
+    keys and values (numbers to a part in a billion), every id and time aside, the engine's version, which moves with each release, and
+    how long a hand calculation took (`seconds`), which differs each time."""
     path, ours = FIXTURES / name, fixed(body)
     if os.environ.get(WRITE) == "1":
         path.write_text(json.dumps(ours, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -315,7 +316,7 @@ def contract(name: str, body: dict) -> dict:
 
     def aside(value):
         if isinstance(value, dict):
-            return {key: aside(item) for key, item in value.items() if key != "engine_version"}
+            return {key: aside(item) for key, item in value.items() if key not in ("engine_version", "seconds")}
         if isinstance(value, list):
             return [aside(item) for item in value]
         return value
@@ -447,6 +448,47 @@ def test_a_wing_the_engine_cannot_read_is_not_planned(kinds_api, monkeypatch):
 
 
 @needs_test_database
+def test_the_wing_cards_contract_a_change_worked_by_hand_checked_and_answered(kinds_api, monkeypatch):
+    """The wing page's plan card (ADR-0144, step 5, page) is mocked from this plan: a change, the hand calculation, the check and an
+    answer, proposed and approved."""
+    ask = "add 2 0-degree plies to the spar caps, work it by hand, run the check and tell me the lowest margin"
+    scripted(monkeypatch, plan(wing_step("add_plies", "add 2 0-degree plies to the spar caps", part="spar_caps", angle="0", count="2"),
+                               wing_step("analyze", "work it by hand"), wing_step("check", "run the check"),
+                               wing_step("answer", "tell me the lowest margin", question="What is the lowest margin?")))
+    client = kinds_api.client
+    pid = project(client, {"wing": capped()}, kind="wing")
+    body = a_wing_plan(client, pid, ask).json()
+    contract("wing-plan-answered.json", body)
+    assert body["state"] == "proposed", body["reason"]
+    assert [(s["role"], s["tool"]) for s in body["steps"]] == [("Setup", "add_plies"), ("Solver", "analyze"), ("Solver", "check"), ("Report", "answer")]
+    assert body["steps"][3]["line"] == "Answer: what is the lowest margin?"
+    approved = client.post(f"/v1/projects/{pid}/plans/{body['id']}/approve", json={"base": body["base"]})
+    assert approved.status_code == 200, approved.text
+    done = approved.json()
+    contract("wing-approve-answered.json", done)
+    analyze, check = done["runs"]
+    assert (analyze["n"], analyze["tool"], check["n"], check["tool"]) == (2, "analyze", 3, "check")
+    assert analyze["answer"]["wing"] == done["project"]["content"]["wing"], "the hand calculation is of the wing the plan leaves"
+    assert check["answer"]["state"] == "queued" and done["plan"]["job"] == check["answer"]["job_id"]
+    assert [s["state"] for s in done["plan"]["steps"]] == ["done", "done", "running", "planned"] and done["plan"]["state"] == "running"
+
+
+@needs_test_database
+def test_a_wing_plan_the_engine_cannot_make_is_refused_in_its_words(kinds_api, monkeypatch):
+    """The wing page shows a refused plan's reason (ADR-0144, step 5, page): the engine's own words for the change it cannot make."""
+    ask = "remove 2 90-degree plies from the skin and run the check"
+    steps = plan(wing_step("remove_plies", "remove 2 90-degree plies from the skin", part="skin", angle="90", count="2"), wing_step("check", "run the check"))
+    model = scripted(monkeypatch, steps, steps)
+    client = kinds_api.client
+    pid = project(client, {"wing": capped()}, kind="wing")
+    body = a_wing_plan(client, pid, ask).json()
+    contract("wing-plan-refused.json", body)
+    assert (body["state"], body["kind"], body["steps"]) == ("refused", "wing", []) and len(model.asked) == 2, "asked again with the reasons, then refused"
+    assert body["reason"] == "step 1: [0/45/-45/0]s has 0 plies at 90°: 2 cannot be taken out."
+    assert client.get(f"/v1/projects/{pid}").json()["content"]["wing"] == capped(), "nothing changes"
+
+
+@needs_test_database
 def test_the_founders_repair_example_end_to_end(kinds_api, monkeypatch):
     model = scripted(monkeypatch, REPAIR_GOOD)
     client = kinds_api.client
@@ -493,6 +535,45 @@ def test_the_founders_repair_example_end_to_end(kinds_api, monkeypatch):
     assert runs[0]["answer"]["rows"] == len(found["rows"]) and runs[0]["answer"]["pick"]["value"] == 4.0, "a sweep's record keeps its pick, not every row"
     assert runs[1]["answer"]["check"]["state"] == "solved" and "lines" not in json.dumps(runs[1]), "a solve's record keeps its headline numbers"
     assert client.post(f"{PLANS}/{body['id']}/approve", json={"repair": repair(), "base": body["base"]}).status_code == 409, "approved once"
+
+
+@needs_test_database
+def test_the_repair_cards_contract_a_sweep_its_pick_the_solve_the_bond_and_an_answer(kinds_api, monkeypatch):
+    """The repair page's plan card (ADR-0144, step 5, page) is mocked from this plan: every run a repair's approval carries, and an answer
+    the page gives, proposed and approved."""
+    ask = "find the smallest repair that stays elastic at 300 N/mm, solve it, follow the bond and tell me what fails first"
+    scripted(monkeypatch, plan(REPAIR_GOOD["steps"][0], REPAIR_GOOD["steps"][1], repair_step("solve", "solve it"), repair_step("bond", "follow the bond"),
+                               repair_step("answer", "tell me what fails first", question="What fails first?")))
+    client = kinds_api.client
+    body = a_repair_plan(client, ask=ask).json()
+    contract("repair-plan-answered.json", body)
+    assert body["state"] == "proposed", body["reason"]
+    assert [(s["role"], s["tool"]) for s in body["steps"]] == [("Solver", "sweep"), ("Geometry", "use_pick"), ("Solver", "solve"), ("Solver", "bond"),
+                                                               ("Report", "answer")]
+    approved = client.post(f"{PLANS}/{body['id']}/approve", json={"repair": repair(), "base": body["base"]})
+    assert approved.status_code == 200, approved.text
+    done = approved.json()
+    contract("repair-approve-answered.json", done)
+    assert [(r["n"], r["tool"]) for r in done["runs"]] == [(1, "sweep"), (3, "solve"), (4, "bond")]
+    assert done["repair"] == done["runs"][0]["answer"]["picked"] and [given["repair"] for given in solved(kinds_api.seen)] == [done["repair"]] * 2
+    assert [s["state"] for s in done["plan"]["steps"]] == ["done", "done", "done", "done", "planned"] and done["plan"]["state"] == "running"
+
+
+@needs_test_database
+def test_a_repair_plan_whose_sweep_picks_nothing_is_refused_in_the_engines_words(kinds_api, monkeypatch):
+    """The founder's sentence on the stock example (ADR-0144, step 5, page): no step length keeps its adhesive elastic at 300 N/mm, so
+    the plan is refused with the sweep's own answer, and the page shows it."""
+    ask = "find the shortest step length that stays elastic at 300 N/mm and solve it"
+    steps = plan(repair_step("sweep", "find the shortest step length that stays elastic at 300 N/mm", quantity="step_length", load="300", load_unit="N/mm"),
+                 repair_step("use_pick", "the shortest step length"), repair_step("solve", "solve it"))
+    model = scripted(monkeypatch, steps, steps)
+    body = a_repair_plan(kinds_api.client, repair_example(), ask).json()
+    contract("repair-plan-refused.json", body)
+    found = sweep_repair(repair_example(), RepairSweep(quantity="step_length", load=300, load_unit="N/mm"))
+    assert found["pick"] is None and found["answer"][0].startswith("None of these keeps")
+    assert (body["state"], body["kind"], body["project"], body["steps"]) == ("refused", "repair", None, []) and len(model.asked) == 2
+    assert body["reason"] == f"step 2: the sweep picks nothing to use: {' '.join(found['answer'])}"
+    assert solved(kinds_api.seen) == [], "nothing runs"
 
 
 @needs_test_database

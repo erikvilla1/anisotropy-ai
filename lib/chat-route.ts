@@ -11,6 +11,7 @@ import { unitsOf, type StudioForm } from "./studio-form";
 import { emptyPlate, namesPlateEdit, PLATE_TEST, type PlateLists } from "./studio-plate";
 import { asksPlateEdit, canBecomePlate, namesOffAxis, readPlateEdit } from "./plate-edits";
 import { modelFileAsked } from "./model-file";
+import { ANSWERS, isQuestion } from "./ask-words";
 import type { ModelProgram } from "./studio-api";
 
 /** Who answers a message in the coupon chat (ADR-0121): the page's own readers in a fixed order, then a model where one reads, then the
@@ -21,13 +22,8 @@ import type { ModelProgram } from "./studio-api";
  * ply 4 in compression?" never changes the test to compression (ADR-0100). */
 export const ASKING = /^\s*(?:why|what|where|which|compare)\b/i;
 
-/** A message that asks rather than tells (ADR-0121 amendment 2): it opens with a word that asks ("what", "how", "is", "does", "should"),
- * or it ends in a question mark and asks for nothing to be done ("can you make it 30 wide?" is a request, and is read as one). "What
- * about" and "how about" offer a value, so they are no question. A question is never read into rows of the setup: "how did you get
- * 16740 N" changes no load. */
-const ASKS_OPEN = /^\s*(?:why|what(?!\s+about\b)|where|which|who|whom|whose|when|how(?!\s+about\b)|compare|is|are|was|were|does|should|shall|am|(?:do|did|have|has)(?=\s+(?:you|u|i|we|they|it|this|my|the)\b))\b/i;
-const REQUEST = /^\s*(?:please|(?:can|could|would|will)\s+(?:you|u|we|i)|may\s+i|let'?s|i(?:'d|\s+would)\s+like|i\s+want)\b/i;
-export const isQuestion = (text: string): boolean => ASKS_OPEN.test(text) || (/\?\s*$/.test(text) && !REQUEST.test(text));
+/** A message that asks rather than tells (ADR-0121 amendment 2), in the words every chat of the workspace shares (`lib/ask-words.ts`). */
+export { isQuestion };
 
 /** A question of whether the setup is ready ("is it ready to run?", "is my setup ok?", "can I run it?", "what's missing?"): the setup is
  * checked and the answer opens with Yes or No (ADR-0121 amendment 2). */
@@ -128,12 +124,6 @@ export type ChatState = {
  * stays with the page's own readers, and a question is never a plan. */
 const CHANGES = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+|(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+)?|let'?s\s+)?(?:set|make|change|use|switch|increase|decrease|reduce|raise|lower|refine|add|remove|apply|put|clamp|fix|hold|pin|pull|push|load|press|move|rotate|turn)\b/i;
 const RUNS = /(?:^|[,;:]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:re-?run|run|solve|analy[sz]e)\b/i;
-const ANSWERS = new RegExp([
-  /\b(?:tell|show|give)\s+me\b|\blet\s+me\s+know\b/.source,
-  /\b(?:see|check|find\s+out|determine|work\s+out|find|report)\s+(?:if|whether|how|what|which|where)\b/.source,
-  /\b(?:does|will|would|whether|if)\s+it\s+(?:holds?|fails?|breaks?|survives?|pass(?:es)?|yields?)\b/.source,
-  /\bfirst[- ]ply[- ]failure\b|\bfpf\b/.source,
-].join("|"), "i");
 /** "never mind", "cancel": no answer to the plan's question, and no plan. */
 const DROPS = /^\s*(?:no\b|nope\b|cancel\b|never\s*mind\b|forget\s+(?:it|that)\b|stop\b)/i;
 
