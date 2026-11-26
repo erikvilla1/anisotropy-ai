@@ -42,7 +42,7 @@ ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engi
                   "repair.description", "repair.section", "repair.patch_lap", "repair.solid",
                   "cases")  # the case runner last: its listing is printed once, in the verification section
 FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields", "working",
-               "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond", "ply_damage", "repair_plies", "large_displacement")
+               "wing_model", "repair_model", "repair_files", "bond_solver", "repair_bond", "ply_damage", "repair_plies", "large_displacement", "followed_plate")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
 # Unit labels for finite element case results, by the deck's unit system and result group.

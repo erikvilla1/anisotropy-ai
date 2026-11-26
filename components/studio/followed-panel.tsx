@@ -3,7 +3,7 @@
 import { curveLayout } from "@/lib/followed-curve";
 import { type Fields } from "@/lib/studio-api";
 import { CRITERION_NAMES } from "@/lib/studio-answer";
-import { FOLLOWED_CHECK } from "@/lib/studio-copy";
+import { FOLLOWED_CHECK, FOLLOWED_MESH } from "@/lib/studio-copy";
 import { printed } from "@/lib/studio-colors";
 
 /** What only a solve with nonlinear geometry has (ADR-0142): that the answer is one, the load against the largest displacement level by
@@ -83,6 +83,7 @@ export function FollowedPanel({ fields }: { fields: Fields }) {
         The answer does not scale with the load: doubling the load does not double a stress, and a load at first-ply failure is given only when a ply reaches
         its limit on the way. A pressure follows the surface as it bends; a force keeps its direction. {FOLLOWED_CHECK.replace(/^Nonlinear geometry: o/, "O")}
       </p>
+      <p className="studio-muted" data-testid="followed-mesh">{FOLLOWED_MESH}</p>
     </div>
   );
 }

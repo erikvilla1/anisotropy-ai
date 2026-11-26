@@ -972,6 +972,7 @@ test.describe("the model tree", () => {
     await expect(page.getByTestId("followed-table").locator("tbody tr")).toHaveCount(10);
     await expect(page.getByTestId("followed-table").locator("tbody tr").nth(4)).toContainText("50 %");
     await expect(page.getByTestId("followed-table").locator("tbody tr").nth(4)).toContainText("1.265");
+    await expect(followed.getByTestId("followed-mesh")).toContainText("No mesh study is made of this run"); // the study is the linear solve's
     await expect(page.getByTestId("answer-rule")).toContainText("does not scale with the load");
     await expect(page.getByTestId("answer-table")).toContainText("not reached");
     await followed.scrollIntoViewIfNeeded();

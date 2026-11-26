@@ -11,7 +11,7 @@ import { answerWords, readJobAnswer } from "../lib/run-history";
 import { summaryAnswer } from "../lib/result-summary";
 import { answerOf, answerStat, percentOf } from "../lib/studio-answer";
 import { printed } from "../lib/studio-colors";
-import { bannedIn, FOLLOWED_CHECK, FOLLOWED_DOCUMENTS, FOLLOWED_STAGE, followedJob, runDetail, runHeadline, runProblem, runStatus, runSteps, verificationOf } from "../lib/studio-copy";
+import { bannedIn, FOLLOWED_CHECK, FOLLOWED_DOCUMENTS, FOLLOWED_MESH, FOLLOWED_STAGE, followedJob, runDetail, runHeadline, runProblem, runStatus, runSteps, verificationOf } from "../lib/studio-copy";
 import { buildValues, exampleForm, FOLLOWED_KEY, FOLLOWED_LABEL, FOLLOWED_WORDS, followedRow, followsShape, formFromValues, PLATE_TEST, rowErrorsFrom, type StudioForm } from "../lib/studio-form";
 import { emptyPlate } from "../lib/studio-plate";
 
@@ -63,7 +63,7 @@ test("a run with nonlinear geometry is worded as one: its own stage, no report s
   const problem = runProblem(stopped) ?? "";
   assert.match(problem, /reached 50 % of the load and stopped there/);
   assert.match(problem, /turn nonlinear geometry off in the Analysis step/);
-  for (const words of [problem, runHeadline(job({})), runStatus(done, "Files"), FOLLOWED_CHECK, ...Object.values(FOLLOWED_WORDS)]) assert.deepEqual(bannedIn(words), [], words);
+  for (const words of [problem, runHeadline(job({})), runStatus(done, "Files"), FOLLOWED_CHECK, FOLLOWED_MESH, ...Object.values(FOLLOWED_WORDS)]) assert.deepEqual(bannedIn(words), [], words);
 });
 
 test("a followed answer does not scale: the failure index at the applied load, and a share of the load only for a ply that reached its limit", () => {

@@ -386,6 +386,10 @@ export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & {
 export type Verification = { line: string; verified: boolean; /** said as a plain note, neither a pass nor a warning */ note?: boolean };
 /** What stands behind an answer with nonlinear geometry, in one line: one solver, held to published problems; no second solver checks it. */
 export const FOLLOWED_CHECK = "Nonlinear geometry: one solver gives this answer, checked against published large-deflection problems. No second solver checks it.";
+/** What a run with nonlinear geometry lacks, said under its curve: no mesh study is made of it (the study is the linear solve's), and the
+ * peak stress beside a held edge rises as the mesh is refined (ADR-0142: a clamped plate's failure index 0.126, 0.186, 0.227 on 8, 16
+ * and 32 elements a side, its deflection the same to 0.1 %). */
+export const FOLLOWED_MESH = "No mesh study is made of this run. The deflection settles on a coarse mesh; a peak stress beside a held edge rises as the mesh is refined, so solve again with a smaller element size before relying on the failure index.";
 /** The reference solver's check in one line, from the summary the package wrote when it is there, else from the result line the
  * pipeline reported ("57 of 57 recorded values agree with …"); null before the reference solver has run. "Verified" only when every
  * value agrees; otherwise the line says how many did, and `verified` is false so the page does not show it as a pass. `brief`, the
