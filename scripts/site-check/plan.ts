@@ -22,6 +22,7 @@ export type Skipped = { id: string; feature: string; ask: string; page: Page; re
 export const PAGES_IN_ORDER: readonly Page[] = ["start", "blank", "setup", "ready", "results", "past", "wing", "wing-caps", "repair", "repair-solved", "repair-external"];
 export const NOT_OFFERED: Partial<Record<Page, string>> = {
   plate: "a plate is set up on a founder's sign-in only, and the check signs in as a customer",
+  "plate-results": "a plate is set up and run on a founder's sign-in only, and the check signs in as a customer",
   imported: "a model is imported on a founder's sign-in only, and the check signs in as a customer",
   "repair-plies": "carrying a repair until it cannot hold the load is a job of minutes that counts against a sign-in's jobs for the day: the check starts none",
 };
