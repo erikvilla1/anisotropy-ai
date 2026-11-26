@@ -14,7 +14,8 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
   every change previewed by `setup_tools.change_setup`, every one or none; every region one the model has; every number in a step
   written in the sentence (a unit converted only by the tools); every quote a span of the sentence; one run, the changes before it and
   the answers after it. A plan kept is a list of steps, each with its role, its one line and its state.
-- `make_plan`: one call, one more with the reasons when the plan fails the checks, then the plan, the question or why there is none.
+- `make_plan`: one call, one more with the reasons when the plan fails the checks, then the plan, the question or why there is none;
+  `plan_with` is the same for any kind's view, schema and checks (a wing's and a repair's are in `planner_kinds.py`, build step 5).
 - `run_values`: the values a run and its check take for the setup, exactly as the page's `workspaceValues` (`lib/tension-screen.ts`)
   writes them, so a plan's run is the run the page would start.
 - `report_step`: a step the page carries (`run`, `qa`, `answer`) reported, and the plan's state that follows.
@@ -23,6 +24,7 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -38,6 +40,8 @@ MAX_UNREAD = 5
 MAX_NOTE = 400
 STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
 STEP_STATES = ("planned", "running", "done", "failed", "skipped")
+# What a plan plans on: a kept `fea` project's coupon or plate, a kept `wing` project, or a repair the page holds (no project).
+KINDS = ("coupon", "plate", "wing", "repair")
 # A request that asked no model is no plan: it is not counted against the day's planned requests.
 UNCOUNTED = ("capped", "unavailable")
 # Why no model was asked: the person's planned requests today reached the day's limit (ADR-0144). The page reads the state `capped`.
@@ -97,6 +101,11 @@ TOOL_WORDS: dict[str, tuple[str, dict[str, str]]] = {
 
 def is_plate(content: dict[str, Any]) -> bool:
     return setup_tools.form_of(content).get("test") == setup_tools.plate_test()
+
+
+def kind_of(content: dict[str, Any]) -> str:
+    """A kept `fea` project's plan is a plate's or a coupon's."""
+    return "plate" if is_plate(content) else "coupon"
 
 
 def tool_names(content: dict[str, Any]) -> list[str]:
@@ -462,26 +471,37 @@ def _billed(calls: list, reading: Any) -> Any:
     return reading
 
 
-def make_plan(assistant: Any, sentence: str, content: dict[str, Any], calls: list) -> Planned:
-    """The plan for a sentence: one call to the model; when its plan fails the checks, one more with the plan and the reasons; then the
-    plan, the question asked back, or `refused` with why. With no model, or none that answered, `unavailable` with the writer's reason
-    and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120)."""
-    schema = plan_schema(content)
-    reading = _billed(calls, assistant.plan(plan_view(sentence, content), schema))
+def _asked(assistant: Any, view: dict[str, Any], schema: dict[str, Any], system: str | None) -> Any:
+    """One call: a coupon's or a plate's plan in the planner's own words, another kind's with the words for it."""
+    return assistant.plan(view, schema) if system is None else assistant.plan(view, schema, system=system)
+
+
+def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | None], dict[str, Any]], schema: dict[str, Any],
+              check: Callable[[dict[str, Any]], Checked], system: str | None = None) -> Planned:
+    """A plan of any kind: one call to the model with `view(None)`; when its plan fails `check`, one more with `view({"plan",
+    "reasons"})`; then the plan, the question asked back, or `refused` with why. With no model, or none that answered, `unavailable`
+    with the writer's reason and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120)."""
+    reading = _billed(calls, _asked(assistant, view(None), schema, system))
     if reading.raw is None:
         return Planned("unavailable", reason=reading.reason, writer="template")
-    checked = check_plan(reading.raw, sentence, content)
+    checked = check(reading.raw)
     if not checked.ok:
-        again = _billed(calls, assistant.plan(plan_view(sentence, content, {"plan": reading.raw, "reasons": checked.reasons}), schema))
+        again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
         if again.raw is None:
             return Planned("refused", unread=checked.unread, reason="; ".join(checked.reasons))
-        retried = check_plan(again.raw, sentence, content)
+        retried = check(again.raw)
         if not retried.ok:
             return Planned("refused", unread=retried.unread, reason="; ".join(retried.reasons))
         reading, checked = again, retried
     if checked.question is not None:
         return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model)
     return Planned("proposed", steps=checked.steps, unread=checked.unread, writer=reading.writer, model=reading.model)
+
+
+def make_plan(assistant: Any, sentence: str, content: dict[str, Any], calls: list) -> Planned:
+    """The plan for a sentence on a coupon's or a plate's setup: `plan_with` this module's view, schema and checks."""
+    return plan_with(assistant, calls, view=lambda refused: plan_view(sentence, content, refused), schema=plan_schema(content),
+                     check=lambda raw: check_plan(raw, sentence, content))
 
 
 # ----------------------------------------------------------------------------------------------- the values a run takes
@@ -604,14 +624,15 @@ def plan_state(steps: list[dict[str, Any]]) -> str:
     return "running"
 
 
-def report_step(steps: list[dict[str, Any]], n: int, state: str, note: str | None) -> str:
-    """A step the page carries reported (`run`, `qa`, `answer`), in place; the plan's state after it. A failed step stops the plan. The
-    same report twice changes nothing; a step that has ended in another state, or one of the server's, is refused."""
+def report_step(steps: list[dict[str, Any]], n: int, state: str, note: str | None, reported: tuple[str, ...] = REPORTED) -> str:
+    """A step the page carries reported (`reported`, a coupon's and a plate's `run`, `qa` and `answer` unless another kind's are given),
+    in place; the plan's state after it. A failed step stops the plan. The same report twice changes nothing; a step that has ended in
+    another state, or one of the server's, is refused."""
     step = next((s for s in steps if s["n"] == n), None)
     if step is None:
         raise LookupError(f"the plan has no step {n}")
-    if step["tool"] not in REPORTED:
-        raise StepRefused(f"step {n} ({step['tool']}) is the server's to carry out; the page reports {', '.join(REPORTED)}")
+    if step["tool"] not in reported:
+        raise StepRefused(f"step {n} ({step['tool']}) is the server's to carry out; the page reports {', '.join(reported)}")
     if step["state"] in ("done", "failed", "skipped") and step["state"] != state:
         raise StepRefused(f"step {n} has ended: it is {step['state']}")
     if state == "failed":
