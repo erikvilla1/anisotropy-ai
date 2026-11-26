@@ -446,10 +446,11 @@ def change_setup(content: dict[str, Any], changes: list[dict[str, Any]]) -> Chan
 
     - hold: `region`, `dofs` (1 to 3 along x, y, z; 4 to 6 about them). It takes the place of the region's hold; a set move of another
       direction stays.
-    - move: `region`, `dof`, `value` (and `unit`): the region moved along a direction (1 to 3) or turned about one (4 to 6) by a set amount.
+    - move: `region`, `dof`, `value` (and `unit`): the region moved along a direction (1 to 3) or turned about one (4 to 6) by a set amount;
+      it takes the place of the region's force along that direction.
     - force: `region`, `value` (and `unit`), and `dof` (1 to 3) with the value signed, or `sense` tension or compression on a straight edge,
       which takes its direction and sign from the edge's outward normal. The total over the region; it takes the place of the region's
-      force along that direction.
+      force or set move along that direction, and is refused along a direction the region is held in (the support would carry it).
     - pressure: `region` (an area), `value` (and `unit`): positive presses down on the plate. It takes the place of the region's pressure.
     - free: `region`: every hold and move on it removed. unload: `region`: every load on it removed.
     - row: `key`, `value` (and `unit`): a row of the form set, or left blank with an empty value.
@@ -564,9 +565,17 @@ def change_setup(content: dict[str, Any], changes: list[dict[str, Any]]) -> Chan
                 refuse(converted)
                 continue
             total = _js_written(converted)
+            if any(s.get("region") == region and not _text(s.get("value")).strip() and dof in (s.get("dofs") or []) for s in lists["supports"]):
+                refuse(f"{region} is held along {dof_word(dof)}, so a force along {dof_word(dof)} there would go into the support: "
+                       f"free {region} or hold it along other directions first")
+                continue
+            # one way of driving a direction of a region: the force takes the place of a set move along it, which would otherwise carry it
+            moves = [s for s in lists["supports"] if s.get("region") == region and _text(s.get("value")).strip() and (s.get("dofs") or [0])[0] == dof]
+            lists["supports"] = [s for s in lists["supports"] if not any(s is m for m in moves)]
             lists["loads"] = [*(l for l in lists["loads"] if not (l.get("region") == region and l.get("kind") == "force" and l.get("dof") == dof)),
                               {"region": region, "kind": "force", "dof": dof, "total": total}]
-            done.append(load_line({"region": region, "kind": "force", "dof": dof, "total": total}, labels) + (f" ({sense})" if sense else ""))
+            done.append(load_line({"region": region, "kind": "force", "dof": dof, "total": total}, labels) + (f" ({sense})" if sense else "")
+                        + (f", in place of its move of {_text(moves[-1].get('value')).strip()} {labels['length']} along {dof_word(dof)}" if moves else ""))
             continue
 
         # move: a set displacement or turn, a boundary condition with a value
@@ -584,7 +593,11 @@ def change_setup(content: dict[str, Any], changes: list[dict[str, Any]]) -> Chan
         kept = [s for s in lists["supports"] if s.get("region") != region or dof not in (s.get("dofs") or [])]
         kept += [{**s, "dofs": [d for d in s["dofs"] if d != dof]} for s in on if not _text(s.get("value")).strip() and len(s["dofs"]) > 1]
         lists["supports"] = [*kept, {"region": region, "dofs": [dof], "value": moved}]
-        done.append(support_line({"region": region, "dofs": [dof], "value": moved}, labels))
+        # and a set move takes the place of a force of the region along its direction, which the move would carry
+        forces = [l for l in lists["loads"] if l.get("region") == region and l.get("kind") == "force" and l.get("dof") == dof]
+        lists["loads"] = [l for l in lists["loads"] if not any(l is f for f in forces)]
+        done.append(support_line({"region": region, "dofs": [dof], "value": moved}, labels)
+                    + (f", in place of its force of {_text(forces[-1].get('total')).strip()} {labels['force']} along {dof_word(dof)}" if forces else ""))
 
     if out.refused:
         return out

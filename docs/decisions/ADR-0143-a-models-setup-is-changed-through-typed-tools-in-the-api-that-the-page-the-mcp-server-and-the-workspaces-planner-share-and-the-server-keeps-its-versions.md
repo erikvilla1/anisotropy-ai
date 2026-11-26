@@ -1,6 +1,6 @@
 # ADR-0143: A model's setup is changed through typed tools in the API that the page, the MCP server and the workspace's planner share, and the server keeps its versions
 
-- Status: Proposed
+- Status: Proposed; a force and a set move of one direction take each other's place since amendment 1
 - Date: 2026-11-26
 - Decided by: Founder, 2026-11-25 ("Mockup and plan first", on the card about making the workspace agentic, after he asked whether the software runs agents "like PhysicsX"); 2026-11-26 ("let's cpntinue with our agentic engineering tell me what you need to continue", on the plan's build step 1, the tool layer with no model) | Drafted by: Claude Code
 - Related: `api/src/anisotropy_api/setup_tools.py`, `api/src/anisotropy_api/records.py` (`ModelVersionRow`, `add_version`, `apply_setup`), `api/alembic/versions/0016_model_versions.py`, `mcp-server/src/anisotropy_mcp/server.py` (`read_plate`, `preview_plate_change`), `components/studio/use-versions.ts`, `lib/model-versions.ts`, `tests/fixtures/setup-tools/plate-setup.json`, [ADR-0113](ADR-0113-each-settled-change-to-a-setup-is-kept-as-a-version-in-the-browser-with-who-made-it-why-and-its-runs-answer-and-going-back-is-a-new-version.md) (versions, until now in the browser), [ADR-0101](ADR-0101-on-a-plate-the-model-proposes-supports-and-loads-from-the-engineers-words-and-the-element-clicked-and-a-guard-keeps-what-the-words-or-the-click-hold.md) (a plate's supports and loads), [ADR-0107](ADR-0107-an-mcp-client-reaches-anisotropy-through-a-local-server-over-stdio-that-calls-the-api-it-solves-a-preview-and-starts-no-full-run-and-the-clients-model-writes-the-words.md) (the MCP server reads and previews only), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (projects kept on the server), [ADR-0139](ADR-0139-the-models-words-may-not-decide-for-the-engineer-its-calls-are-capped-per-person-per-day-and-how-often-the-guards-set-answers-aside-is-read-each-week.md) (the model does not decide for the engineer)
@@ -69,3 +69,13 @@ Option 1. The workspace's steps over a model's setup are typed tools in the API,
 - The fixture has to be rewritten for a disagreement between the page and the tools more than twice in a month. One copy of the rules is then worth its cost.
 - Step 2's planner needs a change these actions cannot state, and it is not one action more.
 - The history in a browser and on the server disagree for an engineer, or the version calls show among the API's errors after deploy.
+
+## Amendment 1, 2026-11-26 (a force and a set move of one direction take each other's place; a force on a held direction is refused)
+
+**Context.** A walk-through of the planner on a plate made from the tension screen showed the card "Edge-Top: force of 2000 N along y (tension)" while the run was driven by the 1 mm move of Edge-Top along y that the plate kept from the coupon's pull: the move carries any force along its direction, so the force did nothing and the answer was of a 1 mm pull. The page's reader and the typed `force` both left the move in place, and the parity fixture's cases held that.
+
+**Options.** Refuse a force on a moved direction and make the engineer free it first: rejected, since "pull the top edge with 2 kN" plainly means a pull by force in place of the pull by travel. Leave both and warn in the setup check: rejected, since the card would still show a change the run does not make. Let the newer one take the other's place and say so in its line: chosen.
+
+**Decision.** A force along a direction of a region takes the place of the region's set move along it, and a set move takes the place of its force along it; the line says what it replaced ("…, in place of its move of 1 mm along y"). A force along a direction the region is held in is refused by the tools and noted by the page, in the same words, since the support would carry it. Holds are unchanged. Drafted after the walk-through; not yet confirmed by the founder.
+
+**Evidence.** `tests/fixtures/setup-tools/plate-setup.json`: three cases now replace a move or a force; `api/tests/test_setup_tools.py` and `tests/setup-tools.test.ts` hold both sides to them and to the refusal.

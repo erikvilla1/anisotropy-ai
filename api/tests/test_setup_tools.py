@@ -46,6 +46,16 @@ def test_a_typed_change_does_what_the_pages_sentence_does(case):
     assert start["plate"] == FIXTURE["edits"]["start"]  # the setup given is never changed in place
 
 
+def test_a_force_on_a_held_direction_is_refused_as_the_page_notes_it():
+    """A force along a direction its region is held in would go into the support, so it is refused, in the page's words (ADR-0143 am. 1);
+    a force or a set move of a direction taking the other's place is in the fixture's cases above."""
+    start = {"form": FIXTURE["edits"]["form"], "plate": FIXTURE["edits"]["start"]}
+    changed = tools.change_setup(start, [{"action": "force", "region": "Edge-Bottom", "sense": "compression", "value": "1", "unit": "kN"}])
+    assert not changed.ok and changed.content == start
+    assert changed.refused == [{"change": 1, "reason": "Edge-Bottom is held along y, so a force along y there would go into the support: "
+                                                      "free Edge-Bottom or hold it along other directions first"}]
+
+
 def test_a_coupons_values_are_not_a_plates():
     with pytest.raises(ValueError, match="a plate's values"):
         tools.plate_values(COUPON)

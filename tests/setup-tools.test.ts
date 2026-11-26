@@ -38,3 +38,13 @@ test("each sentence the page reads makes the change the API's typed change makes
     assert.ok(c.changes.length > 0, `“${c.text}” names its typed change`);
   }
 });
+
+test("a force on a direction its region is held in is noted, not made, in the API's words (ADR-0143 amendment 1)", () => {
+  // `api/tests/test_setup_tools.py` holds the API's refusal of the same force to the same words
+  const { form, start } = FIXTURE.edits;
+  const read = readPlateEdit("push the bottom edge with 1 kN", form, start);
+  assert.ok(read);
+  assert.deepEqual(read.done, []);
+  assert.deepEqual(read.lists, start);
+  assert.deepEqual(read.notes, ["Edge-Bottom is held along y, so a force along y there would go into the support: free Edge-Bottom or hold it along other directions first"]);
+});

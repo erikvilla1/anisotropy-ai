@@ -883,7 +883,7 @@
      }
     ],
     "done": [
-     "Edge-Top: force of 10000 N along y (tension)"
+     "Edge-Top: force of 10000 N along y (tension), in place of its move of 1 mm along y"
     ],
     "after": {
      "supports": [
@@ -895,13 +895,6 @@
         3
        ],
        "value": ""
-      },
-      {
-       "region": "Edge-Top",
-       "dofs": [
-        2
-       ],
-       "value": "1"
       }
      ],
      "loads": [
@@ -1123,7 +1116,7 @@
      }
     ],
     "done": [
-     "Edge-Top: moved 2 mm along y"
+     "Edge-Top: moved 2 mm along y, in place of its force of 500 N along y"
     ],
     "after": {
      "supports": [
@@ -1144,14 +1137,7 @@
        "value": "2"
       }
      ],
-     "loads": [
-      {
-       "region": "Edge-Top",
-       "kind": "force",
-       "dof": 2,
-       "total": "500"
-      }
-     ],
+     "loads": [],
      "regions": []
     }
    },
@@ -1296,17 +1282,10 @@
     ],
     "done": [
      "Edge-Bottom: fixed (encastre)",
-     "Edge-Top: force of 2000 N along y (tension)"
+     "Edge-Top: force of 2000 N along y (tension), in place of its move of 1 mm along y"
     ],
     "after": {
      "supports": [
-      {
-       "region": "Edge-Top",
-       "dofs": [
-        2
-       ],
-       "value": "1"
-      },
       {
        "region": "Edge-Bottom",
        "dofs": [
