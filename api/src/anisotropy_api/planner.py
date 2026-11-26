@@ -408,6 +408,12 @@ def _question_reason(question: Any, sentence: str) -> str | None:
 NOT_A_QUESTION = "the question back is not a question: it asks which one is meant, ending in a question mark"
 
 
+def no_step_reason(unread: list[dict[str, str]]) -> str:
+    """Why an answer with no step and no question is no plan. With words it lists as not read, those words are why: the card shows them
+    under the reason, so the reason says that no step on offer does them ("the plan has no step" was shown above "clamp Edge-Middle")."""
+    return "no step on offer does what the sentence asks" if unread else "the plan has no step and asks no question"
+
+
 def said_back(question: str, sentence: str) -> str | None:
     """Words written back as a question that are none, kept when they keep every other rule of a question asked back (no number the
     sentence does not write, nothing decided, short): a refused plan's answer gives them, the engineer's own case in the model's words."""
@@ -497,7 +503,7 @@ def check_plan(raw: dict[str, Any], sentence: str, content: dict[str, Any]) -> C
             out.question = question.strip()
         return out
     if not steps:
-        out.reasons.append("the plan has no step and asks no question")
+        out.reasons.append(no_step_reason(out.unread))
         return out
 
     offered = tool_names(content)

@@ -162,6 +162,8 @@ def test_the_order_of_a_plan_is_changes_one_run_and_answers():
     twice = plan(step("run", "tell me if it holds"), step("run", "tell me if it holds"))
     assert planner.check_plan(twice, ASK, PLATE).reasons == ["step 2: the plan runs the analysis once"]
     assert planner.check_plan(plan(), ASK, PLATE).reasons == ["the plan has no step and asks no question"]
+    none = planner.check_plan(plan(unread=[{"quote": "clamp Edge-Middle", "reason": "not_offered"}]), "clamp Edge-Middle and run it", PLATE)
+    assert none.reasons == ["no step on offer does what the sentence asks"]  # the card lists the words under it
 
 
 def test_a_change_the_tools_refuse_makes_no_plan():
