@@ -136,7 +136,8 @@ def test_the_features_are_the_ones_the_migration_allows():
     from importlib import util
     from pathlib import Path
 
-    spec = util.spec_from_file_location("m0013", Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0013_model_calls.py")
+    # the last migration to name them: 0013 made the table, 0017 added the planner's `plan_steps` (ADR-0144)
+    spec = util.spec_from_file_location("m0017", Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0017_agent_plans.py")
     migration = util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     assert migration.FEATURES == FEATURES  # a new feature is a new migration (ADR-0120)

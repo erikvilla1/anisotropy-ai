@@ -120,6 +120,28 @@ def tool_choice_schema(names: list[str]) -> dict[str, Any]:
             "required": ["tools"], "additionalProperties": False}
 
 
+# A sentence read into a plan of typed tool steps (ADR-0144): the model names tools on offer, regions and rows by name, and copies each
+# value as the sentence writes it; the server checks every step, previews the changes with the tools and adds the check and the QA.
+PLAN_MAX_TOKENS = 4000
+PLAN_SYSTEM = (
+    "You read an engineer's sentence in a composite analysis workspace and plan it as steps, each one of the tools on offer, so the "
+    "engineer can approve the plan before anything changes or runs. You are given the sentence, the model's setup as it stands (its test, "
+    "units, regions, supports, loads and rows), the rows a row change may set (each with its key, label, kind and for a choice its "
+    "choices), and the tools (each with what it does and the arguments it takes). Plan only what the sentence asks, in its order: the "
+    "changes first, then one run when it asks for a result, then one answer for each question it asks about the result. For each step "
+    "give the tool, its arguments, every argument it does not take as null, and the quote, the shortest span of the sentence, copied "
+    "character for character, that asks for the step. Name a region or a row only by a name on offer. Copy a value exactly as the "
+    "sentence writes it, digit for digit, and its unit exactly as written beside it, or null when it writes none; never convert, compute, "
+    "round, complete or guess a number (a push or a cooling may take a minus sign). An answer's question is the engineer's question in one "
+    "short sentence, with no number the sentence does not write. When the words fit two regions or two rows, plan nothing and ask one "
+    "short question naming the ones they fit; otherwise the question is null. When the sentence asks for something no tool on offer "
+    "does, list it under unread: the words that ask, copied character for character, and one reason. The reasons: not_offered, no tool, "
+    "row or choice on offer covers it; no_value, it names a change but writes no value it takes; refers_back, it leans on an earlier "
+    "message, which you were not given. With nothing of the kind, unread is an empty list. When you are shown a plan of yours that was "
+    "refused and the reasons, give the plan again with each reason put right." + VOICE + DECIDES
+)
+
+
 # A loose question about a result, read into a fixed request (ADR-0100): the model names what is asked for from what the page offers and
 # writes no number of a result, which it is never shown; the page runs the request on the solver's values.
 QUESTION_MAX_TOKENS = 1000
@@ -237,6 +259,8 @@ class Assistant(Protocol):
 
     def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
+    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+
 
 def numbers_in(text: str) -> list[str]:
     return NUMBER.findall(text)
@@ -333,6 +357,10 @@ class TemplateAssistant:
         """The template writes no answer to a question asked before a setup either: the page names the sections found (ADR-0124)."""
         return Reading(None, "template", None)
 
+    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The template plans nothing: the plan is `unavailable` and the page reads the sentence with its patterns (ADR-0144)."""
+        return Reading(None, "template", None)
+
 
 # The models the real-model Assistant check (ADR-0121, check 2) has been run with over every bank, by id, with the run (ADR-0121
 # amendment 8). A model joins only by pull request, after a run with it (the workflow's `model` input) fails no more answers than the
@@ -382,6 +410,9 @@ class LimitedAssistant(TemplateAssistant):
         return self._reading()
 
     def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        return self._reading()
+
+    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         return self._reading()
 
 
@@ -509,6 +540,12 @@ class ClaudeAssistant:
         yet judged. `view` is the question, the theory sections found and the kinds of work offered. Billed as `answer_question`, the
         one feature for questions answered from the theory pages (ADR-0120)."""
         return self._read("answer_question", GENERAL_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
+
+    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+        """The model's plan for a sentence (ADR-0144), as JSON in the schema asked for and not yet judged: the planner's checks read it.
+        `view` is what the model may see: the sentence, the setup as `read_setup` reads it, the rows and the tools on offer; with a plan
+        it gave that was refused, that plan and the reasons. Never a name, a note, an email or another project (R-11)."""
+        return self._read("plan_steps", PLAN_SYSTEM, view, schema, PLAN_MAX_TOKENS)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is
