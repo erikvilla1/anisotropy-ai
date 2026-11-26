@@ -361,3 +361,18 @@ def test_a_question_finds_the_repairs_reference_sections_and_never_a_value_from_
     assert fake.calls[-1][2] == {"question": "why does the shear stress peak at the ends of a step?", "about": "repair", "limit": 3}
     assert found["sections"][0]["from"] == "Bonded repairs, Why the shear stress peaks at the ends of a step"
     assert "never from a section" in found["how_to_answer"]
+
+
+def test_a_plates_answer_is_read_away_from_its_held_corners_and_says_so():
+    """ADR-0108 amendment 2: the package's table on the plate's basis, where it is read, and the basis in the working's opening line."""
+    from anisotropy_mcp.server import answer_of, basis_line, first_to_fail
+    plate = fixture("fields.json", Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "studio-plate-clamped")["summary"]
+    answer = answer_of(plate)
+    assert answer["first_ply_failure_basis"] == "the plate away from its held corners" and "gauge_section_read" not in answer
+    assert answer["plate_read_away_from_held_corners"] == plate["held_corners"]
+    assert answer["first_ply_failure"]["tsai_hill"]["factor"] == plate["fpf_away"]["tsai_hill"]["factor"]
+    assert answer["verdict"]["basis"] == "away" and answer["verdict"]["outside_earlier"]["near_corner"] is True
+    working = plate["working"]
+    assert working["basis"] == "away" and first_to_fail(plate, "away", list(working["criteria"])) == plate["verdict"]["earliest"]
+    line = basis_line("tsai_hill", working["criteria"]["tsai_hill"], "tsai_hill", working["criteria"], "away")
+    assert line.endswith("on the plate away from its held corners, in the preview.")

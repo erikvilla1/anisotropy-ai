@@ -324,6 +324,13 @@ export function gaugeSection(fields: Fields): number[] | null {
   return gauge?.length && grips.size ? gauge.filter((e) => !grips.has(e)) : null;
 }
 
+/** A plate away from its held corners, as the package reads it (`mesh.away_elements`, ADR-0108 amendment 2): its answer's elements, at least
+ * the stand-off from each point where a held run on an edge ends. Null for a model with a gauge section, without a held corner, or solved before it. */
+export function awayFromCorners(fields: Fields): number[] | null {
+  const read = fields.mesh.away_elements;
+  return read?.length ? read : null;
+}
+
 /** Each ply's extreme of each quantity over a region (ADR-0100): the values are the fields' own, per element and ply (and face), and one of
  * them is picked; nothing is summed, averaged or derived. The first element in the mesh's order holds a tie between elements. */
 function extremesOf(fields: Fields, question: Extract<ResultQuestion, { kind: "extreme" }>, asked: number[] | null): ResultAnswer {
@@ -336,6 +343,7 @@ function extremesOf(fields: Fields, question: Extract<ResultQuestion, { kind: "e
     [members, region] = [sets[name], `the region ${name}`];
   } else if (question.region === "gauge" && !gauge) return { kind: "refused", text: "This model has no gauge section between grips. Ask for the whole model, or name an element." };
   else if (question.region !== "whole" && gauge) [members, region] = [gauge, "the gauge section"];
+  else if (question.region === "default" && awayFromCorners(fields)) [members, region] = [awayFromCorners(fields)!, "the plate away from its held corners"];
   else [members, region] = [fields.mesh.element_labels.map((_, i) => i), "the whole model"];
   const faces = fields.mesh.faces?.length ? fields.mesh.faces : [null];
   const plies = asked ?? fields.mesh.angles.map((_, i) => i + 1);

@@ -187,8 +187,8 @@ def working_of(solution: Any, field: PlyField, summary: dict[str, Any], units: s
     if summary.get("isotropic"):
         return None
     verdict = summary.get("verdict")
-    gauge = bool(verdict and verdict["basis"] == "gauge")
-    table = summary.get("fpf_gauge", {}) if gauge else summary["fpf"]
+    basis = verdict["basis"] if verdict and verdict["basis"] in ("gauge", "away") else "whole"  # a plate away from its held corners (ADR-0108 am. 2)
+    table = summary.get({"gauge": "fpf_gauge", "away": "fpf_away"}[basis], {}) if basis != "whole" else summary["fpf"]
     mesh = solution.mesh
     lab = UNIT_LABEL[units]
     unit = lab["stress"]
@@ -228,4 +228,4 @@ def working_of(solution: Any, field: PlyField, summary: dict[str, Any], units: s
                           "factor": printed(factor), "steps": steps}
     if not out:
         return None
-    return {"basis": "gauge" if gauge else "whole", "digits": {"given": GIVEN_DIGITS, "result": DIGITS}, "criteria": out}
+    return {"basis": basis, "digits": {"given": GIVEN_DIGITS, "result": DIGITS}, "criteria": out}

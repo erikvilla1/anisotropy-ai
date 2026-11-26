@@ -153,8 +153,16 @@ def values_at(fields: dict, element: int, plies: list[int] | None = None, quanti
             + (" R is the multiple of the applied loading at which the ply fails here by that criterion; index is the failure index." if rows and "failure" in rows[0] else "")}
 
 
+def away_from_corners(fields: dict) -> list[int] | None:
+    """A plate away from its held corners, as the package reads it (`mesh.away_elements`, ADR-0108 amendment 2): its answer's elements,
+    at least the stand-off from each point where a held run on an edge ends. None for a model with a gauge section, without a held corner,
+    or solved before it."""
+    return list(fields["mesh"].get("away_elements") or []) or None
+
+
 def region_of(fields: dict, region: str) -> tuple[list[int], str]:
-    """The elements a region names and its words: "default" is the gauge section where the model has one, else the whole model."""
+    """The elements a region names and its words: "default" is the gauge section where the model has one, a plate away from its held
+    corners where it has one, else the whole model."""
     sets = fields["mesh"].get("element_sets", {})
     gauge = gauge_section(fields)
     if region == "gauge":
@@ -162,7 +170,10 @@ def region_of(fields: dict, region: str) -> tuple[list[int], str]:
             raise NotInResult("This model has no gauge section between grips. Ask for the whole model, or name an element.")
         return gauge, "the gauge section"
     if region == "default":
-        return (gauge, "the gauge section") if gauge else (list(range(len(fields["mesh"]["element_labels"]))), "the whole model")
+        if gauge:
+            return gauge, "the gauge section"
+        away = away_from_corners(fields)
+        return (away, "the plate away from its held corners") if away else (list(range(len(fields["mesh"]["element_labels"]))), "the whole model")
     if region == "whole":
         return list(range(len(fields["mesh"]["element_labels"]))), "the whole model"
     if region not in sets:

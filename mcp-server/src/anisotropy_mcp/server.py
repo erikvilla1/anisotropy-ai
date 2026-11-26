@@ -165,20 +165,26 @@ def said(result: dict) -> str:
     return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
 
 
+BASIS_WORDS = {"gauge": "the gauge section", "away": "the plate away from its held corners", "whole": "the whole model"}
+
+
 def answer_of(summary: dict) -> dict:
     """The solve's answer as the package wrote it (ADR-0085): the verdict, the first ply to fail by each criterion in the gauge section
-    where the coupon has one (the verdict names a criterion reached earlier outside it), where that section is read (ADR-0108: at least
-    `stand_off` from each tab line, the same distance on every mesh), the loading and the reaction."""
-    gauge = summary.get("fpf_gauge")
+    where the coupon has one, on a plate away from its held corners where it has one (the verdict names a criterion reached earlier
+    outside it), where that section or plate is read (ADR-0108 and its amendment 2: at least `stand_off` from each tab line or held
+    corner, the same distance on every mesh), the loading and the reaction."""
+    gauge, away = summary.get("fpf_gauge"), summary.get("fpf_away")
     verdict = summary.get("verdict")
     if isinstance(verdict, dict) and isinstance(verdict.get("outside_earlier"), dict):
         verdict = {**verdict, "outside_earlier": by_number(verdict["outside_earlier"])}
-    table = gauge if gauge else summary.get("fpf")
+    basis = "gauge" if gauge else "away" if away else "whole"
+    table = gauge if gauge else away if away else summary.get("fpf")
     return {key: value for key, value in {
         "verdict": verdict,
         "first_ply_failure": {c: by_number(entry) for c, entry in table.items()} if isinstance(table, dict) else table,
-        "first_ply_failure_basis": "the gauge section" if gauge else "the whole model",
+        "first_ply_failure_basis": BASIS_WORDS[basis],
         "gauge_section_read": summary.get("gauge_reading") if gauge else None,
+        "plate_read_away_from_held_corners": summary.get("held_corners") if basis == "away" else None,
         "applied": summary.get("applied"), "reaction": summary.get("reaction"), "max_displacement": summary.get("max_displacement"),
     }.items() if value is not None}
 
@@ -284,13 +290,16 @@ def slice_results(solved: dict) -> dict:
 CRITERION_NAMES = {"max_stress": "Maximum stress", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu", "max_strain": "Maximum strain"}
 
 
+BASIS_IN = {"gauge": "in the gauge section", "away": "on the plate away from its held corners", "whole": "over the whole model"}
+
+
 def basis_line(criterion: str, chain: dict, first: str, chains: dict, basis: str | None) -> str:
     """The one line a working answer opens with (ADR-0107 amendment 4): the criterion and its factor, the ply and the place, the section
     it is read in and that it is a preview; and, when another criterion fails first, which and at what factor, so this one is never
     taken for the answer."""
     name = CRITERION_NAMES.get(criterion, criterion)
     line = f"{name}, factor {chain.get('factor')} on the applied loading: {chain.get('where')}, " \
-           f"{'in the gauge section' if basis == 'gauge' else 'over the whole model'}, in the preview."
+           f"{BASIS_IN.get(basis or 'whole', 'over the whole model')}, in the preview."
     if first != criterion and first in chains:
         line += f" {CRITERION_NAMES.get(first, first)} fails first, at a factor of {chains[first].get('factor')}."
     return line
@@ -298,7 +307,7 @@ def basis_line(criterion: str, chain: dict, first: str, chains: dict, basis: str
 
 def first_to_fail(summary: dict, basis: str | None, written: list[str]) -> str:
     """The criterion whose working the page shows when none is named: the answer's earliest, else the first written (ADR-0103)."""
-    earliest = (summary.get("verdict") or {}).get("earliest") or summary.get("earliest_gauge" if basis == "gauge" else "earliest")
+    earliest = (summary.get("verdict") or {}).get("earliest") or summary.get({"gauge": "earliest_gauge", "away": "earliest_away"}.get(basis or "", "earliest"))
     return earliest if earliest in written else written[0]
 
 
@@ -457,8 +466,8 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
         quantities: Annotated[list[Quantity], Field(min_length=1, description="The quantities to find the extreme of")],
         sense: Annotated[Literal["largest", "smallest", "magnitude"], Field(description="largest: with its sign, the most tensile; smallest: the most "
                          "compressive; magnitude: the largest absolute value. Shear, Mises and Tresca are always read by magnitude.")] = "magnitude",
-        region: Annotated[str, Field(description="default (the gauge section where the coupon has one, else the whole model), gauge, whole, or a "
-                                                 "region's name from can_be_asked.regions")] = "default",
+        region: Annotated[str, Field(description="default (the gauge section where the coupon has one, a plate away from its held corners, else "
+                                                 "the whole model), gauge, whole, or a region's name from can_be_asked.regions")] = "default",
         plies: Annotated[list[int] | None, Field(description="Plies counted from the bottom face, starting at 1; leave out for every ply")] = None,
     ) -> str:
         """Where a stress or a strain is largest: the value, its ply and element, the plies tied at that value, and each ply's own extreme.

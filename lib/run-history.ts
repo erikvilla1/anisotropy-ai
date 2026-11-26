@@ -1,20 +1,21 @@
 /** A person's past analyses (ADR-0109): the list is their own coupon jobs as the API keeps them (ADR-0104), each finished run with the
  * answer the fea package wrote for it; one is opened again from the files that run stored, its own rows among them. The page computes
  * nothing (ADR-0051): every value here is picked and worded. */
-import { CRITERION_NAMES } from "./studio-answer";
-import type { JobStatus } from "./studio-api";
+import { BASIS_WORDS, CRITERION_NAMES } from "./studio-answer";
+import type { Basis, JobStatus } from "./studio-api";
 
-/** A done run's answer in a few values, as the package wrote it: on the gauge section or the whole model, by the criterion that governs. */
-export type JobAnswer = { basis: "gauge" | "whole"; criterion: string; fails: boolean; factor: number; ply: number; angle: number; face: string | null };
+/** A done run's answer in a few values, as the package wrote it: on the gauge section, a plate away from its held corners (ADR-0108 amendment 2)
+ * or the whole model, by the criterion that governs. */
+export type JobAnswer = { basis: Basis; criterion: string; fails: boolean; factor: number; ply: number; angle: number; face: string | null };
 
 /** The answer as a job's status carries it, checked before it is shown; null for anything else. */
 export function readJobAnswer(value: unknown): JobAnswer | null {
   if (typeof value !== "object" || value === null) return null;
   const a = value as Record<string, unknown>;
-  const ok = (a.basis === "gauge" || a.basis === "whole") && typeof a.criterion === "string" && typeof a.fails === "boolean"
+  const ok = (a.basis === "gauge" || a.basis === "away" || a.basis === "whole") && typeof a.criterion === "string" && typeof a.fails === "boolean"
     && typeof a.factor === "number" && Number.isFinite(a.factor) && typeof a.ply === "number" && Number.isInteger(a.ply)
     && typeof a.angle === "number" && Number.isFinite(a.angle) && (a.face === null || a.face === undefined || typeof a.face === "string");
-  return ok ? { basis: a.basis as "gauge" | "whole", criterion: a.criterion as string, fails: a.fails as boolean, factor: a.factor as number,
+  return ok ? { basis: a.basis as Basis, criterion: a.criterion as string, fails: a.fails as boolean, factor: a.factor as number,
     ply: a.ply as number, angle: a.angle as number, face: (a.face as string | null | undefined) ?? null } : null;
 }
 
@@ -39,7 +40,7 @@ export function answerWords(answer: JobAnswer | null, print: (value: number) => 
   if (!answer) return null;
   const ply = `ply ${answer.ply} (${answer.angle}°)${answer.face ? `, ${answer.face} face` : ""}`;
   return { verdict: answer.fails ? "Fails" : "Holds", loading: `${print(answer.factor)} × the applied load`,
-    facts: [ply, CRITERION_NAMES[answer.criterion] ?? answer.criterion, answer.basis === "gauge" ? "gauge section" : "whole model"] };
+    facts: [ply, CRITERION_NAMES[answer.criterion] ?? answer.criterion, BASIS_WORDS[answer.basis].replace(/^the /, "")] };
 }
 
 /** When a run ended, in the reader's own date and time; empty for a stamp that is not one. */

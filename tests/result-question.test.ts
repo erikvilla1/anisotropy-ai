@@ -8,7 +8,7 @@ import { bannedIn } from "../lib/studio-copy";
 import { exampleForm } from "../lib/studio-form";
 import { PROBE_COLUMNS, probeTable } from "../lib/studio-fields";
 import { readResultReading } from "../lib/studio-api";
-import { answerResultQuestion, asksElement, comparisonNote, describeElement, extremeLines, extremeWords, gaugeSection, questionFrom, readFollowUp, readResultQuestion, resultOffer, RESULT_COLUMNS,
+import { answerResultQuestion, asksElement, awayFromCorners, comparisonNote, describeElement, extremeLines, extremeWords, gaugeSection, questionFrom, readFollowUp, readResultQuestion, resultOffer, RESULT_COLUMNS,
   resultUnit, valueLines, type ElementFacts, type ResultExtremes, type ResultQuestion, type ResultValues } from "../lib/result-question";
 
 const fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8")) as Fields;
@@ -186,6 +186,21 @@ test("an extreme names its end, its region and the grip edge; an unsigned quanti
   assert.equal(gaugeSection(plate), null);
   assert.equal(extremes(answerResultQuestion(plate, readResultQuestion("max s11")!, null)).region, "the whole model");
   assert.equal(answerResultQuestion(plate, readResultQuestion("max s11 in the gauge section")!, null).kind, "refused");
+});
+
+test("a plate with held corners is read away from them when no region is named, as its answer is (ADR-0108 amendment 2)", () => {
+  const plate = JSON.parse(readFileSync("tests/fixtures/studio-plate-clamped/fields.json", "utf8")) as Fields;
+  assert.deepEqual(awayFromCorners(plate), plate.mesh.away_elements, "the elements the package wrote, none derived on the page");
+  const away = extremes(answerResultQuestion(plate, readResultQuestion("where is the stress across the fibres largest?")!, null));
+  assert.equal(away.region, "the plate away from its held corners");
+  assert.equal(away.elements, plate.summary.held_corners!.elements);
+  const best = away.blocks[0].rows[away.blocks[0].best];
+  const extreme = plate.summary.ply_extremes!.overall.S22.tension!;  // the package's own extreme on the answer's basis
+  assert.ok(Math.abs(best.value - extreme.value) <= 1e-8 * Math.abs(extreme.value));  // the fields keep 9 digits, so its mirror element may hold the tie
+  const whole = extremes(answerResultQuestion(plate, readResultQuestion("largest stress across the fibres anywhere")!, null));
+  assert.equal(whole.region, "the whole model");
+  assert.ok(whole.blocks[0].rows[whole.blocks[0].best].value > best.value, "the clamped corner reads higher, which is why it is set apart");
+  assert.equal(awayFromCorners({ ...plate, mesh: { ...plate.mesh, away_elements: undefined } }), null, "a result solved before the rule");
 });
 
 test("several plies are read at one element, as a comparison asks", () => {

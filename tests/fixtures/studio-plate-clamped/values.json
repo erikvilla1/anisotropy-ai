@@ -1,0 +1,23 @@
+{
+ "form_version": "0.9",
+ "filled_by": "A. Engineer",
+ "date": "2026-11-26",
+ "test": "plate",
+ "standard": "none",
+ "size_from": "a strip clamped at one end and pulled at the other, for the corner rule (ADR-0108 amendment 2)",
+ "team_model": "not built yet",
+ "test_data": "none",
+ "length": 250.0,
+ "width": 25.0,
+ "library": "im7-8552",
+ "angles": [45, 0, -45, 90],
+ "symmetric": "yes",
+ "G13": 4688.43,
+ "G23": 2987.73,
+ "criteria": "all",
+ "element_size": 6.25,
+ "notes": "a plate clamped along its bottom end and pulled by 10 kN along its top end, for the page tests of the held-corner rule",
+ "units": "mm-MPa",
+ "supports": [{"region": "Edge-Bottom", "dofs": [1, 2, 3, 4, 5, 6]}],
+ "loads": [{"region": "Edge-Top", "dof": 2, "total": 10000.0}]
+}

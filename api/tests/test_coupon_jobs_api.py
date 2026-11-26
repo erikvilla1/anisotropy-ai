@@ -403,6 +403,14 @@ def test_a_done_job_says_its_answer_and_hands_out_its_rows(jobs):
     assert [job["answer"] for job in client.get("/v1/coupon-jobs").json()] == [None, None, ANSWER]  # newest first
 
 
+def test_a_plates_answer_read_away_from_its_held_corners_is_kept_and_any_other_basis_is_no_answer():
+    """ADR-0108 amendment 2: a plate's answer has the basis `away`; the shape is checked as for the others."""
+    from anisotropy_api.coupon_jobs import answer_of_outcome
+    plate = {**ANSWER, "basis": "away", "factor": 1.6812}
+    assert answer_of_outcome({"status": "done", "answer": plate}) == plate
+    assert answer_of_outcome({"status": "done", "answer": {**ANSWER, "basis": "corner"}}) is None
+
+
 @pytest.fixture
 def recording_with_table(empty_runs, monkeypatch, tmp_path):
     """The API with run records on and its coupon jobs writing the jobs table, as the lifespan sets them up."""

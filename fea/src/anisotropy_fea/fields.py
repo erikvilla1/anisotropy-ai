@@ -20,6 +20,9 @@ It also names, per criterion, the first ply to fail in the gauge section alone (
 The gauge section is read where the mesh does not set the value (ADR-0108, `gauge_reading`): the deck's `Gauge` elements whose centroid
 is at least a quarter of the coupon's width from each tab line, since the corner where a tab line meets a free edge has a stress that
 grows without limit as the mesh is refined. The stand-off and the elements read are written with the fields, so no reader derives them.
+A plate has no grips and no gauge section, and its answer is read away from its held corners (ADR-0108 amendment 2, `held_corners`): a
+point on its edge where a run of nodes held in the plane ends and the edge goes on free has the same unbounded stress, so the elements
+within a quarter of the plate's smaller side of such a point are set apart, and a failure there that comes earlier is reported apart.
 Every number comes from the solve; a non-finite one is refused.
 """
 
@@ -52,6 +55,8 @@ STRESS_NAMES = ("S11", "S22", "S12")  # the material-axis stress components, as 
 DIGITS = 9  # significant digits written for the arrays; the summary keeps full precision
 SENSE = {2: ("in tension", "in compression"), 3: ("lifting the coupon", "pressing the coupon down")}  # by the sign of the reaction, positive first
 GAUGE_STAND_OFF = 0.25  # of the smaller of the coupon's width and its gauge length: how far from a tab line the gauge section is read (ADR-0108)
+CORNER_STAND_OFF = 0.25  # of the smaller of a plate's width and length: how far from a held corner a plate's answer is read (ADR-0108 amendment 2)
+PLATE_EDGES = ("Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right")  # a plate's four edges as node rows (`spec.EDGE_REGIONS`)
 SUPPORT_SENSE = {1: ("pushing along +x", "pushing along -x"), 2: ("pushing along +y", "pushing along -y"), 3: ("pushing the plate up", "holding the plate down")}
 
 
@@ -212,6 +217,67 @@ def gauge_elements(deck: Deck, solution: Solution) -> list[int]:
     return reading["elements"] if reading else []
 
 
+def held_corners(deck: Deck, solution: Solution) -> dict[str, Any] | None:
+    """Where a plate's answer is read (ADR-0108 amendment 2), in SI: away from every held corner. Along each of the plate's four edges, a
+    node that holds a direction in the plane (x or y, fixed or moved by a set amount) that the next node along the edge does not hold is
+    the end of a held run: a clamped edge meeting a free one, a moved edge's end, a held stretch of an edge. A run is held by two
+    neighbouring nodes or more; a node held alone, as a point that stops the plate sliding, starts none. There the model's stress has
+    no finite value, as at a coupon's tab line (ADR-0108), so the elements within `stand_off` of such a point, a quarter of the plate's
+    smaller side, and the elements with that node as a corner are set apart (`near`); `elements` holds the rest. Two held edges that meet
+    hold the corner together and set nothing apart. None for a deck that is no plate (it has a gauge section, or not the four edges), for
+    one held nowhere in the plane, or when nothing would be left to read."""
+    if deck.elsets.get("Gauge") or not all(name in deck.nsets for name in PLATE_EDGES):
+        return None
+    mesh = solution.mesh
+    held: dict[int, set[int]] = {}
+    for boundary in all_boundaries(deck):
+        dofs = {d for d in (1, 2) if boundary.dof_first <= d <= boundary.dof_last}
+        if dofs:
+            for key in resolve_nodes(deck, boundary.target, boundary.line):
+                held.setdefault(mesh.node(key), set()).update(dofs)
+    if not held:
+        return None
+    rows = []
+    for name in PLATE_EDGES:
+        along = 0 if name in ("Edge-Bottom", "Edge-Top") else 1
+        rows.append(sorted({mesh.node(key) for key in deck.nsets[name]}, key=lambda i: float(mesh.xy[i, along])))
+    # a direction held along an edge, by two neighbouring nodes or more: a single node held alone (a point that stops the plate sliding)
+    # carries no load into the plate and starts no held run
+    run: dict[int, set[int]] = {}
+    for row in rows:
+        for a, b in zip(row, row[1:]):
+            both = held.get(a, set()) & held.get(b, set())
+            if both:
+                run.setdefault(a, set()).update(both)
+                run.setdefault(b, set()).update(both)
+    ends: set[int] = set()
+    for row in rows:
+        for a, b in zip(row, row[1:]):
+            if run.get(a, set()) - held.get(b, set()):
+                ends.add(a)
+            if run.get(b, set()) - held.get(a, set()):
+                ends.add(b)
+    if not ends:
+        return None
+    outline = sorted({mesh.node(key) for name in PLATE_EDGES for key in deck.nsets[name]})
+    width = float(mesh.xy[outline, 0].max() - mesh.xy[outline, 0].min())
+    length = float(mesh.xy[outline, 1].max() - mesh.xy[outline, 1].min())
+    if width <= 0.0 or length <= 0.0:
+        return None
+    stand_off = CORNER_STAND_OFF * min(width, length)
+    points = mesh.xy[sorted(ends)]
+    centroids = mesh.xy[mesh.connectivity[:, :4]].mean(axis=1)
+    distance = np.min(np.linalg.norm(centroids[:, None, :] - points[None, :, :], axis=2), axis=1)
+    slack = 1e-6 * min(width, length)  # a centroid on the circle itself is read, whatever the round-off
+    touches = np.array([bool(ends & set(mesh.connectivity[e, :4].tolist())) for e in range(mesh.element_count)])
+    near_mask = (distance < stand_off - slack) | touches
+    inside = [int(e) for e in np.flatnonzero(~near_mask)]
+    if not inside:
+        return None
+    return {"elements": inside, "near": [int(e) for e in np.flatnonzero(near_mask)], "stand_off": stand_off, "fraction": CORNER_STAND_OFF,
+            "of": "width" if width <= length else "length", "points": [[float(x), float(y)] for x, y in points]}
+
+
 def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
     """The mesh indices of the elements with a gripped node: the row along each tab line, the clamped edge (ADR-0066). Empty for a deck
     without grips (a plate, a bending coupon)."""
@@ -317,25 +383,29 @@ def answer_of(factor: float, applied: dict[str, Any], reaction: float, force_uni
                            "reaction_unit": force_unit, "every_load": every_load}}
 
 
-def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+BASIS_TABLES = {"gauge": "fpf_gauge", "away": "fpf_away", "whole": "fpf"}  # the summary's table each basis of the answer is read from
+
+
+def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]], away: dict[str, dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """The answer's basis and its earliest criterion (ADR-0085): the gauge section, read past the stand-off from each tab line (ADR-0108),
-    when the coupon has one (the number a test coupon that breaks in its gauge is compared with), the whole model otherwise (a plate, a
-    bending coupon). A failure elsewhere that comes earlier, at the clamped edge of a grip or within the stand-off of a tab line
-    (`near_tab`), is reported apart as `outside_earlier`. None without a criterion."""
-    table, basis = (gauge, "gauge") if gauge else (whole, "whole")
+    when the coupon has one (the number a test coupon that breaks in its gauge is compared with); a plate away from its held corners
+    (`held_corners`, ADR-0108 amendment 2) when it has one; the whole model otherwise (a plate held nowhere in its plane, a bending
+    coupon). A failure elsewhere that comes earlier, at the clamped edge of a grip, within the stand-off of a tab line (`near_tab`) or of
+    a held corner (`near_corner`), is reported apart as `outside_earlier`. None without a criterion."""
+    table, basis = (gauge, "gauge") if gauge else (away, "away") if away else (whole, "whole")
     if not table:
         return None
     earliest = min(table, key=lambda c: table[c]["factor"])
     factor = float(table[earliest]["factor"])
     out: dict[str, Any] = {"basis": basis, "earliest": earliest, "factor": factor, "fails": bool(factor <= 1.0), "outside_earlier": None}
-    if basis == "gauge" and whole:
+    if basis != "whole" and whole:
         first = min(whole, key=lambda c: whole[c]["factor"])
         w = whole[first]
         if w["factor"] < factor:
             out["outside_earlier"] = {"criterion": first, "factor": float(w["factor"]), "fails": bool(w["factor"] <= 1.0), "element": w["element"],
                                       "label": w["label"], "ply": w["ply"], "angle": w["angle"], "face": w["face"], "mode": w["mode"],
                                       "place": w["place"], "touches_grip": w["touches_grip"], "near_tab": bool(w.get("near_tab", False)),
-                                      "xy": w["xy"]}
+                                      "near_corner": bool(w.get("near_corner", False)), "xy": w["xy"]}
     return out
 
 
@@ -345,7 +415,7 @@ def run_answer(summary: dict[str, Any]) -> dict[str, Any] | None:
     verdict = summary.get("verdict")
     if not verdict:
         return None
-    first = summary["fpf_gauge" if verdict["basis"] == "gauge" else "fpf"][verdict["earliest"]]
+    first = summary[BASIS_TABLES[verdict["basis"]]][verdict["earliest"]]
     return {"basis": verdict["basis"], "criterion": verdict["earliest"], "fails": bool(verdict["fails"]), "factor": float(verdict["factor"]),
             "ply": int(first["ply"]), "angle": float(first["angle"]), "face": first["face"]}
 
@@ -518,6 +588,13 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     summary["gauge_reading"] = None if reading is None else {
         "stand_off": float(length(reading["stand_off"])), "fraction": reading["fraction"], "of": reading["of"],
         "tab_lines": [float(length(v)) for v in reading["tab_lines"]], "elements": len(reading["elements"]), "left_out": len(reading["near"])}
+    # a plate's answer, read away from its held corners (ADR-0108 amendment 2): the same stand-off from every point where a held run ends
+    corners_read = held_corners(deck, solution) if reading is None else None
+    near_corner = set(corners_read["near"]) if corners_read else set()
+    summary["held_corners"] = None if corners_read is None else {
+        "stand_off": float(length(corners_read["stand_off"])), "fraction": corners_read["fraction"], "of": corners_read["of"],
+        "corners": [length(point).tolist() for point in corners_read["points"]], "elements": len(corners_read["elements"]),
+        "left_out": len(corners_read["near"])}
     # the element a question with no place named is answered at (ADR-0099 amendment 3): the gauge centre, the element the hand check
     # and the Verification table read (`report.gauge_element`), for a coupon with a gauge section whose centre lies in an element
     centre = gauge_element(deck, solution) if reading is not None else None
@@ -529,7 +606,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         summary["fpf"][criterion] = {"factor": float(found.factor), "index": 1.0 / float(found.factor), "element": int(e),
                                      "label": element_name(found.element), "ply": int(found.ply), "angle": float(angles[found.ply - 1]),
                                      "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
-                                     "near_tab": e in near_tab and not touches_grip, "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
+                                     "near_tab": e in near_tab and not touches_grip, "near_corner": e in near_corner, "tied_plies": list(tied),
+                                     "xy": length(centroids[e]).tolist()}
     summary["earliest"] = min(failures, key=lambda c: failures[c].factor) if failures else None
     # the same, over the gauge section alone: the number a test is compared with, read past the stand-off from each tab line (ADR-0108)
     summary["fpf_gauge"] = {}
@@ -541,17 +619,28 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                            "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
                                            "near_tab": False, "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest_gauge"] = min(summary["fpf_gauge"], key=lambda c: summary["fpf_gauge"][c]["factor"]) if summary["fpf_gauge"] else None
+    # the same, over a plate away from its held corners (ADR-0108 amendment 2)
+    summary["fpf_away"] = {}
+    if corners_read is not None:
+        for criterion, found in gauge_failures(deck, solution, failures, shell, corners_read).items():
+            e = mesh.element_keys.index(found.element)
+            place, touches_grip, tied = fpf_place(deck, solution, found, units)
+            summary["fpf_away"][criterion] = {"factor": float(found.factor), "index": 1.0 / float(found.factor), "element": int(e),
+                                              "label": element_name(found.element), "ply": int(found.ply), "angle": float(angles[found.ply - 1]),
+                                              "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
+                                              "near_tab": False, "near_corner": False, "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
+    summary["earliest_away"] = min(summary["fpf_away"], key=lambda c: summary["fpf_away"][c]["factor"]) if summary["fpf_away"] else None
     # the answer (ADR-0085): per criterion, whether a ply fails at the applied loading, and the loading at which the first one would; a
     # linear model scales every stress with the loading, so the loading at first-ply failure is the factor times what is applied
     every_load = applied["set"] in ("the supports", "the moved region")  # a plate: every load scales together
-    for table in (summary["fpf"], summary["fpf_gauge"]):
+    for table in (summary["fpf"], summary["fpf_gauge"], summary["fpf_away"]):
         for entry in table.values():
             entry.update(answer_of(entry["factor"], summary["applied"], summary["reaction"]["value"], lab["force"], every_load))
-    summary["verdict"] = verdict_of(summary["fpf"], summary["fpf_gauge"])
-    inside = reading["elements"] if reading else []
+    summary["verdict"] = verdict_of(summary["fpf"], summary["fpf_gauge"], summary["fpf_away"])
+    inside = reading["elements"] if reading else corners_read["elements"] if corners_read else []
     summary["ply_extremes"] = ply_extremes(stress_12, mises, np.asarray(inside if inside else range(ne), dtype=int), angles, shell,
                                            lambda e: element_name(mesh.element_keys[e]), lambda e: length(centroids[e]).tolist(), stress)
-    summary["ply_extremes"]["basis"] = "gauge" if inside else "whole"
+    summary["ply_extremes"]["basis"] = "gauge" if reading and inside else "away" if inside else "whole"
     # the working behind the answer (ADR-0103): for the first ply to fail by each criterion, each step's formula with the values put in
     worked = working_of(solution, field, summary, units)
     if worked is not None:
@@ -642,6 +731,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                  "node_sets": {name: [mesh.node(key) for key in keys] for name, keys in deck.nsets.items()},
                  "element_sets": {name: [mesh.element(key) for key in keys] for name, keys in deck.elsets.items()},
                  "gauge_elements": list(reading["elements"]) if reading else None,  # where the gauge section is read (ADR-0108)
+                 # where a plate is read, away from its held corners (ADR-0108 amendment 2); None for a model with a gauge section or no held corner
+                 "away_elements": list(corners_read["elements"]) if corners_read else None,
                  "held_elements": np.flatnonzero(held).tolist(),  # clamped inside a grip: drawn as the grip, not by value (ADR-0063 amendment 4)
                  "node_count": n, "element_count": ne, "plies": int(plies), "angles": angles.tolist(), "faces": list(FACES) if shell else None,
                  "translations": translations},
