@@ -4,7 +4,7 @@ name: Site check
 # chats (tests/assistant-questions) and grades each answer as it is shown: fixed checks first (every number one the engine sent, the time,
 # the product's words), then the small model as judge for the answers that pass them. After each deploy of main it asks the questions the
 # page answers itself, which cost nothing on the site; every four days it asks every question, the model's too, for at most $1 a run
-# and $20 a month. The founder hears of it only when an answer fails: one issue labelled `site-check`, which closes itself when a later run
+# and $20 a month. The full run also asks the planner for three plans in turn (ADR-0144), reads each plan card and never approves one. The founder hears of it only when an answer fails: one issue labelled `site-check`, which closes itself when a later run
 # passes.
 #
 # Each job holds only what it needs: `ask` has the Access service token and nothing that can write to the repository; `grade`

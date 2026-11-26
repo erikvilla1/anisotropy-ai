@@ -1,15 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Budget, headerCost, modelSlots, monthSpent, runCap, FIRST_GUESS } from "../scripts/site-check/budget";
-import { fixedChecks, fixedVerdict, repairClaims, type Seen } from "../scripts/site-check/grade";
+import type { CardPlan } from "../scripts/site-check/chat";
+import { fixedChecks, fixedVerdict, planChecks, repairClaims, type Seen } from "../scripts/site-check/grade";
 import { failureText } from "../scripts/site-check/issue";
 import { NumberPool, numbersIn, untraced } from "../scripts/site-check/numbers";
-import { moves, NOT_OFFERED, plan } from "../scripts/site-check/plan";
-import { NO_PROJECTS, refusal } from "../scripts/site-check/routes";
+import { moves, NOT_OFFERED, plan, PLAN_PAGES, PLANS_PER_RUN } from "../scripts/site-check/plan";
+import { NO_APPROVAL, NO_PROJECTS, planOutcome, refusal } from "../scripts/site-check/routes";
 import { combine, html, markdown, stillFailing } from "../scripts/site-check/report";
 import { countOf, runFailed, sameCommit, SCHEMA, verdictOf, type QuestionResult } from "../scripts/site-check/record";
 import { scrub, scrubbed } from "../scripts/site-check/scrub";
-import { banks, type Question } from "./assistant-questions/harness";
+import { banks, pageGap, type Question } from "./assistant-questions/harness";
 
 // The site check (ADR-0138): the robot that asks the banks' questions on the live site. What runs in the browser is tried on GitHub
 // against the site; what decides a grade, what is written out and what is spent is held here.
@@ -148,8 +149,8 @@ test("a quick run asks only what the page answers itself, a full run the model's
   assert.equal(quick.asked.length + quick.skipped.length, total);
   assert.equal(full.asked.length + full.skipped.length, total);
   assert.ok(quick.asked.every((p) => !p.modelRead) && full.asked.some((p) => p.modelRead));
-  assert.ok(full.skipped.every((s) => s.question.page !== "results" || s.question.picked !== undefined || s.reason.includes("Ansys file")),
-    "every results question is asked unless it needs a click or is of a page without the Ansys file");
+  assert.ok(full.skipped.every((s) => s.question.page !== "results" || s.question.picked !== undefined || s.reason.includes("Ansys file") || s.question.route === "plan"),
+    "every results question is asked unless it needs a click, is of a page without the Ansys file, or asks for a plan");
   for (const page of Object.keys(NOT_OFFERED)) assert.ok(full.asked.every((p) => p.question.page !== page), `${page} is a founder's page`);
   // each page's questions together, those that move the page on last
   const pages = full.asked.map((p) => p.question.page);
@@ -295,4 +296,110 @@ test("a question that changes the page's rows has the page set up again after it
   assert.equal(moves(asked("switch to inches")), true);
   assert.equal(moves(asked("A. Engineer")), true);
   assert.equal(moves(asked("what units are you using?")), false);
+});
+
+// ------------------------------------------------------------------------------------------------------------------- the planner
+
+test("a quick run asks no plan; a full run asks a few, on the setup and ready pages only, taking turns, and none of a known gap", () => {
+  const all = banks();
+  const planners = all.flatMap((b) => b.questions.map((q, i) => ({ id: `${b.feature}#${i + 1}`, q }))).filter((x) => x.q.route === "plan");
+  assert.ok(planners.length > 20, "the banks ask the planner");
+  const quick = plan("quick", [], all);
+  assert.ok(quick.asked.every((p) => p.question.route !== "plan"), "a quick run keeps no projects and spends nothing");
+  assert.ok(quick.skipped.filter((s) => s.question.route === "plan" && !NOT_OFFERED[s.question.page]).every((s) => s.reason.includes("asked in the full run")));
+  const first = plan("full", [], all);
+  const asked = first.asked.filter((p) => p.question.route === "plan");
+  assert.equal(asked.length, PLANS_PER_RUN);
+  assert.equal(PLANS_PER_RUN, 3, "the report says three");
+  assert.ok(asked.every((p) => PLAN_PAGES.includes(p.question.page) && !pageGap(p.question) && p.modelRead));
+  const reasons = first.skipped.filter((s) => s.question.route === "plan").map((s) => s.reason);
+  assert.ok(reasons.some((r) => r.includes("setup and ready pages only")), "a plan of the results page waits: setting it up runs an analysis");
+  assert.ok(reasons.some((r) => r.includes("a full run asks 3 plans at most")));
+  assert.ok(reasons.some((r) => r.includes("a founder's sign-in only")), "the plate's plans are a founder's");
+  // the next run asks the next three, until each has been asked
+  const askable = planners.filter((x) => PLAN_PAGES.includes(x.q.page) && !pageGap(x.q)).map((x) => x.id);
+  const lastAsked: Record<string, string> = {};
+  const seenIds = new Set<string>();
+  for (let run = 0; run < Math.ceil(askable.length / PLANS_PER_RUN); run++) {
+    const ids = plan("full", [], all, { slots: Infinity, lastAsked }).asked.filter((p) => p.question.route === "plan").map((p) => p.id);
+    const fresh = ids.filter((id) => !seenIds.has(id)).length;
+    assert.equal(fresh, Math.min(PLANS_PER_RUN, askable.length - seenIds.size), `run ${run + 1} asks the plans not asked yet first`);
+    for (const id of ids) { seenIds.add(id); lastAsked[id] = `2026-11-${String(run + 1).padStart(2, "0")}T00:00:00Z`; }
+  }
+  assert.deepEqual([...seenIds].sort(), [...askable].sort(), "every plan the site can be asked is asked within a few runs");
+  // a planner question has the page set up again after it: its question back would take the next message as its answer
+  assert.ok(planners.every((x) => moves(x.q)));
+});
+
+test("an approval never reaches the site; a planner question's browser keeps its own project and starts no analysis", () => {
+  for (const [quick, keep] of [[true, false], [false, false], [false, true], [true, true]]) {
+    for (const path of ["/api/v1/projects/0b3c6a1e-1111-4222-8333-944455556666/plans/p1/approve", "/api/v1/projects/0b3c6a1e-1111-4222-8333-944455556666/plans/p1/steps/3"]) {
+      assert.equal(refusal("POST", path, quick, keep), "approve", `${path} (quick ${quick}, keep ${keep})`);
+    }
+  }
+  const id = "/api/v1/projects/0b3c6a1e-1111-4222-8333-944455556666";
+  // a full run's planner questions: the page's own project is kept and read back, and a plan is asked for
+  assert.equal(refusal("PUT", id, false, true), null);
+  assert.equal(refusal("GET", id, false, true), null);
+  assert.equal(refusal("POST", `${id}/plans`, false, true), null);
+  assert.equal(refusal("GET", "/api/v1/projects", false, true), "projects", "the page never opens another run's project");
+  assert.equal(refusal("DELETE", id, false, true), "projects");
+  assert.equal(refusal("POST", "/api/v1/coupon-jobs", false, true), "analysis", "nothing runs without an approval");
+  assert.equal(refusal("POST", "/api/v1/wings/checks", false, true), "analysis");
+  assert.equal(refusal("POST", "/api/v1/coupon-jobs/check", false, true), null, "the page's own check of its setup is asked");
+  // everywhere else no project is kept, so no plan is asked for: the page reads the sentence as before
+  for (const [quick, keep] of [[true, false], [false, false], [true, true]]) {
+    assert.equal(refusal("PUT", id, quick, keep), "projects");
+    assert.equal(refusal("POST", `${id}/plans`, quick, keep), "projects");
+  }
+  assert.equal(NO_APPROVAL.status, 409);
+});
+
+test("what a planner question came to: a plan to grade, no planner here, a planner that failed, or nothing sent", () => {
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 200, state: "proposed" }] }), "planned");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 200, state: "refused" }] }), "planned");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 200, state: "question" }, { status: 200, state: "proposed" }] }), "planned", "the last plan asked");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 200, state: "unavailable" }] }), "none-here", "no model to plan with");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 404, state: null }] }), "none-here", "a site from before the planner");
+  assert.equal(planOutcome({ kept: [503], plans: [] }), "none-here", "a site that keeps no projects");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 500, state: null }] }), "failed");
+  assert.equal(planOutcome({ kept: [200], plans: [{ status: 200, state: null }] }), "failed");
+  assert.equal(planOutcome({ kept: [], plans: [] }), "not-sent");
+});
+
+const card = (over: Partial<CardPlan> = {}): CardPlan => ({ stage: "proposed", state: "proposed", heading: "Plan · 4 steps", reason: null, question: null, approve: true,
+  steps: [{ tool: "row", role: "Geometry", state: "planned", line: "Width → 30 mm" }, { tool: "check", role: "QA", state: "planned", line: "Check the setup" },
+    { tool: "run", role: "Solver", state: "planned", line: "Run the analysis" }, { tool: "qa", role: "QA", state: "planned", line: "Check the result" }], ...over });
+
+test("a plan card is graded by its stage, its steps and roles, and its reason or question; an approval or a run nobody asked for fails", () => {
+  const q = question({ ask: "set the width to 30 mm and run it", kind: "command", page: "ready", route: "plan",
+    live: { plan: { state: "proposed", tools: ["row", "check", "run", "qa"] } } });
+  const notes = (s: Partial<Seen>, over: Partial<Question> = {}) => planChecks({ ...q, ...over }, seen({ planOutcome: "planned", plan: card(), ...s }))
+    .map((c) => `${c.level}: ${c.note}`);
+  assert.deepEqual(notes({}), []);
+  assert.deepEqual(notes({ approvals: 1 }), ["fails: the page asked the site to approve a plan though nobody pressed Approve; the robot refused it"]);
+  assert.deepEqual(notes({ analyses: 1 }), ["fails: the page started an analysis though no plan was approved; the robot refused it"]);
+  assert.deepEqual(notes({ plan: card({ stage: "approving" }) }), ["fails: the plan card is approving, though nobody approved it"]);
+  assert.deepEqual(notes({ plan: null }), ["fails: the site made a plan, but no plan card was shown"]);
+  assert.deepEqual(notes({ planOutcome: "failed", plan: null }), ["fails: the site's planner answered with an error"]);
+  assert.deepEqual(notes({ planOutcome: "not-sent", plan: null }), ["weak: the page did not send it to the planner, though its bank says it plans it"]);
+  // the contract: a run between the setup check and the result's checks, the five roles, every step planned, at most twelve
+  const steps = card().steps;
+  assert.deepEqual(notes({ plan: card({ steps: steps.filter((s) => s.tool !== "check") }) }).filter((n) => n.includes("between")),
+    ["fails: the run is not between the setup check and the result's checks"]);
+  assert.ok(notes({ plan: card({ steps: steps.map((s) => (s.tool === "row" ? { ...s, role: "Approver" } : s)) }) }).includes("fails: step row has the role Approver"));
+  assert.ok(notes({ plan: card({ steps: steps.map((s) => (s.tool === "run" ? { ...s, state: "done" } : s)) }) }).includes("fails: step run is done before the approval"));
+  const many = [...Array.from({ length: 10 }, () => steps[0]), ...steps.slice(1)];
+  assert.ok(notes({ plan: card({ steps: many }) }).includes("fails: 13 steps; a plan has at most 12"));
+  // a refusal gives its reason; a question back asks one
+  const refused = question({ ...q, live: { plan: { state: "refused", says: ["steel"] } } });
+  assert.deepEqual(planChecks(refused, seen({ planOutcome: "planned", plan: card({ stage: "refused", state: "refused", steps: [], reason: "steel is not a material of the library" }) })), []);
+  assert.deepEqual(planChecks(refused, seen({ planOutcome: "planned", plan: card({ stage: "refused", state: "refused", steps: [], reason: "" }) })).map((c) => c.note),
+    ["a refused plan gives no reason", "does not say “steel”"]);
+  assert.deepEqual(planChecks(question({ ...q, live: { plan: { state: "question" } } }), seen({ planOutcome: "planned", plan: card({ stage: "question", state: "question", steps: [], question: "Which end?" }) })), []);
+  assert.deepEqual(notes({ plan: card({ stage: "question", state: "question", steps: [], question: "The left end is fixed." }) }),
+    ["fails: the question back is no question", "fails: the plan is question, expected proposed"]);
+  // a question that is not the planner's is graded as before, but an approval or an analysis in its browser still fails
+  assert.deepEqual(planChecks(question(), seen({ planOutcome: "planned" })), []);
+  assert.deepEqual(planChecks(question(), seen({ approvals: 2 })).map((c) => c.level), ["fails"]);
 });

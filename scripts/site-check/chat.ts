@@ -6,8 +6,13 @@ import type { Locator, Page } from "@playwright/test";
 /** The message box of every chat ("Message the coupon assistant", "Message the FEA assistant", ...). */
 export const BOX = "textarea[aria-label^='Message the']";
 
-/** What the page shows for one question, read from the chat's own elements. */
-export type Answer = { heading: string; shown: string; folded: string; parts: string[]; applies: boolean };
+/** A plan card as the page shows it (ADR-0144, `components/studio/plan-card.tsx`): its stage (`data-state`: proposed, approving,
+ * approved, question, refused, capped, ...), the plan's own state, its heading, its steps by tool, role and state, and its reason or its
+ * question back; `approve`, whether it offers the Approve button (which the robot never presses). */
+export type CardPlan = { stage: string; state: string; heading: string; steps: { tool: string; role: string; state: string; line: string }[];
+  reason: string | null; question: string | null; approve: boolean };
+/** What the page shows for one question, read from the chat's own elements; `plan`, the last plan card among its answers. */
+export type Answer = { heading: string; shown: string; folded: string; parts: string[]; applies: boolean; plan?: CardPlan | null };
 /** `interim`: the first answer shown, when the page then replaced it with another (a sweep or a solve the page works on after it says so).
  * `busy`: what the page said it was still doing when the robot stopped waiting ("Checking the setup…"), its answer shown above it. */
 export type Asked = Answer & { seconds: number; timedOut: boolean; interim?: Answer; busy?: string };
@@ -68,10 +73,20 @@ function probe(args: { selector: string; asked: string; n: number; label: string
       if (tagged.dataset.kind) parts.add(`kind:${tagged.dataset.kind}`);
     }
   }
-  const applies = answers.some((el) => !!el.querySelector(".proposal-card input[type=checkbox]")
+  const applies = answers.some((el) => !!el.querySelector(".proposal-card input[type=checkbox], [data-testid=plan-approve]")
     || [...el.querySelectorAll("button")].some((b) => /^\s*Apply\b/.test(b.textContent ?? "")));
+  // the last plan card of the answer, read by its own data attributes (ADR-0144): nothing on it is pressed
+  const card = answers.flatMap((el) => [...el.querySelectorAll<HTMLElement>("[data-testid=plan-card]")]).at(-1);
+  const plan = card ? {
+    stage: card.dataset.state ?? "", state: card.dataset.planState ?? card.dataset.state ?? "", heading: card.querySelector("h4")?.textContent?.trim() ?? "",
+    steps: [...card.querySelectorAll<HTMLElement>("li[data-step]")].map((li) => ({ tool: li.dataset.tool ?? "", role: li.dataset.role ?? "",
+      state: li.dataset.state ?? "", line: li.querySelector(".plan-line")?.textContent?.trim() ?? "" })),
+    reason: card.querySelector("[data-testid=plan-reason]")?.textContent?.trim() ?? null,
+    question: card.querySelector("[data-testid=plan-question]")?.textContent?.trim() ?? null,
+    approve: !!card.querySelector("[data-testid=plan-approve]"),
+  } : null;
   return { label, sent: true, typing, busy, answers: answers.length,
-    answer: { heading, shown: answers.map((el) => el.innerText.trim()).join("\n"), folded: folded.join("\n"), parts: [...parts], applies } };
+    answer: { heading, shown: answers.map((el) => el.innerText.trim()).join("\n"), folded: folded.join("\n"), parts: [...parts], applies, plan } };
 }
 
 /** The chat box the page shows now, or null. */

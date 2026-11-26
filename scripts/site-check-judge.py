@@ -79,6 +79,12 @@ def expectation(question: dict[str, Any], model_read: bool) -> str:
             parts.append("It says: " + "; ".join(f"“{w}”" for w in expected["says"]) + " (numbers may differ).")
     if expected.get("never"):
         parts.append("It never says: " + "; ".join(f"“{w}”" for w in expected["never"]) + ".")
+    if question.get("route") == "plan":  # ADR-0144: a plan card waits for the engineer's approval, which the check never gives
+        parts.append(
+            "The page answers with a plan for the engineer to approve: nothing is changed or run until they press Approve, which this "
+            "check never does, so no result is expected. A good plan holds each change and the run the sentence asks for and nothing "
+            "else; or it asks one clear question back when the sentence leaves something open; or it refuses with a plain reason."
+        )
     return " ".join(parts)
 
 
@@ -95,6 +101,14 @@ def item_of(result: dict[str, Any], question: dict[str, Any]) -> dict[str, Any]:
     }
     if answer.get("interim"):
         item["the chat showed first, then replaced once the page had worked"] = answer["interim"]["heading"]
+    plan = result.get("plan")
+    if plan:
+        item["the plan card, not approved"] = {
+            "state": plan["state"],
+            "steps": [f"{s['role']}: {s['line'] or s['tool']}" for s in plan["steps"]],
+            **({"reason": plan["reason"]} if plan.get("reason") else {}),
+            **({"question back": plan["question"]} if plan.get("question") else {}),
+        }
     item["a good answer"] = expectation(question, result["modelRead"])
     if result.get("foreign"):
         item["a good answer"] += (
