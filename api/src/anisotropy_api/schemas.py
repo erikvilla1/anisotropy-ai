@@ -1418,12 +1418,16 @@ class PlanRequest(Contract):
 
 class PlanStep(Contract):
     """One step of a plan (`tests/fixtures/planner/`): its number from 1, the role it is shown under, the tool, the one line it shows (a
-    change's line is the preview's), the engineer's words that ask for it (none for the server's `check` and `qa`), the regions it draws,
-    the typed change it makes (ADR-0143), the question an `answer` answers, and its state with a note once it has one."""
+    change's line is the preview's), the engineer's words that ask for it (none for the server's `check` and `qa`), the regions it draws
+    (a wing's: the part it changes), the typed change it makes (ADR-0143; a wing's `PlyChange`, a repair's `RepairChange`, ADR-0128 and
+    ADR-0136) or a run's own request (a repair's `sweep` its `RepairSweep`, a `solve` its cut faces), the question an `answer` answers, and
+    its state with a note once it has one. A coupon's `check` is the server's setup check; a wing's is its finite element check."""
 
     n: int
     role: Literal["Geometry", "Setup", "Solver", "QA", "Report"]
-    tool: Literal["hold", "move", "force", "pressure", "free", "unload", "row", "check", "run", "qa", "answer"]
+    tool: Literal["hold", "move", "force", "pressure", "free", "unload", "row", "check", "run", "qa", "answer",
+                  "add_plies", "remove_plies", "analyze",
+                  "set", "add_steps", "remove_steps", "set_steps", "regroup", "regroup_steps", "sweep", "use_pick", "solve", "bond"]
     line: str
     quote: str | None
     regions: list[str]
@@ -1434,17 +1438,23 @@ class PlanStep(Contract):
 
 
 PlanState = Literal["proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped"]
+# The tools whose steps change the model, the wing or the repair: their lines are a plan's `done`. A run's `change` is its own request.
+CHANGING_TOOLS = frozenset({"hold", "move", "force", "pressure", "free", "unload", "row", "add_plies", "remove_plies", "set", "add_steps",
+                            "remove_steps", "set_steps", "regroup", "regroup_steps", "use_pick"})
 
 
 class PlanOutput(Contract):
-    """A plan as the page reads it (`plan-proposed.json`, `plan-question.json`): its steps and the preview's lines (`done`), the digest of
-    the setup it was worked out on (`base`), the question asked back or why there is no plan (`reason`), the words not read, who wrote
-    it, the job and version its approval made, and how many planned requests the person has left today (null when none are counted:
-    a service token, or a server that keeps no count). `withheld` is true when the model's plans failed the checks (`refused`), as the
-    guards' weekly view reads it (ADR-0139); `run_id` names the run record of the request that answered with it."""
+    """A plan as the page reads it (`plan-proposed.json`, `plan-question.json`, `wing-plan-proposed.json`, `repair-plan-proposed.json`):
+    what it plans on (`kind`: a coupon, a plate, a wing or a repair) and its project (null for a repair, which the page holds), its steps
+    and the preview's lines (`done`), the digest of the setup or the repair's description it was worked out on (`base`), the question
+    asked back or why there is no plan (`reason`), the words not read, who wrote it, the job and version its approval made (a wing's
+    check is its job; a wing's versions are the browser's), and how many planned requests the person has left today, every kind together
+    (null when none are counted: a service token, or a server that keeps no count). `withheld` is true when the model's plans failed the
+    checks (`refused`), as the guards' weekly view reads it (ADR-0139); `run_id` names the run record of the request that answered with it."""
 
     id: str
-    project: str
+    kind: Literal["coupon", "plate", "wing", "repair"]
+    project: str | None
     ask: str
     state: PlanState
     steps: list[PlanStep]
@@ -1466,8 +1476,9 @@ class PlanOutput(Contract):
     @classmethod
     def of(cls, row, version=None, requests_left: int | None = None) -> "PlanOutput":
         steps = [PlanStep(**step) for step in row.steps]
-        return cls(id=str(row.id), project=str(row.project_id), ask=row.ask, state=row.state, steps=steps,
-                   done=[step.line for step in steps if step.change is not None], base=row.base, question=row.question,
+        return cls(id=str(row.id), kind=row.kind, project=None if row.project_id is None else str(row.project_id), ask=row.ask, state=row.state,
+                   steps=steps, done=[step.line for step in steps if step.change is not None and step.tool in CHANGING_TOOLS], base=row.base,
+                   question=row.question,
                    unread=[UnreadPart(**part) for part in row.unread], reason=row.reason, writer=row.writer, model=row.model, job=row.job_id,
                    version=None if version is None else ModelVersionOutput.of(version), requests_left=requests_left,
                    created_at=row.created_at.isoformat(), approved_at=None if row.approved_at is None else row.approved_at.isoformat(),
@@ -1480,15 +1491,62 @@ class ApproveRequest(Contract):
     base: Annotated[str, Field(min_length=64, max_length=64)]
 
 
+class PlanRun(Contract):
+    """A run an approval carried, by its step: a wing's hand calculation (`analyze`, as `/v1/wings/analyze` answers it) or its finite
+    element check as started (`check`: the job as `/v1/wings/checks` answers it, polled there by its id), a repair's sweep (as
+    `/v1/repairs/sweeps` answers it, never solved there: a solve is a step of its own), its solve (`headline` and `report`, as
+    `/v1/repairs/solve`, and after the sweep's pick `check`, what the slice makes of the pick, as the sweep's own check) or its bond
+    (`headline` and `report`, as `/v1/repairs/bond`). Every number is the engine's or the solver's."""
+
+    n: int
+    tool: Literal["analyze", "check", "sweep", "solve", "bond"]
+    answer: dict[str, Any]
+
+
 class ApproveOutput(Contract):
-    """What an approval did (`approve-running.json`): the plan as it then stands, the project with its new setup, the version kept, the
-    job started (null when the plan stopped before its run, or has none) and the setup check (null when none ran)."""
+    """What an approval did (`approve-running.json`, `wing-approve.json`): the plan as it then stands, the project with its new setup, the
+    version kept (null for a wing, whose versions are the browser's, ADR-0122), the coupon job started (null when the plan stopped before
+    its run, or has none), the setup check (null when none ran) and the runs the server carried (a wing's hand calculation and check)."""
 
     plan: PlanOutput
     project: ProjectOutput
     version: ModelVersionOutput | None
     job: CouponJobOutput | None
     check: CouponCheckResponse | None
+    runs: list[PlanRun] = []
+    run_id: str | None = None
+
+
+class RepairPlanRequest(PlanRequest):
+    """An engineer's sentence on a repair (ADR-0144, build step 5) with the repair's description as the page holds it (the JSON object of a
+    repair file, ADR-0135): a repair is not a kept project, so the description comes with the sentence."""
+
+    repair: dict[str, Any]
+
+    @model_validator(mode="after")
+    def stated(self) -> Self:
+        if not self.repair:
+            raise ValueError("repair holds the repair's description as the page holds it; the object is empty")
+        size = len(json.dumps(self.repair, ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the repair is {size} bytes; a repair's description is far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class RepairApproveRequest(Contract):
+    """A repair's plan approved: the description as the page holds it now, whose digest must be the plan's `base`, and that `base`."""
+
+    repair: dict[str, Any]
+    base: Annotated[str, Field(min_length=64, max_length=64)]
+
+
+class RepairApproveOutput(Contract):
+    """What a repair's approval did (`repair-approve.json`): the plan as it then stands, the repair's description after its changes and
+    the sweep's pick, which the page takes as the repair it holds, and the answer of each run the server carried (`runs`)."""
+
+    plan: PlanOutput
+    repair: dict[str, Any]
+    runs: list[PlanRun]
     run_id: str | None = None
 
 

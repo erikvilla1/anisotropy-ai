@@ -140,6 +140,43 @@ PLAN_SYSTEM = (
     "message, which you were not given. With nothing of the kind, unread is an empty list. When you are shown a plan of yours that was "
     "refused and the reasons, give the plan again with each reason put right." + VOICE + DECIDES
 )
+# The same for a wing and a repair (ADR-0144, build step 5): the tools are the wing's ply changes and its two analyses, or the repair's
+# changes, its sweep, the use of the sweep's own pick and its solves; the words not read and the plan given again are said as above.
+PLAN_STEPS = (
+    " For each step give the tool, its arguments, every argument it does not take as null, and the quote, the shortest span of the "
+    "sentence, copied character for character, that asks for the step. An answer's question is the engineer's question in one short "
+    "sentence, with no number the sentence does not write. When the sentence asks for something no tool on offer does, list it under "
+    "unread: the words that ask, copied character for character, and one reason. The reasons: not_offered, no tool or choice on offer "
+    "covers it; no_value, it names a change but writes no value it takes; refers_back, it leans on an earlier message, which you were not "
+    "given. With nothing of the kind, unread is an empty list. When you are shown a plan of yours that was refused and the reasons, give "
+    "the plan again with each reason put right."
+)
+WING_PLAN_SYSTEM = (
+    "You read an engineer's sentence in a composite wing workspace and plan it as steps, each one of the tools on offer, so the engineer "
+    "can approve the plan before anything changes or runs. You are given the sentence, the wing's units and its parts on offer (the skin, "
+    "the spar webs, the spar caps when it has them), each with the outer half of its symmetric laminate from the outside in and its zones "
+    "along the half span, and the tools (each with what it does and the arguments it takes). Plan only what the sentence asks, in its "
+    "order: the changes of plies first, then the hand calculation or the finite element check when it asks for a result, each once, then "
+    "one answer for each question it asks about a result. Name a part only by a name on offer. Copy each number exactly as the sentence "
+    "writes it, digit for digit: the count of plies, the ply angle and where along the half span as a percentage, with the root and the "
+    "tip as those words; never convert, compute, round, complete or guess a number. A count is the plies of the whole laminate as "
+    "written: two is one ply each side of its middle. When the words fit two parts, plan nothing and ask one short question naming the "
+    "ones they fit; otherwise the question is null." + PLAN_STEPS + VOICE + DECIDES
+)
+REPAIR_PLAN_SYSTEM = (
+    "You read an engineer's sentence in a composite repair workspace, where a stepped patch repair is described, and plan it as steps, "
+    "each one of the tools on offer, so the engineer can approve the plan before anything changes or runs. You are given the sentence, the "
+    "repair as it stands (its units, whether the patch is flush or bonded on top, its steps and the plies in a step, whether the patch's "
+    "plies are listed, and the quantities a change may set with their values as stated) and the tools (each with what it does and the "
+    "arguments it takes). Plan only what the sentence asks, in its order: the changes first; a sweep when it asks to try a range of "
+    "values, or for the smallest, fewest or shortest repair that stays elastic at a load, and when the sentence names no quantity to "
+    "sweep, the step length; then use_pick when it goes on with what the sweep finds, to use it or to solve it; then the solve of the "
+    "slice or the bond followed until it lets go, each once, when it asks for them; then one answer for each question it asks about a "
+    "result. The pick is the sweep's own: use_pick takes no argument, and no step ever writes the value the sweep picks. Copy each number "
+    "exactly as the sentence writes it, digit for digit, and its unit exactly as written beside it, or null when it writes none; never "
+    "convert, compute, round, complete or guess a number. When the words fit two quantities, plan nothing and ask one short question "
+    "naming the ones they fit; otherwise the question is null." + PLAN_STEPS + VOICE + DECIDES
+)
 
 
 # A loose question about a result, read into a fixed request (ADR-0100): the model names what is asked for from what the page offers and
@@ -259,7 +296,7 @@ class Assistant(Protocol):
 
     def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
 
-    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading: ...
+    def plan(self, view: dict[str, Any], schema: dict[str, Any], system: str | None = None) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -357,7 +394,7 @@ class TemplateAssistant:
         """The template writes no answer to a question asked before a setup either: the page names the sections found (ADR-0124)."""
         return Reading(None, "template", None)
 
-    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+    def plan(self, view: dict[str, Any], schema: dict[str, Any], system: str | None = None) -> Reading:
         """The template plans nothing: the plan is `unavailable` and the page reads the sentence with its patterns (ADR-0144)."""
         return Reading(None, "template", None)
 
@@ -412,7 +449,7 @@ class LimitedAssistant(TemplateAssistant):
     def answer_general(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         return self._reading()
 
-    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+    def plan(self, view: dict[str, Any], schema: dict[str, Any], system: str | None = None) -> Reading:
         return self._reading()
 
 
@@ -541,11 +578,12 @@ class ClaudeAssistant:
         one feature for questions answered from the theory pages (ADR-0120)."""
         return self._read("answer_question", GENERAL_SYSTEM, view, schema, ANSWER_MAX_TOKENS)
 
-    def plan(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
+    def plan(self, view: dict[str, Any], schema: dict[str, Any], system: str | None = None) -> Reading:
         """The model's plan for a sentence (ADR-0144), as JSON in the schema asked for and not yet judged: the planner's checks read it.
         `view` is what the model may see: the sentence, the setup as `read_setup` reads it, the rows and the tools on offer; with a plan
-        it gave that was refused, that plan and the reasons. Never a name, a note, an email or another project (R-11)."""
-        return self._read("plan_steps", PLAN_SYSTEM, view, schema, PLAN_MAX_TOKENS)
+        it gave that was refused, that plan and the reasons. Never a name, a note, an email or another project (R-11). A wing's or a
+        repair's plan passes its own instructions (`WING_PLAN_SYSTEM`, `REPAIR_PLAN_SYSTEM`) and its own view of the wing or the repair."""
+        return self._read("plan_steps", system or PLAN_SYSTEM, view, schema, PLAN_MAX_TOKENS)
 
     def choose_tools(self, view: dict[str, Any]) -> Reading:
         """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is

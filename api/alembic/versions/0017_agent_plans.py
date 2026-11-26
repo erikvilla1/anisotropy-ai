@@ -3,8 +3,10 @@
 One sentence of an engineer's is read by one call to the model into a plan of typed tool steps, which the server checks, the engineer
 approves once, and the server then applies as a version, checks and runs. Each plan is one row: whose it is and what it was asked, its
 state, its steps with each one's state and note as the page reports them, the setup it was worked out on (`base`), the question asked
-back or why there is no plan, the words not read, who wrote it, and the run and version its approval made. A plan goes with its
-project. The day's planned requests of a person are counted from these rows (ADR-0144, 30 a day by default).
+back or why there is no plan, the words not read, who wrote it, and the run and version its approval made. A plan's `kind` says what
+it plans on: a coupon or a plate (a kept `fea` project), a wing (a kept `wing` project) or a repair, which is no kept project: the page
+holds its description, so a repair's plan names no project and is its asker's (build step 5). A plan goes with its project. The day's
+planned requests of a person are counted from these rows, every kind together (ADR-0144, 30 a day by default).
 
 Each call to the model the planner makes is a row of `model_calls` with the feature `plan_steps`, so that table's check of the features
 it allows is replaced by one that names it too. The weekly view of the guards (0015, ADR-0139) counts a request past the day's planned
@@ -37,6 +39,8 @@ FEATURES = (*BEFORE, "plan_steps")
 PLAN_CAPPED = "the day's limit of planned requests for this sign-in is reached"
 # A plan's states, as `anisotropy_api.planner.STATES` names them.
 STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
+# What a plan plans on, as `anisotropy_api.planner.KINDS` names them: a repair's plan alone has no project.
+KINDS = ("coupon", "plate", "wing", "repair")
 
 
 def _sql_list(values: tuple[str, ...]) -> str:
@@ -66,7 +70,8 @@ def upgrade() -> None:
     op.create_table(
         "agent_plans",
         sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
-        sa.Column("project_id", sa.Uuid(as_uuid=True), sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("project_id", sa.Uuid(as_uuid=True), sa.ForeignKey("projects.id", ondelete="CASCADE")),
+        sa.Column("kind", sa.String(8), nullable=False),
         sa.Column("user_email", sa.String(320)),
         sa.Column("actor", sa.String(40), nullable=False),
         sa.Column("ask", sa.Text, nullable=False),
@@ -84,6 +89,8 @@ def upgrade() -> None:
         sa.Column("approved_at", sa.DateTime(timezone=True)),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(f"state IN ({_sql_list(STATES)})", name="agent_plans_state_known"),
+        sa.CheckConstraint(f"kind IN ({_sql_list(KINDS)})", name="agent_plans_kind_known"),
+        sa.CheckConstraint("(kind = 'repair') = (project_id IS NULL)", name="agent_plans_project_by_kind"),
     )
     op.create_index("agent_plans_project", "agent_plans", ["project_id", "created_at"])
     op.create_index("agent_plans_person_day", "agent_plans", ["user_email", "created_at"])

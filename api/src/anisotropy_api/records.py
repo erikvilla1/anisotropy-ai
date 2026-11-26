@@ -184,21 +184,24 @@ class ModelVersionRow(Base):
 
 
 # A plan's states (ADR-0144, migration 0017), as `planner.STATES` names them; and those of a request that asked no model, which are not
-# counted against the day's planned requests.
+# counted against the day's planned requests. What a plan plans on, as `planner.KINDS` names them: a repair is no kept project.
 PLAN_STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
 PLANS_UNCOUNTED = ("capped", "unavailable")
+PLAN_KINDS = ("coupon", "plate", "wing", "repair")
 
 
 class AgentPlanRow(Base):
     """A plan of the workspace's planner (ADR-0144, migration 0017): one engineer's sentence read into typed tool steps, with who asked,
-    its state, its steps as they run (each with its own state and note), the setup it was worked out on (`base`, the content's digest),
-    the question asked back or why there is no plan, the words not read, who wrote it, and the job and version its approval made. It goes
-    with its project, and it is the project owner's (`owns_project`)."""
+    what it plans on (`kind`), its state, its steps as they run (each with its own state and note), the setup it was worked out on
+    (`base`, the digest of the content or of the repair's description), the question asked back or why there is no plan, the words not
+    read, who wrote it, and the job and version its approval made. A coupon's, a plate's or a wing's goes with its project and is the
+    project owner's (`owns_project`); a repair's names no project, since the page holds the repair, and is its asker's (`owns_plan`)."""
 
     __tablename__ = "agent_plans"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
     user_email: Mapped[str | None] = mapped_column(String(320))
     actor: Mapped[str] = mapped_column(String(40), nullable=False)
     ask: Mapped[str] = mapped_column(Text, nullable=False)
@@ -216,7 +219,9 @@ class AgentPlanRow(Base):
     approved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    __table_args__ = (CheckConstraint(f"state IN ({_sql_list(PLAN_STATES)})", name="agent_plans_state_known"),)
+    __table_args__ = (CheckConstraint(f"state IN ({_sql_list(PLAN_STATES)})", name="agent_plans_state_known"),
+                      CheckConstraint(f"kind IN ({_sql_list(PLAN_KINDS)})", name="agent_plans_kind_known"),
+                      CheckConstraint("(kind = 'repair') = (project_id IS NULL)", name="agent_plans_project_by_kind"))
 
 
 UPLOAD_VERDICTS = ("agrees", "differs", "incomplete", "refused")
@@ -668,6 +673,20 @@ def fetch_plan(engine: Engine, project_id: uuid.UUID, plan_id: uuid.UUID) -> Age
         return row if row is not None and row.project_id == project_id else None
 
 
+def owns_plan(row: AgentPlanRow, actor: str, user_email: str | None) -> bool:
+    """Whose a repair's plan is, with no project to ask: the signed-in email behind Access; locally, with no email, the actor that asked."""
+    if user_email is not None:
+        return row.user_email == user_email
+    return row.user_email is None and row.actor == actor
+
+
+def fetch_repair_plan(engine: Engine, plan_id: uuid.UUID) -> AgentPlanRow | None:
+    """A repair's plan by its id; None when there is none or the plan is a project's. Whose it is (`owns_plan`) is the caller's to check."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(AgentPlanRow, plan_id)
+        return row if row is not None and row.kind == "repair" and row.project_id is None else None
+
+
 def update_plan(engine: Engine, plan_id: uuid.UUID, **fields) -> AgentPlanRow:
     """A few columns of a plan moved: its state and steps as its approval runs them, its job."""
     with Session(engine, expire_on_commit=False) as session:
@@ -712,12 +731,13 @@ STALE_PLAN = "The model changed since this plan was made. Ask again for a new pl
 
 
 def approve_plan(engine: Engine, plan_id: uuid.UUID, project_id: uuid.UUID, *, base: str, digest_of, content: dict | None, why: str,
-                 changes: list[str], version_digest: str | None, steps: list,
-                 now: dt.datetime) -> tuple[AgentPlanRow, ProjectRow, ModelVersionRow | None]:
+                 changes: list[str], version_digest: str | None, steps: list, now: dt.datetime,
+                 versioned: bool = True) -> tuple[AgentPlanRow, ProjectRow, ModelVersionRow | None]:
     """A plan approved in one transaction (ADR-0144): its row locked and still `proposed`, the project still on the setup the plan was
     worked out on (`base`), the changed setup (`content`) kept with a new version by the assistant with the ask as why, and the plan
-    `approved` with its steps and the version's number. A plan with no change keeps no version. PlanTaken when it is no plan to approve
-    or the project changed since; nothing is written then."""
+    `approved` with its steps and the version's number. A plan with no change keeps no version, and neither does a wing's
+    (`versioned` false): a wing's versions are kept in the browser (ADR-0122), so its content alone is replaced. PlanTaken when it is no
+    plan to approve or the project changed since; nothing is written then."""
     with Session(engine, expire_on_commit=False) as session:
         plan = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id, AgentPlanRow.project_id == project_id)
                                .with_for_update()).first()
@@ -726,7 +746,12 @@ def approve_plan(engine: Engine, plan_id: uuid.UUID, project_id: uuid.UUID, *, b
         if plan.base != base:
             raise PlanTaken(STALE_PLAN)
         version = None
-        if content is not None:
+        if content is not None and not versioned:
+            project = session.scalars(select(ProjectRow).where(ProjectRow.id == project_id).with_for_update()).first()
+            if project is None or digest_of(dict(project.content)) != base:
+                raise PlanTaken(STALE_PLAN)
+            project.content, project.updated_at = content, now
+        elif content is not None:
             kept = _apply_setup_in(session, project_id, base=base, digest_of=digest_of, content=content, made_by="assistant", why=why,
                                    changes=changes, version_digest=version_digest or "", now=now)
             if kept is None:
@@ -740,6 +765,25 @@ def approve_plan(engine: Engine, plan_id: uuid.UUID, project_id: uuid.UUID, *, b
         plan.version_n = None if version is None else version.n
         session.commit()
         return plan, project, version
+
+
+STALE_REPAIR = "The repair changed since this plan was made. Ask again for a new plan."
+
+
+def approve_repair_plan(engine: Engine, plan_id: uuid.UUID, *, base: str, steps: list, now: dt.datetime) -> AgentPlanRow:
+    """A repair's plan approved, once: its row locked, still `proposed` and worked out on the description the approval carries
+    (`base`, its digest), and set `approved` with its steps. There is no project to change: the page holds the repair, and the approval
+    answers the description the plan makes of it. PlanTaken when it is no plan to approve, or the description is another; nothing is
+    written then."""
+    with Session(engine, expire_on_commit=False) as session:
+        plan = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id, AgentPlanRow.kind == "repair").with_for_update()).first()
+        if plan is None or plan.state != "proposed":
+            raise PlanTaken("This plan was approved already, or it is not a plan to approve. Ask again for a new one.")
+        if plan.base != base:
+            raise PlanTaken(STALE_REPAIR)
+        plan.state, plan.steps, plan.approved_at, plan.updated_at = "approved", steps, now, now
+        session.commit()
+        return plan
 
 
 def fetch_version(engine: Engine, project_id: uuid.UUID, n: int | None) -> ModelVersionRow | None:
