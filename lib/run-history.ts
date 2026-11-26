@@ -5,7 +5,9 @@ import { CRITERION_NAMES } from "./studio-answer";
 import type { JobStatus } from "./studio-api";
 
 /** A done run's answer in a few values, as the package wrote it: on the gauge section or the whole model, by the criterion that governs. */
-export type JobAnswer = { basis: "gauge" | "whole"; criterion: string; fails: boolean; factor: number; ply: number; angle: number; face: string | null };
+export type JobAnswer = { basis: "gauge" | "whole"; criterion: string; fails: boolean; factor: number; ply: number; angle: number; face: string | null;
+  /** a plate solved with nonlinear geometry (ADR-0142): the factor is no multiple of the load */
+  followed?: boolean };
 
 /** The answer as a job's status carries it, checked before it is shown; null for anything else. */
 export function readJobAnswer(value: unknown): JobAnswer | null {
@@ -15,7 +17,7 @@ export function readJobAnswer(value: unknown): JobAnswer | null {
     && typeof a.factor === "number" && Number.isFinite(a.factor) && typeof a.ply === "number" && Number.isInteger(a.ply)
     && typeof a.angle === "number" && Number.isFinite(a.angle) && (a.face === null || a.face === undefined || typeof a.face === "string");
   return ok ? { basis: a.basis as "gauge" | "whole", criterion: a.criterion as string, fails: a.fails as boolean, factor: a.factor as number,
-    ply: a.ply as number, angle: a.angle as number, face: (a.face as string | null | undefined) ?? null } : null;
+    ply: a.ply as number, angle: a.angle as number, face: (a.face as string | null | undefined) ?? null, ...(a.followed === true ? { followed: true } : {}) } : null;
 }
 
 export type PastRun = {
@@ -34,12 +36,14 @@ export function pastRuns(jobs: JobStatus[]): PastRun[] {
 export type AnswerWords = { verdict: "Holds" | "Fails"; /** "1.033 × the applied load" */ loading: string; /** ["ply 4 (90°)", "Tsai-Hill"] */ facts: string[] };
 
 /** The answer in the list's words: the verdict, the factor on the applied loading at first-ply failure, then the ply and the criterion.
- * Every number is the package's, printed by `print`. Null when the run kept no answer. */
+ * Every number is the package's, printed by `print`. Null when the run kept no answer. A plate solved with nonlinear geometry has no such
+ * factor (its answer does not scale with the load): the list says the verdict is at the applied load, and how it was solved. */
 export function answerWords(answer: JobAnswer | null, print: (value: number) => string): AnswerWords | null {
   if (!answer) return null;
   const ply = `ply ${answer.ply} (${answer.angle}°)${answer.face ? `, ${answer.face} face` : ""}`;
-  return { verdict: answer.fails ? "Fails" : "Holds", loading: `${print(answer.factor)} × the applied load`,
-    facts: [ply, CRITERION_NAMES[answer.criterion] ?? answer.criterion, answer.basis === "gauge" ? "gauge section" : "whole model"] };
+  return { verdict: answer.fails ? "Fails" : "Holds", loading: answer.followed ? "the applied load" : `${print(answer.factor)} × the applied load`,
+    facts: [ply, CRITERION_NAMES[answer.criterion] ?? answer.criterion, answer.basis === "gauge" ? "gauge section" : "whole model",
+      ...(answer.followed ? ["nonlinear geometry"] : [])] };
 }
 
 /** When a run ended, in the reader's own date and time; empty for a stamp that is not one. */

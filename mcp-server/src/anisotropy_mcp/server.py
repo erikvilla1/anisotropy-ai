@@ -308,6 +308,9 @@ def slice_results(solved: dict) -> dict:
                     "a corner grows as the mesh is refined. A ply is checked by maximum stress."}
 
 
+LINEAR_PREVIEW = ("The setup asks for nonlinear geometry, and this preview is a linear solve. The plate's shape is followed only by a full run "
+                  "on the page (Run analysis), in ten levels of the load; its answer differs from this one once the plate deflects by more "
+                  "than about half its thickness, and it does not scale with the load.")
 CRITERION_NAMES = {"max_stress": "Maximum stress", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu", "max_strain": "Maximum strain"}
 
 
@@ -487,10 +490,12 @@ def build(api: Api, form_path: Path = FORM) -> MCPServer:
                          "note": "Nothing was solved: the setup items named in `blocking` do not pass. Their messages and rows say what to change."})
         explanation = found.get("explanation") or {}
         result_id = held.keep({"fields": fields, "explanation": explanation, "designation": found.get("designation")})
+        # a preview is a linear solve whatever the setup asks (ADR-0142): a plate's shape is followed only by a full run on the page
+        linear = {"note": LINEAR_PREVIEW} if values.get("nonlinear_geometry") is True else {}
         return said({"solved": True, "result_id": result_id, "kind": PREVIEW, "seconds": found.get("seconds"),
                      "coupon": fields.get("coupon"), "setup": setup, **as_read(found),
                      "answer": answer_of(fields.get("summary") or {}), "sentences": sentences_of(explanation),
-                     "can_be_asked": results.offer(fields)})
+                     "can_be_asked": results.offer(fields), **linear})
 
     @server.tool(annotations=READS, structured_output=False)
     def result_values(

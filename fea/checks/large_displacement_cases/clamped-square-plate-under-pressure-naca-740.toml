@@ -1,0 +1,84 @@
+title = "A clamped square plate under pressure, deflected up to 1.9 times its thickness: CalculiX's large-displacement answer follows NACA Report 740"
+source = "NACA Report 740 (Samuel Levy, Square plate with clamped edges under normal pressure producing large deflections, 1942; NASA Technical Reports Server 19930091819), Table 5: the centre deflection over the thickness against p a^4 / (E h^4) for a square plate of side a and thickness h with Poisson's ratio 0.316, its edges kept from turning and from moving across themselves and free to slide along themselves, by a double Fourier series solution of von Karman's equations whose error the report estimates below 2 percent. Here a = 200 mm, h = 2 mm, E = 70000 MPa, and the pressure rises to 0.2814 MPa, the table's last row; it presses toward +z. The plate is 16 by 16 eight-node elements: CalculiX's deflection is 0.2 percent below the table at the first row and 2.0 percent below at the last, and moves by less than 0.05 percent from 16 to 32 elements a side, so the difference is not the mesh's. The tolerance holds that difference and no more. The report's stresses are not compared: at the centre CalculiX's membrane stress is about a tenth above the table's and its bending stress about a tenth below, their sum 3 percent below (ADR-0142, open)."
+
+[follow]
+first = 0.02
+at = [0.04425373134, 0.09527363184, 0.1577114428, 0.236318408, 0.3355721393, 0.4577114428, 0.6094527363, 0.7910447761, 1.0]
+
+[small_load]
+factor = 0.001
+tolerance = 1e-4
+kernel_tolerance = 0.02
+
+[[expected]]
+name = "centre deflection over the thickness"
+what = "displacement"
+of = "centre"
+component = 3
+scale = 0.5
+values = [0.237, 0.471, 0.695, 0.912, 1.121, 1.323, 1.521, 1.714, 1.902]
+tolerance = 0.025
+
+[plate]
+title = "NOM-PLT-L2, plate: a clamped square isotropic plate under a pressure that deflects it up to 1.9 thicknesses"
+kind = "plate"
+units = "mm-MPa"
+
+[plate.coupon]
+designation = "NOM-PLT-L2"
+standard = "none"
+size_from = "NACA Report 740"
+team_model = "not built yet"
+test_data = "none"
+
+[plate.geometry]
+length = 200.0
+width = 200.0
+
+[plate.mesh]
+mesher = "structured"
+element_order = 2
+nx = 16
+ny = 16
+
+[plate.layup]
+angles = [0]
+angles_from = "length"
+symmetric = false
+ply_thickness = 2.0
+
+[plate.material]
+E1 = 70000.0
+E2 = 70000.0
+G12 = 26595.74468085106
+nu12 = 0.316
+[plate.material.transverse]
+G13 = 26595.74468085106
+G23 = 26595.74468085106
+plane_stress = true
+transverse_isotropy = true
+
+[[plate.supports]]
+region = "Edge-Left"
+dofs = [1, 3, 5]
+[[plate.supports]]
+region = "Edge-Right"
+dofs = [1, 3, 5]
+[[plate.supports]]
+region = "Edge-Bottom"
+dofs = [2, 3, 4]
+[[plate.supports]]
+region = "Edge-Top"
+dofs = [2, 3, 4]
+
+[[plate.loads]]
+region = "Face"
+pressure = -0.2814
+
+[plate.probes]
+nodes = { centre = [100.0, 100.0] }
+
+[plate.output]
+fpf_criteria = []
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = false, el_print_global = true }

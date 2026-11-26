@@ -15,7 +15,8 @@ import { summaryAnswer } from "../../lib/result-summary";
 import { isConditionOrLoad, termLines } from "../../lib/fea-terms";
 import { workingFor } from "../../lib/result-working";
 import { applyMessage, unitsNamed } from "../../lib/studio-chat";
-import { blankForm, exampleForm, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
+import { blankForm, exampleForm, followedRow, PLATE_TEST, type StudioForm } from "../../lib/studio-form";
+import { followedAnswer } from "../../lib/followed-ask";
 import { printed } from "../../lib/studio-colors";
 import { couponOffer, plateLines, plateOffer, unreadLines } from "../../lib/proposals";
 import { factsOf, generalLines, headed, readAt, whyLines } from "../../lib/result-why";
@@ -39,7 +40,7 @@ export const KINDS = ["value", "which", "yes-no", "what-is", "why", "change", "c
  * program's words, units, or a bare word or two. */
 export const STYLES = ["plain", "typo", "fragment", "loose", "jargon", "units", "terse"] as const;
 /** What is on the page when it is asked. */
-export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "start", "wing", "wing-caps", "repair", "repair-solved", "repair-external", "repair-bond",
+export const PAGES = ["blank", "setup", "ready", "results", "imported", "past", "plate", "plate-linear", "plate-followed", "start", "wing", "wing-caps", "repair", "repair-solved", "repair-external", "repair-bond",
   "repair-plies"] as const;
 /** Every way a message is answered: the coupon chat's routes (`lib/chat-route.ts`), then those of the FEA assistant of a blank project
  * (page "start", `routeStart` in `lib/work-intent.ts`, ADR-0124), then the wing's chat (pages "wing" and "wing-caps", `readWingAsk` in
@@ -188,6 +189,11 @@ const REPAIR_HELD: Record<string, RepairHeld> = {
 };
 const RESULTS = { fields: studio("fields.json") as Fields, facts: !!studio("explanation.json").facts, explanation: studio("explanation.json") };
 const IMPORTED = { fields: imported("fields.json") as Fields, facts: !!imported("explanation.json").facts, explanation: imported("explanation.json") };
+/** A clamped plate under pressure (ADR-0142): solved linear, where it leaves its plane by more than twice its thickness ("plate-linear"),
+ * and with nonlinear geometry on, its shape followed in ten load levels ("plate-followed"). */
+const followed = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio-followed/${name}`, "utf8"));
+const PLATE_LINEAR = { fields: followed("linear-fields.json") as Fields, facts: !!followed("linear-explanation.json").facts, explanation: followed("linear-explanation.json") };
+const PLATE_FOLLOWED = { fields: followed("fields.json") as Fields, facts: !!followed("explanation.json").facts, explanation: followed("explanation.json") };
 
 /** The page a question is asked on: the setup, the results shown and the chat's state, with or without a model reading. */
 export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<string, unknown> | null; state: ChatState; past: boolean; imported: boolean;
@@ -195,8 +201,11 @@ export type Scene = { form: StudioForm; fields: Fields | null; facts: Record<str
 
 export function scene(question: Question, modelReads: boolean): Scene {
   const example = exampleForm("2026-11-19");
-  const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED : null;
-  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } : example; // a plate with a hole, so the hole can be held
+  const results = question.page === "results" || question.page === "past" ? RESULTS : question.page === "imported" ? IMPORTED
+    : question.page === "plate-linear" ? PLATE_LINEAR : question.page === "plate-followed" ? PLATE_FOLLOWED : null;
+  const solved = question.page === "plate-linear" || question.page === "plate-followed"; // the clamped plate, as its run's values reopen it
+  const form = question.page === "blank" ? blankForm() : question.page === "plate" ? { ...example, test: PLATE_TEST, hole_diameter: "6" } // a plate with a hole, so the hole can be held
+    : solved ? { ...example, test: PLATE_TEST, length: "200", width: "200", ...followedRow(question.page === "plate-followed") } : example;
   const fields = results?.fields ?? null;
   const picked = question.picked !== undefined && fields ? fields.mesh.element_labels.findIndex((l) => l.split(".").pop() === String(question.picked)) : -1;
   return {
@@ -204,7 +213,7 @@ export function scene(question: Question, modelReads: boolean): Scene {
     ansys: question.ansys === true,
     state: {
       form, readOnly: question.page === "imported" || question.page === "past", results: !!fields, facts: !!results?.facts, api: true, modelReads,
-      onPlate: question.page === "plate" && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: question.asking === "plan" ? null : (question.asking as ChatState["step"]) ?? null,
+      onPlate: (question.page === "plate" || solved) && modelReads, ready: question.page !== "blank" && question.page !== "setup", step: question.asking === "plan" ? null : (question.asking as ChatState["step"]) ?? null,
       about: null, thread: null, sections: true, plates: true, plate: emptyPlate(), here: [],
       // the project is kept on the server, as on the hosted site, so a sentence of a change and a run is planned there once it holds a
       // setup (ADR-0144); a blank coupon is filled by the setup's readers first
@@ -264,6 +273,11 @@ export function pageAnswer(text: string, s: Scene, routed: ChatRoute): Said {
     case "about": {
       const answer = aboutAnswer(routed.topic, text, { form: s.form, results: !!s.fields, readOnly: s.state.readOnly });
       return said("about", answer.title, answer.lines, { topic: routed.topic });
+    }
+    case "followed": { // as answerFollowed in coupon-chat.tsx: the switch is set at once, a question of it changes nothing (ADR-0142)
+      const answer = followedAnswer(routed.ask, s.form, s.fields, printed, text);
+      return said(answer.set === null ? (answer.problem ? "refused" : "said") : "rows", answer.title, answer.lines,
+        { ask: routed.ask, rows: answer.set === null ? {} : followedRow(answer.set) });
     }
     // the API writes the plan (ADR-0144); nothing changes until the engineer approves it, so the page's own answer is the card's heading
     case "plan": return said("plan", routed.reply ? "Planning again with your answer" : "A plan to approve", [], { reply: routed.reply });
@@ -387,6 +401,10 @@ export function talk(question: Question, modelReads: boolean): { route: AnyRoute
       s.state = { ...s.state, thread: routed.question, about: null };
     }
     if (routed.route === "element" && typeof answer.data.element === "string") s.state = { ...s.state, about: Number(answer.data.element) };
+    if (routed.route === "followed" && answer.kind === "rows") { // the switch stays as the message set it, as the page's form does
+      s.form = { ...s.form, ...(answer.data.rows as StudioForm) };
+      s.state = { ...s.state, form: s.form };
+    }
     last = { route: routed.route, said: answer, routed };
   }
   return last!;

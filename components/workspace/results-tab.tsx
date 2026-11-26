@@ -54,7 +54,8 @@ export function ResultsTab({ apiBaseUrl }: { apiBaseUrl: string }) {
       <dl className="ws-tree-answer" data-testid="tree-results-answer">
         <div><dt>Reaction</dt><dd>{printed(Math.abs(s.reaction.value))} {lab.force}, {s.reaction.sense}, {setWords(s.reaction.set)}</dd></div>
         <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length}</dd></div>
-        <div><dt>First-ply failure</dt><dd>{stat ? `${stat.verdict}, R = ${stat.factor}` : "no failure criterion chosen"}</dd></div>
+        <div><dt>First-ply failure</dt><dd>{stat ? `${stat.verdict}, ${stat.measure}` : "no failure criterion chosen"}</dd></div>
+        {s.followed ? <div data-testid="tree-results-followed"><dt>Nonlinear geometry</dt><dd>{s.followed.fractions.length} load levels; linear {printed(Math.abs(s.followed.linear.largest))} {lab.length}</dd></div> : null}
       </dl>
       {live ? <p className="studio-hint">From the quick solve. Run analysis checks it with a second solver and writes the report.</p> : null}
       <p className="ws-tree-caption">Show on the model</p>

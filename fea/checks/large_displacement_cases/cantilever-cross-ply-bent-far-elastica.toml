@@ -1,0 +1,105 @@
+title = "A [0/90]s laminate's strip, clamped and bent by an end force until its tip stands at 0.81 of its length: CalculiX's large-displacement answer follows the elastica"
+source = "The elastica, worked without the package by fea/tools/large_deflection_closed_forms.py: a strip 100 mm long, 10 mm wide and 0.8 mm thick, clamped at y = 0, under a force along +z at its free end that keeps its direction and rises to P = 10 EI / L^2 = 60.434478 N; EI = b / d = 60434.478 N mm^2, with d the entry along the strip of the inverse of the laminate's D, by plain laminate theory (E1 = 160000, E2 = 9000, G12 = 4700 MPa, nu12 = 0.32, plies of 0.2 mm; a round carbon ply of our own). theta'' = -alpha cos(theta) with alpha = P L^2 / EI, theta(0) = 0 and theta'(1) = 0 (Timoshenko and Gere, Theory of Elastic Stability, Section 2.7), integrated by Runge-Kutta and shooting; the tip's deflection and how far it comes back are the integrals of sin(theta) and 1 - cos(theta). The strain is the Lagrangian strain along the strip, ((1 + e0 - z kappa)^2 - 1) / 2 with e0 = P sin(theta) / EA - 3 EI kappa^2 / (2 EA) the stretch of the middle (EA = 679126.5 N), at the centroid of the element below mid-length (y = 48.75 mm), at the heights of CalculiX's lowest and highest integration points. The strip is 2 by 40 eight-node elements; the trial behind ADR-0142 gave the differences the tolerances hold."
+
+[follow]
+first = 0.02
+at = [0.1, 0.2, 0.5, 1.0]
+
+[small_load]
+factor = 0.001
+tolerance = 1e-4
+kernel_tolerance = 0.001
+readings = ["tip deflection over the length"]
+
+[[expected]]
+name = "tip deflection over the length"
+what = "displacement"
+of = "tip"
+component = 3
+scale = 0.01
+values = [0.3017207689, 0.4934574717, 0.7137915077, 0.8106090017]
+tolerance = 0.003
+
+[[expected]]
+name = "tip displacement along the strip over the length"
+what = "displacement"
+of = "tip"
+component = 2
+scale = 0.01
+values = [-0.05643323628, -0.1606417208, -0.3876283607, -0.5549955978]
+tolerance = 0.005
+
+[[expected]]
+name = "strain along the strip at the lowest points, below mid-length"
+what = "strain"
+of = "mid"
+component = 2
+height = -0.3577350269
+values = [0.00167302827, 0.002761608242, 0.003891764435, 0.003892974411]
+tolerance = 0.003
+
+[[expected]]
+name = "strain along the strip at the highest points, below mid-length"
+what = "strain"
+of = "mid"
+component = 2
+height = 0.3577350269
+values = [-0.001670083002, -0.002750059852, -0.003834925243, -0.003742709494]
+tolerance = 0.003
+
+[plate]
+title = "NOM-PLT-L4, plate: a [0/90]s laminate's strip clamped at one end and bent far by a force at the other"
+kind = "plate"
+units = "mm-MPa"
+
+[plate.coupon]
+designation = "NOM-PLT-L4"
+standard = "none"
+size_from = "the elastica"
+team_model = "not built yet"
+test_data = "none"
+
+[plate.geometry]
+length = 100.0
+width = 10.0
+
+[plate.mesh]
+mesher = "structured"
+element_order = 2
+nx = 2
+ny = 40
+
+[plate.layup]
+angles = [0, 90, 90, 0]
+angles_from = "length"
+symmetric = false
+ply_thickness = 0.2
+
+[plate.material]
+E1 = 160000.0
+E2 = 9000.0
+G12 = 4700.0
+nu12 = 0.32
+[plate.material.transverse]
+G13 = 4700.0
+G23 = 3000.0
+plane_stress = true
+transverse_isotropy = true
+
+[[plate.supports]]
+region = "Edge-Bottom"
+dofs = [1, 2, 3, 4, 5, 6]
+
+[[plate.loads]]
+region = "Edge-Top"
+dof = 3
+total = 60.4344783
+
+[plate.probes]
+nodes = { tip = [5.0, 100.0] }
+elements = { mid = [2.5, 48.75] }
+
+[plate.output]
+fpf_criteria = []
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = false, el_print_global = true }

@@ -261,6 +261,15 @@ export const RUN_STEPS: { id: RunStepId; label: string; doing: string }[] = [
   { id: "report", label: "Report ready", doing: "Writing the report" },
 ];
 
+/** A run with nonlinear geometry (ADR-0142), as the pipeline says it (fea/tools/run_coupon.py): the stage that follows the plate's shape,
+ * and what its outcome says of the report. No report and no mesh study are written of such a run: both describe a linear answer. */
+export const FOLLOWED_STAGE = "the followed solve";
+export const FOLLOWED_DOCUMENTS = "no report for a run with nonlinear geometry";
+type MaybeFollowed = { stage?: string | null; stages?: string[]; documents?: string | null };
+/** Whether a job is a run with nonlinear geometry: its stages say so while it runs, its outcome once it is done. */
+export const followedJob = (job: MaybeFollowed): boolean =>
+  job.documents === FOLLOWED_DOCUMENTS || job.stage === FOLLOWED_STAGE || (job.stages ?? []).includes(FOLLOWED_STAGE);
+
 /** The pipeline's stage names (fea/tools/run_coupon.py STAGES) and the step each belongs to. A stage this list does not know counts as
  * solving, the step a new stage is most likely to join. The drawings come after the result is on the page, so they are part of writing
  * the report (ADR-0064 amendment 1). */
@@ -268,6 +277,8 @@ const STAGE_STEP: Record<string, RunStepId> = {
   "the setup check": "meshing", "the input": "meshing", "the decks": "meshing", "the attempt": "meshing",
   "our engine": "solving", "the convergence study": "solving", "CalculiX": "solving",
   "the CalculiX record": "post", "the result": "post",
+  // a plate with nonlinear geometry (ADR-0142): solved once more with its shape followed, after the linear check of the model
+  [FOLLOWED_STAGE]: "solving",
   // the mesh study runs after the result since ADR-0064 amendment 3, under a name of its own: a run of before it keeps its study in solving
   "the mesh study": "report", "the drawings": "report", "the package": "report", "the outputs": "report",
 };
@@ -312,14 +323,19 @@ const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
 /** A finished job whose report was not written: the outcome says so, or, for a job that does not say, its files hold neither the PDF nor
  * what it is written from on request. "Report ready" means the report can be had, not only the package (ADR-0064 amendments 2 and 3). */
 const reportMissing = (job: Pick<JobStatus, "documents"> & { outputs?: JobStatus["outputs"] }): boolean =>
-  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs) && !("document_source" in job.outputs);
+  followedJob(job) ? false : job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs) && !("document_source" in job.outputs);
 const order = (id: RunStepId) => RUN_STEPS.findIndex((s) => s.id === id);
 
 export type StepState = "done" | "current" | "waiting" | "stopped";
 /** Each step's state for a job: everything before the job's step done, its step current (or stopped), the rest waiting. */
-export function runSteps(job: Pick<JobStatus, "state" | "stage" | "documents"> & { outputs?: JobStatus["outputs"] }): { id: RunStepId; label: string; state: StepState }[] {
-  const at = job.state === "queued" ? "queued" : job.state === "done" ? null : stepOfJob(job);
-  return RUN_STEPS.map((s) => {
+export function runSteps(job: Pick<JobStatus, "state" | "stage" | "documents"> & { outputs?: JobStatus["outputs"]; stages?: string[] }): { id: RunStepId; label: string; state: StepState }[] {
+  const followed = followedJob(job);
+  const stepOf = (j: Pick<JobStatus, "state" | "stage">): RunStepId => {
+    const step = stepOfJob(j);
+    return followed && step === "report" ? "post" : step; // no report is written of it: its last stage is the end of post-processing
+  };
+  const at = job.state === "queued" ? "queued" : job.state === "done" ? null : stepOf(job);
+  return RUN_STEPS.filter((s) => !(followed && s.id === "report")).map((s) => {
     if (at === null) return { ...s, state: s.id === "report" && reportMissing(job) ? "stopped" : "done" };
     const k = order(s.id), here = order(at);
     const state: StepState = k < here ? "done" : k > here ? "waiting" : job.state === "stopped" || job.state === "refused" ? "stopped" : "current";
@@ -334,12 +350,12 @@ export function queueAhead(message: string | null | undefined): number | null {
 }
 
 /** The run in a few words: "Queued (1 ahead)", "Solving", "Done", "Stopped". */
-export function runHeadline(job: Pick<JobStatus, "state" | "stage" | "message" | "result" | "documents"> & { outputs?: JobStatus["outputs"] }): string {
+export function runHeadline(job: Pick<JobStatus, "state" | "stage" | "message" | "result" | "documents"> & { outputs?: JobStatus["outputs"]; stages?: string[] }): string {
   if (job.state === "queued") {
     const ahead = queueAhead(job.message);
     return ahead ? `Queued (${ahead} ahead)` : "Queued";
   }
-  if (job.state === "running") return RUN_STEPS[order(stepOfStage(job.stage))].doing;
+  if (job.state === "running") return job.stage === FOLLOWED_STAGE ? "Solving with nonlinear geometry" : RUN_STEPS[order(stepOfStage(job.stage))].doing;
   if (job.state === "done") return reportMissing(job) ? "Done, report not written" : "Done";
   if (job.state === "refused") return "Not started";
   return "Stopped";
@@ -348,12 +364,16 @@ export function runHeadline(job: Pick<JobStatus, "state" | "stage" | "message" |
 const STEP_WORDS: Record<RunStepId, string> = { queued: "before it started", meshing: "while meshing", solving: "while solving", post: "during post-processing", report: "while writing the report" };
 
 /** What went wrong and what to do next, in plain words; the pipeline's own message only when it is fit to show. */
-export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | "documents"> & { outputs?: JobStatus["outputs"] }): string | null {
+export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | "documents"> & { outputs?: JobStatus["outputs"]; stages?: string[] }): string | null {
   if (job.state === "refused") {
     const said = customerText(job.message);
     return `The analysis did not start${said ? `: ${said.replace(/\.$/, "")}` : ""}. Check the setup and run it again.`;
   }
   if (job.state === "stopped") {
+    // a solve with nonlinear geometry that stopped on the way says how far it came and what to try (ADR-0142): a plate that buckles or
+    // snaps through stops so, and running it again as it is would stop again
+    const followed = customerText(job.message?.match(/the solve with nonlinear geometry (?:reached|stopped)[^\n]*$/)?.[0]);
+    if (followed) return `${sentence(followed.replace(/\.$/, ""))}. Or turn nonlinear geometry off in the Analysis step.`;
     return `The analysis stopped ${STEP_WORDS[stepOfJob(job)]}. Run it again; if it stops again, contact us.`;
   }
   if (job.state === "done" && reportMissing(job)) return "The results are ready, but the report could not be written. Run the analysis again to retry.";
@@ -361,13 +381,15 @@ export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | 
 }
 
 /** One line on what the run has done so far, under the headline. */
-export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & { message?: string | null }): string {
+export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & { message?: string | null; stages?: string[]; documents?: string | null }): string {
   if (job.state === "queued") {
     const ahead = queueAhead(job.message);
     return ahead ? `Waiting for the ${ahead === 1 ? "run" : `${ahead} runs`} ahead.` : "The analysis starts in a moment.";
   }
   if (job.state !== "running") return "";
   const step = stepOfStage(job.stage);
+  if (job.stage === FOLLOWED_STAGE) return "Following the plate's shape as the load rises, in ten levels. This takes longer than a linear solve.";
+  if (followedJob(job)) return job.result ? "Results are ready." : "The linear solve comes first, as the check of the model. Nonlinear geometry follows.";
   if (job.result || step === "report") return "Results are ready. The report follows.";
   if (step === "post") return "Checking the result against the reference solver.";
   return "Results appear as soon as the solve finishes.";
@@ -375,13 +397,22 @@ export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & {
 
 // --------------------------------------------------------------------------------------------------------------- verification
 
-export type Verification = { line: string; verified: boolean };
+export type Verification = { line: string; verified: boolean; /** said as a plain note, neither a pass nor a warning */ note?: boolean };
+/** What stands behind an answer with nonlinear geometry, in one line: one solver, held to published problems; no second solver checks it. */
+export const FOLLOWED_CHECK = "Nonlinear geometry: one solver gives this answer, checked against published large-deflection problems. No second solver checks it.";
+/** What a run with nonlinear geometry lacks, said under its curve: no mesh study is made of it (the study is the linear solve's), and the
+ * peak stress beside a held edge rises as the mesh is refined (ADR-0142: a clamped plate's failure index 0.126, 0.186, 0.227 on 8, 16
+ * and 32 elements a side, its deflection the same to 0.1 %). */
+export const FOLLOWED_MESH = "No mesh study is made of this run. The deflection settles on a coarse mesh; a peak stress beside a held edge rises as the mesh is refined, so solve again with a smaller element size before relying on the failure index.";
 /** The reference solver's check in one line, from the summary the package wrote when it is there, else from the result line the
  * pipeline reported ("57 of 57 recorded values agree with …"); null before the reference solver has run. "Verified" only when every
  * value agrees; otherwise the line says how many did, and `verified` is false so the page does not show it as a pass. `brief`, the
  * product's view: no counts, which a customer is not asked to judge (the founder, 2026-11-17: "something the user shouldn't be trying to
  * verify"), only whether a second solver agrees. */
 export function verificationOf(result: string | null | undefined, beside?: { agree: string; tolerance: number } | null, brief = false): Verification | null {
+  // nonlinear geometry (ADR-0142): the counts in its result line are of the linear check of the model, not of the answer shown, which one
+  // solver gives. Said as it is, and never as a pass.
+  if (result?.startsWith("nonlinear geometry")) return { line: FOLLOWED_CHECK, verified: false, note: true };
   const counted = beside && /\d+\s+of\s+\d+/.test(beside.agree) ? beside.agree.match(/(\d+)\s+of\s+(\d+)/)
     : result?.match(/(\d+)\s+of\s+(\d+)\s+recorded values agree/);
   if (!counted) return null;
@@ -397,7 +428,8 @@ export function verificationOf(result: string | null | undefined, beside?: { agr
 /** The run's state in the side panel: the plain problem when it ended badly, else done with where the files are, else the headline. No
  * position words: below 1100 px the results sit under the setup, not in a centre column (audit fea-run-50). */
 export function runStatus(job: Parameters<typeof runProblem>[0] & Pick<JobStatus, "result">, filesUnder: string): string {
-  return runProblem(job) ?? (job.state === "done" ? `Done. Download the report and files under ${filesUnder}.`
+  return runProblem(job) ?? (job.state === "done" ? (followedJob(job) ? "Done. No report is written of a run with nonlinear geometry."
+    : `Done. Download the report and files under ${filesUnder}.`)
     : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`);
 }
 

@@ -5,7 +5,8 @@ import { X } from "lucide-react";
 import { explainJob, sameResults, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
-import { answerOf, answerStat, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
+import { answerOf, answerStat, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, percentOf, type AnswerRow } from "@/lib/studio-answer";
+import { FollowedPanel } from "./followed-panel";
 import { customerText, downloadable, setWords, shownSentence } from "@/lib/studio-copy";
 import { useAllTests, type FieldView, type Place } from "./project-context";
 import { DEFAULT_PALETTE, isPalette, legendGradient, legendTicks, overlayColors, PALETTES, percentChange, printed, scaleFor, settled, type Palette, type Scale } from "@/lib/studio-colors";
@@ -108,7 +109,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion selected.</p> : (
         <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
       )}
-      <p className="studio-muted">R is the load factor at first-ply failure; R below 1 fails at the applied load.
+      <p className="studio-muted">{s.followed ? "R is one over the failure index at the applied load; with nonlinear geometry it is no multiple of the load." : "R is the load factor at first-ply failure; R below 1 fails at the applied load."}
         {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element is at a grip's clamped edge, where stress does not converge." : ""}</p>
       {s.fpf_gauge && Object.keys(s.fpf_gauge).length ? (
         <>
@@ -400,6 +401,9 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
     : `${printed(Math.abs(r.applied))} ${a.appliedUnit}` + (a.control !== "force" && r.reaction !== null ? `, ${printed(Math.abs(r.reaction))} ${a.forceUnit}` : "");
   const times = a.everyLoad ? "every applied load" : "the applied loading";
   const who = (r: { ply: number; angle: number; face: string | null }) => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
+  // nonlinear geometry (ADR-0142): no multiple of the load is the load at failure; a ply that reached its limit on the way says at what share
+  const reached = (r: AnswerRow) => r.fraction !== null && r.between
+    ? `at about ${percentOf(r.fraction)} of the applied loading, between the load levels at ${percentOf(r.between[0])} and ${percentOf(r.between[1])}` : null;
   const extremes = fields.summary.ply_extremes;
   const reading = fields.summary.gauge_reading;
   return (
@@ -407,19 +411,21 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
       <h3>First-ply failure <span className="studio-badge">{a.basisWords}</span></h3>
       <p className="studio-answer-headline" data-testid="answer-headline">
         <strong>{e.fails ? "Fails" : "Holds"} at the applied loading</strong> ({e.name}).{" "}
-        {e.fails ? `The first ply fails at ${printed(e.factor)} of ${times}` : `The first ply would fail at ${printed(e.factor)} × ${times}`}
+        {a.followed
+          ? (reached(e) ? `The first ply reaches its limit ${reached(e)}` : `The failure index is ${printed(e.index)} at the applied loading, largest in the ply named here`)
+          : e.fails ? `The first ply fails at ${printed(e.factor)} of ${times}` : `The first ply would fail at ${printed(e.factor)} × ${times}`}
         {e.applied !== null ? ` (${loading(e)}${a.control !== "force" ? ` at ${a.reactionSet}` : ""})` : ""}: {who(e)}, {modeWords(e.mode)}, element {e.label.split(".").pop()} {where(e.xy, L)}.
       </p>
       <div className="studio-table-scroll">
         <table className="studio-table studio-table-sticky" data-testid="answer-table">
-          <thead><tr><th scope="col">Criterion</th><th scope="col">Verdict</th><th scope="col" className="studio-num-head">R</th><th scope="col">Load at failure</th><th scope="col">First ply, mode</th><th scope="col">Location</th><th scope="col"><span className="sr-only">Show</span></th></tr></thead>
+          <thead><tr><th scope="col">Criterion</th><th scope="col">Verdict</th><th scope="col" className="studio-num-head">{a.followed ? "Failure index" : "R"}</th><th scope="col">Load at failure</th><th scope="col">First ply, mode</th><th scope="col">Location</th><th scope="col"><span className="sr-only">Show</span></th></tr></thead>
           <tbody>
             {a.rows.map((r) => (
               <tr key={r.criterion} data-criterion={r.criterion} data-fails={r.fails} className={r.earliest ? "studio-earliest" : undefined}>
                 <th scope="row">{r.name}{r.earliest ? " (governs)" : ""}</th>
                 <td data-testid={`answer-verdict-${r.criterion}`}><span className={`studio-badge studio-badge-${r.fails ? "fail" : "pass"}`}>{r.fails ? "fails" : "holds"}</span></td>
-                <td className="studio-num" data-testid={`answer-factor-${r.criterion}`}>{printed(r.factor)}</td>
-                <td className="studio-num" data-testid={`answer-loading-${r.criterion}`}>{loading(r)}</td>
+                <td className="studio-num" data-testid={`answer-factor-${r.criterion}`}>{printed(a.followed ? r.index : r.factor)}</td>
+                <td className="studio-num" data-testid={`answer-loading-${r.criterion}`}>{a.followed && r.fraction !== null ? `${percentOf(r.fraction)}: ${loading(r)}` : a.followed ? "not reached" : loading(r)}</td>
                 <td>{who(r)}{r.tied.length ? `, tied with ${r.tied.join(", ")}` : ""}; {modeWords(r.mode)}</td>
                 <td>element {r.label.split(".").pop()} {where(r.xy, L)}</td>
                 <td><button type="button" className="studio-text-button" onClick={() => onShow(r.element, r.ply, r.criterion, r.face)}>Show</button></td>
@@ -428,7 +434,9 @@ export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (elemen
           </tbody>
         </table>
       </div>
-      <p className="studio-muted">R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading. First-ply failure is the onset of damage, not ultimate strength.</p>
+      <p className="studio-muted" data-testid="answer-rule">{a.followed
+        ? "Nonlinear geometry: the answer does not scale with the load, so the failure index is read at the applied loading (1 or more fails), and a load at failure is given only for a ply that reaches its limit on the way."
+        : "R is the load factor at first-ply failure; R ≤ 1 fails at the applied loading."} First-ply failure is the onset of damage, not ultimate strength.</p>
       {a.basis === "gauge" && reading ? (
         <p className="studio-muted" data-testid="answer-gauge-reading">
           The gauge section is read at least {printed(reading.stand_off)} {L} from each tab line, a quarter of the {reading.of}, the same distance on every mesh.
@@ -616,7 +624,7 @@ function AnswerShort({ fields, onShow, details, onDetails }: {
     return (
       <div className="cv-answer-short" data-testid="answer-short">
         <h3 className="cv-verdict">Reaction {printed(Math.abs(s.reaction.value))} {lab.force}</h3>
-        <p className="cv-answer-line">Largest displacement {printed(s.max_displacement.value)} {lab.length}.</p>
+        <p className="cv-answer-line">Largest displacement {printed(s.max_displacement.value)} {lab.length}{s.followed ? ` with nonlinear geometry, ${printed(Math.abs(s.followed.linear.largest))} ${lab.length} linear` : ""}.</p>
         <p className="cv-answer-labels">No failure criterion chosen</p>
         <div className="cv-answer-actions">{more}</div>
       </div>
@@ -624,7 +632,11 @@ function AnswerShort({ fields, onShow, details, onDetails }: {
   }
   const e = a.earliest;
   const control = a.control ? a.control[0].toUpperCase() + a.control.slice(1) : "Applied";
-  const line = a.appliedNow
+  const followed = s.followed ?? null; // nonlinear geometry (ADR-0142): the answer does not scale, so no load at failure is worked from R
+  const line = a.followed && a.appliedNow
+    ? `${control} ${printed(a.appliedNow.applied)} ${a.appliedUnit}: it carries ${printed(Math.abs(a.appliedNow.reaction))} ${a.forceUnit}`
+      + (e.fraction !== null ? `; the first ply reaches its limit at about ${percentOf(e.fraction)} of the load.` : ".")
+    : a.appliedNow
     ? `${control} ${printed(a.appliedNow.applied)} ${a.appliedUnit}: it carries ${printed(Math.abs(a.appliedNow.reaction))} ${a.forceUnit}`
       + (e.reaction !== null ? `; the first ply would ${e.fails ? "have failed" : "fail"} at about ${printed(Math.abs(e.reaction))} ${a.forceUnit}.` : ".")
     : `Every load scaled together; R is the factor on them.`;
@@ -634,7 +646,13 @@ function AnswerShort({ fields, onShow, details, onDetails }: {
         {stat.verdict}: {(100 * e.index).toFixed(1)} % of its strength used, in ply {e.ply} ({e.angle}°){e.face ? `, ${e.face} face` : ""}.
       </h3>
       <p className="cv-answer-line">{line}</p>
-      <p className="cv-answer-labels">R {stat.factor} · {e.name} · {modeWords(e.mode)} · {a.basisWords}</p>
+      <p className="cv-answer-labels">{a.followed ? `Failure index ${printed(e.index)}` : `R ${stat.factor}`} · {e.name} · {modeWords(e.mode)} · {a.basisWords}</p>
+      {followed ? (
+        <p className="cv-answer-note" data-testid="answer-short-followed">
+          Nonlinear geometry: largest displacement {printed(s.max_displacement.value)} {lab.length} against {printed(Math.abs(followed.linear.largest))} {lab.length} linear.
+          The load against deflection curve is under Details.
+        </p>
+      ) : null}
       {stat.outside ? <p className="cv-answer-note">{stat.outside}</p> : null}
       <div className="cv-answer-actions">
         <button type="button" className="studio-text-button" onClick={() => onShow(e.element, e.ply, e.criterion, e.face)}>Show where</button>
@@ -649,7 +667,9 @@ function AnswerShort({ fields, onShow, details, onDetails }: {
 type ReadoutAt = { left?: number; right?: number; top: number } | null;
 
 export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false, showFiles = true, onPicked, place = null, proposed = null,
-  emphasis = null, view = null, onShown }: {
+  emphasis = null, view = null, onShown, linearPreview = false }: {
+  /** the live answer is a linear one of a plate whose Analysis step asks for nonlinear geometry (ADR-0142): the banner says so */
+  linearPreview?: boolean;
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
   /** a plate's boundary conditions and loads proposed and not applied yet, drawn dashed (ADR-0110) */
   proposed?: ProposedInputs | null;
@@ -846,6 +866,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   ) : null;
   const rest = (
     <>
+      <FollowedPanel fields={fields} />
       <SummaryPanel fields={fields} onShow={show} />
       {/* the user's own Abaqus beside a finished run of the tension coupon, the one the comparison covers (ADR-0094 part 7) */}
       {job && !live && job.state === "done" && apiBase && fields.coupon.kind === "unnotched_tension"
@@ -858,7 +879,8 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
     <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>
       {live ? (
         <p className="studio-live-banner" data-testid="live-banner">
-          <strong>Preview</strong> ({live.seconds < 10 ? live.seconds.toFixed(1) : Math.round(live.seconds)} s). Run the analysis to verify it and write the report.{updating ? " Updating…" : ""}
+          <strong>{linearPreview ? "Linear preview" : "Preview"}</strong> ({live.seconds < 10 ? live.seconds.toFixed(1) : Math.round(live.seconds)} s).{" "}
+          {linearPreview ? "Nonlinear geometry is on: Run analysis follows the plate's shape, and its answer will differ from this one." : "Run the analysis to verify it and write the report."}{updating ? " Updating…" : ""}
         </p>
       ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating…</p> : null}
       <div className="studio-scene-block" onPointerDown={(e) => { pointer.current = { x: e.clientX, y: e.clientY, t: Date.now() }; }}>

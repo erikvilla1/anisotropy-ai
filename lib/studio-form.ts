@@ -265,8 +265,25 @@ export function buildValues(form: StudioForm, lists?: Record<string, unknown[]>)
     else values[field.key] = text;
   }
   if (form.test === PLATE_TEST && lists) for (const [key, list] of Object.entries(lists)) values[key] = list as unknown as number[];
+  if (followsShape(form)) values[FOLLOWED_KEY] = true as unknown as string; // the Analysis step's switch (ADR-0142): sent only when on
   return values;
 }
+
+/** The Analysis step's switch (ADR-0142): a plate solved with nonlinear geometry, its shape followed as the load rises. Kept with the
+ * form's rows as "yes" under this key, which is the values file's own (`intake.FOLLOWED_KEY`); it is no row of the form, so no table of
+ * rows lists it. Only a plate has it: a coupon pulled along its length is solved as it stands. */
+export const FOLLOWED_KEY = "nonlinear_geometry";
+export const FOLLOWED_LABEL = "Nonlinear geometry";
+export const followsShape = (form: StudioForm): boolean => form.test === PLATE_TEST && form[FOLLOWED_KEY] === "yes";
+/** The switch as a row to merge into the form: "yes" when on, blank when off (a blank row is no row to the values and the versions). */
+export const followedRow = (on: boolean): StudioForm => ({ [FOLLOWED_KEY]: on ? "yes" : "" });
+/** What the Analysis step says under its switch, by its state, and why a coupon pulled along its length has none (`intake.FOLLOWED_PLATE_ONLY`). */
+export const FOLLOWED_WORDS = {
+  off: "One static step, linear: the load is applied in one go and every result scales with it.",
+  on: "One static step with nonlinear geometry: the load rises in ten levels and the plate's shape is followed, so the answer does not scale with the load. The run takes longer, and no report or mesh study is written of it.",
+  hint: "Turn it on when the plate deflects by more than about half its thickness: the stretch of its middle then carries part of the load, and a linear solve overstates the deflection.",
+  coupon: "Nonlinear geometry is offered on a plate only: a coupon pulled along its length keeps its shape, and following it changes the answer only at strains past first failure, where solvers differ by the stress and strain they use.",
+};
 
 /** The form's text from a values object (a coupon read back through `GET /v1/coupons/{name}/values`). */
 export function formFromValues(values: Record<string, unknown>): StudioForm {
@@ -280,6 +297,7 @@ export function formFromValues(values: Record<string, unknown>): StudioForm {
     else if (typeof value === "boolean") form[field.key] = value ? "yes" : "no";
     else form[field.key] = String(value);
   }
+  if (values[FOLLOWED_KEY] === true) form[FOLLOWED_KEY] = "yes"; // a run made with nonlinear geometry reopens with it on (ADR-0142)
   return form;
 }
 
@@ -304,6 +322,7 @@ export function rowErrorsFrom(checklist: Checklist): Record<string, string> {
     for (const label of item.rows) {
       const field = fieldByLabel[label];
       if (field && !errors[field.key]) errors[field.key] = problems[label];
+      if (label === FOLLOWED_LABEL && !errors[FOLLOWED_KEY]) errors[FOLLOWED_KEY] = problems[label]; // the Analysis step's switch, no row of the form
     }
   }
   return errors;

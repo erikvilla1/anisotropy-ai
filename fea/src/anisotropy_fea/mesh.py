@@ -93,12 +93,12 @@ def stated_angles(section: ShellSection) -> tuple[float, ...]:
 SHEAR_CORRECTION = 5.0 / 6.0  # the shear correction factor of the flat shell (ADR-0053); shell.py states the choice
 
 
-def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Material], name: str, correction: float = SHEAR_CORRECTION) -> np.ndarray:
-    """H (2, 2) for [gamma_xz, gamma_yz]: the correction factor times the sum over the plies of thickness times the ply's transverse
-    shear stiffness rotated to the laminate axes, Q55 = G13 c^2 + G23 s^2, Q44 = G13 s^2 + G23 c^2, Q45 = (G13 - G23) c s, with c and s the
-    cosine and sine of the ply's fibre angle from global x (the stated angle plus the section's rotation, ADR-0065). An isotropic material
-    takes G13 = G23 = G; a lamina must state G13 and G23."""
-    H = np.zeros((2, 2))
+def layer_shear_stiffness(section: ShellSection, materials: dict[str, Material], name: str) -> list[tuple[float, np.ndarray]]:
+    """Each ply's thickness and its transverse shear stiffness (2, 2) for [gamma_xz, gamma_yz] in the laminate axes, bottom first:
+    Q55 = G13 c^2 + G23 s^2, Q44 = G13 s^2 + G23 c^2, Q45 = (G13 - G23) c s, with c and s the cosine and sine of the ply's fibre angle from
+    global x (the stated angle plus the section's rotation, ADR-0065). An isotropic material takes G13 = G23 = G; a lamina must state G13
+    and G23."""
+    out = []
     for layer, angle in zip(expanded_layers(section), fibre_angles(section)):
         material = materials[layer.material]
         if material.elastic is None:
@@ -115,7 +115,16 @@ def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Mater
         Q55 = G13 * c * c + G23 * s * s
         Q44 = G13 * s * s + G23 * c * c
         Q45 = (G13 - G23) * c * s
-        H += layer.thickness * np.array([[Q55, Q45], [Q45, Q44]])
+        out.append((layer.thickness, np.array([[Q55, Q45], [Q45, Q44]])))
+    return out
+
+
+def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Material], name: str, correction: float = SHEAR_CORRECTION) -> np.ndarray:
+    """H (2, 2) for [gamma_xz, gamma_yz]: the correction factor times the sum over the plies of thickness times the ply's transverse
+    shear stiffness rotated to the laminate axes (`layer_shear_stiffness`)."""
+    H = np.zeros((2, 2))
+    for thickness, stiffness in layer_shear_stiffness(section, materials, name):
+        H += thickness * stiffness
     return correction * H
 
 

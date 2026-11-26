@@ -3,7 +3,7 @@
  * `failure` (ADR-0100 amendment 1); either way the answer is the package's own first-ply failure (ADR-0085), picked and put in words. No
  * model writes a word of it and the page computes nothing (ADR-0051). */
 import { criterionNamed } from "./result-working";
-import { answerOf, CRITERION_NAMES, modeWords, type Answer, type AnswerRow } from "./studio-answer";
+import { answerOf, CRITERION_NAMES, modeWords, percentOf, type Answer, type AnswerRow } from "./studio-answer";
 import type { Fields } from "./studio-api";
 
 const FAILS = "(?:fail(?:s|ed|ing|ure|ures)?|break(?:s|ing)?|broke|breakage|give(?:s)? (?:out|way)|go(?:es)? first)";
@@ -76,7 +76,10 @@ export function decidesNote(text: string): string | null {
 
 /** What a question of a margin of safety is told beside the answer: the result gives the load factor, not a margin. */
 export function marginNote(text: string, found: FailureAnswer, print: (value: number) => string): string | null {
-  return /\bmargins?\b/i.test(text) ? `No margin of safety is worked out here: the first ply fails at ${print(found.row.factor)} × the applied load, by ${found.row.name}.` : null;
+  if (!/\bmargins?\b/i.test(text)) return null;
+  return found.answer.followed // nonlinear geometry: no multiple of the load is the load at failure (ADR-0142)
+    ? `No margin of safety is worked out here: the failure index is ${print(found.row.index)} at the applied load, by ${found.row.name}.`
+    : `No margin of safety is worked out here: the first ply fails at ${print(found.row.factor)} × the applied load, by ${found.row.name}.`;
 }
 
 /** A ply as the answer names it: "ply 4 (90°)", with its face on a shell. */
@@ -114,7 +117,7 @@ export function confirmsFailure(text: string, found: FailureAnswer, print: (valu
   if (!CONFIRMS.test(text) || DENIES.test(text)) return false;
   const { answer, row } = found;
   const now = answer.appliedNow;
-  if (!now || row.applied === null) return false;
+  if (!now || row.applied === null || answer.followed) return false;
   const plies = new Set([row.ply, ...row.tied]);
   for (const named of text.matchAll(PLY_NAMED)) if (!plies.has(Number(named[1]))) return false;
   const bare = text.replace(PLY_NAMED, " ").replace(/\bfirst[- ]ply\b/gi, " ");
@@ -130,7 +133,7 @@ export function confirmsFailure(text: string, found: FailureAnswer, print: (valu
 /** Whether a message states the answer back as `confirmsFailure` reads it, with a number that is not the answer's: it is answered "No",
  * with the loadings as they are (ADR-0099 amendment 4). */
 export function contradictsFailure(text: string, found: FailureAnswer, print: (value: number) => string): boolean {
-  if (!CONFIRMS.test(text) || DENIES.test(text) || !found.answer.appliedNow || found.row.applied === null) return false;
+  if (!CONFIRMS.test(text) || DENIES.test(text) || !found.answer.appliedNow || found.row.applied === null || found.answer.followed) return false;
   const bare = text.replace(PLY_NAMED, " ").replace(/\bfirst[- ]ply\b/gi, " ");
   const at = bare.search(FAIL_WORD);
   return at >= 0 && /\d/.test(bare.slice(at)) && !confirmsFailure(text, found, print);
@@ -159,6 +162,14 @@ export function failureLines(found: FailureAnswer, print: (value: number) => str
   if (row.tied.length) facts.push(`tied with ${row.tied.length > 1 ? "plies" : "ply"} ${row.tied.join(", ")}`);
   const now = appliedLoading(answer, print);
   const state = row.fails ? `${plyWords(row)} has already failed: it fails first` : `no ply has failed. ${plyWords(row).replace(/^p/, "P")} fails first`;
+  if (answer.followed) {
+    // nonlinear geometry (ADR-0142): the answer does not scale, so the load at failure is the share the solve itself passed, or none
+    const reached = row.fraction !== null && row.between
+      ? `At about ${percentOf(row.fraction)} of the applied load${at ? ` (${at})` : ""}, between the load levels at ${percentOf(row.between[0])} and ${percentOf(row.between[1])}. The coupon fails.`
+      : `Its failure index is ${print(row.index)} at the applied load. The coupon ${row.fails ? "fails" : "holds"}. With nonlinear geometry the answer does not scale with the load, so no load at failure is given: raise the load to find it.`;
+    return { headline: row.fails ? `${plyWords(row).replace(/^p/, "P")} fails first` : `No ply fails: ${plyWords(row)} is the closest`, loading: reached,
+      applied: now ? `Applied: ${now}.` : null, confirmed: null, facts: [...facts, "nonlinear geometry"] };
+  }
   return {
     headline: `${plyWords(row).replace(/^p/, "P")} fails first`,
     loading: `At ${print(row.factor)} × ${times}${at ? ` (${at})` : ""}. The coupon ${row.fails ? "fails" : "holds"}.`,

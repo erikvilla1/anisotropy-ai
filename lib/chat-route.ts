@@ -7,11 +7,12 @@ import { asksWorking } from "./result-working";
 import { isConditionOrLoad, setupAsked, termAsked, type FeaTerm, type TermQuestion } from "./fea-terms";
 import { readIntent } from "./work-intent";
 import { applyMessage, isSwitchRequest, unitsNamed, type ChatStep } from "./studio-chat";
-import { unitsOf, type StudioForm } from "./studio-form";
+import { followsShape, unitsOf, type StudioForm } from "./studio-form";
 import { emptyPlate, namesPlateEdit, PLATE_TEST, type PlateLists } from "./studio-plate";
 import { asksPlateEdit, canBecomePlate, namesOffAxis, readPlateEdit } from "./plate-edits";
 import { modelFileAsked } from "./model-file";
 import { ANSWERS, isQuestion } from "./ask-words";
+import { followedAsked, type FollowedAsk } from "./followed-ask";
 import type { ModelProgram } from "./studio-api";
 
 /** Who answers a message in the coupon chat (ADR-0121): the page's own readers in a fixed order, then a model where one reads, then the
@@ -44,7 +45,7 @@ const CHECK = /^\s*(?:check|chek|chekc|cehck|chcek|chck|chk|check\s+setup|check\
 
 /** Every route a message can take, in the order `routeMessage` tries them. A new route is a new way of answering, and the question banks
  * must ask at least one question that takes it (`tests/assistant-questions.test.ts`). */
-export const ROUTES = ["start-over", "model-file", "term", "about", "plan", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
+export const ROUTES = ["start-over", "model-file", "term", "about", "followed", "plan", "working", "why", "why-none", "summary", "value", "failure", "element", "follow-up", "read-only",
   "ready", "plate-edit", "setup-fixed", "run", "check", "full-form", "section", "name", "general", "model", "unread", "patterns"] as const;
 export type RouteName = (typeof ROUTES)[number];
 /** What the coupon chat opens when asked for by name (ADR-0124): another section, or the wing's page under FEA (ADR-0118 amendment 1). */
@@ -58,6 +59,7 @@ export type ChatRoute =
   // a change and a run or an answer asked in one sentence, planned by the API into steps the engineer approves once (ADR-0144); `reply`
   // when it answers the plan's own question, and is planned again with the sentence it answers
   | { route: "plan"; reply: boolean }
+  | { route: "followed"; ask: FollowedAsk } // the Analysis step's switch: nonlinear geometry turned on or off, or asked about (ADR-0142)
   | { route: "working" } // the formula or the proof behind the answer (ADR-0103)
   | { route: "why" } // a question of why, answered in words from the results and the theory pages (ADR-0102)
   | { route: "why-none" } // a question of why with no result (or no API) to answer from
@@ -177,6 +179,10 @@ export function routeMessage(typed: string, s: ChatState): ChatRoute {
   // ("can I use inches?" switched the units before; ADR-0121 amendment 2)
   const topic = aboutAsked(text, s.readOnly);
   if (topic) return { route: "about", topic };
+  // the Analysis step's switch ("turn on nonlinear geometry", "make it linear", "is nlgeom on?"): set at once by the page, and a question
+  // of it changes nothing (ADR-0142). An imported model's step is the file's and a past run's is as it was solved, so neither is read here
+  const followed = s.readOnly ? null : followedAsked(text, isQuestion(text), s.results && followsShape(s.form));
+  if (followed) return { route: "followed", ask: followed };
   // a change and a run or an answer in one sentence is planned by the API, where a model reads and the project is kept there (ADR-0144):
   // the plan is shown before anything changes. A reply to the plan's own question is planned again with the sentence it answers
   if (s.kept && s.modelReads && s.api && !s.readOnly) {

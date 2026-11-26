@@ -658,6 +658,147 @@ The load at which anything first softens and what it was; the largest load the s
 
 A ply parting from its neighbour is not modelled, so a laminate that splits between its plies at a ledge is not seen. A ply crushing across its fibres is not followed ($`F_{2c}`$ is unused). Nothing saturates matrix cracking, so where the panel's far field itself cracks the number of cracked elements grows with the mesh; the mesh study is what says whether a load may be read, and a repair whose load does not settle has none to report. The strain across the width stays the undamaged laminate's. What the slice leaves out it still leaves out: the cut faces carry nothing, the slice is held flat, no load flows round the repair, and fatigue, heat, moisture and cure stress are absent. The load carried is "the load the repair carries in this model", never its strength: no test of a repair has been compared.
 
+## 14. A plate followed as its shape changes (`large_displacement.py`)
+
+Everything above writes equilibrium on the shape the plate had before the load: twice the load gives twice the deflection. That holds while the deflection is small beside the thickness. A thin plate pressed until it deflects by its own thickness has become a shallow dish, and a dish carries pressure by stretching as well as by bending; it is stiffer than the flat plate was, and the stiffer the further it goes. A solve that follows the shape as it changes sees this. Abaqus calls the switch NLGEOM, Ansys NLGEOM,ON or "large deflection".
+
+Our kernel does not follow the shape. A followed plate is solved by CalculiX alone (ADR-0142, under ADR-0067): this package writes the plate's eight-node twin with the step `*STEP, NLGEOM` and reads the answer back. No number of this section is computed twice by programs of ours, so what stands behind it is the set of problems with exact or published answers in Section 14.5.
+
+### 14.1 What the solver does
+
+CalculiX describes the deformed plate from the shape it had first (its manual calls this the total Lagrangian approach). With $`\mathbf{F}`$ the gradient of the deformed positions over the first ones, the strain is the Lagrangian strain
+
+```math
+\mathbf{E} = \tfrac{1}{2}\left(\mathbf{F}^T \mathbf{F} - \mathbf{I}\right) ,
+```
+
+which a rigid turn leaves at zero however large the turn, and which for a line stretched to $`\lambda`$ times its length is $`(\lambda^2 - 1)/2`$. The stress that goes with it is the second Piola-Kirchhoff stress $`\mathbf{S}`$, a force on the first area carried back to the first axes, and the material law is the small-strain one with the same constants,
+
+```math
+\mathbf{S} = \mathbf{C}\,\mathbf{E} ,
+```
+
+for a ply the $`\bar{\mathbf{Q}}`$ of Section 6 (CalculiX's manual, `*ELASTIC`: "S is the second Piola-Kirchhoff stress and E is the Lagrange deformation tensor"). The force that crosses a first area is $`\mathbf{F}\,\mathbf{S}`$ on it. Equilibrium on the deformed shape is no longer linear in the displacements, so the load is raised from nothing in increments, each solved by Newton's method; CalculiX sizes the increments itself from the first one, which the deck states as a fraction of the load, and the deck names the fractions of the load at which the answer is printed. The step is written by `write_calculix` when it is given a `LargeDisplacement`; the solve and the history, one level per fraction of the load, are computed by `follow` and `read_history`.
+
+<!-- code: follow, read_history -->
+
+### 14.2 The stretch rule
+
+A strip of stretching stiffness $`EA`$ pulled to $`(1 + e)`$ times its length with its sides free has $`E = e + e^2/2`$ along it, $`S = EA\,(e + e^2/2)`$ over its first area, and pulls on its end with $`S`$ times the stretch:
+
+```math
+F = EA\,e\,\left(1 + \tfrac{e}{2}\right)(1 + e) .
+```
+
+The small-strain law gives $`EA\,e`$. The factor $`(1 + e)(1 + e/2)`$ is 1.021 at a strain of 1.4 % and 1.055 at 3.6 %, whatever the Poisson's ratio and whatever the layup. It is a property of the law $`\mathbf{S} = \mathbf{C}\,\mathbf{E}`$ and not of the material: a law that keeps the same constants between the true stress and the logarithmic strain, on a section that thins as it stretches, gives the factor $`\ln(1+e)/\big(e\,(1+e)\big)`$, which is 0.979 and 0.948 at the same strains. The two agree with each other and with the small-strain law as $`e \to 0`$, and nothing in a ply's elastic constants says which a ply follows at 3 %. For this reason a tension coupon is not offered with the shape followed: it stretches and does not turn, the only thing the switch would change is this factor, and at the strain of a carbon ply's first failure the choice of law moves the force by two percent either way.
+
+Where a plate bends, the choice matters far less. The two faces of a bent section stretch and shorten by like amounts, the factor above one on the stretched face meets a factor below one on the shortened face, and to the first order the moment is unchanged: the bent strips of Section 14.5 reach a strain of 2 % at their clamp, turn by more than a radian, and follow the elastica within 0.1 %. The rule leaves one small mark on bending: summed over the section of a strip bent to the curvature $`\kappa`$ under an axial force $`N`$, the force of each line to the second order gives $`N = EA\,e_0 + \tfrac{3}{2} EI\,\kappa^2`$, so the middle of a strip bent under no axial force shortens by $`e_0 = -3\,EI\,\kappa^2 / (2\,EA)`$. The bent strips of Section 14.5 show it.
+
+### 14.3 What is printed, and what a ply's stress is read from
+
+At each integration point CalculiX prints the Lagrangian strain $`\mathbf{E}`$, in the axes the plate had before the load, and the true (Cauchy) stress, the force on the deformed area, in the fixed global axes (its manual, `*EL PRINT`). The printed place of a point is the place it had first. In a strip whose section has turned by seventy degrees the printed strain along the strip is still the strain along the strip, $`\pm z\kappa`$, while the printed stress has the strip's own stress spread over its $`yy`$, $`zz`$ and $`yz`$ components, because the strip no longer lies along $`y`$.
+
+A ply's stress in its own axes is therefore read from the strain: $`\mathbf{E}`$ turned into the ply's axes (the turn of Section 6, by the ply's angle in the first shape), times the ply's stiffness. That is the ply's $`\mathbf{S}`$, which differs from its true stress by terms of the order of the strain itself (under 1 % in the plate of Section 14.5, 2 % at the clamp of its bent strips), and it needs no knowledge of how far the section has turned. The reading of one quantity of one level, in the units a case states its plate in, is computed by `reading_of`.
+
+<!-- code: reading_of -->
+
+### 14.4 What the loads do
+
+Detected by running CalculiX 2.21 on a strip bent far (`tests/test_large_displacement.py`). A force keeps the direction it was given: the reaction at the clamp of a strip bent by an end force along $`z`$ stays along $`z`$. A pressure stays square to the plate where the plate now lies: on the same strip under a pressure $`p`$ the reaction is the pressure on the chord from the clamp to the tip, turned a quarter, $`p\,b\,w`$ along the strip and $`p\,b\,(L + v)`$ across it with $`w`$ and $`v`$ the tip's displacements, within 1 %. A displacement or a rotation given to a support is reached in the same fractions as the loads. The same plate under a part of everything that loads it is computed by `under`.
+
+<!-- code: under -->
+
+### 14.5 The problems CalculiX is held to
+
+Five cases in `fea/checks/large_displacement_cases/`, each a plate with the fractions of its load to read and what is expected there; `fea/tools/large_deflection_closed_forms.py` works every expected number without this package and writes the cases, and `tests/test_large_displacement.py` runs CalculiX on each. The differences below are CalculiX 2.21's on the meshes of the cases.
+
+| Case | What is exact or published | Read | Largest difference |
+| --- | --- | --- | --- |
+| A clamped square plate under pressure, deflected up to 1.9 thicknesses | NACA Report 740 (Levy, 1942), Table 5: nine pressures, by a Fourier series solution of von Karman's equations whose error the report puts below 2 % | centre deflection | 0.2 % at the first row, rising to 2.0 % at the last |
+| A cantilever strip with $`\nu = 0`$ bent by an end force until its tip stands at 0.81 of its length | the elastica, $`\theta'' = -\alpha\cos\theta`$ with $`\alpha = PL^2/EI`$ up to 10 | the tip's two displacements; the strain along the strip at the lowest and highest integration points below mid-length | 0.09 %, 0.21 %; 0.13 % |
+| The same strip as a [0/90]s laminate, $`EI = b/d`$ by plain laminate theory | the elastica | the same | 0.10 %, 0.21 %; 0.09 % |
+| An isotropic strip stretched 3 % with its sides free | the stretch rule of Section 14.2 | the force on the moved end, at half the pull and at the whole | 0.00001 % |
+| A [0/90]s strip stretched 3 % with its sides free, $`EA = b/a`$ | the stretch rule | the same | 0.0015 %, which is the layered bricks' free sides and is there without the shape followed too |
+
+The plate's difference from the report grows with the deflection and does not move with the mesh (2.11 % on 8 elements a side, 2.03 % on 16, 2.02 % on 32 at the last row), so it lies between the report's series and the model and not in the mesh; the case's tolerance is 2.5 %. The report's stresses are not compared: at the plate's centre CalculiX's membrane stress is about a tenth above the report's and its bending stress about a tenth below, their sum 3 % below, and which of the two is nearer has not been settled (ADR-0142). The strain of the bent strips is the check of what Section 14.3 says is printed: it is compared with $`\big((1 + e_0 - z\kappa)^2 - 1\big)/2`$, the middle's $`e_0`$ from the force along the strip and the shortening of Section 14.2.
+
+**The small-load check.** Each case is also solved under a thousandth of its load with the shape followed, and compared with CalculiX's linear solve of the same deck and with our kernel's linear solve of the same plate. With the shape followed the deflections differ from the linear ones by 1 to 2 parts in 100,000 and the stretched strips' forces by $`1.5\,e`$, 4.5 parts in 100,000; our kernel's deflection differs by 0.25 % on the plate, whose element is another, and by 0.01 % on the strips, and its force on the stretched strips is CalculiX's within the 0.0015 % of the laminate's free sides. So the followed solve and the linear ones are one solve at small loads, and the cases above are where they part.
+
+### 14.6 What this leaves out
+
+A load past which a plate snaps or buckles cannot be passed: the load is raised and never lowered, so the run ends at the last load it could hold and says which. The material stays elastic and each ply whole. Strains of several percent are outside what the law of Section 14.1 can be trusted for (CalculiX's manual says of it that it "does not lead to a physically sensible material law" under large compression), which is one more reason the tension coupon is left as it is. A whole plate's plies and failure under a followed solve are Sections 14.7 to 14.10, and what those leave out is Section 14.11.
+
+### 14.7 The whole plate, read from what CalculiX prints
+
+Sections 14.1 to 14.6 read a history at a few probes. A plate an engineer solves with nonlinear geometry on (`[analysis] large_displacement = true` in its spec) is read whole. The same eight-node twin is written with the step of Section 14.1 and ten levels of the load, a tenth of it apart; at each level CalculiX prints the displacement of every node, the reaction at every held node, and the Lagrangian strain with its first place at every integration point of every element. Nothing else of CalculiX's is used, and no stress of its own: Section 14.3 says why. The printed file of a fine plate runs to a hundred megabytes, so it is read one block at a time. The solve is computed by `follow_plate`; the levels it reads are computed by `read_plate`, and the blocks of the printed file, one at a time, are computed by `printed_blocks`.
+
+<!-- code: follow_plate, read_plate, printed_blocks -->
+
+A plate is taken only if CalculiX can solve it in the time a run is given. Its layered element stops above 13 layers (CalculiX 2.21), and the count of elements times plies is held to 10,000; a plate outside either is refused before any mesh is made, in words that say what to change. The words are computed by `why_not`. The two models of a plate that passes, the eight-node twin CalculiX solves and the four-node mesh of our own kernel on the same corner nodes, are computed by `frame_of`.
+
+<!-- code: why_not, frame_of -->
+
+### 14.8 From the strains to the laminate
+
+**The line in the height.** CalculiX expands a layered shell into bricks, one layer of them a ply, and prints the strain at their integration points. In each element, for each of $`E_{xx}`$, $`E_{yy}`$ and $`E_{xy}`$, the straight line through all the element's points over their height $`z`$ is taken by least squares:
+
+```math
+E(z) \approx \varepsilon^0 + z\,\kappa , \qquad \kappa = \frac{\sum (z - \bar z)\,E}{\sum (z - \bar z)^2} , \qquad \varepsilon^0 = \bar E - \kappa\,\bar z ,
+```
+
+with the shear doubled, as a laminate's law takes it. $`\varepsilon^0`$ and $`\kappa`$ are the strain of the middle of the plate and its curvature, one of each per element, the same two quantities our own shell hands to the laminate (Section 6). How far the element's centre strain at each height lies from its line is kept with every level, over the largest such strain of the plate: 0.0003 on the clamped plate of Section 14.10, so the strain is straight in the height as plain laminate theory takes it to be. The transverse shear strains $`E_{xz}`$ and $`E_{yz}`$ are not put on a line; each ply keeps the mean of its own points. The reduction is computed by `through_the_height`.
+
+<!-- code: through_the_height -->
+
+**The plies.** From $`\varepsilon^0`$ and $`\kappa`$ on, the followed plate is read exactly as our kernel's own solve is: each ply's strain at its bottom and top, turned into the ply's axes, times the ply's stiffness, and the failure criteria on that stress (Section 6, `recovery.py`). The stress so read is the ply's second Piola-Kirchhoff stress, the force on the ply's first area in the axes the ply has carried along as it turned, which is the stress a strength measured on a flat coupon is set against; it differs from the true stress by terms of the order of the strain. The section forces and moments are the laminate's $`\mathbf{A}`$, $`\mathbf{B}`$ and $`\mathbf{D}`$ on $`\varepsilon^0`$ and $`\kappa`$; the shear forces are each ply's shear stiffness times its own shear strain, summed.
+
+**The rotations.** A shell node of CalculiX carries no rotation after the expansion. The two rotations our shell carries are taken as the slope of the deflected middle, $`\theta_x = \partial w/\partial y`$ and $`\theta_y = -\partial w/\partial x`$, from the eight-node element's own shape functions at each corner, the mean over the elements that share it. The shape function derivatives are computed by `serendipity_derivatives` and the slopes are computed by `midplane_slopes`. One level put together as a solution of our flat shell, so that everything that reads our kernel's solve reads CalculiX's, is computed by `shell_solution`.
+
+<!-- code: serendipity_derivatives, midplane_slopes, shell_solution -->
+
+### 14.9 The reaction at the supports
+
+CalculiX prints as a held node's reaction the force the plate puts on it. A load put straight onto a held direction of a node never enters the plate and is not in that number: the supports of a clamped plate of 20 by 20 elements under a pressure print 96.6 % of the pressure's whole force, the missing 3.4 % being the share of the pressure that falls on the edge nodes (seen on CalculiX 2.21). An eight-node element spreads a uniform pressure $`p`$ over its area $`A`$ as
+
+```math
+f_\text{corner} = -\tfrac{1}{12}\,p\,A , \qquad f_\text{midside} = \tfrac{1}{3}\,p\,A ,
+```
+
+four of each summing to $`pA`$. The share that lands on held directions is added to the printed reaction, a midside node's reaction shared between the two corners it lies between, and the supports then carry the load applied at every level within 0.2 %. The share is taken on the shape the plate had first, which is exact for a held edge that has not moved and leaves out the turn of the pressure on an edge that is free to rotate. It is computed by `loads_on_held_nodes`.
+
+<!-- code: loads_on_held_nodes -->
+
+### 14.10 An answer that does not scale
+
+Under a linear solve every stress is proportional to the load, so a ply with $`f = 1/R`$ at the loads applied reaches its limit at $`R`$ times them (Section 6). A followed plate is not proportional: a tenth more load moves it less than the tenth before, and the stretching of its middle grows with about the square of the deflection. $`R`$ is still written, as one over $`f`$ at the loads applied, and says how near the ply is; $`R`$ times the loads is no longer where the ply gives way, so no loading at first-ply failure is worked from it.
+
+What is written instead is what the solve passed through: $`f`$ of each criterion at every level. If it reaches one before the whole load, the share of the load where it does is taken on the straight line between the two levels around it,
+
+```math
+\lambda^\ast = \lambda_i + (\lambda_{i+1} - \lambda_i)\,\frac{1 - f_i}{f_{i+1} - f_i} ,
+```
+
+from $`f = 0`$ at no load for the first level, and the two levels are named with it. If it stays below one, the plate holds at the loads applied and no load at failure is given. The crossing is computed by `crossing`. The fields the page reads, with the levels, the load against the largest displacement, $`f`$ at each level and our own kernel's linear answer on the same plate, are computed by `followed_fields`, and the two files of a run are computed by `write_followed`.
+
+<!-- code: crossing, followed_fields, write_followed -->
+
+**The linear answer beside it.** Our kernel solves the same plate linear in the same run. It is not a check of the followed answer; it is the straight line the curve is drawn against, and the number that says what following the shape changed. At a thousandth of the load the two are one plate (`test_under_a_small_load_the_followed_plate_is_our_kernels_linear_plate`, an unsymmetric laminate so that bending and stretching are coupled: deflection within 2 %, moments within 4 % at the worst element of 256, the two elements being different ones).
+
+### 14.11 When following the shape matters, and what it leaves out
+
+Every shell result, linear or followed, states its largest displacement out of the plate's plane over the thinnest laminate's thickness. A clamped 200 mm square [45/0/-45/90]s plate of IM7/8552, 1.463 mm thick, under 0.03 MPa shows the size of the effect:
+
+| Share of the load | Linear deflection over thickness | Followed over linear |
+| --- | --- | --- |
+| 10 % | 0.25 | 0.97 |
+| 20 % | 0.50 | 0.90 |
+| 50 % | 1.24 | 0.70 |
+| 100 % | 2.48 | 0.51 |
+
+A linear deflection of half the thickness is a tenth too large on this plate, and past it the gap widens quickly. A linear plate past a ratio of 0.5 therefore says so in its explanation and names the switch. The ratio and the mark are written into the summary by `field_data`.
+
+One solver gives the followed answer, and the cases of Section 14.5 are deflections and bent strips: no ply stress of a followed plate has a published value behind it. A plate that is exactly flat under loads in its own plane does not buckle in this solve, there being nothing to start it leaving its plane; a buckling load is not found. The levels are a tenth of the load apart, so a failure load is placed within a tenth and then by a straight line. The share of a pressure on held nodes is taken on the first shape. No mesh study is made of a followed run. On the plate above the largest displacement is 1.855, 1.857 and 1.857 mm on 8, 16 and 32 elements a side. The largest failure index, in the element beside the clamped edge, is 0.126, 0.186 and 0.227, and at the centre 0.107, 0.110 and 0.110: a ply's stress is one value per element, the bending is steepest at the edge itself, and the element's value there climbs as the element shrinks. The further a plate deflects, the narrower the strip beside a clamp where it still bends: under fifty times the pressure the value beside the edge is 1.14, 1.78 and 2.54 on the same meshes. The deflection of a coarse plate can be relied on; the value beside a held edge cannot, and the page says so. Laminates of more than 13 plies and meshes past 10,000 elements times plies are refused. The tension coupon and the other pulled or bent coupons stay linear (Section 14.2).
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -679,6 +820,7 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - The repair's slice in CalculiX (Section 11): the graded mesh has a line of nodes on every edge of every rectangle, fine elements beside it, no element much longer than its neighbour and the description's areas; the deck has one material for each ply angle and the adhesive, the far-field width strain as its temperature and the far-field stresses on its end, summing to the load; on a strip patch, the flush example and the example with bonded cut faces the forces add up at every station and, well outside the repair, every ply's stress is the laminate theory's with nothing through the thickness and nothing across the width in sum; held to the lap's assumptions the model returns the lap's closed form (case `constructed-external-strip-held-to-the-stepped-laps-assumptions`, Section 11.4); a patch bonded on top carries the whole load at the hole's edge, what its bondline's shear passes to it is the load within 1 %, it is pressed on at the hole's edge and pulled off at its tip; twice the load doubles every stress and compression changes every sign; the largest mean over a length of bond is found exactly on a bond worked by hand; elements half as long beside the edges change the largest shear stress by less than 0.5 %, the largest peel stress by less than 1 % and the patch's forces by less than 0.2 % on the strip patch and on the flush example, where the value at a bond's last station beside an open cut face grows by more than a fifth; on the flush example the adhesive's elastic limit comes before the first ply, which reaches its transverse tensile strength inside the repair at a lower load than a 90° ply does far from it; bonded cut faces take load off the ledges, so leaving them open is the lower reading; what a solve lacks is refused in words (`test_repair_model.py`).
 - A repair's bond followed to failure (Section 12). The law alone: along any direction it peaks on the onset line and spends the failure line's energy; damage only grows; a pressed bond carries the pressure whole. The plane elements return an even stress and balance a stress inside them. Cases with exact answers: a block pulled off its bond reaches the strength times the length and spends the energy times the length, through a snap-back; the peel test's load is beam theory's within 2 % while the crack grows; the shear test's largest load is 7.8 % under beam theory's at 60 MPa, as the softening zone ahead of a crack of finite strength makes it, and is the one MOOSE gives for the same model within 0.3 % (729.5 N; the input file and the curve are in `fea/checks/bond_cases/`); a patch pulled off a strip held flat runs at the load its energy gives, $`\sqrt{2 G_c S_a (S_a + S_b)/S_b}`$, within 0.5 %, and between the two pure answers with unequal numbers (`test_bond_solver.py`). On the repair: on CalculiX's own nodes and elements the plane elements return CalculiX's strains; held to the stepped lap's assumptions the bond first softens at the lap's elastic limit load, and so does one with a bondline two and a half and four and a half plies thick; a refusal states its numbers in the repair file's units; a panel too short is refused before the path is followed; with the bond whole the patch carries midway along every step what it carries in CalculiX's slice within a third of a percent of the load; the example softens over a third of its bond and then lets go, and a mesh four times coarser beside each edge gives the same two loads; a path that ends before the load falls says so; a repair without the six numbers is refused in words (`test_repair_bond.py`).
 - A repair's plies damaged beside its bond (Section 13). The law alone: it peaks at the strength, the stress integrated over the strain times the band's width is the fracture energy within a thousandth, damage only grows, and a crack pressed shut carries the pressure whole. A bar of one ply with a weak element breaks at that element's strength with 10, 20, 40 and 80 elements along it, for a 0° ply and a 90° ply, which is what the crack band is for. A cross-ply strip's first ply failure is laminate theory's, written out in the check, and the load it carries lies between the whole laminate's at the fibre's onset strain and its 0° plies' alone. A crack whose plane holds the load is not followed; an element too long to soften in is refused in words (`test_ply_damage.py`). On a repair: the element is cut to what a crack can soften in; a repair without the plies' strengths or fracture energies is refused with the list; the plies' forces add up to the load at every station; and on the example of a patch bonded over a hole, where the bond is the only way across, the load at which Section 12's own path method has the bond let go lies between the load this method holds and the load it does not, although the two share nothing past onset (`test_repair_plies.py`).
+- A plate followed as its shape changes (Section 14). The writer adds the step only when asked, prints at the fractions named and changes nothing else of the deck; a step that cannot be followed is refused. The exact answers are checked on their own: the elastica gives the printed tables' tips at $`PL^2/EI`$ = 1, 2, 5 and 10 and the small-deflection beam at a thousandth; the laminate strip's stiffnesses by hand are the engine's; the cases in the repository are what the tool writes and hold the report's table. CalculiX is held to every case of Section 14.5 at every fraction of the load, and under a thousandth of the load to its own linear solve and to our kernel's; the stretched strip's force over the linear one is the rule's factor; a pressure stays square to a strip bent far and a force keeps its direction; a history is read by the fraction of the load and keeps the levels a stopped run reached (`test_large_displacement.py`). The CalculiX runs are skipped where CalculiX is not installed.
 - The repair's slice for Abaqus and Ansys (Section 11.6): the Abaqus file holds the deck's nodes, elements, stiffness terms, supports, temperature and load, and solved by CalculiX, which reads the same keywords, it gives the deck's answer; the Ansys file's engineering constants give back the stiffness terms by an inverse written in the test, and its blocks hold the model's nodes, elements, materials, supports and load; stand-in output in each program's wording and figures is read back as the same answer, and a table with a row missing, of another model, with stresses that are not the stiffness times the strains, or with another width strain is refused (`test_repair_files.py`). Neither program runs in the tests.
 
 ## Not modeled yet
@@ -688,5 +830,6 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Distributed loads other than a uniform pressure per element (surface tractions, gravity, line loads by `*Dload`); thermal strain
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)
 - Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
+- A followed solve of our own: a plate followed as its shape changes is CalculiX's answer alone (Section 14); a ply's stresses and first failure under it; the tension coupon with the shape followed (Section 14.2); a load past which a plate snaps
 - Eigenvalue buckling of joined shells (CalculiX's `*BUCKLE` misses a wing web's buckle; the wing's panels are flat Ritz plates on the model's mean loads, Section 10.4); a web panel's buckling under its own bending stress; buckling of a curved panel; the load after buckling
 - For a repair's slice (Section 11): a panel free to bend under a one-sided patch (a large-deflection solution); a yielding adhesive (the followed bond of Section 12 softens in two straight lines, with no plateau); damage in the plies while the bond is followed, and a bond on the cut faces; the laminate beside a hole narrower than the panel and the load that flows around a round repair (the panel in three dimensions); a slice free to shear in the laminate's plane (generalized plane strain); thermal mismatch from the cure

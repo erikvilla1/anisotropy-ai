@@ -488,3 +488,17 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .studio-abaqus-key { border: 1px solid var(--accent); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
 .studio-abaqus-key p { font-size: 12px; margin: 0 0 8px; }
 .studio-abaqus-command { margin: 6px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Nonlinear geometry (ADR-0142): the load against the largest displacement, the followed curve in ink and the linear answer dashed. */
+.studio-followed-figure { margin: 10px 0 4px; max-width: 460px; }
+.studio-followed-figure svg { display: block; width: 100%; height: auto; overflow: visible; }
+.studio-followed-grid { stroke: var(--line); stroke-width: 1; }
+.studio-followed-tick, .studio-followed-axis { fill: var(--muted); font-size: 10.5px; font-family: var(--font); }
+.studio-followed-line { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.studio-followed-linear { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.studio-followed-dot { fill: var(--text); stroke: var(--panel); stroke-width: 2; }
+.studio-followed-hit { fill: transparent; cursor: default; }
+.studio-followed-hit:hover { fill: rgba(255, 255, 255, 0.08); }
+.studio-followed-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12px; color: var(--text); }
+.studio-followed-key { display: inline-block; width: 18px; border-top: 2px solid var(--text); vertical-align: middle; margin-right: 4px; }
+.studio-followed-key-linear { border-top: 2px dashed var(--muted); }
+.studio-followed tr[data-reached="true"] td:last-child { color: #f6bba9; }

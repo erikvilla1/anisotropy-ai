@@ -495,7 +495,9 @@ class CouponJobRequest(Contract):
 
 class JobAnswer(Contract):
     """A done run's answer in a few values (ADR-0109), as the fea package wrote it: on the gauge section or the whole model, by the
-    criterion that governs, whether a ply fails at the applied loading, the factor on that loading at first-ply failure, and the ply."""
+    criterion that governs, whether a ply fails at the applied loading, the factor on that loading at first-ply failure, and the ply.
+    `followed` marks a plate solved with nonlinear geometry (ADR-0142): its factor is one over the failure index at the applied loading
+    and no multiple of it."""
 
     basis: Literal["gauge", "whole"]
     criterion: str
@@ -504,6 +506,7 @@ class JobAnswer(Contract):
     ply: int
     angle: float
     face: str | None = None
+    followed: bool = False
 
 
 class CouponJobOutput(Contract):
