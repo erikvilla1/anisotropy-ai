@@ -4,7 +4,7 @@ import { aboutAnswer, aboutAsked } from "../lib/chat-about";
 import { routeMessage, type ChatState } from "../lib/chat-route";
 import { modelFileAnswer, modelFileAsked, programNamed } from "../lib/model-file";
 import { bannedIn } from "../lib/studio-copy";
-import { MODEL_FILE_LABELS } from "../lib/studio-api";
+import { MODEL_FILE_LABELS, MODEL_FILE_OPENING } from "../lib/studio-api";
 import { exampleForm } from "../lib/studio-form";
 
 const state = (results: boolean): ChatState => ({
@@ -78,6 +78,30 @@ test("the answer offers the files this visitor may have, says to compare the Ans
     for (const sentence of [answer.title, ...answer.lines, ...answer.offers.map((p) => MODEL_FILE_LABELS[p])]) assert.deepEqual(bannedIn(sentence), [], sentence);
     assert.ok(answer.lines.length <= 2, answer.title);
   }
+});
+
+test("how the downloaded file opens in the engineer's own program is answered in fixed words, and so is the error a job gives when only its mesh came in (ADR-0129 amendment 5)", () => {
+  const asked: [string, string | null][] = [
+    ["how do I open the inp in abaqus", "model-file-open"], ["how do i import this model into Abaqus?", "model-file-open"],
+    ["where do I load the downloaded file in abaqus cae", "model-file-open"], ["how do I run it in abaqus", "model-file-open"],
+    ["THIS MODEL HAS EITHER INCORRECT OR NO ELEMENT DEFINITIONS", "model-file-open"], ["abaqus says no element definitions", "model-file-open"],
+    ["why is the imported model empty in abaqus", "model-file-open"], ["why won't the job run in abaqus after I import the file", "model-file-open"],
+    // a request for the file, a model brought in here, what a file is and a question of the results are read by others
+    ["what is an abaqus input file", "model-file-what"], ["import an abaqus model", null], ["why is ply 4 in compression", null],
+    ["how does this compare with abaqus", null], ["what element type does abaqus use", null],
+  ];
+  for (const [text, topic] of asked) assert.equal(aboutAsked(text), topic, text);
+  assert.deepEqual(modelFileAsked("can I open this in Abaqus?"), { program: "abaqus" }); // still an offer of the file
+  for (const text of ["how do I open the inp in abaqus", "abaqus says no element definitions"]) assert.equal(modelFileAsked(text), null, text);
+  const form = exampleForm("2026-11-25");
+  const said = aboutAnswer("model-file-open", "how do I open the inp in abaqus", { form, results: false, readOnly: false });
+  assert.equal(said.title, "Open it with File > Import > Model");
+  assert.match(said.lines.join(" "), /File > Import > Part brings in the mesh only/);
+  assert.match(said.lines.join(" "), /download the model/);
+  assert.ok(!aboutAnswer("model-file-open", "", { form, results: true, readOnly: true }).lines.some((line) => /download the model/.test(line)));
+  for (const line of [said.title, ...said.lines, MODEL_FILE_OPENING.abaqus ?? ""]) assert.deepEqual(bannedIn(line), [], line); // the customer's words (ADR-0091)
+  assert.match(MODEL_FILE_OPENING.abaqus ?? "", /^Open it with File > Import > Model/);
+  assert.equal(MODEL_FILE_OPENING.ansys, undefined); // its menus were not tried with the file: nothing is said
 });
 
 test("what a model file is, where the report is and a model brought in from another program are answered in fixed words, and are no request for a file (ADR-0129 amendment 1)", () => {

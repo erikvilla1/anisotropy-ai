@@ -19,6 +19,8 @@
     {"ask": "create a step", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "One static step", "term": "step"}},
     {"ask": "add a contact between the tabs", "kind": "change", "style": "jargon", "page": "setup", "route": "setup-fixed", "answer": {"heading": "Not offered yet", "term": "interaction"}},
     {"ask": "what is a reference point", "kind": "what-is", "style": "jargon", "page": "setup", "route": "term", "answer": {"kind": "term"}, "gap": "10: a common pre-processor word is not in the glossary"},
-    {"ask": "whats a shell element", "kind": "what-is", "style": "typo", "page": "setup", "route": "term", "answer": {"kind": "term"}, "gap": "10: what a shell element is, is not in the glossary"}
+    {"ask": "whats a shell element", "kind": "what-is", "style": "typo", "page": "setup", "route": "term", "answer": {"kind": "term"}, "gap": "10: what a shell element is, is not in the glossary"},
+    {"ask": "what is NLGEOM", "kind": "what-is", "style": "jargon", "page": "results", "route": "term", "answer": {"kind": "term", "heading": "Nonlinear geometry", "term": "nonlinear-geometry"}, "source": "the founder, 2026-11-25, recreating a teammate's model whose step had it on: \"what is NLGEOM\""},
+    {"ask": "what is nonlinear geometry", "kind": "what-is", "style": "plain", "page": "setup", "route": "term", "answer": {"kind": "term", "heading": "Nonlinear geometry", "term": "nonlinear-geometry"}}
   ]
 }

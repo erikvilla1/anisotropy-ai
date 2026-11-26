@@ -14,7 +14,7 @@ import { OTHERS_LINES, PRIVATE_TITLES, privateAsked } from "./chat-private";
  * Nothing here names a tool, a vendor or a model (ADR-0091), and nothing here is a number of a result. */
 
 export type AboutTopic = "identity" | "abilities" | "instructions" | "other-program" | "units" | "units-other" | "own-material" | "layup-advice"
-  | "needs" | "mises" | "setup-value" | "model-file-what" | "report" | "bring-in" | "others";
+  | "needs" | "mises" | "setup-value" | "model-file-what" | "model-file-open" | "report" | "bring-in" | "others";
 
 const IDENTITY = [
   /^\s*(?:who|what)\s+(?:are|r)\s+(?:you|u)\b/i,
@@ -53,6 +53,13 @@ const NEEDS = [
 ];
 /** What a model file is ("what is an Abaqus input file?", "whats a cdb"): a question about the file, not a request for it (ADR-0129 amendment 1). */
 const FILE_WHAT = /^\s*what(?:'s|’s|s|\s+is|\s+are)\s+(?:an?\s+|the\s+|this\s+)?(?:(?:abaqus|abqus|ansys|apdl|solver)\s+)?(?:input\s+files?|\.?inp(?:\s+files?)?|\.?cdb(?:\s+files?)?|input\s+decks?|decks?|model\s+files?)\s*(?:for)?\s*\??\s*$/i;
+/** How the downloaded file is opened in the engineer's own Abaqus, or the error a job gives when only its mesh was brought in ("how do I
+ * open the inp in abaqus", "abaqus says no element definitions"): File > Import > Model, never Import > Part (ADR-0129 amendment 5). */
+const FILE_OPEN = [
+  /\bno\s+element\s+definitions?\b/i,
+  /^\s*(?:how|where|which\s+menu)\b(?=.*\b(?:abaqus|abqus|abacus|cae)\b)(?=.*\b(?:open\w*|import\w*|load\w*|submit\w*|run)\b)(?=.*\b(?:inp|input\s+files?|files?|models?|decks?|it|this|downloads?|downloaded|job)\b)/i,
+  /^\s*(?:why|how\s+come)\b(?=.*\b(?:abaqus|abqus|abacus|cae)\b)(?=.*(?:\b(?:empty|nothing|aborts?|aborted|errors?|fails?|failed|cannot)\b|\b(?:won|can|doesn|isn)['’]?t\b|\bno\s+(?:elements?|mesh|materials?|job|layup|step|instance)\b))(?=.*\b(?:inp|input\s+files?|files?|models?|decks?|imports?|imported|downloads?|downloaded|job)\b)/i,
+];
 /** The report asked for, or where it is ("download the report", "where is the pdf"). "report the stress in ply 3" asks for a value. */
 const REPORT = /\b(?:the|a|my|this|its|pdf|full|final)\s+report\b|\breport\s+(?:pdf|file)\b|\bpdf\b/i;
 const REPORT_ASKS = /\b(?:downloads?|donwload|dowload|downlod|downlaod|get|give|send|make|write|create|generate|print|save|export|need|want|find|see|open|where|how)\b|^\s*(?:is|can|could|do|does)\b/i;
@@ -93,6 +100,7 @@ export function aboutAsked(text: string, readOnly = false): AboutTopic | null {
   if (IDENTITY.some((p) => p.test(text))) return "identity";
   if (ABILITIES.some((p) => p.test(text))) return "abilities";
   if (FILE_WHAT.test(text)) return "model-file-what";
+  if (FILE_OPEN.some((p) => p.test(text))) return "model-file-open";
   if (BRING_IN.test(text) && NOT_READ_HERE.test(text) && !/\d/.test(text)) return "bring-in";
   if (REPORT.test(text) && REPORT_ASKS.test(text) && !/^\s*why\b/i.test(text) && !/\breport\s+(?:of|on|about)\b/i.test(text)) return "report";
   if (PROGRAM.test(text) && ASKS_TO_RUN.test(text) && !/\bimport/i.test(text)) return "other-program";
@@ -145,6 +153,11 @@ export function aboutAnswer(topic: AboutTopic, text: string, c: AboutContext): {
       return { title: "A text file that holds the whole model", lines: [
         "It states the mesh, the layup, the material, the supports and the loads in one program's own commands, so that program builds and solves the same model.",
         "To get this model as one, say “download the model”."] };
+    case "model-file-open":
+      return { title: "Open it with File > Import > Model", lines: [
+        "That reads the whole Abaqus input file (.inp): the part, its instance, the material, the layup, the step, the supports and the loads. Create the job from the model it makes.",
+        "File > Import > Part brings in the mesh only, and a job from it stops with “no element definitions”.",
+        ...(c.readOnly ? [] : ["To get the file, say “download the model”."])] };
     case "report":
       return { title: "The report is under Files", lines: [
         "After a run, Files beneath the results lists “Report (PDF)”. If it is not written yet, pressing it writes it in about half a minute.",

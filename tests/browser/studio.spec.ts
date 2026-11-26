@@ -630,6 +630,7 @@ test("the tension screen takes the material and the layup, builds the model, say
   // a customer gets the report and the solver input, asked for by what it is; the team's package and reference files stay out (D4)
   await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveAttribute("href", /\/files\/solver_input\?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_solver\.inp$/);
   await expect(page.getByTestId("tension-files").locator("a[data-key=package], a[data-key=prepomax_deck], a[data-key=prepomax_results]")).toHaveCount(0);
+  await expect(page.getByTestId("tension-files").getByTestId("abaqus-file-opening")).toContainText("File > Import > Part brings in the mesh only"); // ADR-0129 amendment 5
   await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Results.");
 });
 
@@ -2230,6 +2231,7 @@ test("the model downloads as a file for the engineer's own program, from the men
   await menu.getByTestId("model-download-ansys").click();
   if (fromMenu) expect((await fromMenu).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
   await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Ansys input file (.cdb).");
+  await expect(menu.getByTestId("model-download-opening")).toHaveCount(0); // its menus were not tried with the file: nothing is said (ADR-0129 amendment 5)
   await expect(menu.getByRole("menuitem")).toHaveCount(0); // the menu closes once a file is picked
   expect(asked).toHaveLength(1);
   expect(asked[0].program).toBe("ansys");
@@ -2243,6 +2245,8 @@ test("the model downloads as a file for the engineer's own program, from the men
   await card.getByTestId("chat-model-file-abaqus").click();
   if (fromChat) expect((await fromChat).suggestedFilename()).toBe("IM7-UNT-L1-abaqus.inp");
   await expect(card.getByRole("status")).toHaveText("Saved the Abaqus input file (.inp).");
+  // how the engineer's own program opens it, said with the file: Import > Part reads the mesh alone (the founder's job with no elements, 2026-11-25)
+  await expect(card.getByTestId("chat-model-file-opening")).toHaveText(/^Open it with File > Import > Model, then create the job from the model that makes\. File > Import > Part brings in the mesh only/);
   expect(asked.map((a) => a.program)).toEqual(["ansys", "abaqus"]);
   await say("donwload ansys modle"); // typed fast
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
@@ -2279,6 +2283,7 @@ test("where the Ansys file is closed, a customer is offered the Abaqus file alon
   await menu.getByTestId("model-download-abaqus").click();
   if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1-abaqus.inp");
   await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the Abaqus input file (.inp).");
+  await expect(menu.getByTestId("model-download-opening")).toContainText("Open it with File > Import > Model"); // ADR-0129 amendment 5
   expect(asked[0].values).toMatchObject({ input: "tension" }); // the tension screen's rows: the package chooses the rest, as for the check
   const message = page.getByLabel("Message the coupon assistant", { exact: true });
   await message.fill("can i get this as an ansys file?");

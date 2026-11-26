@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Download } from "lucide-react";
-import { askReport, fileUrl, getJob, POLL_MS, StudioError, type Fields, type JobStatus } from "@/lib/studio-api";
+import { askReport, fileUrl, getJob, MODEL_FILE_OPENING, POLL_MS, StudioError, type Fields, type JobStatus } from "@/lib/studio-api";
 import { downloadable, downloadName, REPORT_WORDS, type ReportState } from "@/lib/studio-copy";
 
 /** What a job's files are named after (ADR-0091): the standard and the layup the package wrote, else the rows on the page. */
@@ -107,6 +107,7 @@ export function JobFiles({ apiBase, job, naming, viewer = true, testId, all = fa
         return (
           <li key={key}>
             <a href={fileUrl(apiBase, shown.job_id, key, name)} download={name} target="_blank" rel="noreferrer" data-key={key}><Download size={13} aria-hidden="true" /> {label}</a>
+            {key === "abaqus_deck" ? <span className="studio-download-note" data-testid="abaqus-file-opening">{MODEL_FILE_OPENING.abaqus}</span> : null}
           </li>
         );
       })}

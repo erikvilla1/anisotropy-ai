@@ -345,6 +345,13 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
  * named as the file that opens in it (`ALLOWED_PHRASE` in `studio-copy.ts` for the first). */
 export type ModelProgram = "abaqus" | "ansys";
 export const MODEL_FILE_LABELS: Record<ModelProgram, string> = { abaqus: "Abaqus input file (.inp)", ansys: "Ansys input file (.cdb)" };
+/** How the engineer's own program opens the file (ADR-0129 amendment 5), said under the file wherever the page offers it and in the
+ * assistant's answer: Abaqus/CAE's File > Import > Part reads the mesh alone, and a job made from it has no elements ("THIS MODEL HAS
+ * EITHER INCORRECT OR NO ELEMENT DEFINITIONS"). The file says the same in its first lines. The menus are the program's own, so the line
+ * names no program (ADR-0091). Nothing is said for a program whose menus were not tried with the file. */
+export const MODEL_FILE_OPENING: Partial<Record<ModelProgram, string>> = {
+  abaqus: "Open it with File > Import > Model, then create the job from the model that makes. File > Import > Part brings in the mesh only, so a job from it has no elements.",
+};
 const MODEL_FILE_HEADER = "X-Anisotropy-Model-File";
 const MODEL_FILE_ENDINGS: Record<ModelProgram, string> = { abaqus: "-abaqus.inp", ansys: "-ansys.cdb" };
 
