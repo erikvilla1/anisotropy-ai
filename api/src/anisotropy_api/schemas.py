@@ -1402,6 +1402,103 @@ class ModelVersionOutput(Contract):
 SetupChangesOutput.model_rebuild()
 
 
+# ----------------------------------------------------------------------------- the workspace's planner (ADR-0144)
+
+class PlanRequest(Contract):
+    """An engineer's sentence for the planner (ADR-0144): one call to the model reads it into a plan of typed tool steps."""
+
+    ask: Annotated[str, Field(min_length=1, max_length=1000)]
+
+    @model_validator(mode="after")
+    def words(self) -> Self:
+        if not self.ask.strip():
+            raise ValueError("ask holds no words")
+        return self
+
+
+class PlanStep(Contract):
+    """One step of a plan (`tests/fixtures/planner/`): its number from 1, the role it is shown under, the tool, the one line it shows (a
+    change's line is the preview's), the engineer's words that ask for it (none for the server's `check` and `qa`), the regions it draws,
+    the typed change it makes (ADR-0143), the question an `answer` answers, and its state with a note once it has one."""
+
+    n: int
+    role: Literal["Geometry", "Setup", "Solver", "QA", "Report"]
+    tool: Literal["hold", "move", "force", "pressure", "free", "unload", "row", "check", "run", "qa", "answer"]
+    line: str
+    quote: str | None
+    regions: list[str]
+    change: dict[str, Any] | None
+    question: str | None
+    state: Literal["planned", "running", "done", "failed", "skipped"]
+    note: str | None
+
+
+PlanState = Literal["proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped"]
+
+
+class PlanOutput(Contract):
+    """A plan as the page reads it (`plan-proposed.json`, `plan-question.json`): its steps and the preview's lines (`done`), the digest of
+    the setup it was worked out on (`base`), the question asked back or why there is no plan (`reason`), the words not read, who wrote
+    it, the job and version its approval made, and how many planned requests the person has left today (null when none are counted:
+    a service token, or a server that keeps no count). `withheld` is true when the model's plans failed the checks (`refused`), as the
+    guards' weekly view reads it (ADR-0139); `run_id` names the run record of the request that answered with it."""
+
+    id: str
+    project: str
+    ask: str
+    state: PlanState
+    steps: list[PlanStep]
+    done: list[str]
+    base: str
+    question: str | None
+    unread: list[UnreadPart]
+    reason: str | None
+    writer: str
+    model: str | None
+    job: str | None
+    version: ModelVersionOutput | None
+    requests_left: int | None
+    created_at: str
+    approved_at: str | None
+    withheld: bool = False
+    run_id: str | None = None
+
+    @classmethod
+    def of(cls, row, version=None, requests_left: int | None = None) -> "PlanOutput":
+        steps = [PlanStep(**step) for step in row.steps]
+        return cls(id=str(row.id), project=str(row.project_id), ask=row.ask, state=row.state, steps=steps,
+                   done=[step.line for step in steps if step.change is not None], base=row.base, question=row.question,
+                   unread=[UnreadPart(**part) for part in row.unread], reason=row.reason, writer=row.writer, model=row.model, job=row.job_id,
+                   version=None if version is None else ModelVersionOutput.of(version), requests_left=requests_left,
+                   created_at=row.created_at.isoformat(), approved_at=None if row.approved_at is None else row.approved_at.isoformat(),
+                   withheld=row.state == "refused")
+
+
+class ApproveRequest(Contract):
+    """A plan approved (ADR-0144): `base` is the plan's own, so the changes apply only to the setup they were worked out on."""
+
+    base: Annotated[str, Field(min_length=64, max_length=64)]
+
+
+class ApproveOutput(Contract):
+    """What an approval did (`approve-running.json`): the plan as it then stands, the project with its new setup, the version kept, the
+    job started (null when the plan stopped before its run, or has none) and the setup check (null when none ran)."""
+
+    plan: PlanOutput
+    project: ProjectOutput
+    version: ModelVersionOutput | None
+    job: CouponJobOutput | None
+    check: CouponCheckResponse | None
+    run_id: str | None = None
+
+
+class StepReport(Contract):
+    """A step the page carries (`run`, `qa`, `answer`) reported as it goes: its state and a note of at most 400 characters."""
+
+    state: Literal["running", "done", "failed", "skipped"]
+    note: Annotated[str, Field(max_length=400)] | None = None
+
+
 class CouponValuesOutput(Contract):
     """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
 

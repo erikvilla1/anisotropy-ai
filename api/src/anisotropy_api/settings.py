@@ -46,6 +46,11 @@ JOBS_PER_DAY_VARIABLE = "ANISOTROPY_JOBS_PER_USER_PER_DAY"
 # requests have called the model that many times since midnight UTC, counted in the model_calls table (ADR-0120), is answered by the
 # page's own patterns and the template until midnight; off unless set. The hosted tier sets it in wrangler.jsonc.
 MODEL_CALLS_PER_DAY_VARIABLE = "ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY"
+# The day's planned requests per person (ADR-0144): a signed-in person who has asked the planner that many times since midnight UTC,
+# counted in the agent_plans table, is answered `capped` with no call to the model until midnight. A request with no email (a service
+# token) is not counted. 30 unless set.
+AGENT_REQUESTS_PER_DAY_VARIABLE = "ANISOTROPY_AGENT_REQUESTS_PER_DAY"
+AGENT_REQUESTS_PER_DAY_DEFAULT = 30
 # The job queue (ADR-0056 stage 3, amendment 3): unset, this process runs each coupon job itself, one at a time (ADR-0050). `queue`:
 # it files the job in the object store and the jobs table and leaves it to the queue, which the Worker feeds; `solver`: it runs the
 # queued job a request names, in a container of that job's own. Either needs the jobs table and the store.
@@ -132,6 +137,7 @@ class Settings:
     storage: StorageSettings = StorageSettings(None, None, None, None)
     jobs_per_user_per_day: int | None = None  # None: no per-user limit, as locally
     model_calls_per_user_per_day: int | None = None  # None: no daily cap on calls to the model, as locally (ADR-0139)
+    agent_requests_per_user_per_day: int = AGENT_REQUESTS_PER_DAY_DEFAULT  # planned requests per person per day (ADR-0144)
     job_role: str | None = None  # None: jobs run in this process; "queue" or "solver" with the job queue (ADR-0056 amendment 3)
     live_workers: int = LIVE_WORKERS_DEFAULT  # warm live-solve workers (ADR-0086); 0: a fresh process per live solve
     all_tests: bool = False  # every test offered (ADR-0089); False: the unnotched tension coupon only
@@ -167,6 +173,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
                     allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
                     jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"),
                     model_calls_per_user_per_day=model_calls_per_user_per_day(environ, records_on=switch == "on"),
+                    agent_requests_per_user_per_day=agent_requests_per_user_per_day(environ, records_on=switch == "on"),
                     job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on),
                     live_workers=live_workers(environ), all_tests=all_tests(environ),
                     founder_emails=founder_emails(environ, access_on=access_settings(environ).on),
@@ -253,6 +260,21 @@ def model_calls_per_user_per_day(environ: Mapping[str, str], *, records_on: bool
     if not records_on:
         raise RuntimeError(f"{MODEL_CALLS_PER_DAY_VARIABLE} counts a person's calls to the model in the model_calls table, which needs run "
                            f"records on; unset it, or set {RECORDING_VARIABLE}=on with {DATABASE_VARIABLE}")
+    return int(raw)
+
+
+def agent_requests_per_user_per_day(environ: Mapping[str, str], *, records_on: bool) -> int:
+    """The daily cap on planned requests per person (ADR-0144), a whole number of at least 1, or the default when unset. It counts the
+    plans in the agent_plans table, so a number set with run records off is refused rather than ignored (ADR-0003)."""
+    raw = environ.get(AGENT_REQUESTS_PER_DAY_VARIABLE, "").strip()
+    if not raw:
+        return AGENT_REQUESTS_PER_DAY_DEFAULT
+    if not raw.isdigit() or int(raw) < 1:
+        raise RuntimeError(f"{AGENT_REQUESTS_PER_DAY_VARIABLE} must be a whole number of planned requests per person per day, at least 1, "
+                           f"not {raw!r}; unset it for {AGENT_REQUESTS_PER_DAY_DEFAULT}")
+    if not records_on:
+        raise RuntimeError(f"{AGENT_REQUESTS_PER_DAY_VARIABLE} counts a person's plans in the agent_plans table, which needs run records on; "
+                           f"unset it, or set {RECORDING_VARIABLE}=on with {DATABASE_VARIABLE}")
     return int(raw)
 
 

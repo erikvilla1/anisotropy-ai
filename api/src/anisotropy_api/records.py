@@ -183,6 +183,42 @@ class ModelVersionRow(Base):
                       CheckConstraint("n >= 1", name="model_versions_n_positive"))
 
 
+# A plan's states (ADR-0144, migration 0017), as `planner.STATES` names them; and those of a request that asked no model, which are not
+# counted against the day's planned requests.
+PLAN_STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
+PLANS_UNCOUNTED = ("capped", "unavailable")
+
+
+class AgentPlanRow(Base):
+    """A plan of the workspace's planner (ADR-0144, migration 0017): one engineer's sentence read into typed tool steps, with who asked,
+    its state, its steps as they run (each with its own state and note), the setup it was worked out on (`base`, the content's digest),
+    the question asked back or why there is no plan, the words not read, who wrote it, and the job and version its approval made. It goes
+    with its project, and it is the project owner's (`owns_project`)."""
+
+    __tablename__ = "agent_plans"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    ask: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(12), nullable=False)
+    steps: Mapped[list] = mapped_column(JSONB, nullable=False)
+    base: Mapped[str] = mapped_column(String(64), nullable=False)
+    question: Mapped[str | None] = mapped_column(Text)
+    unread: Mapped[list] = mapped_column(JSONB, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    writer: Mapped[str] = mapped_column(String(20), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(80))
+    job_id: Mapped[str | None] = mapped_column(String(64))
+    version_n: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    approved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (CheckConstraint(f"state IN ({_sql_list(PLAN_STATES)})", name="agent_plans_state_known"),)
+
+
 UPLOAD_VERDICTS = ("agrees", "differs", "incomplete", "refused")
 
 
@@ -586,21 +622,132 @@ def mark_version_run(engine: Engine, project_id: uuid.UUID, n: int, *, job_id: s
         return row
 
 
+def _apply_setup_in(session: Session, project_id: uuid.UUID, *, base: str, digest_of, content: dict, made_by: str, why: str | None,
+                    changes: list[str], version_digest: str, now: dt.datetime) -> tuple[ProjectRow, ModelVersionRow] | None:
+    """`apply_setup` inside a transaction the caller holds, so a plan's approval is one with it (ADR-0144)."""
+    row = session.scalars(select(ProjectRow).where(ProjectRow.id == project_id).with_for_update()).first()
+    if row is None or digest_of(dict(row.content)) != base:
+        return None
+    row.content, row.updated_at = content, now
+    last = session.scalars(select(ModelVersionRow).where(ModelVersionRow.project_id == project_id).order_by(ModelVersionRow.n.desc()).limit(1)).first()
+    version = ModelVersionRow(project_id=project_id, n=(last.n if last else 0) + 1, made_by=made_by, why=why, changes=list(changes),
+                              content=content, digest=version_digest, created_at=now)
+    session.add(version)
+    return row, version
+
+
 def apply_setup(engine: Engine, project_id: uuid.UUID, *, base: str, digest_of, content: dict, made_by: str, why: str | None,
                 changes: list[str], version_digest: str, now: dt.datetime) -> tuple[ProjectRow, ModelVersionRow] | None:
     """A project's content replaced by a changed setup and kept as a new version, in one transaction, only while the content is still
     the one the change was worked out on (`digest_of(content) == base`); None when it has changed since."""
     with Session(engine, expire_on_commit=False) as session:
-        row = session.scalars(select(ProjectRow).where(ProjectRow.id == project_id).with_for_update()).first()
-        if row is None or digest_of(dict(row.content)) != base:
+        kept = _apply_setup_in(session, project_id, base=base, digest_of=digest_of, content=content, made_by=made_by, why=why,
+                               changes=changes, version_digest=version_digest, now=now)
+        if kept is None:
             return None
-        row.content, row.updated_at = content, now
-        last = session.scalars(select(ModelVersionRow).where(ModelVersionRow.project_id == project_id).order_by(ModelVersionRow.n.desc()).limit(1)).first()
-        version = ModelVersionRow(project_id=project_id, n=(last.n if last else 0) + 1, made_by=made_by, why=why, changes=list(changes),
-                                  content=content, digest=version_digest, created_at=now)
-        session.add(version)
         session.commit()
-        return row, version
+        return kept
+
+
+# -------------------------------------------------------------------------------- the workspace's plans (ADR-0144)
+
+def add_plan(engine: Engine, **fields) -> AgentPlanRow:
+    """A plan as the planner made it, or a request that came to none (`question`, `refused`, `unavailable`, `capped`)."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = AgentPlanRow(**fields)
+        session.add(row)
+        session.commit()
+        return row
+
+
+def fetch_plan(engine: Engine, project_id: uuid.UUID, plan_id: uuid.UUID) -> AgentPlanRow | None:
+    """A plan of a project, by its id; None when there is none or it is another project's. Whose a plan is, is its project's
+    (`owns_project`), which the caller checks first."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(AgentPlanRow, plan_id)
+        return row if row is not None and row.project_id == project_id else None
+
+
+def update_plan(engine: Engine, plan_id: uuid.UUID, **fields) -> AgentPlanRow:
+    """A few columns of a plan moved: its state and steps as its approval runs them, its job."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(AgentPlanRow, plan_id)
+        if row is None:
+            raise LookupError(f"no row for plan {plan_id}")
+        for name, value in fields.items():
+            setattr(row, name, value)
+        session.commit()
+        return row
+
+
+def edit_plan(engine: Engine, plan_id: uuid.UUID, edit, now: dt.datetime) -> AgentPlanRow | None:
+    """A plan's steps and state changed by `edit(steps) -> state` with its row locked, so two reports at once never lose one; whatever
+    `edit` raises leaves the row as it was. None when there is no such plan."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id).with_for_update()).first()
+        if row is None:
+            return None
+        steps = json.loads(json.dumps(row.steps))
+        state = edit(steps)
+        row.steps, row.state, row.updated_at = steps, state, now
+        session.commit()
+        return row
+
+
+def plans_since(engine: Engine, user_email: str, since: dt.datetime) -> int:
+    """How many planned requests the signed-in person made at or after `since`, whatever the project or the client (ADR-0144): each one
+    that asked the model, kept as a plan or not, and none that asked none (`PLANS_UNCOUNTED`)."""
+    statement = (select(func.count()).select_from(AgentPlanRow)
+                 .where(AgentPlanRow.user_email == user_email, AgentPlanRow.created_at >= since, AgentPlanRow.state.not_in(PLANS_UNCOUNTED)))
+    with Session(engine) as session:
+        return session.scalar(statement) or 0
+
+
+class PlanTaken(Exception):
+    """A plan's approval refused: it is no plan to approve any more (approved already, or never proposed), or the project changed since
+    it was made. The message says which, in the words the page shows."""
+
+
+STALE_PLAN = "The model changed since this plan was made. Ask again for a new plan."
+
+
+def approve_plan(engine: Engine, plan_id: uuid.UUID, project_id: uuid.UUID, *, base: str, digest_of, content: dict | None, why: str,
+                 changes: list[str], version_digest: str | None, steps: list,
+                 now: dt.datetime) -> tuple[AgentPlanRow, ProjectRow, ModelVersionRow | None]:
+    """A plan approved in one transaction (ADR-0144): its row locked and still `proposed`, the project still on the setup the plan was
+    worked out on (`base`), the changed setup (`content`) kept with a new version by the assistant with the ask as why, and the plan
+    `approved` with its steps and the version's number. A plan with no change keeps no version. PlanTaken when it is no plan to approve
+    or the project changed since; nothing is written then."""
+    with Session(engine, expire_on_commit=False) as session:
+        plan = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id, AgentPlanRow.project_id == project_id)
+                               .with_for_update()).first()
+        if plan is None or plan.state != "proposed":
+            raise PlanTaken("This plan was approved already, or it is not a plan to approve. Ask again for a new one.")
+        if plan.base != base:
+            raise PlanTaken(STALE_PLAN)
+        version = None
+        if content is not None:
+            kept = _apply_setup_in(session, project_id, base=base, digest_of=digest_of, content=content, made_by="assistant", why=why,
+                                   changes=changes, version_digest=version_digest or "", now=now)
+            if kept is None:
+                raise PlanTaken(STALE_PLAN)
+            project, version = kept
+        else:
+            project = session.scalars(select(ProjectRow).where(ProjectRow.id == project_id).with_for_update()).first()
+            if project is None or digest_of(dict(project.content)) != base:
+                raise PlanTaken(STALE_PLAN)
+        plan.state, plan.steps, plan.approved_at, plan.updated_at = "approved", steps, now, now
+        plan.version_n = None if version is None else version.n
+        session.commit()
+        return plan, project, version
+
+
+def fetch_version(engine: Engine, project_id: uuid.UUID, n: int | None) -> ModelVersionRow | None:
+    """One version of a project's model by its number; None for none."""
+    if n is None:
+        return None
+    with Session(engine, expire_on_commit=False) as session:
+        return session.get(ModelVersionRow, (project_id, n))
 
 
 # -------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)
