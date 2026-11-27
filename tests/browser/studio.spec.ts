@@ -2350,7 +2350,7 @@ test("the model downloads as a file for the engineer's own program, from the men
   // the menu over the model: one item per file, named as the program's own file
   const menu = page.getByTestId("model-download");
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)", "CAD (STEP)"]);
   const fromMenu = saving();
   await menu.getByTestId("model-download-ansys").click();
   if (fromMenu) expect((await fromMenu).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
@@ -2401,7 +2401,7 @@ test("where the Ansys file is closed, a customer is offered the Abaqus file alon
   await page.getByTestId("build-button").click();
   await expect(menu).toBeVisible({ timeout: 30_000 }); // the model is built and checked
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "CAD (STEP)"]);
   await expectNoBannedTerms(page, "the download menu open");
   const file = browserName === "webkit" ? null : page.waitForEvent("download");
   await menu.getByTestId("model-download-abaqus").click();
@@ -2433,7 +2433,7 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   await page.getByTestId("build-button").click();
   await expect(menu).toBeVisible({ timeout: 30_000 });
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)", "CAD (STEP)"]);
   await expectNoBannedTerms(page, "the download menu open, both files");
   const file = browserName === "webkit" ? null : page.waitForEvent("download");
   await menu.getByTestId("model-download-ansys").click();
