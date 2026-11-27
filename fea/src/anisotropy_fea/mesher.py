@@ -263,6 +263,12 @@ def gmsh_available() -> str | None:
     return str(gmsh.__version__)
 
 
+def hole_centre(width: float, length: float) -> tuple[float, float]:
+    """Where a plate's or a coupon's one hole sits: the middle of the width and of the length. The mesh is cut round it and the STEP
+    file's solid is drilled at it (ADR-0146), so both read it here."""
+    return width / 2, length / 2
+
+
 def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, element_size: float, circumferential: int, radial_layers: int,
                          ring_ratio: float, growth: float, order: int = 1, tab_length: float = 0.0,
                          node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
@@ -293,7 +299,7 @@ def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, elem
         raise MeshError("element_size must be positive")
     radius = hole_diameter / 2
     half = ring_ratio * radius
-    cx, cy = width / 2, length / 2
+    cx, cy = hole_centre(width, length)
     if not radius < half < min(cx, cy):
         raise MeshError(f"the inner square (half-side {half:g}) must enclose the hole (radius {radius:g}) and lie inside the plate ({cx:g} by {cy:g} half-sizes)")
     if tab_length < 0 or (tab_length and tab_length >= cy - half):

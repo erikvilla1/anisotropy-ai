@@ -9,6 +9,7 @@
     uv run python tools/studio_tool.py tow <values.json> --out <dir>        # a fibre tow record (ASTM D4018): tow.json, its checklist and result
     uv run python tools/studio_tool.py import <model.inp> --units mm-MPa --out <dir>   # a model brought in as an Abaqus deck: read, drawn and solved
     uv run python tools/studio_tool.py model <values.json> --program ansys --out <dir> # the model as a file for Abaqus or Ansys, no solve
+    uv run python tools/studio_tool.py model <values.json> --program step --out <dir>  # the model's shape as a STEP file for a CAD program
 
 `check` judges a values file the way `tools/run_coupon.py` will (`checks.setup_checklist`) and exits 0 whatever it finds: the
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
@@ -28,8 +29,10 @@ request {"deck": <path>, "units": <system>, "name": <the file's name>, "out": <f
 file another program reads (ADR-0129), `--program abaqus` (the input deck a run writes) or `ansys` (a Mechanical APDL input file):
 checklist.json always, and, when nothing blocks but the full run's own tools, model.json (the state `written`, the file's name, its
 program, units, size and SHA-256) and the file beside it; a model the program's writer refuses is `refused` with the reason. Nothing is
-solved. `serve` answers it for a request {"values": <path>, "out": <folder>, "model": <program>}. Nothing here computes a result: the
-modules named do.
+solved. `--program step` writes the model's shape instead (ADR-0146): each part one solid at its thickness in a STEP file, built by
+Gmsh's OpenCASCADE from the model the check built, with the part table in model.json; a shape that cannot be drawn is `refused`, and
+without Gmsh (the optional extra `mesh`) the state is `unavailable` and no file is written. `serve` answers it for a request
+{"values": <path>, "out": <folder>, "model": <program>}. Nothing here computes a result: the modules named do.
 """
 
 from __future__ import annotations
@@ -72,6 +75,9 @@ RUN_ONLY = ("solver", "document")
 # The programs a model is written for on request (ADR-0129): the writer and how the file's name ends.
 # The Abaqus file says first how Abaqus/CAE opens it (ADR-0129 amendment 5); the rest is the deck a run writes.
 MODEL_PROGRAMS = {"abaqus": (write_abaqus_download, "-abaqus.inp"), "ansys": (write_ansys, "-ansys.cdb")}
+# The model's shape for a CAD program (ADR-0146): no writer of text, the solids are built by Gmsh's OpenCASCADE (`coupon_shape`).
+STEP = "step"
+MODEL_FILES = (*MODEL_PROGRAMS, STEP)
 
 
 def write_json(path: Path, data) -> Path:
@@ -255,9 +261,8 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
     check built, the same model a live solve and a run use. checklist.json always; model.json and the file when it is written. Returns
     `written`, `blocked` (the check stops it, as it stops a solve) or `refused` (the writer cannot state this model). Nothing is solved
     and nothing is kept in the coupons' folders."""
-    if program not in MODEL_PROGRAMS:
-        raise IntakeError(f"a model is written for {' or '.join(MODEL_PROGRAMS)}; got {program!r}")
-    write, ending = MODEL_PROGRAMS[program]
+    if program not in MODEL_FILES:
+        raise IntakeError(f"a model is written for {' or '.join(MODEL_PROGRAMS)}, or as {STEP}; got {program!r}")
     try:
         form = read_input(values_path)
     except IntakeError as exc:
@@ -270,6 +275,10 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
     if not solvable(checklist, model):
         print(f"{checklist.state}: no model written")
         return "blocked"
+    stem = re.sub(r"[^A-Za-z0-9._-]", "-", (model.spec.coupon.designation if model.spec.coupon else None) or "model")
+    if program == STEP:
+        return shape_file(model, out, stem)
+    write, ending = MODEL_PROGRAMS[program]
     units = deck_units_of(model.spec.units)
     try:
         text = write(model)
@@ -277,13 +286,41 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
         write_json(out / "model.json", {"state": "refused", "program": program, "problem": str(exc)})
         print(f"refused: {exc}")
         return "refused"
-    stem = re.sub(r"[^A-Za-z0-9._-]", "-", (model.spec.coupon.designation if model.spec.coupon else None) or "model")
     data = text.encode("utf-8")
     out.mkdir(parents=True, exist_ok=True)
     (out / (stem + ending)).write_bytes(data)
     write_json(out / "model.json", {"state": "written", "program": program, "name": stem + ending, "units": units, "bytes": len(data),
                                     "sha256": hashlib.sha256(data).hexdigest(), "nodes": model.mesh.node_count, "elements": model.mesh.element_count})
     print(f"written: {stem + ending}, {len(data)} bytes, {model.mesh.node_count} nodes and {model.mesh.element_count} elements in {units}")
+    return "written"
+
+
+def shape_file(model, out: Path, stem: str) -> str:
+    """The model's shape as a STEP file (ADR-0146): each part one solid at its thickness, built by Gmsh's OpenCASCADE from the model the
+    check built, and the part table in model.json. Returns `written`, `refused` (the shape cannot be drawn from what the model states) or
+    `unavailable` (Gmsh, the optional extra `mesh`, is not installed here: no file is written)."""
+    from anisotropy_fea.coupon_shape import ENDING, build_coupon_shape, part_table
+    from anisotropy_fea.mesher import gmsh_available
+    from anisotropy_fea.wing_shape import ShapeError
+
+    if gmsh_available() is None:
+        problem = "Gmsh is not available; from fea/ run `uv sync --extra mesh` (on Linux the wheel also needs libGLU: apt install libglu1-mesa)"
+        write_json(out / "model.json", {"state": "unavailable", "program": STEP, "problem": problem})
+        print(f"unavailable: {problem}")
+        return "unavailable"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / (stem + ENDING)
+    try:
+        shape = build_coupon_shape(model, path)
+    except ShapeError as exc:
+        write_json(out / "model.json", {"state": "refused", "program": STEP, "problem": str(exc)})
+        print(f"refused: {exc}")
+        return "refused"
+    data = path.read_bytes()
+    write_json(out / "model.json", {"state": "written", "program": STEP, "name": path.name, "units": "mm", "bytes": len(data),
+                                    "sha256": hashlib.sha256(data).hexdigest(), "solids": len(shape.parts),
+                                    "parts": part_table(shape, model.spec.units)})
+    print(f"written: {path.name}, {len(data)} bytes, {len(shape.parts)} solid{'' if len(shape.parts) == 1 else 's'} in mm")
     return "written"
 
 
@@ -351,9 +388,9 @@ def main() -> None:
     p.add_argument("--units", required=True, help="the unit system the deck is written in: mm-MPa, m-Pa, in-psi or in-ksi")
     p.add_argument("--name", help="the file's name as the engineer sent it (default the path's)")
     p.add_argument("--out", type=Path, required=True)
-    p = commands.add_parser("model", help="the model a values file builds, as a file for Abaqus or Ansys; nothing is solved")
+    p = commands.add_parser("model", help="the model a values file builds, as a file for Abaqus or Ansys or as a STEP file; nothing is solved")
     p.add_argument("values", type=Path)
-    p.add_argument("--program", required=True, choices=sorted(MODEL_PROGRAMS))
+    p.add_argument("--program", required=True, choices=sorted(MODEL_FILES))
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     with enabled.every_test(args.every_test):
