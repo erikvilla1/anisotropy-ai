@@ -433,10 +433,11 @@ def test_the_real_tool_behind_the_route_draws_a_tabbed_strip_end_to_end(real):
 
 @needs_gmsh
 def test_the_real_tool_draws_a_very_fine_model_as_fast_as_a_coarse_one_because_a_shape_cuts_no_mesh(real):
-    """An element size of 0.05 mm is about 1.9 million elements of this strip, which the route once meshed before it drew anything."""
+    """An element size of 0.16 mm is about 182,000 elements of this strip, near the most a setup may state (ADR-0086 amendment 2), which
+    the route once meshed before it drew anything."""
     client.post(ADDRESS, params=STEP, json={"values": ROWS})  # the worker is warm after this
     files, seconds = [], []
-    for size in (2.0, 0.05):
+    for size in (2.0, 0.16):
         started = time.perf_counter()
         answer = client.post(ADDRESS, params=STEP, json={"values": {**ROWS, "element_size": size}})
         seconds.append(time.perf_counter() - started)
@@ -462,15 +463,20 @@ def test_the_real_tool_draws_a_plate_with_a_hole_from_the_rows_the_workspace_sen
 
 @needs_gmsh
 @pytest.mark.parametrize("changes, said", [
-    ({"tab_thickness": 41.9 * math.tan(math.radians(11.3)) * (1 - 1e-9), "tab_bevel": 11.3, "tab_material": "glass"}, "so it has no outer face left."),
+    ({"tab_thickness": 41.9 * math.tan(math.radians(11.3)) * (1 - 1e-9), "tab_bevel": 11.3, "tab_material": "glass"},
+     "e-08 mm long, under the 0.001 mm that is the smallest size drawn."),
+    ({"tab_thickness": 41.9 * math.tan(math.radians(11.3)) * (1 + 1e-9), "tab_bevel": 11.3, "tab_material": "glass"},
+     "runs the tab's whole length, 41.9 mm, so it has no outer face left."),
     ({"tab_thickness": 1e-9, "tab_bevel": 90.0}, "the tabs' thickness is 1e-09 mm, under the 0.001 mm that is the smallest size drawn."),
     ({"tab_thickness": 10.0, "tab_bevel": 7.0}, "a bevel of 7 degrees over a thickness of 10 mm runs 81.4435 mm, and the tab is 41.9 mm long"),
-], ids=["a bevel that runs the tab's whole length", "a tab a nanometre thick", "a bevel longer than the tab"])
+], ids=["a bevel that leaves an outer face too short to draw", "a bevel that runs the tab's whole length", "a tab a nanometre thick",
+        "a bevel longer than the tab"])
 def test_a_shape_the_real_tool_cannot_draw_is_a_422_with_its_reason(real, changes, said):
     answer = client.post(ADDRESS, params=STEP, json={"values": {**ROWS, **changes}})
     assert answer.status_code == 422, answer.text
     detail = answer.json()["detail"]
     assert detail.startswith("This model cannot be drawn as a STEP file yet: ") and said in detail and detail.endswith(".")
+    assert "runs 41.9 mm, and the tab is 41.9 mm long" not in detail  # two numbers that print alike are no reason
     assert nothing_of_this_machine(answer, real)
 
 
@@ -493,7 +499,8 @@ def test_a_refusal_of_the_real_tool_is_in_the_units_the_rows_are_in(real):
     ('"tab_thickness": Infinity, "tab_bevel": 30', "Tab thickness (mm): a finite number is needed, not inf"),
     ('"material_code": "' + "A" * 300 + '"', "the coupon's name would be 307 characters, and a name is at most 80; give shorter codes"),
     ('"layup_code": "L' + "1" * 90 + '"', "the coupon's name would be 99 characters, and a name is at most 80; give shorter codes"),
-    ('"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "' + "g" * 81 + '"', "Tab material: at most 80 characters, not 81"),
+    ('"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "' + "g" * 81 + '"',
+     "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 81"),
 ], ids=["Infinity", "1e999", "NaN", "an infinite tab", "a 300-character material code", "a 91-character layup code", "an 81-character tab material"])
 def test_a_size_that_is_no_number_or_a_name_too_long_is_stopped_at_the_setup_check_with_its_row(real, program, raw, said):
     """What the JSON of a request may hold and no model may: each was a 503 with the tool's own error, one of them naming its folder."""
@@ -507,10 +514,50 @@ def test_a_size_that_is_no_number_or_a_name_too_long_is_stopped_at_the_setup_che
 
 @needs_gmsh
 def test_a_name_at_its_limit_is_drawn_and_its_part_table_fits_the_header(real):
-    """A tab material of 80 characters, the most the form takes, each one outside ASCII: the table travels at six bytes a character."""
-    material = "α" * 80
+    """A tab material of 80 bytes, the most the form takes, each letter outside ASCII: the table travels at six bytes a letter."""
+    material = "α" * 40
     answer = client.post(ADDRESS, params=STEP, json={"values": {**ROWS, "tab_thickness": 1.5, "tab_bevel": 30, "tab_material": material}})
     assert answer.status_code == 200, answer.text
     raw = answer.headers["X-Anisotropy-Model-Parts"]
     assert len(raw) <= MODEL_PARTS_LIMIT and json.loads(raw)["parts"][1]["material"] == material
     assert max(len(line) for line in answer.content.decode("ascii").split("FILE_DESCRIPTION((")[1].split("),'2;1');")[0].splitlines()) < 80
+
+
+SEEDS_OF_THE_STRIP = '"element_size": null, "mesh_partitions": "41.9, 195.4", '
+PAST_THE_MOST = "elements; a setup holds at most 200,000, whatever is made of it: "
+NOT_A_503 = [  # what the review's second round still got a 503 or a 504 for, each with the reason its row now gives
+    ('"length": 1' + "0" * 400, "Length (mm): the number is too large"),
+    ('"angles": [45, 1' + "0" * 400 + ', -45, 90]', "Ply 2: the number is too large"),
+    ('"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "' + "\U0001F600" * 80 + '"',
+     "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 320"),
+    ('"size_from": "' + "s" * 5000 + '"', "Where the size comes from: one word of it takes 5000 bytes, and a line of a model file holds a word of at most 200; "
+                                          "shorten it or put a space in it"),
+    (SEEDS_OF_THE_STRIP + '"mesh_nx": 1000000000000, "mesh_seeds": "20, 80, 20"',
+     "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "give fewer elements across the width or fewer rows per segment"),
+    (SEEDS_OF_THE_STRIP + '"mesh_nx": 10, "mesh_seeds": "20, 99999999999, 20"',
+     "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "give fewer elements across the width or fewer rows per segment"),
+    ('"element_size": 1e-5', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
+    ('"element_size": 1e-6', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
+    ('"element_size": 5e-324', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
+    ('"element_size": 0.1', "the mesh would have 467,481 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
+]
+
+
+@needs_gmsh
+@pytest.mark.parametrize("program", ["step", "abaqus", "ansys"])
+@pytest.mark.parametrize("raw, said", NOT_A_503, ids=["a length of 1 and 400 zeros", "a ply angle of 1 and 400 zeros", "a tab material of 80 emoji",
+                                                     "a 5000-character word", "10^12 elements across", "99999999999 rows in a segment",
+                                                     "an element size of 1e-5 mm", "an element size of 1e-6 mm", "an element size of 5e-324 mm",
+                                                     "an element size of 0.1 mm"])
+def test_what_no_file_can_hold_is_a_422_with_its_rows_reason_for_every_program_and_soon(real, program, raw, said):
+    """Each of these was a 503 or, past the route's 30 s, a 504, for at least one program: a number no float holds, a name or a word no
+    line of a deck holds, and a mesh that took the memory of the machine before anything was refused (ADR-0146, ADR-0086 amendment 2)."""
+    body = json.dumps({"values": ROWS})[:-2] + ", " + raw + "}}"
+    started = time.perf_counter()
+    answer = client.post(ADDRESS, params={"program": program}, content=body.encode("utf-8"), headers={"Content-Type": "application/json"})
+    seconds = time.perf_counter() - started
+    assert answer.status_code == 422, answer.text[:400]
+    detail = answer.json()["detail"]
+    assert detail.startswith("The setup is not complete, so there is no model to write yet. ") and said in detail and len(detail) < 700
+    assert seconds < 10.0, seconds
+    assert nothing_of_this_machine(answer, real)
