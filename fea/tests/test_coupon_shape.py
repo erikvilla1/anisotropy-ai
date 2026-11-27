@@ -67,7 +67,7 @@ def dogbone_type_iv() -> dict:
 
 def plate_with_a_hole() -> dict:
     table = table_of("plate-pressure-isotropic")
-    table["geometry"].update(hole_diameter=20.0, tab_length=0.0)  # no tabs, stated as the form states it
+    table["geometry"]["hole_diameter"] = 20.0  # and no tab length: a plate set up in the workspace states none
     table["mesh"] = {"mesher": "gmsh", "element_order": 1, "element_size": 5.0,
                      "hole": {"circumferential": 32, "radial_layers": 4, "ring_ratio": 2.0, "growth": 1.2}}
     return table
@@ -462,6 +462,26 @@ def test_the_tool_says_gmsh_is_not_installed_and_writes_no_file(tmp_path):
     head = json.loads((out / "model.json").read_text(encoding="utf-8"))
     assert head == {"state": "unavailable", "program": "step", "problem": head["problem"]} and "uv sync --extra mesh" in head["problem"]
     assert sorted(p.name for p in out.iterdir()) == ["checklist.json", "model.json"]
+
+
+@needs_gmsh
+def test_a_plate_with_a_hole_set_up_as_the_workspace_writes_it_gets_its_step_file(tmp_path):
+    """The rows the workspace sends for a plate (the browser tests' plate) with a hole's diameter added, and no tab length, which the
+    form does not show for a plate. The setup check stopped on this until the hole's refusal was built only where it applies."""
+    rows = json.loads((paths.ROOT / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8"))
+    assert rows["test"] == "plate" and "tab_length" not in rows and "hole_diameter" not in rows
+    source = tmp_path / "values.json"
+    source.write_text(json.dumps({**rows, "hole_diameter": 20.0}), encoding="utf-8")
+    out = tmp_path / "model"
+    done = run_tool("--root", str(tmp_path / "root"), "--every-test", "model", str(source), "--program", "step", "--out", str(out))
+    assert done.returncode == 0, done.stderr
+    assert json.loads((out / "checklist.json").read_text(encoding="utf-8"))["state"] != "blocked", done.stdout
+    head = json.loads((out / "model.json").read_text(encoding="utf-8"))
+    assert head["state"] == "written" and head["solids"] == 1, head
+    (solid,) = read_step_solids(out / head["name"])
+    (hole,) = solid["holes"]
+    assert solid["box"][:2] == pytest.approx((0.0, 0.0), abs=SIZE_MM) and solid["box"][3:5] == pytest.approx((100.0, 100.0), abs=SIZE_MM)
+    assert (hole["x"], hole["y"], hole["diameter"]) == pytest.approx((50.0, 50.0, 20.0), abs=SIZE_MM)
 
 
 def test_a_blocked_setup_gets_no_step_file_as_it_gets_no_other(tmp_path):

@@ -462,8 +462,9 @@ def validate_spec(spec: CouponSpec) -> None:
         need(hole.ring_ratio > 1.0 and hole.ring_ratio * g.hole_diameter / 2 < g.width / 2, "mesh.hole.ring_ratio must exceed 1 and keep the inner square inside the width")
         half = hole.ring_ratio * g.hole_diameter / 2
         need(half < g.length / 2, "mesh.hole.ring_ratio must keep the inner square inside the length")
-        need(not g.tab_length or g.tab_length < g.length / 2 - half,
-             f"the tabs (tab_length {g.tab_length:g}) must end before the inner square around the hole begins at y = {g.length / 2 - half:g}")
+        if g.tab_length:  # a plate may state none: the sentence prints it, so it is built only where there are tabs to judge
+            need(g.tab_length < g.length / 2 - half,
+                 f"the tabs (tab_length {g.tab_length:g}) must end before the inner square around the hole begins at y = {g.length / 2 - half:g}")
     # mesh counts
     seeded = m.y_partitions is not None or m.y_seeds is not None
     if seeded:

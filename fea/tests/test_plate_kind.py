@@ -105,6 +105,35 @@ def test_a_plate_is_refused_by_name(old, new, message):
         parse_spec(text.replace(old, new, 1))
 
 
+def plate_with_a_hole(tab_length: str = "") -> str:
+    """The pressure plate, 100 by 100 mm, with a 20 mm hole at its middle whose ringed square reaches 20 mm from the centre, so it begins
+    at y = 30. The workspace states a plate with no tab length; `tab_length` adds the line a spec file may carry."""
+    text = PRESSURE.read_text(encoding="utf-8")
+    geometry, mesh = "width = 100.0\n", 'mesher = "structured"\nelement_order = 1\nnx = 16\nny = 16\n'
+    assert geometry in text and mesh in text
+    text = text.replace(geometry, geometry + "hole_diameter = 20.0\n" + tab_length, 1)
+    return text.replace(mesh, 'mesher = "gmsh"\nelement_order = 1\nelement_size = 5.0\n\n[mesh.hole]\ncircumferential = 32\nradial_layers = 4\n'
+                              'ring_ratio = 2.0\ngrowth = 1.2\n', 1)
+
+
+def test_a_plate_with_a_hole_and_no_tab_length_passes_the_check_and_tabs_that_reach_the_hole_are_refused_in_the_same_words():
+    """The refusal's sentence prints the tab length, and it was built before the condition was judged: a plate that states none, as
+    every plate set up in the workspace does, stopped on the formatting (a TypeError) and never reached the check."""
+    spec = parse_spec(plate_with_a_hole())
+    assert spec.geometry.tab_length is None and spec.geometry.hole_diameter == 20.0 and "Hole" in plate_regions(spec)
+    assert parse_spec(plate_with_a_hole("tab_length = 0.0\n")).geometry.tab_length == 0.0  # no tabs, stated: as before
+    assert parse_spec(plate_with_a_hole("tab_length = 25.0\n")).geometry.tab_length == 25.0  # tabs that end before the square: as before
+    # where the refusal applies it reads as it did, on a plate and on the open-hole coupon
+    with pytest.raises(SpecError) as plate:
+        parse_spec(plate_with_a_hole("tab_length = 35.0\n"))
+    assert str(plate.value).endswith("the tabs (tab_length 35) must end before the inner square around the hole begins at y = 30")
+    open_hole = paths.spec_path("open-hole-im7-8552").read_text(encoding="utf-8")
+    assert "tab_length = 50.0" in open_hole
+    with pytest.raises(SpecError) as coupon:
+        parse_spec(open_hole.replace("tab_length = 50.0", "tab_length = 145.0", 1))
+    assert str(coupon.value).endswith("the tabs (tab_length 145) must end before the inner square around the hole begins at y = 144")
+
+
 def test_a_coupon_kind_refuses_the_plate_lists_and_a_plate_names_its_regions():
     with pytest.raises(SpecError, match="belong to the plate kind only"):
         parse_spec(UNT.replace("[probes]", '[[supports]]\nregion = "Edge-Left"\ndofs = [1]\n[probes]', 1))
