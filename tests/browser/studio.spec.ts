@@ -2542,8 +2542,14 @@ test("at phone width a long layup wraps inside the card once a STEP file is save
   await page.getByTestId("build-button").click();
   await expect(menu).toBeVisible({ timeout: 30_000 });
   await page.setViewportSize({ width: 390, height: 844 }); // the model is set up on a wide window and read on a phone: the card is the window's foot
-  await page.getByRole("button", { name: "Close the model tree" }).click(); // on a phone the tree covers the model until it is closed
-  await page.getByTestId("sheet-card").click(); // under the model, the project's card and not the assistant
+  // The card measured below is the one a finished run leaves: its results shown and its steps put away. The menu is there from the first
+  // model on, while the played solve is still under way, and until the results are in the card is laid out otherwise (the model's words
+  // beside the project, the run's steps over the menu). A measurement taken then was of another card, and it failed two runs in eight.
+  const shell = page.getByTestId("workspace-shell");
+  await expect(shell).toHaveAttribute("data-results", "true", { timeout: 60_000 });
+  await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 60_000 });
+  await expect(shell).toHaveAttribute("data-tree", "closed"); // on a phone the first results close the tree, which covers the model
+  await expect(page.getByTestId("ws-sheet")).toHaveAttribute("data-sheet", "card"); // and show the project's card under it, not the assistant
   await expect(menu).toBeVisible();
   const opener = menu.getByTestId("model-download-open");
   // every file of the menu, picked with the keyboard: the entry leaves the page with its menu, and the focus goes back to the button
