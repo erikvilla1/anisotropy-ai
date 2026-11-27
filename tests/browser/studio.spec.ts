@@ -2508,6 +2508,84 @@ test("the model's shape downloads as a STEP file from the menu, named after the 
   expect(browserErrors).toEqual([]);
 });
 
+test("at phone width a long layup wraps inside the card once a STEP file is saved, and a pick by keyboard gives the focus back to the button for every file (ADR-0146)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  // sixteen angles with fractions, which a layup writes as one word of 114 characters, and a tab material that is one word of 80
+  const layup = `[${[12, -12, 33, -33, 47, -47, 61, -61, 75, -75, 88, -88, 5, -5, 19, -19].map((angle) => `${angle}.25`).join("/")}]s`;
+  const table = { title: "IM7-UNT-L1", units: { length: "mm", volume: "mm³", step: "mm" }, parts: [
+    { name: "Laminate", kind: "laminate", layup, plies: 32, ply_thickness: 0.18288, thickness: 5.85216, material: "IM7-8552", volume: 36576, in_model: true },
+    { name: "Bottom tab, top face", kind: "tab", layup: null, plies: null, ply_thickness: null, thickness: 1.5, material: "G".repeat(80), volume: 1870.94, in_model: false }] };
+  const ascii = JSON.stringify(table).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  const files: Record<string, { name: string; type: string; body: string; saved: string }> = {
+    abaqus: { name: "IM7-UNT-L1-abaqus.inp", type: "text/plain; charset=utf-8", body: "** IM7-UNT-L1\n*Heading\n", saved: "Saved the Abaqus input file (.inp)." },
+    ansys: { name: "IM7-UNT-L1-ansys.cdb", type: "text/plain; charset=utf-8", body: "! IM7-UNT-L1\n/PREP7\n", saved: "Saved the Ansys input file (.cdb)." },
+    step: { name: "IM7-UNT-L1.step", type: "model/step", body: "ISO-10303-21;\nHEADER;\n", saved: "Saved the STEP file." } };
+  await page.route(API, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname !== "/v1/coupon-jobs/model" || request.method() !== "POST") return route.fallback();
+    const program = url.searchParams.get("program") ?? "";
+    const file = files[program];
+    return route.fulfill({ status: 200, contentType: file.type, body: file.body, headers: { "Content-Disposition": `attachment; filename="${file.name}"`,
+      "X-Anisotropy-Model-File": file.name, ...(program === "step" ? { "X-Anisotropy-Model-Parts": ascii } : {}),
+      "Access-Control-Expose-Headers": "X-Anisotropy-Model-File, X-Anisotropy-Model-Parts" } });
+  });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await page.setViewportSize({ width: 390, height: 844 }); // the model is set up on a wide window and read on a phone: the card is the window's foot
+  await page.getByRole("button", { name: "Close the model tree" }).click(); // on a phone the tree covers the model until it is closed
+  await page.getByTestId("sheet-card").click(); // under the model, the project's card and not the assistant
+  await expect(menu).toBeVisible();
+  const opener = menu.getByTestId("model-download-open");
+  // every file of the menu, picked with the keyboard: the entry leaves the page with its menu, and the focus goes back to the button
+  for (const program of ["abaqus", "ansys", "step"]) {
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    const entry = menu.getByTestId(`model-download-${program}`);
+    await entry.focus();
+    await expect(entry).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu.getByTestId("model-download-saved")).toHaveText(files[program].saved);
+    await expect(opener).toBeFocused();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe("BUTTON"); // not BODY: the next Tab goes on from the menu
+  }
+  // Escape closes the menu from an entry and leaves the focus on the button too
+  await page.keyboard.press("Enter");
+  await menu.getByTestId("model-download-step").focus();
+  await page.keyboard.press("Escape");
+  await expect(menu.getByRole("menuitem")).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  // the STEP file's note, with a layup and a material that are each one long word: inside the card, which does not scroll sideways
+  await expect(menu.getByTestId("model-download-part")).toHaveText([
+    `Laminate: ${layup}, 32 plies of 0.1829 mm, 5.852 mm thick, IM7-8552.`,
+    `Bottom tab, top face: 1.5 mm thick, ${"G".repeat(80)}. Drawn as stated. The analysis grips this length and does not include the tab's material.`]);
+  const widths = await page.evaluate(() => {
+    const note = document.querySelector<HTMLElement>("[data-testid=model-download] .studio-model-note")!;
+    const scrolls: string[] = []; // every box round the note that is wider inside than it shows
+    for (let box = note.parentElement; box; box = box.parentElement) if (box.scrollWidth > box.clientWidth + 1) scrolls.push(`${box.tagName}.${box.className} ${box.scrollWidth} > ${box.clientWidth}`);
+    const parts = [...note.querySelectorAll<HTMLElement>("[data-testid=model-download-part]")].map((part) => part.getBoundingClientRect());
+    return { note: note.getBoundingClientRect().width, right: Math.max(note.getBoundingClientRect().right, ...parts.map((part) => part.right)),
+      left: note.getBoundingClientRect().left, lines: parts.map((part) => part.height), window: window.innerWidth, scrolls };
+  });
+  expect(widths.window).toBe(390);
+  expect(widths.scrolls).toEqual([]);
+  expect(widths.note).toBeLessThanOrEqual(390);
+  expect(widths.left).toBeGreaterThanOrEqual(0);
+  expect(widths.right).toBeLessThanOrEqual(390);
+  expect(Math.min(...widths.lines)).toBeGreaterThan(30); // each part's line is broken over several: 12 px type on one line is under 20
+  await expectNoBannedTerms(page, "the STEP file saved at phone width");
+  expect(browserErrors).toEqual([]);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { modelFileAnswer } from "../lib/model-file";
-import { modelDownloadsOffered, readShapeParts, savedLine, shapePartLines, STEP_FILE, STEP_FILE_NOTE, STEP_FILE_NOTE_ALONE, type ShapeParts } from "../lib/model-shape";
+import { modelDownloadsOffered, readShapeParts, savedLine, shapePartLines, STEP_FILE, STEP_FILE_NOTE, STEP_FILE_NOTE_ALONE, STEP_FILE_NOTE_ONE_MATERIAL, stepFileNote, type ShapeParts } from "../lib/model-shape";
 import { MODEL_FILE_LABELS, modelFile, StudioError } from "../lib/studio-api";
 import { ANALYSIS_UNAVAILABLE, bannedIn } from "../lib/studio-copy";
 
@@ -64,10 +64,22 @@ test("each solid has one line: its name, its layup as the coupon writes it, its 
 test("what the page says of a STEP file states where the layup is and stays in the product's words (ADR-0146, ADR-0091)", () => {
   assert.match(STEP_FILE_NOTE, /one solid at its thickness, in millimetres/);
   assert.match(STEP_FILE_NOTE, /holds no plies, so the layup is listed here and in the file's first lines/);
-  assert.match(STEP_FILE_NOTE_ALONE, /holds no plies; the layup is in the file's first lines/);
+  assert.equal(stepFileNote(readShapeParts(TABBED)), STEP_FILE_NOTE);
+  // a coupon of one material has no layup to list: the note names the material, as its part line does
+  const plastic = table([{ name: "Coupon", kind: "coupon", layup: null, plies: null, ply_thickness: null, thickness: 3.2, material: "Nylon 6" }]);
+  assert.equal(stepFileNote(plastic), STEP_FILE_NOTE_ONE_MATERIAL);
+  assert.equal(STEP_FILE_NOTE_ONE_MATERIAL, "Each part is one solid at its thickness, in millimetres. The file holds the shape only, so the material is listed here and in the file's first lines.");
+  assert.doesNotMatch(STEP_FILE_NOTE_ONE_MATERIAL, /layup|plies/);
+  // a plastic coupon with tabs is still one material and no layup; a laminate beside a part without plies still has its layup listed
+  assert.equal(stepFileNote(table([{ layup: null, plies: null }, { name: "Top tab, top face", kind: "tab", layup: null, plies: null, in_model: false }])), STEP_FILE_NOTE_ONE_MATERIAL);
+  assert.equal(stepFileNote(table([{}, { name: "Top tab, top face", kind: "tab", layup: null, plies: null, in_model: false }])), STEP_FILE_NOTE);
+  // no table came with the file (it is left out past the header's limit): the note lists nothing "here" and is true of either model
+  assert.equal(stepFileNote(null), STEP_FILE_NOTE_ALONE);
+  assert.equal(STEP_FILE_NOTE_ALONE, "Each part is one solid at its thickness, in millimetres. The file holds the shape only; what each part is made of is in the file's first lines.");
+  assert.doesNotMatch(STEP_FILE_NOTE_ALONE, /here|layup/);
   assert.equal(savedLine("step", MODEL_FILE_LABELS.step), "Saved the STEP file.");
   assert.equal(savedLine("ansys", MODEL_FILE_LABELS.ansys), "Saved the Ansys input file (.cdb)."); // as before (ADR-0129)
-  const said = [MODEL_FILE_LABELS.step, STEP_FILE_NOTE, STEP_FILE_NOTE_ALONE, savedLine("step", MODEL_FILE_LABELS.step), ...shapePartLines(readShapeParts(TABBED)!)];
+  const said = [MODEL_FILE_LABELS.step, STEP_FILE_NOTE, STEP_FILE_NOTE_ONE_MATERIAL, STEP_FILE_NOTE_ALONE, savedLine("step", MODEL_FILE_LABELS.step), ...shapePartLines(readShapeParts(TABBED)!)];
   for (const line of said) {
     assert.deepEqual(bannedIn(line), [], line);
     assert.doesNotMatch(line, /[—–]/, line); // no dash used as punctuation

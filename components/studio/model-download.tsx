@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { modelDownloadsOffered, savedLine, shapePartLines, STEP_FILE, STEP_FILE_NOTE, STEP_FILE_NOTE_ALONE, type ModelDownload } from "@/lib/model-shape";
+import { modelDownloadsOffered, savedLine, shapePartLines, STEP_FILE, stepFileNote, type ModelDownload } from "@/lib/model-shape";
 import { MODEL_FILE_LABELS, MODEL_FILE_OPENING, modelFile, StudioError, type ModelProgram } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
 import { workspaceValues } from "@/lib/tension-screen";
@@ -37,7 +37,7 @@ export function useModelDownload() {
       save(file.text, file.name);
       setSaved(savedLine(program, MODEL_FILE_LABELS[program])); // the file's kind, not its name: the name carries the program's (ADR-0091)
       if (program === STEP_FILE) {
-        setOpening(file.parts ? STEP_FILE_NOTE : STEP_FILE_NOTE_ALONE);
+        setOpening(stepFileNote(file.parts));
         setParts(file.parts ? shapePartLines(file.parts) : []);
       } else {
         setOpening(MODEL_FILE_OPENING[program] ?? "");
@@ -63,22 +63,35 @@ export function ModelDownloadMenu() {
   const { busy, problem, saved, opening, parts, download } = useModelDownload();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const picked = useRef(false); // a file was picked from the menu: the focus it held goes back to the button, not to the page
+  useEffect(() => {
+    // The picked entry leaves the page with its menu, and the button cannot take the focus while the file is written (it is disabled),
+    // so the focus is returned once it can: without this a keyboard's next Tab starts from the top of the page.
+    if (open || busy !== null || !picked.current) return;
+    picked.current = false;
+    if (!document.activeElement || document.activeElement === document.body) opener.current?.focus();
+  }, [open, busy]);
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false); };
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (box.current?.contains(document.activeElement)) opener.current?.focus(); // before the menu goes, and its entry's focus with it
+      setOpen(false);
+    };
     document.addEventListener("mousedown", away); document.addEventListener("keydown", key);
     return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", key); };
   }, [open]);
   // spans throughout: the menu sits in the model's heading, where only phrasing content belongs
   return (
     <span className="studio-model-tools" ref={box} data-testid="model-download">
-      <button type="button" className="studio-model-button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} disabled={busy !== null}
+      <button type="button" className="studio-model-button" ref={opener} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} disabled={busy !== null}
         data-testid="model-download-open">{busy ? "Writing the file…" : "Download model"}</button>
       {open ? (
         <span className="studio-model-menu" role="menu">
           {programs.map((program) => (
-            <button key={program} type="button" role="menuitem" onClick={() => { setOpen(false); void download(program); }} data-testid={`model-download-${program}`}>
+            <button key={program} type="button" role="menuitem" onClick={() => { picked.current = true; setOpen(false); void download(program); }} data-testid={`model-download-${program}`}>
               {MODEL_FILE_LABELS[program]}</button>
           ))}
           <span className="studio-muted">The model as it is set up now, for your own copy of the program.</span>

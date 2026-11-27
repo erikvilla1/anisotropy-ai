@@ -47,10 +47,20 @@ export function readShapeParts(raw: string | null | undefined): ShapeParts | nul
   return { title: text(payload.title) ? payload.title : "", units: { length, volume: text(volume) ? volume : `${length}³`, step }, parts };
 }
 
+const SOLIDS = "Each part is one solid at its thickness, in millimetres.";
 /** Said under a STEP file once it is saved: what it holds and where the layup is, since the file holds none. */
-export const STEP_FILE_NOTE = "Each part is one solid at its thickness, in millimetres. A STEP file holds no plies, so the layup is listed here and in the file's first lines.";
-/** The same when the table did not come with the file: the file's own first lines still state the layup. */
-export const STEP_FILE_NOTE_ALONE = "Each part is one solid at its thickness, in millimetres. A STEP file holds no plies; the layup is in the file's first lines.";
+export const STEP_FILE_NOTE = `${SOLIDS} A STEP file holds no plies, so the layup is listed here and in the file's first lines.`;
+/** The same for a model of one material throughout, which has no layup to list. */
+export const STEP_FILE_NOTE_ONE_MATERIAL = `${SOLIDS} The file holds the shape only, so the material is listed here and in the file's first lines.`;
+/** The same when the table did not come with the file: the file's own first lines still state what each part is made of. */
+export const STEP_FILE_NOTE_ALONE = `${SOLIDS} The file holds the shape only; what each part is made of is in the file's first lines.`;
+
+/** The note for the table that came with the file: the layup where a part has plies, the material where none has, and the file's own
+ * first lines where no table came. */
+export function stepFileNote(table: ShapeParts | null): string {
+  if (!table) return STEP_FILE_NOTE_ALONE;
+  return table.parts.some((part) => part.plies !== null && part.layup !== null) ? STEP_FILE_NOTE : STEP_FILE_NOTE_ONE_MATERIAL;
+}
 
 /** One line per solid, in the file's order: its name as the CAD program shows it, then its layup, ply count, thickness and material. A
  * layup is printed as the coupon writes it. */
