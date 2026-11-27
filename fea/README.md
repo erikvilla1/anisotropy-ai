@@ -116,6 +116,16 @@ checks/              proofs that are not team models: cases/, decks/ (tiny fixtu
 examples/             deck_summary.py, solve_deck.py
 ```
 
+## A coupon's or a plate's shape and STEP file
+
+`anisotropy_fea.coupon_shape` draws the model a coupon or a plate states as solids in Gmsh's OpenCASCADE and writes them as a STEP file in millimetres (ADR-0146). The laminate is one solid at its whole thickness: the outline the mesh is cut from (`geometry`, `dogbone.Outline`, the hole at `mesher.hole_centre`), extruded by the sum of the model's ply thicknesses, with z = 0 at mid-thickness. Bonded tabs are four more solids when the coupon states their thickness, with the bevel it states; a coupon that gives only the gripped length gets no tab. Every solid is named, and the file's header states each part's layup, ply count, thickness and material, because a STEP file holds no plies. It needs the optional extra `mesh`:
+
+```
+uv run --extra mesh python tools/studio_tool.py model <values>.json --program step --out <folder>
+```
+
+writes `<designation>.step` and, in `model.json`, the part table in the coupon's units. `model.json` says `unavailable` and no file is written where Gmsh is not installed, and `refused` with the reason for a shape the model does not state (tabs that reach a dog-bone's fillet, a bevel longer than the tab). `tests/test_coupon_shape.py` reads every kind's file back and holds its outline, its thickness and its hole against the model and the mesh to 1e-6 mm, and its volume against the outline's area times the thickness. The files have been read back by OpenCASCADE only; none has been opened in a CAD program yet.
+
 ## A wing's shape and STEP file
 
 `anisotropy_fea.wing_shape` builds a wing file's parts (the engine's wing description, ADR-0115) as surfaces at their mid-thickness in Gmsh's OpenCASCADE, writes them as a STEP file in millimetres with every part named, and meshes them with four-node shells (ADR-0116). It needs the optional extra `mesh`:

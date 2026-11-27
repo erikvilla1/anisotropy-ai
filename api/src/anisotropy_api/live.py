@@ -11,7 +11,7 @@ A model brought in as an Abaqus deck (ADR-0105) is answered by the same workers,
 the rows (`read_model`): nothing of it is kept once the answer is read.
 
 A model asked for as a file for Abaqus or Ansys (ADR-0129) is written by the same workers from the rows (`model_file`): the setup check
-and the program's writer, no solve.
+and the program's writer, no solve. Its shape as a STEP file for a CAD program (ADR-0146) is asked for and answered the same way.
 
 The API reads the files the tool wrote and passes them on as written (`raw`): the fields of a fine mesh run to megabytes, and parsing and
 writing them again would cost more than the solve. The API depends on the engine alone; the fea package runs in its own processes (ADR-0051).
@@ -75,9 +75,10 @@ class ModelAnswer:
 @dataclass
 class ModelFile:
     """The model the rows build, as a file another program reads (ADR-0129), as `studio_tool.py model` answered it."""
-    state: str  # written, blocked (the setup check stops it) or refused (the program's writer cannot state this model)
+    state: str  # written, blocked (the setup check stops it), refused (the program's writer cannot state this model, or its shape cannot be
+    # drawn) or, for a STEP file, unavailable (Gmsh is not installed with the fea package here)
     checklist: dict
-    head: dict  # model.json: the program, the file's name, its units, size and SHA-256; {} when blocked
+    head: dict  # model.json: the program, the file's name, its units, size and SHA-256, a STEP file's part table; {} when blocked
     content: bytes | None  # the file, when written
     seconds: float
     warm: bool

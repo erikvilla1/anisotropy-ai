@@ -89,6 +89,9 @@ ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 MODEL_PROGRAM_NAMES = {"abaqus": "Abaqus", "ansys": "Ansys"}  # as a refusal names them (ADR-0129)
 MODEL_FILE_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
+MODEL_PARTS_HEADER = "X-Anisotropy-Model-Parts"  # a STEP file's part table as JSON in ASCII (ADR-0146): the file itself holds no plies
+STEP_MEDIA_TYPE = "model/step"
+SHAPE_BUILDER_ABSENT = "The shape builder is not installed here"  # as the wing's and the repair's shape routes say it
 WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
 WAKE_HEADER = "X-Anisotropy-Wake"  # what the Worker reads on the answer to start a solver (worker/routing.ts)
 SOLVER_STATE = "/v1/solver/state"  # whether a solver container runs a job: the wake-up's question (ADR-0056 amendment 11)
@@ -196,7 +199,7 @@ app.add_middleware(
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
-    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_FILE_HEADER, "Location"],
+    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_FILE_HEADER, MODEL_PARTS_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -710,13 +713,19 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
 
 
-@app.post(COUPON_JOBS + "/model", response_model=None, responses={200: {"content": {"text/plain": {}}, "description": "The model file"}})
+@app.post(COUPON_JOBS + "/model", response_model=None,
+          responses={200: {"content": {"text/plain": {}, STEP_MEDIA_TYPE: {}}, "description": "The model file"}})
 def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, program: ModelProgram) -> Response:
     """The model the rows build, as a file another program reads (ADR-0129): `program=abaqus` gives the Abaqus input deck a run writes,
     `program=ansys` a Mechanical APDL input file of the same model. The fea package judges the rows as a live solve does and writes the
     file; nothing is solved and nothing is kept. The answer is the file, named in `Content-Disposition`. The Abaqus file is everyone's;
     the Ansys file is too since ADR-0129 amendment 3 (403 if it is closed again, `_ansys_model`). 422 when the setup check stops the model, with its first reason, or the program's writer cannot state it; 429, 504 and
-    503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256."""
+    503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256.
+
+    `program=step` gives the model's shape as a STEP file for a CAD program instead (ADR-0146): each part one solid at its thickness, in
+    millimetres, built by the fea package from the same model, under the same rules as the other two files. Its part table (each part's
+    layup, ply count, thickness and material, which a STEP file does not hold) comes as JSON in the header `X-Anisotropy-Model-Parts`.
+    422 when the shape cannot be drawn from what the model states, with the reason; 503 where Gmsh is not installed."""
     if program == "ansys" and not _ansys_model(request):
         raise HTTPException(status_code=403, detail="The Ansys model is not offered yet.")
     receipt = CouponModelReceipt(**problem.receipt().model_dump(exclude_none=True), program=program)
@@ -731,8 +740,14 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except LiveRefused as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if found.state == "unavailable":  # Gmsh is not installed with the fea package here: the tool's own words stay in the log
+        print(f"the model's shape was not built: {found.head.get('problem', 'no reason given')}", flush=True)
+        run_id = _record(request, actor, receipt, error="the shape builder is not installed")
+        raise HTTPException(status_code=503, detail=SHAPE_BUILDER_ABSENT, headers=_run_header(run_id))
     if found.state != "written" or found.content is None:
-        if found.state == "refused":
+        if found.state == "refused" and program == "step":  # closed as a sentence, so the page shows it as it stands (ADR-0091)
+            detail = f"This model cannot be drawn as a STEP file yet: {str(found.head.get('problem', 'no reason given')).rstrip('.')}."
+        elif found.state == "refused":
             detail = f"This model cannot be written for {MODEL_PROGRAM_NAMES[program]} yet: {found.head.get('problem', 'no reason given')}"
         else:
             reasons = [f"{item.get('label', item.get('id'))}: {item.get('message')}" for item in found.checklist.get("items", [])
@@ -744,8 +759,13 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
     run_id = _record(request, actor, receipt, response={
         "state": found.state, "designation": found.checklist.get("designation"), "program": program, "name": name, "units": found.head.get("units"),
         "bytes": len(found.content), "sha256": hashlib.sha256(found.content).hexdigest(), "nodes": found.head.get("nodes"),
-        "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3)})
+        "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3),
+        **({"solids": found.head.get("solids")} if program == "step" else {})})
     headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_FILE_HEADER: name, **(_run_header(run_id) or {})}
+    if program == "step":
+        if isinstance(found.head.get("parts"), dict):
+            headers[MODEL_PARTS_HEADER] = json.dumps(found.head["parts"], ensure_ascii=True, separators=(",", ":"))
+        return Response(content=found.content, media_type=STEP_MEDIA_TYPE, headers=headers)
     return Response(content=found.content, media_type="text/plain; charset=utf-8", headers=headers)
 
 
