@@ -55,6 +55,11 @@ jobs:
         run: ../scripts/ci-apt-install.sh ~/apt-debs calculix-ccx libglu1-mesa && (ccx -v || true)
       - run: uv sync --locked --extra mesh   # Gmsh (the wheel needs libGLU, installed above)
       - run: uv run pytest tests ../engine/tests
+      - name: The model file's route with the real tool behind it (ADR-0146)
+        # The api job has no Gmsh, so its tests that draw a STEP file through the route skip there. This job's environment holds
+        # Gmsh, so they run here: the api project gets its own environment, and the file needs no database and no secret
+        # (ADR-0114 amendment 4). -rs prints a skipped test's reason.
+        run: uv run --locked --project ../api pytest ../api/tests/test_coupon_step_api.py -rs
 
   api:
     runs-on: ubuntu-latest
