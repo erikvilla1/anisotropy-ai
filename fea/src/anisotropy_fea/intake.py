@@ -20,6 +20,7 @@ that system and the decks in `units.deck_units_of` it (ADR-0061). The library sh
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -73,6 +74,7 @@ WORD_OF_CRITERION = {criterion: word for word, criterion in CRITERION_OF_WORD.it
 VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the workspace sends (ADR-0046 amendment 2)
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
+NAME_LENGTH = 80  # the most characters of a coupon's name and of a material's: what the API's coupon field and a name of a deck hold
 LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
                 "this cell shows its constants")  # shown until a material is picked; an Excel text in a formula holds at most 255 characters
 assert len(LIBRARY_HELP) <= 255 and '"' not in LIBRARY_HELP
@@ -1007,6 +1009,9 @@ def check_form(form: FormInput) -> Values:
         except (TypeError, ValueError):
             problems.append(f"{label}: a number is needed, not {forms.text_of(value)!r}")
             return None
+        if not math.isfinite(number_):  # inf and nan are numbers to Python and to no model: said here, before a size is divided by one
+            problems.append(f"{label}: a finite number is needed, not {number_:g}")
+            return None
         if whole and number_ != int(number_):
             problems.append(f"{label}: a whole number is needed, not {number_:g}")
             return None
@@ -1038,7 +1043,7 @@ def check_form(form: FormInput) -> Values:
             return None
         try:
             parts = [float(p.strip()) for p in raw.replace(";", ",").split(",") if p.strip()]
-            if whole and any(p != int(p) for p in parts):
+            if not all(math.isfinite(p) for p in parts) or whole and any(p != int(p) for p in parts):
                 raise ValueError
             return [int(p) for p in parts] if whole else parts
         except ValueError:
@@ -1140,6 +1145,8 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"{L('tab_thickness')} and {L('tab_bevel')}: give both for bonded tabs, or leave the three tab rows blank")
             if not tab_length:
                 problems.append(f"{L('tab_thickness')}: bonded tabs need a {L('tab_length')} above 0")
+    if tab_material is not None and len(tab_material) > NAME_LENGTH:
+        problems.append(f"{L('tab_material')}: at most {NAME_LENGTH} characters, not {len(tab_material)}")
     if tab_bevel is not None and tab_bevel > 90:
         problems.append(f"{L('tab_bevel')}: at most 90 (a square end), not {tab_bevel:g}")
     strain_device, strain_length = word("strain_device") or None, number("strain_length")
@@ -1526,9 +1533,13 @@ def designation_for(values: Values, root: Path) -> Designation:
         other = next((c for c, angles in layups.items() if angles == stacking and c != layup), None)
         if other is not None:
             problems.append(f"Layup code: this stacking sequence already has the code {other}; use it")
+    named = Designation(code, values.test_code, layup)
+    if len(named.name) > NAME_LENGTH:
+        problems.append(f"Material code and Layup code: the coupon's name would be {len(named.name)} characters, and a name is at most {NAME_LENGTH}; "
+                        "give shorter codes")
     if problems:
         raise IntakeError("; ".join(problems))
-    return Designation(code, values.test_code, layup)
+    return named
 
 
 # --------------------------------------------------------------------------------------------- the spec

@@ -102,6 +102,31 @@ def test_a_blank_row_in_the_values_is_refused_as_on_the_form(tmp_path):
     assert "Length (mm): required" in str(refused.value) and "G23 (MPa): required" in str(refused.value)
 
 
+@pytest.mark.parametrize("changes, said", [
+    ({"width": float("inf")}, "Width (mm): a finite number is needed, not inf"),
+    ({"length": float("nan")}, "Length (mm): a finite number is needed, not nan"),
+    ({"length": "1e999"}, "Length (mm): a finite number is needed, not inf"),
+    ({"element_size": float("-inf")}, "a finite number is needed, not -inf"),
+    ({"tab_thickness": float("inf"), "tab_bevel": 30}, "Tab thickness (mm): a finite number is needed, not inf"),
+    ({"material_code": "A" * 300}, "Material code and Layup code: the coupon's name would be 307 characters, and a name is at most 80; give shorter codes"),
+    ({"layup_code": "L" + "1" * 90}, "the coupon's name would be 99 characters, and a name is at most 80"),
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "g" * 81}, "Tab material: at most 80 characters, not 81"),
+])
+def test_a_size_that_is_no_finite_number_or_a_name_too_long_is_refused_at_its_row(tmp_path, changes, said):
+    """What a values file may hold and no model may (JSON as Python reads it takes Infinity and NaN, and 1e999 is infinite): each
+    stopped the tool with an error of its own before, one of them naming the folder it wrote in (ADR-0146)."""
+    with pytest.raises(IntakeError) as refused:
+        specs_of(tmp_path, PUBLIC_FILL, **changes)
+    assert said in str(refused.value)
+
+
+def test_a_name_at_its_limit_is_taken(tmp_path):
+    longest = "A" * (80 - len("-UNT-L1"))
+    main, _ = specs_of(tmp_path, PUBLIC_FILL, material_code=longest, layup_code="L1", tab_thickness=1.5, tab_bevel=30, tab_material="g" * 80)
+    spec = parse_spec(main)
+    assert spec.coupon.designation == f"{longest}-UNT-L1" and len(spec.coupon.designation) == 80 and spec.tabs.material == "g" * 80
+
+
 # --------------------------------------------------------------------------------------------- the failure criterion rows (form 0.3)
 
 def test_all_reports_every_criterion_the_material_allows(tmp_path):
