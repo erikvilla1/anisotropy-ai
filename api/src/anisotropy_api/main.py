@@ -90,6 +90,8 @@ COUPON_JOBS = "/v1/coupon-jobs"
 MODEL_PROGRAM_NAMES = {"abaqus": "Abaqus", "ansys": "Ansys"}  # as a refusal names them (ADR-0129)
 MODEL_FILE_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
 MODEL_PARTS_HEADER = "X-Anisotropy-Model-Parts"  # a STEP file's part table as JSON in ASCII (ADR-0146): the file itself holds no plies
+MODEL_PARTS_LIMIT = 4096  # the most bytes of a part table a header carries: an ordinary table is under 1000, and a fetch refuses headers near 16 kB
+MODEL_NOT_WRITTEN = "The model file could not be written here"  # a 503 of the model's address, whatever stopped the tool
 STEP_MEDIA_TYPE = "model/step"
 SHAPE_BUILDER_ABSENT = "The shape builder is not installed here"  # as the wing's and the repair's shape routes say it
 WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
@@ -725,7 +727,9 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
     `program=step` gives the model's shape as a STEP file for a CAD program instead (ADR-0146): each part one solid at its thickness, in
     millimetres, built by the fea package from the same model, under the same rules as the other two files. Its part table (each part's
     layup, ply count, thickness and material, which a STEP file does not hold) comes as JSON in the header `X-Anisotropy-Model-Parts`.
-    422 when the shape cannot be drawn from what the model states, with the reason; 503 where Gmsh is not installed."""
+    The header is left out when the table is over `MODEL_PARTS_LIMIT` bytes, so the answer's headers stay small whatever the rows name.
+    422 when the shape cannot be drawn from what the model states, with the reason; 503 where Gmsh is not installed. A 503 of this
+    address says what happened and never why in the tool's words, which may name a folder of this machine: the cause is in the log."""
     if program == "ansys" and not _ansys_model(request):
         raise HTTPException(status_code=403, detail="The Ansys model is not offered yet.")
     receipt = CouponModelReceipt(**problem.receipt().model_dump(exclude_none=True), program=program)
@@ -738,8 +742,9 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except LiveTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
-    except LiveRefused as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except LiveRefused as exc:  # the cause may name a folder of this machine: it stays in the log, and the answer names none (ADR-0146)
+        print(f"the model file was not written: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail=MODEL_NOT_WRITTEN) from exc
     if found.state == "unavailable":  # Gmsh is not installed with the fea package here: the tool's own words stay in the log
         print(f"the model's shape was not built: {found.head.get('problem', 'no reason given')}", flush=True)
         run_id = _record(request, actor, receipt, error="the shape builder is not installed")
@@ -763,8 +768,9 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
         **({"solids": found.head.get("solids")} if program == "step" else {})})
     headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_FILE_HEADER: name, **(_run_header(run_id) or {})}
     if program == "step":
-        if isinstance(found.head.get("parts"), dict):
-            headers[MODEL_PARTS_HEADER] = json.dumps(found.head["parts"], ensure_ascii=True, separators=(",", ":"))
+        table = json.dumps(found.head["parts"], ensure_ascii=True, separators=(",", ":")) if isinstance(found.head.get("parts"), dict) else ""
+        if 0 < len(table) <= MODEL_PARTS_LIMIT:  # a larger table is left out, and the page says where the layup is instead
+            headers[MODEL_PARTS_HEADER] = table
         return Response(content=found.content, media_type=STEP_MEDIA_TYPE, headers=headers)
     return Response(content=found.content, media_type="text/plain; charset=utf-8", headers=headers)
 
