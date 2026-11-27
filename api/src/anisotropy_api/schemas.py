@@ -1407,6 +1407,17 @@ SetupChangesOutput.model_rebuild()
 
 # ----------------------------------------------------------------------------- the workspace's planner (ADR-0144)
 
+def _cannot_be_kept(value: Any) -> bool:
+    """Whether what a request states holds a character the records keep in no text and no JSON: a NUL, or half of a surrogate pair."""
+    if isinstance(value, str):
+        return any(character == "\x00" or "\ud800" <= character <= "\udfff" for character in value)
+    if isinstance(value, dict):
+        return any(_cannot_be_kept(key) or _cannot_be_kept(item) for key, item in value.items())
+    if isinstance(value, list):
+        return any(_cannot_be_kept(item) for item in value)
+    return False
+
+
 class PlanRequest(Contract):
     """An engineer's sentence for the planner (ADR-0144): one call to the model reads it into a plan of typed tool steps."""
 
@@ -1416,6 +1427,9 @@ class PlanRequest(Contract):
     def words(self) -> Self:
         if not self.ask.strip():
             raise ValueError("ask holds no words")
+        # the sentence is kept as it was asked (the plan, its run record) and never changed, so one that cannot be kept is refused here
+        if _cannot_be_kept(self.ask):
+            raise ValueError("ask holds a character that cannot be kept (a NUL, or half of a surrogate pair); write the sentence without it")
         return self
 
 
@@ -1530,6 +1544,8 @@ class RepairPlanRequest(PlanRequest):
     def stated(self) -> Self:
         if not self.repair:
             raise ValueError("repair holds the repair's description as the page holds it; the object is empty")
+        if _cannot_be_kept(self.repair):  # it is kept with the request (ADR-0026) and never changed, as the sentence is
+            raise ValueError("repair holds a character that cannot be kept (a NUL, or half of a surrogate pair)")
         size = len(json.dumps(self.repair, ensure_ascii=False).encode("utf-8"))
         if size > VALUES_LIMIT_BYTES:
             raise ValueError(f"the repair is {size} bytes; a repair's description is far below {VALUES_LIMIT_BYTES}")

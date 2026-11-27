@@ -3,6 +3,7 @@ story from its records, the week's numbers, and that each view of the page is ke
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import uuid
@@ -11,7 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event as sql_event
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from anisotropy_api import access, oversight, planner
@@ -24,6 +26,8 @@ from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, service_token, token
 from conftest import TEST_URL, needs_test_database
 from test_model_costs import _call
 from test_planner import ASK, GOOD, PLATE, plan, project, scripted, step, with_args
+from test_planner_kinds import PLANS as REPAIR_PLANS
+from test_planner_kinds import repair as a_repair
 
 FOUNDER = "founder@example.com"
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "oversight"
@@ -51,11 +55,21 @@ def test_a_reason_loses_the_words_it_quotes_for_a_customer():
     assert oversight.reason_kind(reason) == "the sentence asks for a change the plan leaves out"
     nested = "the sentence asks for a change the plan leaves out (“pull it like the “north bracket” of the Acme job”): ask for it rather than run without it"
     assert oversight.reason_kind(nested) == "the sentence asks for a change the plan leaves out"
-    assert oversight.reason_kind("step 2: the sentence writes 2 kN, and the step gives it in N") == "step 2: a value given in another unit than the sentence writes"
-    assert oversight.reason_kind("step 1: Edge-Middle is not a region of this model; it has Edge-Bottom, Edge-Top") == "step 1: a region the model does not have"
-    assert oversight.reason_kind("You want the bottom edge clamped for the north site bracket") == oversight.REASON_HIDDEN
-    assert oversight.reason_kind("step 3: 30 mm is thinner than the plies of the Acme bracket") == oversight.REASON_HIDDEN  # a tool's own refusal
-    assert oversight.reason_shown(None, None, False) is None and oversight.reason_shown(nested, None, True) == nested
+    in_n = "step 2: the sentence writes 2 kN, and the step gives it in N"  # the checks' reason for the second of an answer's four steps
+    assert oversight.reason_kind(in_n, 4) == "step 2: a value given in another unit than the sentence writes"
+    assert oversight.reason_kind("step 1: Edge-Middle is not a region of this model; it has Edge-Bottom, Edge-Top", 4) == "step 1: a region the model does not have"
+    assert oversight.reason_kind("You want the bottom edge clamped for the north site bracket", 4) == oversight.REASON_HIDDEN
+    assert oversight.reason_kind("step 3: 30 mm is thinner than the plies of the Acme bracket", 4) == oversight.REASON_HIDDEN  # a tool's own refusal
+    assert oversight.reason_shown(None, "refused", None, 0, False) is None and oversight.reason_shown(nested, "refused", None, 0, True) == nested
+    # the second review of 2026-11-27: a step's number is given only when it is one of the answer's own steps, as the server counted them
+    for steps in (0, 1):
+        assert oversight.reason_kind(in_n, steps) == oversight.REASON_HIDDEN
+    assert oversight.reason_kind("step 7313: ZQXJOB is not a row on offer", 4) == oversight.REASON_HIDDEN
+    assert oversight.reason_kind("step 0: ZQXJOB is not a row on offer", 4) == oversight.REASON_HIDDEN
+    assert oversight.reason_kind("step 4: ZQXJOB is not a row on offer", 4) == "step 4: a row that is not on offer"
+    assert oversight.reasons_shown([in_n, "x"], False, 4) == ["step 2: a value given in another unit than the sentence writes", oversight.REASON_HIDDEN]
+    assert oversight.reasons_shown([in_n], False) == [oversight.REASON_HIDDEN] and oversight.reasons_shown([in_n], True) == [in_n]
+    assert oversight.steps_of({"steps": [1, 2, 3]}) == 3 and oversight.steps_of({"steps": "x"}) == 0 and oversight.steps_of(None) == 0
 
 
 def _refusals() -> list[str]:
@@ -85,18 +99,34 @@ def test_every_reason_of_the_planners_checks_has_a_fixed_line_and_no_reason_give
     reasons = _refusals()
     assert len(set(reasons)) >= 18  # the checks above fail in as many ways
     for reason in reasons:
-        line = oversight.reason_kind(reason)
+        line = oversight.reason_kind(reason, 9)  # none of these answers has more than nine steps
         assert line != oversight.REASON_HIDDEN and _fixed(line), reason  # a reason of planner.py with no line: add it to REASON_KINDS
     assert oversight.reason_kind(planner.PLAN_LIMIT_REASON) == planner.PLAN_LIMIT_REASON
     # whatever the words, the answer is a fixed line, after a step's number at most: nothing of the reason is in it
     for words in ("", "x", "step 1: ", "step 12: “a” is not a row on offer", "step 7: Acme's secret is not a tool on offer here; the tools are x",
                   "the sentence names Acme, not Zenith", "Acme takes only words the sentence writes", "step 99999: x is not a row on offer", *reasons):
-        line = oversight.reason_kind(words)
-        assert _fixed(line) and "Acme" not in line, words
+        for steps in (0, 9, 20):
+            line = oversight.reason_kind(words, steps)
+            assert _fixed(line) and "Acme" not in line and "99999" not in line, words
     joined = planner.reason_of(reasons)  # more than a refusal's answer names: the first five, and "more like them"
-    shown = oversight.reason_shown(joined, reasons, False)
+    shown = oversight.reason_shown(joined, "refused", reasons, 9, False)
     assert shown.endswith("; and more like them") and all(_fixed(part) for part in shown.removesuffix("; and more like them").split("; "))
-    assert _fixed(oversight.reason_shown(joined, None, False))  # with nothing to read the joined reasons by, still a fixed line
+    assert shown != oversight.REASON_HIDDEN
+    # the second review of 2026-11-27: a refused plan's reason is read against the fixed lines only when it is the checks' own, which
+    # it is when it is exactly their reasons for the last answer turned back, joined. Anything else is the model's own sentence, or
+    # cannot be told from it, and a model can write a sentence that matches a line: it is hidden, and never read against the lines
+    row = "ZQXJOB is not a row on offer"
+    assert oversight.reason_shown(row, "refused", [planner.NOT_A_QUESTION], 0, False) == oversight.REASON_HIDDEN  # the model's sentence
+    assert oversight.reason_shown(f"step 1: {row}", "refused", [f"step 1: {row}"], 2, False) == "step 1: a row that is not on offer"  # the checks'
+    assert oversight.reason_shown(f"step 1: {row}", "refused", [f"step 2: {row}"], 2, False) == oversight.REASON_HIDDEN
+    assert oversight.reason_shown(joined, "refused", None, 9, False) == oversight.REASON_HIDDEN  # a plan older than `attempts`: nothing tells whose
+    assert oversight.reason_shown(joined, "refused", reasons[:3], 9, False) == oversight.REASON_HIDDEN
+    assert oversight.reason_shown(planner.NOT_A_QUESTION, "refused", [planner.NOT_A_QUESTION], 0, False) == planner.NOT_A_QUESTION
+    # a plan that is not refused has the server's own reason from when it was made, with no step in it
+    assert oversight.reason_shown(planner.PLAN_LIMIT_REASON, "capped", None, 0, False) == planner.PLAN_LIMIT_REASON
+    assert oversight.reason_shown("the model could not be reached", "unavailable", None, 0, False) == "the model could not be reached"
+    assert oversight.reason_shown(f"step 1: {row}", "unavailable", None, 0, False) == oversight.REASON_HIDDEN
+    assert oversight.reason_shown(row, "refused", None, 0, True) == row  # and a founder's own is whole
 
 
 @pytest.mark.parametrize(("stop", "response", "plan_state", "outcome"), [
@@ -367,27 +397,36 @@ def test_a_call_that_is_no_plans_reads_what_became_of_its_words_from_its_run(ove
 EPOCH = "1970-01-01T00:00:00+00:00"
 
 
-def _feed(o, **params) -> list[dict]:
+def _page(o, **params) -> dict:
     answered = o.client.get("/v1/oversight/activity", params=params, headers=o.founder)
     assert answered.status_code == 200, answered.text
-    return answered.json()["events"]
+    return answered.json()
+
+
+def _feed(o, **params) -> list[dict]:
+    return _page(o, **params)["events"]
 
 
 def _first(o, size: int) -> tuple[list[dict], str | None]:
-    """The first page and its floor: the key of its oldest event, or None when the page is the whole feed."""
-    events = _feed(o, limit=size)
-    return events, (events[-1]["key"] if len(events) == size else None)
+    """The first page and its floor: the key of its oldest event, or None when the feed says there is nothing older."""
+    page = _page(o, limit=size)
+    return page["events"], (page["events"][-1]["key"] if page["older"] else None)
+
+
+def _pages(o, floor: str | None, size: int) -> list[list[dict]]:
+    """Everything from the floor on (from the beginning with no floor), page by page until the feed says there is nothing older: the
+    page's refresh, one request for each page."""
+    start = {"from": floor} if floor else {"since": EPOCH}
+    pages: list[list[dict]] = []
+    while True:
+        page = _page(o, limit=size, **start, **({"before": pages[-1][-1]["key"]} if pages else {}))
+        pages.append(page["events"])
+        if not page["older"]:
+            return pages
 
 
 def _refreshed(o, floor: str | None, size: int) -> list[dict]:
-    """Everything from the floor on (from the beginning with no floor), page by page until a page is short: the page's refresh."""
-    start = {"from": floor} if floor else {"since": EPOCH}
-    events: list[dict] = []
-    while True:
-        page = _feed(o, limit=size, **start, **({"before": events[-1]["key"]} if events else {}))
-        events += page
-        if len(page) < size:
-            return events
+    return [event for page in _pages(o, floor, size) for event in page]
 
 
 def _recorded(o, at: dt.datetime, n: int = 1, **changes) -> None:
@@ -595,5 +634,261 @@ def test_on_a_machine_with_no_sign_in_its_one_user_reads_the_page(empty_runs, mo
     monkeypatch.delenv(FOUNDER_EMAILS_VARIABLE, raising=False)
     with TestClient(app, headers={"X-Anisotropy-Actor": "studio"}) as client:
         app.state.access_verifier = None
-        assert client.get("/v1/oversight/activity").json() == {"events": []}
+        assert client.get("/v1/oversight/activity").json() == {"events": [], "older": False}
         assert client.get("/v1/oversight/weekly").status_code == 200
+
+
+# ------------------------------------------------------------------ the second review of 2026-11-27: what it found, held fixed
+
+NUMBERED = "clamp the bottom edge, pull the top edge with 7313 N and tell me if it holds"
+ROW = "ZQXJOB is not a row on offer"  # one of the checks' own lines, with a word of the answer in it
+
+
+@needs_test_database
+@pytest.mark.parametrize("said", [f"step 7313: {ROW}", ROW], ids=["after a step's number", "alone"])
+def test_the_models_own_sentence_is_hidden_though_it_reads_as_one_of_the_checks_lines(overseeing, monkeypatch, said):
+    # the model's words that are no question become the reason as they are, and they can be written to match a line of the checks:
+    # read against the lines, "step 7313: ZQXJOB is not a row on offer" left as "step 7313: a row that is not on offer", and 7313 is
+    # a number of the customer's sentence
+    scripted(monkeypatch, *[plan(question=said)] * 4)
+    theirs = _planned(overseeing.client, overseeing.customer, ask=NUMBERED)
+    assert theirs["state"] == "refused" and theirs["reason"] == said  # what the customer is told, in full
+    story, week, sent = _read_by_a_founder(overseeing, theirs["id"])
+    assert story["reason"] == oversight.REASON_HIDDEN and week["refused"] == [{"reason": oversight.REASON_HIDDEN, "plans": 1}]
+    assert story["turned_back"] == [{"plan": None, "reasons": [planner.NOT_A_QUESTION]}] * 2  # what the checks said of it
+    assert "step 7313" not in sent and "ZQXJOB" not in sent and "not on offer" not in sent
+    ours = _planned(overseeing.client, overseeing.founder, ask=NUMBERED)  # a founder's own row stays whole
+    assert ours["reason"] == said == _story(overseeing, ours["id"])["reason"]
+    assert oversight.reason_kind(said, 9999) != oversight.REASON_HIDDEN  # read as the checks' own, it would be one of their lines
+
+
+@needs_test_database
+def test_a_steps_number_is_shown_only_when_the_answer_has_that_step_and_a_reason_nothing_vouches_for_is_hidden(overseeing):
+    # records as they can stand: the checks number a step by its place in the answer, so a number past the answer's steps is none of
+    # theirs, and a plan older than the kept answers has nothing to say who wrote its reason
+    now = dt.datetime.now(dt.timezone.utc)
+
+    def kept(reasons: list[str] | None, steps: int, reason: str | None = None, state: str = "refused") -> str:
+        tried = [] if reasons is None else [{"plan": {"steps": [{}] * steps, "question": None, "unread": []}, "reasons": reasons}]
+        row = add_plan(overseeing.engine, kind="repair", project_id=None, user_email=EMAIL, actor="studio", ask="pull it with 7313 N",
+                       state=state, steps=[], base="0" * 64, question=None, unread=[], writer="anthropic", model="claude-opus-5-5",
+                       reason=reason or planner.reason_of(reasons), attempts=tried, created_at=now, updated_at=now)
+        return str(row.id)
+
+    line, hidden = "a row that is not on offer", oversight.REASON_HIDDEN
+    cases = [(kept([f"step 2: {ROW}"], 2), f"step 2: {line}", [[f"step 2: {line}"]]),
+             (kept([f"step 3: {ROW}"], 2), hidden, [[hidden]]),  # the answer has two steps
+             (kept([f"step 7313: {ROW}"], 2), hidden, [[hidden]]),
+             (kept([f"step 0: {ROW}"], 2), hidden, [[hidden]]),
+             (kept([f"step 1: {ROW}"], 0), hidden, [[hidden]]),  # an answer with no list of steps has no step 1
+             (kept([f"step 1: {ROW}", f"step 7313: {ROW}"], 1), f"step 1: {line}; {hidden}", [[f"step 1: {line}", hidden]]),
+             (kept([f"step 1: {ROW}"], 1, reason=f"step 1: {ROW} "), hidden, [[f"step 1: {line}"]]),  # not the checks' joining: the model's
+             (kept(None, 0, reason=f"step 1: {ROW}"), hidden, []),  # older than the kept answers
+             (kept(None, 0, reason=ROW), hidden, []),
+             (kept(None, 0, reason="step 7313: the model could not be reached", state="unavailable"), hidden, []),
+             (kept(None, 0, reason="the model could not be reached", state="unavailable"), "the model could not be reached", [])]
+    for plan_id, reason, turned_back in cases:
+        story = _story(overseeing, plan_id)
+        assert story["reason"] == reason and [t["reasons"] for t in story["turned_back"]] == turned_back, (reason, turned_back)
+        assert "7313" not in json.dumps([story["reason"], story["turned_back"]]) and "ZQXJOB" not in json.dumps(story)
+    week = overseeing.client.get("/v1/oversight/weekly", headers=overseeing.founder).json()
+    assert {r["reason"]: r["plans"] for r in week["refused"]} == {hidden: 7, f"step 2: {line}": 1, f"step 1: {line}; {hidden}": 1}
+    assert "7313" not in json.dumps(week["refused"]) and "ZQXJOB" not in json.dumps(week)
+
+
+METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+
+
+def _answer(client, method: str, path: str, headers: dict) -> tuple[int, bytes, dict]:
+    answered = client.request(method, path, headers=headers, follow_redirects=False)
+    return answered.status_code, answered.content, dict(answered.headers)
+
+
+@needs_test_database
+def test_nothing_under_the_pages_routes_is_answered_otherwise_than_an_address_with_no_route(overseeing):
+    # the second review: one of the routes with a slash after it was answered 307 with where the route is, another method on one 405
+    # with `Allow: GET`, and OPTIONS the same with no sign-in at all, each of which says the route is there
+    client, plan_id = overseeing.client, uuid.uuid4()
+    routes = ["/v1/oversight/activity", "/v1/oversight/weekly", f"/v1/oversight/plans/{plan_id}"]
+    under = [*routes, *[route + "/" for route in routes], "/v1/oversight", "/v1/oversight/", "/v1/oversight/plans", "/v1/oversight/plans/",
+             "/v1/oversight/activity/older", f"/v1/oversight/plans/{plan_id}/steps", "/v1/oversight/nothing-here"]
+    missing = "/v1/nothing-here/at-all"
+    for name, who in (("a customer", overseeing.customer), ("a robot", overseeing.robot), ("no sign-in", {})):
+        for method in METHODS:
+            nothing = _answer(client, method, missing, who)
+            assert nothing[0] == (401 if name == "no sign-in" and method != "OPTIONS" else 404), (name, method)
+            for path in under:
+                assert _answer(client, method, path, who) == nothing, (name, method, path)
+    for method in METHODS:  # a founder too, for everything but the three routes read with GET
+        nothing = _answer(client, method, missing, overseeing.founder)
+        for path in under:
+            if method != "GET" or path not in routes:
+                assert _answer(client, method, path, overseeing.founder) == nothing, (method, path)
+    assert client.get(routes[0], headers=overseeing.founder).status_code == 200
+    # a browser's question before a read from another origin is answered as it is for any route, by the layer outside the sign-in
+    asking = {"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "x-anisotropy-actor"}
+    elsewhere = _answer(client, "OPTIONS", "/v1/projects", asking)
+    assert elsewhere[0] == 200 and elsewhere[2]["access-control-allow-origin"] == "http://localhost:3000"
+    for path in (*routes, missing):
+        assert _answer(client, "OPTIONS", path, asking) == elsewhere, path
+    assert _views(overseeing.engine) == ["/v1/oversight/activity"]
+
+
+@needs_test_database
+def test_an_email_that_only_folds_or_trims_to_a_founders_is_not_a_founders(overseeing, monkeypatch):
+    # the second review: the check lower-cased and trimmed the email, and the Kelvin sign lower-cases to k and a no-break space trims
+    founders = frozenset({FOUNDER, "kate@example.com"})
+    monkeypatch.setattr(app.state, "settings", dataclasses.replace(app.state.settings, founder_emails=founders))
+
+    def read(email: str):
+        return overseeing.client.get("/v1/oversight/activity", headers={access.HEADER: token(email=email)})
+
+    assert read("kate@example.com").status_code == 200 and read("Kate@Example.COM").status_code == 200
+    nothing = overseeing.client.get("/v1/nothing-here", headers=overseeing.customer)
+    others = ["Kate@example.com", "kate@example.com ", "\tkate@example.com", "kate@example.com\n", " kate@example.com",
+              "kate@example.com ", "﻿kate@example.com", "kate@exаmple.com", "kate@example.com.evil.test"]
+    for email in others:
+        answered = read(email)
+        assert (answered.status_code, answered.content) == (nothing.status_code, nothing.content), repr(email)
+        assert not oversight.is_founder(email, founders), repr(email)
+        assert oversight.who(email, founders, local=False) == (oversight.tag_of(email), False), repr(email)
+    assert oversight.is_founder("KATE@example.com", founders) and not oversight.is_founder(None, founders)
+    assert oversight.who("Kate@example.com", founders, local=False) == ("Kate@example.com", True)
+    assert _views(overseeing.engine) == ["/v1/oversight/activity"] * 2
+
+
+def _plans_kept(engine) -> int:
+    with Session(engine) as session:
+        return len(list(session.scalars(select(AgentPlanRow.id))))
+
+
+@needs_test_database
+@pytest.mark.parametrize("sent", ["\\u0000", "\\ud800", "\\udfff"], ids=["a NUL", "the first half of a surrogate pair", "the second half"])
+def test_a_sentence_the_records_cannot_keep_is_refused_when_it_is_asked(overseeing, sent):
+    # the second review: such a sentence was a 503 (the plan could not be kept); it is the engineer's, so it is not changed either
+    client, json_sent = overseeing.client, {**overseeing.customer, "Content-Type": "application/json"}
+    pid = project(client, PLATE, headers=overseeing.customer)
+    stated = json.dumps({**a_repair(), "title": "the north bracket"})
+    bodies = [(f"/v1/projects/{pid}/plans", '{"ask": "clamp the bottom edge%s and run it"}' % sent, "ask"),
+              (REPAIR_PLANS, '{"ask": "find the smallest repair%s, then solve it", "repair": %s}' % (sent, stated), "ask"),
+              # and the repair's description, which comes with the sentence and is kept with it
+              (REPAIR_PLANS, '{"ask": "find the smallest repair, then solve it", "repair": %s}' % stated.replace("bracket", "bracket" + sent), "repair")]
+    for path, body, what in bodies:
+        answered = client.post(path, content=body.encode("ascii"), headers=json_sent)
+        assert answered.status_code == 422, (path, answered.text)
+        assert what in answered.json()["detail"][0]["msg"] + str(answered.json()["detail"][0]["loc"]), answered.text  # it names what is wrong
+        assert not any(words in answered.text for words in ("clamp the bottom edge", "smallest repair", "north bracket"))
+        whole = client.post(path, content=body.replace(sent, "").encode("ascii"), headers=json_sent)  # the same without it is planned
+        assert whole.status_code == 200 and whole.json()["state"] == "unavailable", whole.text
+    assert _plans_kept(overseeing.engine) == 3
+
+
+ASKED_BACK = "Which edge do you mean{}: the bottom edge (Edge-Bottom) or the top edge (Edge-Top)?"
+
+
+@needs_test_database
+@pytest.mark.parametrize("sent", ["\u0000", "\ud800"], ids=["a NUL", "half a surrogate pair"])
+@pytest.mark.parametrize("turned_back", [False, True], ids=["the first answer", "after an answer turned back"])
+def test_what_the_model_writes_that_the_records_cannot_keep_is_kept_cleaned_wherever_it_stands(overseeing, monkeypatch, sent, turned_back):
+    # the second review: only the answers turned back were cleaned. A question asked back with a NUL was a 503 and, after an answer
+    # turned back, one with half a surrogate pair a 500; so was a NUL in a step of the plan itself
+    first = [BAD] if turned_back else []
+    scripted(monkeypatch, *first, plan(question=ASKED_BACK.format(sent)))
+    asked = _planned(overseeing.client, overseeing.customer)
+    assert asked["state"] == "question" and asked["question"] == ASKED_BACK.format("�")
+    scripted(monkeypatch, *first, with_args(GOOD, 4, question=f"Does it hold{sent} at 2 kN?"))
+    proposed = _planned(overseeing.client, overseeing.customer)
+    assert proposed["state"] == "proposed" and [s["tool"] for s in proposed["steps"]][-1] == "answer"
+    scripted(monkeypatch, *first, plan(question=f"You want it clamped{sent} now"), plan(question=f"You want it clamped{sent} now"))
+    refused = _planned(overseeing.client, overseeing.customer)
+    assert refused["state"] == "refused" and refused["reason"] == "You want it clamped� now"
+    for kept in (asked, proposed, refused):
+        story = _story(overseeing, kept["id"])
+        assert story["state"] == kept["state"] and len(story["turned_back"]) == len(first) + (2 if kept is refused and not first else
+                                                                                               1 if kept is refused else 0)
+    with Session(overseeing.engine) as session:
+        steps = session.get(AgentPlanRow, uuid.UUID(proposed["id"])).steps
+    assert "�" in json.dumps(steps, ensure_ascii=False) and sent not in json.dumps(steps, ensure_ascii=False)
+
+
+@needs_test_database
+def test_a_place_that_is_not_plain_text_is_refused_as_any_other_that_cannot_be_read(overseeing):
+    # the second review: the time's reader takes any one character between the date and the hour, so a NUL there was read, and the
+    # view of the page that keeps `before` could not be kept: 503
+    _recorded(overseeing, dt.datetime(2026, 11, 20, 12, tzinfo=dt.timezone.utc))
+    assert len(_feed(overseeing, before="2026-11-20 13:00:00+00:00")) == 1  # a space there is read, as the standard writes a time
+    for name in ("before", "since", "from"):
+        for mark in ("\u0000", "\t", "\n", "\u007f", " ", " ", "K"):
+            for value in (f"2026-11-20{mark}13:00:00+00:00", f"2026-11-20T13:00:00+00:00{mark}", f"{mark}2026-11-20T13:00:00+00:00",
+                          f"2026-11-20T13:00:00+00:00|call|{uuid.uuid4()}{mark}"):
+                answered = overseeing.client.get("/v1/oversight/activity", params={name: value}, headers=overseeing.founder)
+                assert answered.status_code == 422 and name in answered.json()["detail"], (name, value)
+    for value in ("2026-11-20\ud80013:00:00+00:00", "2026-11-20\u000013:00:00+00:00"):
+        with pytest.raises(ValueError, match="plain"):
+            oversight.cursor(value)
+    assert _views(overseeing.engine) == ["/v1/oversight/activity"]  # the one read `before` a place that could be read
+
+
+@needs_test_database
+def test_a_feed_that_fits_its_page_exactly_says_nothing_is_older_and_a_refresh_is_one_request(overseeing):
+    # the second review: the page took a full page to mean there are older events, so a feed of exactly a page kept "Show older" with
+    # nothing behind it and its refresh asked twice
+    base = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+    _recorded(overseeing, base, 50)
+    page = _page(overseeing, limit=50)
+    assert len(page["events"]) == 50 and page["older"] is False
+    assert set(page) == set(json.loads((FIXTURES / "activity.json").read_text(encoding="utf-8")))
+    assert _first(overseeing, 50)[1] is None and [len(p) for p in _pages(overseeing, None, 200)] == [50]
+    assert _page(overseeing, limit=49)["older"] is True and _page(overseeing, limit=50, before=page["events"][0]["key"])["older"] is False
+    _recorded(overseeing, base + dt.timedelta(seconds=50))
+    page, floor = _first(overseeing, 50)
+    assert floor == page[-1]["key"] and _page(overseeing, limit=50)["older"] is True
+    older = _page(overseeing, limit=50, before=floor)
+    assert len(older["events"]) == 1 and older["older"] is False  # "Show older" once, and then there is none
+    _recorded(overseeing, base + dt.timedelta(seconds=51), 149)
+    whole = _page(overseeing, limit=200)
+    assert len(whole["events"]) == 200 and whole["older"] is False
+    floor = whole["events"][-1]["key"]  # the page shows all 200 after "Show older"; its refresh reads from the oldest on
+    assert [len(p) for p in _pages(overseeing, floor, 200)] == [200] and _refreshed(overseeing, floor, 200) == whole["events"]
+    _recorded(overseeing, base + dt.timedelta(seconds=200))
+    assert [len(p) for p in _pages(overseeing, floor, 200)] == [200, 1]
+    assert _page(overseeing, limit=200, since=whole["events"][1]["key"])["older"] is False  # one side of a place has its own count
+    assert _page(overseeing, limit=1, **{"from": floor, "before": whole["events"][-2]["key"]}) == {"events": whole["events"][-1:], "older": False}
+
+
+@needs_test_database
+def test_the_feed_reads_each_kind_newest_first_through_an_index_and_carries_no_plans_steps(overseeing, monkeypatch):
+    # the second review: `agent_plans` had no index on when a plan was made or approved, so every read of the feed sorted the whole
+    # table twice, and it carried every plan's steps and turned-back answers, which the feed does not show
+    with overseeing.engine.connect() as connection:
+        made = dict(connection.execute(text("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'agent_plans'")).all())
+    assert made["agent_plans_created"].endswith("(created_at, id)")
+    assert made["agent_plans_approved"].endswith("(approved_at, id) WHERE (approved_at IS NOT NULL)")
+    scripted(monkeypatch, BAD, GOOD)
+    theirs = _planned(overseeing.client, overseeing.customer)
+    asked: list[str] = []
+
+    def seen(connection, cursor, statement, parameters, context, executemany) -> None:
+        asked.append(statement)
+
+    sql_event.listen(overseeing.engine, "before_cursor_execute", seen)
+    try:
+        events, older = oversight.activity(overseeing.engine, frozenset({FOUNDER}), local=False)
+    finally:
+        sql_event.remove(overseeing.engine, "before_cursor_execute", seen)
+    assert [(e["kind"], e["outcome"], e["plan"]) for e in events] == [("plan", "proposed", theirs["id"]), ("call", "proposed", theirs["id"]),
+                                                                      ("call", "turned back", theirs["id"])] and older is False
+    of_plans = [statement for statement in asked if "FROM agent_plans" in statement]
+    assert len(of_plans) == 3 and len(asked) == 6  # plans, approvals and the plans of the calls; calls, their runs and their order
+    for column in ("steps", "unread", "question", "reason", "base", "job_id"):
+        assert not any(f"agent_plans.{column}" in statement for statement in asked), column
+    assert sum("agent_plans.attempts" in statement for statement in asked) == 1  # which calls were turned back, read in the database
+    assert not any("model_calls.sent_fingerprint" in statement or "model_calls.input_tokens" in statement for statement in asked)
+    with overseeing.engine.connect() as connection:  # with the choice of a sort taken away, each reading has its index to walk
+        connection.execute(text("SET LOCAL enable_seqscan = off"))
+        connection.execute(text("SET LOCAL enable_sort = off"))
+        for column, index in (("created_at", "agent_plans_created"), ("approved_at", "agent_plans_approved")):
+            only = "WHERE approved_at IS NOT NULL " if column == "approved_at" else ""
+            how = "\n".join(row[0] for row in connection.execute(text(
+                f"EXPLAIN SELECT id, {column} FROM agent_plans {only}ORDER BY {column} DESC, id DESC LIMIT 51")))
+            assert f"Index Scan Backward using {index}" in how or f"Index Only Scan Backward using {index}" in how, how

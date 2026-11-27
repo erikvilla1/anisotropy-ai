@@ -12,8 +12,9 @@ Three readings of records the API already keeps, and nothing else: no write, no 
 
 What a person wrote stays theirs (ADR-0104). On a row of anyone who is not a founder, what happened is shown (the feature, the model,
 the outcome, the time, the cost, each step's tool and state) and what they wrote is not (the sentence, a step's words, values and notes,
-the answers turned back, the changes, the job's messages). No free text of such a row leaves here: a reason is given as one of the fixed
-lines of `REASON_KINDS`, or as `REASON_HIDDEN` when it is none of the planner's own (`reason_kind`). Such a person is named by a tag that
+the answers turned back, the changes, the job's messages). No free text of such a row leaves here: a reason the server's checks wrote
+is given as one of the fixed lines of `REASON_KINDS`, and any other reason, the model's own sentence above all, as `REASON_HIDDEN`
+(`reason_shown`, `reason_kind`). Such a person is named by a tag that
 tells their rows apart and keeps their email off the page. The tag is a pseudonym, not anonymity: it is the start of the email's SHA-256
 with nothing added, so whoever knows an email can work out its tag, and a founder can read the database. A row with no email is a
 robot's (a service token, ADR-0138) or, on a machine with no sign-in, its one user's.
@@ -32,7 +33,7 @@ from typing import Any
 
 from sqlalchemy import Engine, and_, case, false, func, literal_column, or_, select, text, true
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from . import planner
 from .records import AgentPlanRow, JobRow, ModelCallRow, ModelVersionRow, Run
@@ -53,12 +54,20 @@ def tag_of(email: str) -> str:
     return "customer " + hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:TAG_LENGTH]
 
 
+def is_founder(email: str | None, founders: Collection[str]) -> bool:
+    """Whether an email is one of the founders', for this page: the founders' list holds plain lower-case emails, and an email is one
+    of them only when it is the same but for the case of its ASCII letters. An email with any character outside ASCII is none (`K`, the
+    Kelvin sign, lower-cases to `k`, so "Kate@…" written with it would read as kate@…), and neither is one with space around it
+    (`.strip()` would take a tab, a line end or a no-break space off)."""
+    return email is not None and email.isascii() and email == email.strip() and email.lower() in founders
+
+
 def who(email: str | None, founders: Collection[str], *, local: bool) -> tuple[str, bool]:
     """Who a row is for, as the page names them, and whether what they wrote may be shown: a founder's email and theirs in full; a
     robot or the machine's one user with no email, in full; anyone else as a tag, without their words."""
     if email is None:
         return ("this machine" if local else "robot"), True
-    if email.strip().lower() in founders:
+    if is_founder(email, founders):
         return email, True
     return tag_of(email), False
 
@@ -78,7 +87,8 @@ def _same(*lines: str) -> list[tuple[re.Pattern[str], str]]:
 # Each reason the planner's checks give (planner.py, planner_kinds.py), the day's limits and why a writer gave no answer (assistant.py),
 # as the fixed line shown on a row whose words are not shown. What a reason writes of the sentence, the setup or the model's answer (a
 # number, a unit, a region, a material, quoted words) is in no line. A reason that matches none, a tool's own refusal among them, is
-# REASON_HIDDEN. tests/test_oversight.py holds the planner's reasons to this list.
+# REASON_HIDDEN. tests/test_oversight.py holds the planner's reasons to this list. Only a reason the server wrote is read against the
+# list (`reason_shown` says which those are): the model can write a sentence that matches a line.
 REASON_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     *_same("the value or the unit given is longer than any a step takes", "it quotes no words of the sentence",
            "its quote is not words of the sentence", "an answer names the question it answers",
@@ -137,34 +147,56 @@ REASON_LINES = frozenset(line for _, line in REASON_KINDS) | {REASON_HIDDEN}
 _OF_A_STEP = re.compile(r"step (\d{1,4}): (.*)", re.DOTALL)
 
 
-def reason_kind(reason: str) -> str:
-    """One reason as a row whose words are not shown gives it: a fixed line of REASON_KINDS, after "step N: " when the reason is one
-    step's, or REASON_HIDDEN. Nothing of the reason itself is in the answer but that step number."""
+def reason_kind(reason: str, steps: int = 0) -> str:
+    """One reason the server's checks wrote, as a row whose words are not shown gives it: a fixed line of REASON_KINDS, after
+    "step N: " when the reason is one step's, or REASON_HIDDEN. `steps` is how many steps the answer the reason is about has: a step's
+    number is given only when it is one of them, 1 to `steps`, which is the number the server itself gave that step. Any other number
+    could be a number of the sentence (a model can write "step 7313: …" back), so a reason that leads with one is hidden whole."""
     step = _OF_A_STEP.fullmatch(reason)
-    head, body = (f"step {int(step.group(1))}: ", step.group(2)) if step else ("", reason)
+    head, body = "", reason
+    if step:
+        if not 1 <= int(step.group(1)) <= steps:
+            return REASON_HIDDEN
+        head, body = f"step {int(step.group(1))}: ", step.group(2)
     for pattern, line in REASON_KINDS:
         if pattern.fullmatch(body):
             return head + line
     return REASON_HIDDEN
 
 
-def reasons_shown(reasons: Any, open_: bool) -> list[str]:
-    """The reasons the checks gave for one answer: as they are for a founder, a robot or this machine; each as its fixed line otherwise."""
+def steps_of(answer: Any) -> int:
+    """How many steps an answer of the model has, as it is kept in `agent_plans.attempts`; 0 for anything that is no such answer."""
+    steps = answer.get("steps") if isinstance(answer, dict) else None
+    return len(steps) if isinstance(steps, list) else 0
+
+
+def reasons_shown(reasons: Any, open_: bool, steps: int = 0) -> list[str]:
+    """The reasons the checks gave for one answer of `steps` steps (`agent_plans.attempts` keeps them, and the checks alone write
+    them): as they are for a founder, a robot or this machine; each as its fixed line otherwise."""
     kept = [reason for reason in (reasons if isinstance(reasons, list) else []) if isinstance(reason, str)]
-    return kept if open_ else [reason_kind(reason) for reason in kept]
+    return kept if open_ else [reason_kind(reason, steps) for reason in kept]
 
 
-def reason_shown(reason: str | None, last_reasons: Any, open_: bool) -> str | None:
-    """Why a plan came to nothing, as its row may give it. In full when the words may be shown. Otherwise: the fixed lines of the reasons
-    it was put together from, when it is those of the last answer turned back as the planner joins them (`planner.reason_of`); the fixed
-    line of the reason itself, when it is one; else REASON_HIDDEN, which is what the model's own sentence as the reason always is."""
+def reason_shown(reason: str | None, state: str, last_reasons: Any, last_steps: int, open_: bool) -> str | None:
+    """Why a plan came to nothing, as its row may give it. In full when the words may be shown. Otherwise it depends on who wrote it,
+    which the records tell:
+
+    - A refused plan's reason is either the checks' reasons for the last answer turned back, joined (`planner.reason_of`), or the
+      model's own sentence in their place (`Checked.said`, ADR-0144 amendment 1). `last_reasons` are those checks' reasons as
+      `agent_plans.attempts` keeps them, so the reason is the checks' when it is exactly their joining, and then each is given as its
+      fixed line. When it is not, it is the model's sentence, or the plan is older than `attempts` and nothing tells which: it is
+      REASON_HIDDEN and is never read against the fixed lines, since a model can write a sentence that matches one.
+    - Any other plan's reason is the server's own from when the plan was made (no model answered, or a day's limit): its fixed line,
+      with no step's number, or REASON_HIDDEN."""
     if reason is None or open_:
         return reason
+    if state != "refused":
+        return reason_kind(reason)
     reasons = reasons_shown(last_reasons, True)
-    if reasons and reason == planner.reason_of(reasons):
-        lines = list(dict.fromkeys(reason_kind(one) for one in reasons[:planner.MAX_REASONS]))
-        return "; ".join(lines) + ("; and more like them" if len(reasons) > planner.MAX_REASONS else "")
-    return reason_kind(reason)
+    if not reasons or reason != planner.reason_of(reasons):
+        return REASON_HIDDEN
+    lines = list(dict.fromkeys(reason_kind(one, last_steps) for one in reasons[:planner.MAX_REASONS]))
+    return "; ".join(lines) + ("; and more like them" if len(reasons) > planner.MAX_REASONS else "")
 
 
 # ------------------------------------------------------------------------------------------------------------- how a call ended
@@ -233,7 +265,11 @@ def key_of(at: dt.datetime, kind: str, row: uuid.UUID) -> str:
 
 
 def cursor(value: str) -> Cursor:
-    """A time with its offset, or an event's key, read; ValueError says what is wrong with anything else."""
+    """A time with its offset, or an event's key, read; ValueError says what is wrong with anything else. A place is plain text: the
+    time's reader takes any one character between the date and the hour, a NUL or half of a surrogate pair among them, and a view
+    of the page keeps the place as it was asked, which the records cannot do with those."""
+    if not (value.isascii() and value.isprintable()):
+        raise ValueError("a place is written in plain characters")
     stamp, bar, rest = value.partition("|")
     at = dt.datetime.fromisoformat(stamp)
     if at.tzinfo is None:
@@ -280,20 +316,30 @@ def _plans_of_calls(session: Session, plan_ids: Collection[uuid.UUID]) -> tuple[
     return {plan: state for plan, (state, _) in plans.items()}, turned_back
 
 
+# What the feed shows of a call and of a plan: a plan's steps and the answers turned back are large and are no part of it.
+CALL_SHOWN = (ModelCallRow.called_at, ModelCallRow.user_email, ModelCallRow.actor, ModelCallRow.feature, ModelCallRow.model,
+              ModelCallRow.checked, ModelCallRow.stop_reason, ModelCallRow.seconds, ModelCallRow.cost_usd, ModelCallRow.plan_id,
+              ModelCallRow.run_id)
+PLAN_SHOWN = (AgentPlanRow.created_at, AgentPlanRow.approved_at, AgentPlanRow.user_email, AgentPlanRow.actor, AgentPlanRow.kind,
+              AgentPlanRow.model, AgentPlanRow.state, AgentPlanRow.ask)
+
+
 def activity(engine: Engine, founders: Collection[str], *, local: bool, limit: int = 50, before: Cursor | None = None,
-             since: Cursor | None = None, start: Cursor | None = None) -> list[dict[str, Any]]:
-    """The newest events, at most `limit` of them: calls, plans and approvals, merged by key (time, then kind, then row), newest
-    first. Each carries its `key`. `before` reads what is before a place and `since` what is after it; `start` reads from a place on,
-    that place included. A page of fewer than `limit` events is the last one that way; a full one is followed by the page `before`
-    its last event's key. Reading from the oldest event shown on, page by page, gives everything there is from it on, however late a
-    row was written: that is the page's refresh."""
+             since: Cursor | None = None, start: Cursor | None = None) -> tuple[list[dict[str, Any]], bool]:
+    """The newest events, at most `limit` of them, and whether there are older ones the same reading would give: calls, plans and
+    approvals, merged by key (time, then kind, then row), newest first. Each carries its `key`. `before` reads what is before a
+    place and `since` what is after it; `start` reads from a place on, that place included. When there are older ones, the next page
+    is the one `before` the last event's key. Reading from the oldest event shown on, page by page, gives everything there is from
+    it on, however late a row was written: that is the page's refresh. Each kind is read newest first by its time and row, which
+    `model_calls_called_at_idx` and migration 0018's two indexes on `agent_plans` give without a sort."""
     limit = max(1, min(limit, FEED_MAX))
-    sources = (("call", ModelCallRow, ModelCallRow.called_at, None), ("plan", AgentPlanRow, AgentPlanRow.created_at, None),
-               ("approval", AgentPlanRow, AgentPlanRow.approved_at, AgentPlanRow.approved_at.is_not(None)))
+    sources = (("call", ModelCallRow, ModelCallRow.called_at, None, CALL_SHOWN), ("plan", AgentPlanRow, AgentPlanRow.created_at, None, PLAN_SHOWN),
+               ("approval", AgentPlanRow, AgentPlanRow.approved_at, AgentPlanRow.approved_at.is_not(None), PLAN_SHOWN))
     found: dict[str, list] = {}
     with Session(engine) as session:
-        for kind, table, time, only in sources:
-            query = select(table).order_by(time.desc(), table.id.desc()).limit(limit)
+        for kind, table, time, only, shown in sources:
+            # one more than asked of each kind: the event past the page, if there is one, says there are older ones
+            query = select(table).options(load_only(*shown, raiseload=True)).order_by(time.desc(), table.id.desc()).limit(limit + 1)
             if only is not None:
                 query = query.where(only)
             for place, side in ((before, "before"), (since, "after"), (start, "from")):
@@ -327,7 +373,7 @@ def activity(engine: Engine, founders: Collection[str], *, local: bool, limit: i
             "model": None, "checked": None, "outcome": p.state, "seconds": None, "cost_usd": None, "plan": str(p.id), "run": None,
             "ask": p.ask if open_ else HIDDEN}))
     events.sort(key=lambda pair: pair[0], reverse=True)
-    return [{**event, "key": key_of(*key)} for key, event in events[:limit]]
+    return [{**event, "key": key_of(*key)} for key, event in events[:limit]], len(events) > limit
 
 
 # ------------------------------------------------------------------------------------------------------------------- a plan's story
@@ -361,10 +407,12 @@ def plan_story(engine: Engine, plan_id: uuid.UUID, founders: Collection[str], *,
     return {
         "id": str(plan.id), "kind": plan.kind, "who": name, "words_shown": open_, "actor": plan.actor, "state": plan.state,
         "ask": plan.ask if open_ else HIDDEN, "question": plan.question if open_ else None,
-        "reason": reason_shown(plan.reason, tried[-1].get("reasons") if tried else None, open_),
+        "reason": reason_shown(plan.reason, plan.state, tried[-1].get("reasons") if tried else None,
+                               steps_of(tried[-1].get("plan")) if tried else 0, open_),
         "unread": len(plan.unread or []), "writer": plan.writer, "model": plan.model,
         "created_at": _at(plan.created_at), "approved_at": _at(plan.approved_at), "updated_at": _at(plan.updated_at),
-        "turned_back": [{"plan": t.get("plan") if open_ else None, "reasons": reasons_shown(t.get("reasons"), open_)} for t in tried],
+        "turned_back": [{"plan": t.get("plan") if open_ else None, "reasons": reasons_shown(t.get("reasons"), open_, steps_of(t.get("plan")))}
+                        for t in tried],
         "calls": [{"at": _at(c.called_at), "what": c.feature, "model": c.model, "checked": c.checked, "input_tokens": c.input_tokens,
                    "output_tokens": c.output_tokens, "seconds": c.seconds, "cost_usd": _money(c.cost_usd), "stop_reason": c.stop_reason,
                    "outcome": call_outcome(c.stop_reason, None, plan.state, turned_back[c.id]),
@@ -389,8 +437,10 @@ COSTS = text("SELECT week_of, feature, calls, cost_usd, cost_per_call_usd, usual
              "FROM model_costs_by_feature WHERE week_of >= :since ORDER BY week_of DESC, cost_usd DESC NULLS LAST, feature")
 PLANS = text("SELECT date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_of, kind, state, count(*) AS plans "
              "FROM agent_plans WHERE created_at >= :since GROUP BY 1, 2, 3 ORDER BY 1 DESC, 2, 4 DESC")
-REFUSED = text("SELECT reason, user_email, attempts -> -1 -> 'reasons' AS last_reasons FROM agent_plans "
-               "WHERE state = 'refused' AND created_at >= :since AND reason IS NOT NULL")
+REFUSED = text("SELECT reason, user_email, attempts -> -1 -> 'reasons' AS last_reasons, "
+               "CASE WHEN jsonb_typeof(attempts -> -1 -> 'plan' -> 'steps') = 'array' "
+               "THEN jsonb_array_length(attempts -> -1 -> 'plan' -> 'steps') ELSE 0 END AS last_steps "
+               "FROM agent_plans WHERE state = 'refused' AND created_at >= :since AND reason IS NOT NULL")
 UNCHECKED = text("SELECT date_trunc('week', called_at AT TIME ZONE 'UTC')::date AS week_of, model, count(*) AS calls "
                  "FROM model_calls WHERE checked IS FALSE AND called_at >= :since GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC")
 
@@ -414,9 +464,9 @@ def weekly(engine: Engine, founders: Collection[str], *, now: dt.datetime | None
         guards, costs = _rows(session, GUARDS, since.date()), _rows(session, COSTS, since.date())
         plans, unchecked = _rows(session, PLANS, since), _rows(session, UNCHECKED, since)
         refused: dict[str, int] = {}
-        for reason, email, last_reasons in session.execute(REFUSED, {"since": since}).all():
+        for reason, email, last_reasons, last_steps in session.execute(REFUSED, {"since": since}).all():
             _, open_ = who(email, founders, local=False)
-            words = reason_shown(reason, last_reasons, open_)
+            words = reason_shown(reason, "refused", last_reasons, last_steps or 0, open_)
             refused[words] = refused.get(words, 0) + 1
     reasons = [{"reason": r, "plans": n} for r, n in sorted(refused.items(), key=lambda pair: (-pair[1], pair[0]))[:10]]
     return {"since": since.date().isoformat(), "guards": guards, "costs": costs, "plans": plans, "refused": reasons, "unchecked": unchecked}

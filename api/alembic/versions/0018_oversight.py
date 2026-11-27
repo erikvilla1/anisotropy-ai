@@ -11,6 +11,10 @@ Three gaps the oversight review found (docs/decisions/ADR-0145):
 - A plan's calls were tied to it only through the run record's answer. `model_calls.plan_id` names the plan; it is emptied if the plan
   goes (with its project).
 
+And the page's feed reads `agent_plans` newest first twice, by when a plan was made and by when it was approved, which no index of
+migration 0017 gives (they lead with the project and with the email): `agent_plans_created` and `agent_plans_approved` do, each with
+the row's id after the time, as the feed orders and pages (the second holds approved plans only).
+
 Nothing is rewritten: the new columns are empty on the rows made before. The downgrade drops them and what they hold.
 
 Revision ID: 0018
@@ -37,9 +41,14 @@ def upgrade() -> None:
     op.add_column("model_calls", sa.Column("plan_id", sa.Uuid(as_uuid=True), sa.ForeignKey("agent_plans.id", ondelete="SET NULL"),
                                            comment="The plan the call was made for (ADR-0145)"))
     op.create_index("model_calls_plan", "model_calls", ["plan_id"])
+    op.create_index("agent_plans_created", "agent_plans", ["created_at", "id"])
+    op.create_index("agent_plans_approved", "agent_plans", ["approved_at", "id"], postgresql_where=sa.text("approved_at IS NOT NULL"))
 
 
 def downgrade() -> None:
+    # if they are there: a local database that ran this migration before the two indexes were added to it has none to drop
+    op.execute("DROP INDEX IF EXISTS agent_plans_approved")
+    op.execute("DROP INDEX IF EXISTS agent_plans_created")
     op.drop_index("model_calls_plan", table_name="model_calls")
     op.drop_column("model_calls", "plan_id")
     op.drop_column("model_calls", "checked")

@@ -645,11 +645,13 @@ _NOT_KEPT = re.compile("[\x00\ud800-\udfff]")  # what PostgreSQL keeps in no tex
 
 
 def storable(value: Any) -> Any:
-    """An answer the checks turned back, or a refusal's reason, as the records can keep it and a request can carry it (ADR-0145): the
-    same, with each character PostgreSQL refuses in text and in JSON (a NUL, an unpaired surrogate, which UTF-8 cannot write either)
-    replaced by U+FFFD and a number that is no number (NaN, an infinity) written as its word. Such an answer is kept for a founder to
-    read later and is sent back to the model once; one such character in it must not fail the engineer's request. The answer the
-    checks read is not touched, and neither is a plan that passes them."""
+    """What the model wrote, as the records can keep it and a request can carry it (ADR-0145): the same, with each character
+    PostgreSQL refuses in text and in JSON (a NUL, an unpaired surrogate, which UTF-8 cannot write either) replaced by U+FFFD and a
+    number that is no number (NaN, an infinity) written as its word. Every answer of the model is read through this before the checks
+    see it, so whatever is kept of it (the plan's steps, a question asked back, an answer turned back and its reasons, a refusal in
+    the model's own words) and whatever is sent back to the model for its one more try can be: one such character must not fail the
+    engineer's request. An answer without one is as it was. The engineer's own sentence is never changed: one that holds such a
+    character is refused when it is asked (`schemas.PlanRequest`)."""
     if isinstance(value, str):
         return _NOT_KEPT.sub("\ufffd", value)
     if isinstance(value, float) and not math.isfinite(value):
@@ -688,18 +690,20 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
     every answer the checks turned back is kept in `tried` with their reasons, so that it can be read later (ADR-0145)."""
     reading = _billed(calls, _asked(assistant, view(None), schema, system))
     if reading.raw is None:
-        return Planned("unavailable", reason=reading.reason, writer="template")
-    checked = check(reading.raw)
+        return Planned("unavailable", reason=storable(reading.reason), writer="template")
+    raw = storable(reading.raw)  # as the records can keep it, before anything is read from it
+    checked = check(raw)
     tried: list[dict[str, Any]] = []
     if not checked.ok:
-        tried.append(storable({"plan": reading.raw, "reasons": list(checked.reasons)}))
+        tried.append({"plan": raw, "reasons": list(checked.reasons)})
         again = _billed(calls, _asked(assistant, view(tried[0]), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason=storable(checked.said or reason_of(checked.reasons)), tried=tried)
-        retried = check(again.raw)
+            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons), tried=tried)
+        raw = storable(again.raw)
+        retried = check(raw)
         if not retried.ok:
-            tried.append(storable({"plan": again.raw, "reasons": list(retried.reasons)}))
-            return Planned("refused", unread=retried.unread, reason=storable(retried.said or reason_of(retried.reasons)), tried=tried)
+            tried.append({"plan": raw, "reasons": list(retried.reasons)})
+            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons), tried=tried)
         reading, checked = again, retried
     if checked.question is not None:
         return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)

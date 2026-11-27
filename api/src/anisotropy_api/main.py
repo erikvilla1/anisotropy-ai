@@ -2872,12 +2872,13 @@ def _overseer(request: Request) -> tuple[frozenset[str], bool]:
     a signed-in founder, decided here from the email Cloudflare Access verified, or the one user of a machine with no sign-in. Anyone
     else is answered 404, as if there were no such page; nothing the request says can change it. The routes take it as their first
     dependency, so it is decided before the actor header or any parameter is read: whatever else is wrong with a request, anyone but
-    a founder gets the same 404."""
+    a founder gets the same 404. An email is a founder's only as `oversight.is_founder` reads it: the same as one on the list but for
+    the case of its ASCII letters, so not one that only lower-cases or trims to it. It is read as the token states it
+    (`email_as_signed`): the email the other routes read has had the space around it taken off already."""
     settings = getattr(request.app.state, "settings", None)
     founders = frozenset(settings.founder_emails) if settings is not None else frozenset()
     local = getattr(request.app.state, "access_verifier", None) is None
-    email = _email(request)
-    if not local and (email is None or email.strip().lower() not in founders):
+    if not local and not oversight.is_founder(getattr(request.state, "email_as_signed", None), founders):
         raise HTTPException(status_code=404, detail="Not Found")
     return founders, local
 
@@ -2906,17 +2907,18 @@ def _seen(request: Request, actor: str, view: OversightView, response: dict) -> 
 def oversight_activity(overseer: Overseer, actor: Actor, request: Request, limit: int = 50, before: str | None = None,
                        since: str | None = None, start: Annotated[str | None, Query(alias="from")] = None) -> dict:
     """The AI's newest events for a founder (ADR-0145): each call to the model, each plan and each approval, newest first, at most
-    `limit` (200 at most), each with its `key`. `before` pages back from a time or a key. `since` reads what came after a time or a
+    `limit` (200 at most), each with its `key`, and `older`: whether the same reading has events past these, which the page `before`
+    the last key gives. `before` pages back from a time or a key. `since` reads what came after a time or a
     key, and `from` reads from one on, itself included: the page's refresh, which reads again from the oldest event it shows, page by
     page with `before`, so that no event is missed however late its row was written. A read with `since` or `from` is not kept as a
     run record (the page refreshes every few seconds); any other is. 404 for anyone but a founder."""
     founders, local = overseer
     engine = _records_engine(request)
-    events = oversight.activity(engine, founders, local=local, limit=limit, before=_place(before, "before"), since=_place(since, "since"),
-                                start=_place(start, "from"))
+    events, older = oversight.activity(engine, founders, local=local, limit=limit, before=_place(before, "before"),
+                                       since=_place(since, "since"), start=_place(start, "from"))
     if since is None and start is None:
         _seen(request, actor, OversightView(view="activity", before=before), {"events": len(events)})
-    return {"events": events}
+    return {"events": events, "older": older}
 
 
 @app.get(OVERSIGHT + "/plans/{plan_id}", response_model=None)
@@ -2940,6 +2942,16 @@ def oversight_weekly(overseer: Overseer, actor: Actor, request: Request) -> dict
     week = oversight.weekly(_records_engine(request), founders)
     _seen(request, actor, OversightView(view="weekly"), {"since": week["since"]})
     return week
+
+
+@app.api_route(OVERSIGHT, methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+@app.api_route(OVERSIGHT + "/{rest:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+def oversight_nothing_else(rest: str = "") -> None:
+    """Anything else under the page's routes is answered as an address with no route is (ADR-0145): another method on one of the three
+    (the router alone would answer 405 with `Allow: GET`), one of them with a slash after it (a redirect to the route), any other
+    path. Without this, those answers tell anyone, signed in or not, where the page's routes are. Declared after the three routes,
+    so it is reached only when none of them takes the request; the sign-in still answers first, as on every route."""
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)
