@@ -12,6 +12,8 @@ is true (ADR-0120, Context).
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -82,6 +84,7 @@ class ModelCall:
     cost_usd: Decimal | None  # None when a model the call used is not in PRICES, or a speed the list does not price
     prices_as_of: str | None
     attempts: tuple[dict[str, Any], ...] | None = None  # each attempt's tokens when there was more than one (a refusal, then a fallback)
+    sent_sha256: str | None = None  # the fingerprint of the words sent: instructions, request and answer form (oversight, ADR-0145)
 
 
 def _int(value: Any) -> int:
@@ -108,6 +111,14 @@ def price(tokens: Tokens, us_only: bool = False) -> Decimal | None:
     counts = (tokens.input, tokens.cache_write_5m, tokens.cache_write_1h, tokens.cache_read, tokens.output)
     cost = sum((Decimal(count) * rate for count, rate in zip(counts, rates)), Decimal(0)) / PER_TOKEN
     return cost * US_ONLY_FACTOR if us_only else cost
+
+
+def sent_fingerprint(system: str, user: str, schema: dict[str, Any] | None) -> str:
+    """The SHA-256 of the words a call sent: its instructions, its request and its answer form, each closed by a NUL so that no two
+    different sendings run together into the same text (ADR-0145). The words are not kept, only this: two calls with one fingerprint
+    were sent the same words, and a change of instructions shows as a new one."""
+    form = json.dumps(schema, sort_keys=True, ensure_ascii=False) if schema is not None else ""
+    return hashlib.sha256("\0".join((system, user, form)).encode("utf-8")).hexdigest()
 
 
 def measure(feature: str, asked_model: str, effort: str | None, response: Any, answer: str, seconds: float) -> ModelCall | None:

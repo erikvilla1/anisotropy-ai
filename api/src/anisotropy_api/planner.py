@@ -637,6 +637,7 @@ class Planned:
     reason: str | None = None
     writer: str = "template"
     model: str | None = None
+    tried: list[dict[str, Any]] = field(default_factory=list)  # each answer the checks turned back, with their reasons (ADR-0145)
 
 
 def _billed(calls: list, reading: Any) -> Any:
@@ -662,22 +663,26 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
               check: Callable[[dict[str, Any]], Checked], system: str | None = None) -> Planned:
     """A plan of any kind: one call to the model with `view(None)`; when its plan fails `check`, one more with `view({"plan",
     "reasons"})`; then the plan, the question asked back, or `refused` with why. With no model, or none that answered, `unavailable`
-    with the writer's reason and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120)."""
+    with the writer's reason and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120), and
+    every answer the checks turned back is kept in `tried` with their reasons, so that it can be read later (ADR-0145)."""
     reading = _billed(calls, _asked(assistant, view(None), schema, system))
     if reading.raw is None:
         return Planned("unavailable", reason=reading.reason, writer="template")
     checked = check(reading.raw)
+    tried: list[dict[str, Any]] = []
     if not checked.ok:
+        tried.append({"plan": reading.raw, "reasons": list(checked.reasons)})
         again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons))
+            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons), tried=tried)
         retried = check(again.raw)
         if not retried.ok:
-            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons))
+            tried.append({"plan": again.raw, "reasons": list(retried.reasons)})
+            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons), tried=tried)
         reading, checked = again, retried
     if checked.question is not None:
-        return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model)
-    return Planned("proposed", steps=checked.steps, unread=checked.unread, writer=reading.writer, model=reading.model)
+        return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)
+    return Planned("proposed", steps=checked.steps, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)
 
 
 def make_plan(assistant: Any, sentence: str, content: dict[str, Any], calls: list) -> Planned:

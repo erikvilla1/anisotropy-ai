@@ -76,7 +76,7 @@ from .schemas import (
     VerificationResponse, ModelVersionInput, ModelVersionOutput, ProjectChangesRequest, SetupChangesOutput, SetupChangesRequest, SetupReadRequest, VersionRun,
     ApproveOutput, ApproveRequest, PlanOutput, PlanRequest, PlanRun, RepairApproveOutput, RepairApproveRequest, RepairPlanRequest, StepReport,
 )
-from . import planner, planner_kinds, setup_tools
+from . import oversight, planner, planner_kinds, setup_tools
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
 # What a request's calls to the model cost, on the answer to a request with no signed-in email only: the site check's service token (ADR-0138)
@@ -305,14 +305,15 @@ def _billed(calls: list[ModelCall], outcome: Billed) -> Billed:
     return outcome
 
 
-def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: uuid.UUID | None) -> None:
-    """Each call to the model the request made, with who asked and the request's run (ADR-0120). A row that cannot be written is
-    named in the log and the answer still goes back: the run is the request's receipt, and the provider's usage page holds the call."""
+def _record_calls(request: Request, actor: str, calls: list[ModelCall], run_id: uuid.UUID | None, plan_id: uuid.UUID | None = None) -> None:
+    """Each call to the model the request made, with who asked and the request's run (ADR-0120), the plan it was for and whether the
+    model that answered had passed the assistant check (ADR-0145). A row that cannot be written is named in the log and the answer
+    still goes back: the run is the request's receipt, and the provider's usage page holds the call."""
     engine = getattr(request.app.state, "records", None)
     if engine is None or not calls:
         return
     try:
-        record_model_calls(engine, calls, actor=actor, user_email=_email(request), run_id=run_id)
+        record_model_calls(engine, calls, actor=actor, user_email=_email(request), run_id=run_id, plan_id=plan_id, checked_models=CHECKED_MODELS)
     except SQLAlchemyError as exc:
         print(f"{len(calls)} model call(s) of {request.url.path} could not be recorded: {str(exc).splitlines()[0]}", flush=True)
 
@@ -330,6 +331,16 @@ def _cost_header(request: Request, response: Response, calls: list[ModelCall]) -
 Body = TypeVar("Body", bound=BaseModel)
 
 
+def _plan_id_of(body: BaseModel | None) -> uuid.UUID | None:
+    """The plan a request's answer is, when it is one (ADR-0144): its calls to the model are that plan's (ADR-0145)."""
+    if isinstance(body, PlanOutput):
+        try:
+            return uuid.UUID(body.id)
+        except ValueError:
+            return None
+    return None
+
+
 def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body],
              llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None, calls: list[ModelCall] | None = None,
              endpoint: str | None = None, recorded: Callable[[Body], dict] | None = None) -> Body:
@@ -344,6 +355,7 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
     (`_record`).
     """
     run_id: uuid.UUID | None = None
+    body: Body | None = None
     try:
         try:
             body = compute()
@@ -356,7 +368,7 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
                          llm=llm_of(body) if llm_of is not None else (None, None), endpoint=endpoint)
     finally:
         if calls:
-            _record_calls(request, actor, calls, run_id)
+            _record_calls(request, actor, calls, run_id, plan_id=_plan_id_of(body))
     _cost_header(request, response, calls or [])
     if run_id is None:
         return body
@@ -1079,7 +1091,7 @@ def _plan_and_keep(request: Request, actor: str, engine, ask: str, *, kind: str,
     try:
         kept = add_plan(engine, kind=kind, project_id=project_id, user_email=email, actor=actor, ask=ask, state=made.state, steps=made.steps,
                         base=base, question=made.question, unread=made.unread, reason=made.reason, writer=made.writer, model=made.model,
-                        created_at=now, updated_at=now)
+                        attempts=made.tried or None, created_at=now, updated_at=now)
     except SQLAlchemyError as exc:
         raise _database_error(exc) from exc
     counted = made.state not in planner.UNCOUNTED
@@ -2842,6 +2854,83 @@ def report_repair_plan_step(plan_id: uuid.UUID, n: int, report: StepReport, acto
     if edited is None:
         raise HTTPException(status_code=404, detail=f"No plan {plan_id} of yours")
     return _plan_output(request, engine, edited)
+
+
+OVERSIGHT = "/v1/oversight"  # the founders' AI activity page (ADR-0145)
+
+
+class OversightView(BaseModel):
+    """What a view of the AI activity page asked for, as its run record keeps it (ADR-0145)."""
+
+    view: str
+    plan: str | None = None
+    before: str | None = None
+
+
+def _overseer(request: Request) -> tuple[frozenset[str], bool]:
+    """The founders' emails and whether this is a machine with no sign-in, for a request that may read the AI's activity (ADR-0145):
+    a signed-in founder, decided here from the email Cloudflare Access verified, or the one user of a machine with no sign-in. Anyone
+    else is answered 404, as if there were no such page; nothing the request says can change it."""
+    settings = getattr(request.app.state, "settings", None)
+    founders = frozenset(settings.founder_emails) if settings is not None else frozenset()
+    local = getattr(request.app.state, "access_verifier", None) is None
+    email = _email(request)
+    if not local and (email is None or email.strip().lower() not in founders):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return founders, local
+
+
+def _when(value: str | None, name: str) -> dt.datetime | None:
+    if value is None:
+        return None
+    try:
+        when = dt.datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{name} must be a time in ISO 8601, such as 2026-11-27T10:00:00Z; got {value!r}") from exc
+    return when if when.tzinfo is not None else when.replace(tzinfo=dt.timezone.utc)
+
+
+def _seen(request: Request, actor: str, view: OversightView, response: dict) -> None:
+    """A view of the page kept as a run record (ADR-0145): who looked at what, and how much they were shown."""
+    _record(request, actor, view, response=response, endpoint=OVERSIGHT + ("/plans/{plan_id}" if view.view == "plan" else "/" + view.view))
+
+
+@app.get(OVERSIGHT + "/activity", response_model=None)
+def oversight_activity(actor: Actor, request: Request, limit: int = 50, before: str | None = None, since: str | None = None) -> dict:
+    """The AI's newest events for a founder (ADR-0145): each call to the model, each plan and each approval, newest first, at most
+    `limit` (200 at most). `before` pages back; `since` reads only what came after it, the page's refresh, which is logged and not kept
+    as a run record (the page refreshes every few seconds). 404 for anyone but a founder."""
+    founders, local = _overseer(request)
+    engine = _records_engine(request)
+    events = oversight.activity(engine, founders, local=local, limit=limit, before=_when(before, "before"), since=_when(since, "since"))
+    if since is None:
+        _seen(request, actor, OversightView(view="activity", before=before), {"events": len(events)})
+    else:
+        print(f"AI activity refreshed by {actor}: {len(events)} new event(s)", flush=True)
+    return {"events": events}
+
+
+@app.get(OVERSIGHT + "/plans/{plan_id}", response_model=None)
+def oversight_plan(plan_id: uuid.UUID, actor: Actor, request: Request) -> dict:
+    """One plan's story from its records for a founder (ADR-0145): the sentence, each answer the checks turned back and why, each
+    call, the approval, the version, the job and each step. A customer's words are not shown. 404 for anyone but a founder, and for a
+    plan there is not."""
+    founders, local = _overseer(request)
+    story = oversight.plan_story(_records_engine(request), plan_id, founders, local=local)
+    if story is None:
+        raise HTTPException(status_code=404, detail="There is no such plan.")
+    _seen(request, actor, OversightView(view="plan", plan=str(plan_id)), {"plan": story["id"], "state": story["state"]})
+    return story
+
+
+@app.get(OVERSIGHT + "/weekly", response_model=None)
+def oversight_weekly(actor: Actor, request: Request) -> dict:
+    """The last eight weeks for a founder (ADR-0145): the guards' and the costs' views per feature, plans per kind and state, why plans
+    were refused, and the calls answered by a model outside the checked list. 404 for anyone but a founder."""
+    founders, _ = _overseer(request)
+    week = oversight.weekly(_records_engine(request), founders)
+    _seen(request, actor, OversightView(view="weekly"), {"since": week["since"]})
+    return week
 
 
 @app.get("/v1/workspace/assistant", response_model=AssistantInfo)

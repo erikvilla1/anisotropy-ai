@@ -1,0 +1,25 @@
+{
+  "since": "2026-10-02",
+  "guards": [
+    {"week_of": "2026-11-23", "feature": "projects/{project_id}/plans", "asked": 41, "kept": 33, "set_aside": 6, "with_dropped": 0, "no_answer": 2,
+     "capped": 0, "set_aside_pct": 14.6, "usual_set_aside_pct": null, "flag": "no earlier week to compare with"},
+    {"week_of": "2026-11-23", "feature": "workspace/result-answers", "asked": 58, "kept": 55, "set_aside": 3, "with_dropped": 0, "no_answer": 0,
+     "capped": 0, "set_aside_pct": 5.2, "usual_set_aside_pct": 4.8, "flag": "ok"}
+  ],
+  "costs": [
+    {"week_of": "2026-11-23", "feature": "plan_steps", "calls": 52, "cost_usd": 2.11, "cost_per_call_usd": 0.0406, "usual_cost_per_call_usd": null,
+     "models": "claude-opus-5-5", "flag": "no earlier week to compare with"}
+  ],
+  "plans": [
+    {"week_of": "2026-11-23", "kind": "coupon", "state": "done", "plans": 18},
+    {"week_of": "2026-11-23", "kind": "coupon", "state": "refused", "plans": 4},
+    {"week_of": "2026-11-23", "kind": "plate", "state": "question", "plans": 3}
+  ],
+  "refused": [
+    {"reason": "the sentence asks for changes the plan leaves out (“…”): ask for them rather than run without them", "plans": 3},
+    {"reason": "no step on offer does what the sentence asks", "plans": 1}
+  ],
+  "unchecked": [
+    {"week_of": "2026-11-23", "model": "claude-stand-in-1", "calls": 1}
+  ]
+}

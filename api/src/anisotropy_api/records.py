@@ -15,7 +15,7 @@ import os
 import re
 import subprocess
 import uuid
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from decimal import Decimal
 from pathlib import Path
 
@@ -215,6 +215,8 @@ class AgentPlanRow(Base):
     model: Mapped[str | None] = mapped_column(String(80))
     job_id: Mapped[str | None] = mapped_column(String(64))
     version_n: Mapped[int | None] = mapped_column(Integer)
+    attempts: Mapped[list | None] = mapped_column(JSONB(none_as_null=True),
+                                                  comment="Each answer of the model the checks turned back, with their reasons (ADR-0145)")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     approved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -326,6 +328,10 @@ class ModelCallRow(Base):
     run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"),
                                                      comment="The run record of the request the call answered")
     attempts: Mapped[list | None] = mapped_column(JSONB(none_as_null=True), comment="Each attempt's tokens when there was more than one")
+    sent_sha256: Mapped[str | None] = mapped_column(String(64), comment="The fingerprint of the words sent: instructions, request, answer form (ADR-0145)")
+    checked: Mapped[bool | None] = mapped_column(Boolean, comment="Whether the model that answered had passed the assistant check then (ADR-0145)")
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("agent_plans.id", ondelete="SET NULL"),
+                                                      comment="The plan the call was made for (ADR-0145)")
 
     __table_args__ = (
         CheckConstraint(f"feature IN ({_sql_list(FEATURES)})", name="model_calls_feature_known"),
@@ -424,8 +430,11 @@ def model_calls_since(engine: Engine, user_email: str, since: dt.datetime) -> in
         return session.scalar(statement) or 0
 
 
-def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None) -> int:
-    """One row per call (ADR-0120), in one transaction; returns how many. A database failure raises; the caller decides."""
+def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, user_email: str | None, run_id: uuid.UUID | None,
+                       plan_id: uuid.UUID | None = None, checked_models: Collection[str] | None = None) -> int:
+    """One row per call (ADR-0120), in one transaction; returns how many. A database failure raises; the caller decides. With
+    `checked_models`, each row says whether the model that answered was one of them; `plan_id` names the plan the calls were for
+    (ADR-0145)."""
     if not calls:
         return 0
     with Session(engine) as session:
@@ -433,7 +442,9 @@ def record_model_calls(engine: Engine, calls: list[ModelCall], *, actor: str, us
                                      input_tokens=c.input_tokens, output_tokens=c.output_tokens, thinking_tokens=c.thinking_tokens,
                                      cache_read_tokens=c.cache_read_tokens, cache_write_tokens=c.cache_write_tokens,
                                      answer_characters=c.answer_characters, stop_reason=c.stop_reason, seconds=c.seconds, cost_usd=c.cost_usd,
-                                     prices_as_of=c.prices_as_of, run_id=run_id, attempts=list(c.attempts) if c.attempts else None)
+                                     prices_as_of=c.prices_as_of, run_id=run_id, attempts=list(c.attempts) if c.attempts else None,
+                                     sent_sha256=c.sent_sha256, plan_id=plan_id,
+                                     checked=None if checked_models is None else c.model in checked_models)
                         for c in calls)
         session.commit()
     return len(calls)
