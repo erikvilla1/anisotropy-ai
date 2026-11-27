@@ -52,7 +52,7 @@ from pathlib import Path
 from anisotropy_fea import enabled, paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
-from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, plate_shape, setup_checklist
+from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, plate_shape, setup_checklist, shape_checklist
 from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
@@ -269,15 +269,22 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
         write_json(out / "checklist.json", unreadable(values_path, str(exc)).as_dict())
         print(f"blocked: {exc}")
         return "blocked"
+    if program == STEP:
+        # a shape has no mesh: the rows, the spec, the material and the plies are judged as for the other files, and no mesh is cut, so
+        # an element size of any fineness costs the shape nothing (ADR-0146)
+        checklist, spec = shape_checklist(form, root)
+        write_json(out / "checklist.json", checklist.as_dict())
+        if not solvable(checklist, spec):
+            print(f"{checklist.state}: no model written")
+            return "blocked"
+        return shape_file(spec, out, file_stem(spec))
     # the file is for another program on the engineer's own machine: no limit on its elements (ADR-0086 amendment 1; the founder, 2026-11-24)
     checklist, model, _ = setup_checklist(form, root, element_limit=None)
     write_json(out / "checklist.json", checklist.as_dict())
     if not solvable(checklist, model):
         print(f"{checklist.state}: no model written")
         return "blocked"
-    stem = re.sub(r"[^A-Za-z0-9._-]", "-", (model.spec.coupon.designation if model.spec.coupon else None) or "model")
-    if program == STEP:
-        return shape_file(model, out, stem)
+    stem = file_stem(model.spec)
     write, ending = MODEL_PROGRAMS[program]
     units = deck_units_of(model.spec.units)
     try:
@@ -295,9 +302,14 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
     return "written"
 
 
-def shape_file(model, out: Path, stem: str) -> str:
-    """The model's shape as a STEP file (ADR-0146): each part one solid at its thickness, built by Gmsh's OpenCASCADE from the model the
-    check built, and the part table in model.json. Returns `written`, `refused` (the shape cannot be drawn from what the model states) or
+def file_stem(spec) -> str:
+    """How a model's file is named before its ending: the coupon's designation, in the characters a file name takes (ADR-0129 amendment 5)."""
+    return re.sub(r"[^A-Za-z0-9._-]", "-", (spec.coupon.designation if spec.coupon else None) or "model")
+
+
+def shape_file(spec, out: Path, stem: str) -> str:
+    """The model's shape as a STEP file (ADR-0146): each part one solid at its thickness, built by Gmsh's OpenCASCADE from the spec the
+    check judged, and the part table in model.json. Returns `written`, `refused` (the shape cannot be drawn from what the spec states) or
     `unavailable` (Gmsh, the optional extra `mesh`, is not installed here: no file is written)."""
     from anisotropy_fea.coupon_shape import ENDING, build_coupon_shape, part_table
     from anisotropy_fea.mesher import gmsh_available
@@ -311,7 +323,7 @@ def shape_file(model, out: Path, stem: str) -> str:
     out.mkdir(parents=True, exist_ok=True)
     path = out / (stem + ENDING)
     try:
-        shape = build_coupon_shape(model, path)
+        shape = build_coupon_shape(spec, path)
     except ShapeError as exc:
         write_json(out / "model.json", {"state": "refused", "program": STEP, "problem": str(exc)})
         print(f"refused: {exc}")
@@ -319,7 +331,7 @@ def shape_file(model, out: Path, stem: str) -> str:
     data = path.read_bytes()
     write_json(out / "model.json", {"state": "written", "program": STEP, "name": path.name, "units": "mm", "bytes": len(data),
                                     "sha256": hashlib.sha256(data).hexdigest(), "solids": len(shape.parts),
-                                    "parts": part_table(shape, model.spec.units)})
+                                    "parts": part_table(shape, spec.units)})
     print(f"written: {path.name}, {len(data)} bytes, {len(shape.parts)} solid{'' if len(shape.parts) == 1 else 's'} in mm")
     return "written"
 

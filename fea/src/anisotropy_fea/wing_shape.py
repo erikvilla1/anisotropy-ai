@@ -256,9 +256,37 @@ def mid_surface_section(wing: Wing, points_per_side: int = SECTION_POINTS) -> Se
 
 
 def _step_string(text: str) -> str:
-    """A name as a STEP string: printable ASCII, apostrophes doubled."""
-    clean = "".join(ch if 32 <= ord(ch) < 127 else "_" for ch in text)
-    return clean.replace("'", "''")
+    """Text as the inside of a string of a STEP file (ISO 10303-21): printable ASCII as it is, an apostrophe and a backslash doubled,
+    and every other character by its control directive, `\\X\\hh` for one up to U+00FF, `\\X2\\hhhh...\\X0\\` for a run of the basic
+    plane and `\\X4\\hhhhhhhh...\\X0\\` beyond it. A backslash left single would start a directive of the text's own choosing. A name
+    of plain ASCII without an apostrophe or a backslash is written as it is."""
+    out: list[str] = []
+    wide: list[str] = []  # a run of characters of one width, written under one directive
+    width = 0
+
+    def close() -> None:
+        nonlocal width
+        if wide:
+            out.append(f"\\X{width // 2}\\{''.join(wide)}\\X0\\")
+            wide.clear()
+        width = 0
+
+    for ch in text:
+        code = ord(ch)
+        needs = 0 if code <= 0xFF else 4 if code <= 0xFFFF else 8
+        if needs != width:
+            close()
+            width = needs
+        if needs:
+            wide.append(f"{code:0{needs}X}")
+        elif ch in "'\\":
+            out.append(ch * 2)
+        elif 32 <= code < 127:
+            out.append(ch)
+        else:
+            out.append(f"\\X\\{code:02X}")
+    close()
+    return "".join(out)
 
 
 def name_step_products(path: Path, assembly: str, names: list[str]) -> None:

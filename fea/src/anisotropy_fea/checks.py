@@ -28,13 +28,13 @@ from . import paths
 from .audit import CRITERION
 from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
-from .femodel import BoundaryDefinition, FEModel, build_model
+from .femodel import BoundaryDefinition, FEModel, build_model, laminate_section
 from .followed_plate import LEVELS as FOLLOWED_LEVELS, why_not as why_not_followed
 from .intake import FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import (BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, SpecError, element_estimate, follows_shape, full_angles, is_isotropic, layup_text,
+from .spec import (BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, CouponSpec, SpecError, element_estimate, follows_shape, full_angles, is_isotropic, layup_text,
                    spec_plies)
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
@@ -305,6 +305,25 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
                     element_limit: int | None = MOST_ELEMENTS) -> tuple[Checklist, FEModel | None, QualityField | None]:
     """Every item judged as far as the inputs allow. Returns the checklist, and the model and its mesh quality when the inputs build one.
     A mesh past `element_limit` elements is not built (ADR-0086 amendment 1); None, for the file written for Abaqus or Ansys, builds any."""
+    checklist, model, quality, _ = _judged(form, root, ccx, tectonic, gmsh, element_limit, cut_mesh=True)
+    return checklist, model, quality
+
+
+def shape_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
+                    tectonic: Callable[[], str | None] = find_tectonic) -> tuple[Checklist, CouponSpec | None]:
+    """The setup check as far as a model's shape goes (ADR-0146), and the spec the shape is drawn from when the rows give one. The rows,
+    the names, the spec's own rules, the material and the plies are judged as `setup_checklist` judges them, by the same lines. No mesh
+    is cut, so the items judged on a mesh (the supports and loads on its nodes, its quality, its size, the result points) stay pending:
+    a shape has none of them, and a mesh of any size costs it nothing."""
+    checklist, _, _, spec = _judged(form, root, ccx, tectonic, gmsh_available, None, cut_mesh=False)
+    return checklist, spec
+
+
+def _judged(form: FormInput, root: Path | str | None, ccx: Callable[[], Path | None], tectonic: Callable[[], str | None],
+            gmsh: Callable[[], str | None], element_limit: int | None, *, cut_mesh: bool,
+            ) -> tuple[Checklist, FEModel | None, QualityField | None, CouponSpec | None]:
+    """The checklist, the model and its mesh quality when one is built, and the spec when the rows, the material and the plies stand.
+    With `cut_mesh` off the model is not built: the section is, as the model would build it."""
     root = Path(root) if root is not None else paths.LOCAL
     notes = _Notes()
     problems: list[str] = []
@@ -315,6 +334,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     spec = None
     model: FEModel | None = None
     quality: QualityField | None = None
+    described: CouponSpec | None = None  # the spec, once its material and its plies stand
     try:
         values = check_form(form)
     except IntakeError as exc:
@@ -341,8 +361,12 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         notes.note("mesh", "fail", too_many, (row("element_size"),))
     elif spec is not None:
         try:
-            model = build_model(spec)
+            if cut_mesh:
+                model = build_model(spec)
+            else:
+                laminate_section(spec)  # the material and the section as the model builds them, with no mesh (ADR-0146)
             plies = spec_plies(spec)  # the engine's plies: it refuses a lamina whose compliance is not positive
+            described = spec
         except (SpecError, MeshError) as exc:
             problems.append(str(exc))
             notes.note("mesh", "fail", str(exc), (row("element_size"),))
@@ -561,7 +585,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
-    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality
+    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality, described
 
 
 def support_clash(model: FEModel) -> tuple[BoundaryDefinition, BoundaryDefinition, int, int] | None:

@@ -18,7 +18,7 @@ import pytest
 
 from anisotropy_fea import paths
 from anisotropy_fea.coupon_shape import (
-    HEADER_WIDTH, MM, build_coupon_shape, describe_step, header_lines, laminate_thickness, name_step_solids, part_table, read_step_solids, tab_run,
+    HEADER_WIDTH, MM, build_coupon_shape, describe_step, header_lines, name_step_solids, part_table, read_step_solids, tab_run,
 )
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.intake import FORM_VERSION
@@ -28,6 +28,7 @@ from anisotropy_fea.wing_shape import ShapeError
 
 from public_coupon import DESIGNATION
 from test_intake import PUBLIC_FILL
+from test_wing_shape import part21_text
 
 STUDIO = Path(__file__).parents[1] / "tools" / "studio_tool.py"
 needs_gmsh = pytest.mark.skipif(gmsh_available() is None,
@@ -42,6 +43,11 @@ def table_of(name: str) -> dict:
 
 def model_of(table: dict):
     return build_model(to_si(spec_from_table(copy.deepcopy(table), "0" * 64)))
+
+
+def thickness_of(model) -> float:
+    """The thickness the finite element model itself holds, metres: the sum of its section's plies. The shape is held against it."""
+    return sum(ply.thickness_m for ply in model.section.plies)
 
 
 def strip(**tabs) -> dict:
@@ -120,18 +126,26 @@ def written(request, tmp_path_factory):
         pytest.skip("Gmsh is not available")
     model = model_of(KINDS[request.param]())
     step = tmp_path_factory.mktemp("shape") / "coupon.step"
-    shape = build_coupon_shape(model, step)
+    shape = build_coupon_shape(model.spec, step)
     return model, shape, step, read_step_solids(step)
+
+
+def mesh_edge_sides(mesh) -> list[tuple[int, int, int | None]]:
+    """The element sides on the mesh's own boundary, those only one element has: the two corner nodes of each and, on a second-order
+    mesh, its midside node."""
+    sides: dict[tuple[int, int], list] = {}
+    for e, nodes in enumerate(mesh.corners):
+        for k in range(4):
+            a, b = int(nodes[k]), int(nodes[(k + 1) % 4])
+            entry = sides.setdefault((min(a, b), max(a, b)), [0, None])
+            entry[0] += 1
+            entry[1] = None if mesh.midside is None else int(mesh.midside[e][k])
+    return [(a, b, middle) for (a, b), (count, middle) in sides.items() if count == 1]
 
 
 def mesh_edge_nodes(mesh) -> np.ndarray:
     """The corner nodes on the mesh's own boundary: the ends of every element side that only one element has."""
-    sides: dict[tuple[int, int], int] = {}
-    for nodes in mesh.corners:
-        for k in range(4):
-            a, b = int(nodes[k]), int(nodes[(k + 1) % 4])
-            sides[(min(a, b), max(a, b))] = sides.get((min(a, b), max(a, b)), 0) + 1
-    return np.unique([node for side, count in sides.items() if count == 1 for node in side])
+    return np.unique([node for a, b, _ in mesh_edge_sides(mesh) for node in (a, b)])
 
 
 def mesh_area(mesh) -> float:
@@ -162,7 +176,7 @@ def distance_to_the_outline(step: Path, z_mm: float, points_mm: np.ndarray) -> f
 @needs_gmsh
 def test_the_laminate_is_one_solid_of_the_models_length_width_and_thickness(written):
     model, shape, _, solids = written
-    g, t = model.spec.geometry, laminate_thickness(model)
+    g, t = model.spec.geometry, thickness_of(model)
     laminate = solids[0]
     assert laminate["name"] == shape.parts[0].name == ("Coupon" if model.spec.layup is None else "Laminate")
     expected = (0.0, 0.0, -t / 2 / MM, g.width / MM, g.length / MM, t / 2 / MM)
@@ -178,16 +192,48 @@ def test_every_node_on_the_meshs_edge_lies_on_the_step_files_outline(written):
     model, _, step, _ = written
     edge = model.mesh.xy[mesh_edge_nodes(model.mesh)] / MM
     assert len(edge) >= 8
-    assert distance_to_the_outline(step, -laminate_thickness(model) / 2 / MM, edge) < ON_THE_OUTLINE_MM
+    assert distance_to_the_outline(step, -thickness_of(model) / 2 / MM, edge) < ON_THE_OUTLINE_MM
     # a point of the mesh's inside is not on it, so the measure can tell
     inside = model.mesh.centroids()[model.mesh.nearest_element((model.spec.geometry.width / 2, model.spec.geometry.length / 4))] / MM
-    assert distance_to_the_outline(step, -laminate_thickness(model) / 2 / MM, inside[None, :]) > 0.1
+    assert distance_to_the_outline(step, -thickness_of(model) / 2 / MM, inside[None, :]) > 0.1
+
+
+@needs_gmsh
+@pytest.mark.parametrize("name, curved_mm", [("open-hole-im7-8552", 3.0), ("d638-type-i-plastic", 76.0), ("d3039-im7-8552", None)])
+def test_on_a_second_order_mesh_the_corner_nodes_lie_on_the_outline_and_a_midside_node_on_a_curve_lies_on_its_chord(tmp_path, name, curved_mm):
+    """What is true of a second-order mesh, measured: its corner nodes lie on the STEP file's outline as a first-order mesh's do; a
+    midside node on the boundary is the middle of the straight line between its two corners, so on a straight edge it is on the outline
+    and on a curve (the hole, a fillet of `curved_mm` radius) it is inside it by that chord's sagitta, c^2 / (8 r) for a chord c."""
+    table = table_of(name)
+    table["mesh"]["element_order"] = 2
+    model = model_of(table)
+    step = tmp_path / "coupon.step"
+    build_coupon_shape(model.spec, step)
+    mesh, z = model.mesh, -thickness_of(model) / 2 / MM
+    sides = mesh_edge_sides(mesh)
+    assert all(middle is not None for _, _, middle in sides)
+    xy = mesh.xy / MM
+    assert distance_to_the_outline(step, z, xy[mesh_edge_nodes(mesh)]) < ON_THE_OUTLINE_MM
+    for a, b, middle in sides:
+        assert xy[middle] == pytest.approx((xy[a] + xy[b]) / 2, abs=1e-9)  # on the chord, at its middle
+    gaps = np.array([distance_to_the_outline(step, z, xy[[middle]]) for _, _, middle in sides])
+    chords = np.array([float(np.linalg.norm(xy[a] - xy[b])) for a, b, _ in sides])
+    if curved_mm is None:
+        assert gaps.max() < ON_THE_OUTLINE_MM  # every edge is straight: the midside nodes are on the outline too
+        return
+    off = gaps > ON_THE_OUTLINE_MM
+    assert off.any() and gaps.max() > 1e-4, "a curve's midside nodes are off the outline by an amount that can be measured"
+    # the sagitta of each chord on the tightest curve bounds its gap; on that curve it is the gap
+    sagitta = curved_mm - np.sqrt(curved_mm**2 - (chords / 2) ** 2)
+    assert (gaps[off] <= sagitta[off] + ON_THE_OUTLINE_MM).all()
+    worst = int(np.argmax(gaps))
+    assert gaps[worst] == pytest.approx(sagitta[worst], abs=1e-6 if name == "open-hole-im7-8552" else 1e-3)
 
 
 @needs_gmsh
 def test_the_solids_volume_is_the_outlines_area_times_the_thickness_and_the_meshs_area_agrees(written):
     model, shape, _, solids = written
-    g, t = model.spec.geometry, laminate_thickness(model)
+    g, t = model.spec.geometry, thickness_of(model)
     outline = outline_of(model.spec)
     if outline is None:
         area = g.width * g.length
@@ -227,7 +273,7 @@ def test_a_dog_bones_narrow_section_is_as_wide_in_the_file_as_in_the_mesh(writte
     outline = outline_of(model.spec)
     if outline is None:
         return
-    g, t = model.spec.geometry, laminate_thickness(model)
+    g, t = model.spec.geometry, thickness_of(model)
     centre = g.width / 2
     # the sides of the narrow section at mid-length and at its ends, the full width's corners, and the points where the arcs meet
     stations = [0.0, outline.l, -outline.l, outline.s_tangent, -outline.s_tangent, outline.s_full, -outline.s_full, outline.half_length * 0.999]
@@ -242,7 +288,7 @@ def test_a_dog_bones_narrow_section_is_as_wide_in_the_file_as_in_the_mesh(writte
 @needs_gmsh
 def test_bonded_tabs_are_four_named_solids_on_the_gripped_length_and_the_gripped_strip_has_none(written):
     model, shape, _, solids = written
-    spec, t = model.spec, laminate_thickness(model)
+    spec, t = model.spec, thickness_of(model)
     g = spec.geometry
     if spec.tabs is None:
         assert len(solids) == len(shape.parts) == 1
@@ -264,6 +310,82 @@ def test_bonded_tabs_are_four_named_solids_on_the_gripped_length_and_the_gripped
         # the mesh grips the same length: the elements of its tab region end where the tab's solid does
         band = model.mesh.xy[np.unique(model.mesh.corners[model.mesh.element_sets["Tab-Bottom" if bottom_end else "Tab-Top"]]), 1] / MM
         assert (band.min(), band.max()) == pytest.approx((y0, y1), abs=SIZE_MM)
+
+
+def tab_faces(step: Path) -> dict[str, list[tuple[float, ...]]]:
+    """Every tab solid of a STEP file by its name: the bounding box of each of its faces (mm)."""
+    import gmsh
+
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.model.add("tabs")
+        solids = [entity for entity in gmsh.model.occ.importShapes(str(step)) if entity[0] == 3]
+        gmsh.model.occ.synchronize()
+        return {gmsh.model.getEntityName(3, tag).rsplit("/", 1)[-1]: [tuple(gmsh.model.getBoundingBox(2, abs(face)))
+                                                                    for _, face in gmsh.model.getBoundary([(3, tag)], oriented=False)]
+                for _, tag in solids[1:]}
+    finally:
+        gmsh.finalize()
+
+
+def check_the_bevels(step: Path, length: float, tab_length: float, half: float, tab_thickness: float, bevel: float) -> None:
+    """Each tab's bevel is on its end toward the gauge section and rises at the stated angle from the coupon's face: the tab's face on
+    the coupon runs the whole gripped length from the coupon's end, its outer face stops short of the gauge end by the bevel's run, and
+    the one inclined face joins the two there. Sizes in millimetres, `half` the laminate's half thickness, `bevel` in degrees."""
+    run = tab_thickness / math.tan(math.radians(bevel))
+    found = tab_faces(step)
+    assert len(found) == 4
+    for name, boxes in found.items():
+        end, gauge = (0.0, tab_length) if name.startswith("Bottom") else (length, length - tab_length)
+        toward = 1.0 if gauge > end else -1.0  # the direction from the coupon's end to the gauge section, along y
+        side = 1.0 if name.endswith("top face") else -1.0
+        on_coupon, outer = (next(box for box in boxes if abs(box[2] - z) < SIZE_MM and abs(box[5] - z) < SIZE_MM)
+                            for z in (side * half, side * (half + tab_thickness)))
+        assert sorted((on_coupon[1], on_coupon[4])) == pytest.approx(sorted((end, gauge)), abs=SIZE_MM), name
+        assert sorted((outer[1], outer[4])) == pytest.approx(sorted((end, gauge - toward * run)), abs=SIZE_MM), name
+        (inclined,) = [box for box in boxes if box[3] - box[0] > SIZE_MM and box[4] - box[1] > SIZE_MM and box[5] - box[2] > SIZE_MM]
+        assert sorted((inclined[1], inclined[4])) == pytest.approx(sorted((gauge - toward * run, gauge)), abs=SIZE_MM), name
+        assert math.degrees(math.atan2(inclined[5] - inclined[2], inclined[4] - inclined[1])) == pytest.approx(bevel, abs=1e-4), name  # a box read back carries the kernel's 1e-7 mm margin
+
+
+@needs_gmsh
+@pytest.mark.parametrize("bevel", [7.0, 15.0, 45.0])
+def test_a_tabs_bevel_is_on_its_end_toward_the_gauge_section_at_the_stated_angle(tmp_path, bevel):
+    model = model_of(strip(thickness=1.5, bevel=bevel))
+    step = tmp_path / "coupon.step"
+    build_coupon_shape(model.spec, step)
+    g = model.spec.geometry
+    check_the_bevels(step, g.length / MM, g.tab_length / MM, thickness_of(model) / 2 / MM, 1.5, bevel)
+
+
+@needs_gmsh
+def test_the_check_of_the_bevels_fails_for_a_tab_bevelled_at_the_coupons_end_or_overhanging(tmp_path, monkeypatch):
+    """The check above, tried on two wrong tabs of the same box and the same volume as the right one: one bevelled at the coupon's
+    end, one whose outer face overhangs the gauge section. Every other test of this file passes for both."""
+    from anisotropy_fea import coupon_shape
+
+    def wrong(profile_of):
+        def tab(occ, spec, thickness_mm, run_mm, end, face):
+            g = spec.geometry
+            width, length, tab_length, tab_thickness = g.width / MM, g.length / MM, g.tab_length / MM, spec.tabs.thickness / MM
+            y0, into = (length, -1.0) if end else (0.0, 1.0)
+            z0 = face * thickness_mm / 2
+            points = [occ.addPoint(0.0, y0 + into * y, z0 + face * z) for y, z in profile_of(tab_length, tab_thickness, run_mm)]
+            loop = occ.addCurveLoop([occ.addLine(points[k], points[(k + 1) % 4]) for k in range(4)])
+            return next(tag for dim, tag in occ.extrude([(2, occ.addPlaneSurface([loop]))], width, 0.0, 0.0) if dim == 3)
+        return tab
+
+    at_the_end = lambda L, t, run: ((0.0, 0.0), (L, 0.0), (L, t), (run, t))  # noqa: E731
+    overhanging = lambda L, t, run: ((0.0, 0.0), (L - run, 0.0), (L, t), (0.0, t))  # noqa: E731
+    model = model_of(strip(thickness=1.5, bevel=15.0))
+    g = model.spec.geometry
+    for k, profile_of in enumerate((at_the_end, overhanging)):
+        monkeypatch.setattr(coupon_shape, "_tab", wrong(profile_of))
+        step = tmp_path / f"wrong-{k}.step"
+        build_coupon_shape(model.spec, step)
+        with pytest.raises(AssertionError):
+            check_the_bevels(step, g.length / MM, g.tab_length / MM, thickness_of(model) / 2 / MM, 1.5, 15.0)
 
 
 @needs_gmsh
@@ -325,7 +447,7 @@ def test_a_table_in_inches_states_the_parts_in_inches_and_the_file_stays_in_mill
     table["strain"]["gauge_length"] = 1.0
     model = model_of(table)
     step = tmp_path / "inch.step"
-    shape = build_coupon_shape(model, step)
+    shape = build_coupon_shape(model.spec, step)
     stated = part_table(shape, "in-psi")
     assert stated["units"] == {"length": "in", "volume": "in³", "step": "mm"}
     assert stated["parts"][0]["thickness"] == pytest.approx(8 * 0.0072) and stated["parts"][0]["ply_thickness"] == pytest.approx(0.0072)
@@ -343,13 +465,13 @@ def test_tabs_that_reach_a_dog_bones_fillet_are_refused_and_no_file_is_written(t
     table = table_of("d638-type-i-plastic")
     table["tabs"] = {"thickness": 1.5, "bevel": 90.0}
     model = model_of(table)  # its 25 mm grips pass the fillets' start, 32.86 mm from each end: drawn
-    assert len(build_coupon_shape(model, tmp_path / "fits.step").parts) == 5
+    assert len(build_coupon_shape(model.spec, tmp_path / "fits.step").parts) == 5
     table["geometry"]["tab_length"] = 40.0  # past it: the tab would lie on the fillet, where nothing states its outline
     table["mesh"] = {"mesher": "structured", "element_order": 1, "nx": 8, "ny": 165}
     model = model_of(table)
     step = tmp_path / "refused.step"
     with pytest.raises(ShapeError, match=r"The tabs cannot be drawn: they are 40 mm long and the dog-bone's full width ends 32\.857\d* mm from each end"):
-        build_coupon_shape(model, step)
+        build_coupon_shape(model.spec, step)
     assert not step.exists()
 
 
@@ -358,14 +480,14 @@ def test_a_bevel_too_shallow_for_the_tabs_length_is_refused_and_no_file_is_writt
     model = model_of(strip(thickness=10.0, bevel=7.0))  # 10 / tan 7 degrees = 81.4 mm of bevel on a 56 mm tab
     step = tmp_path / "refused.step"
     with pytest.raises(ShapeError, match=r"a bevel of 7 degrees over a thickness of 10 mm runs 81\.44\d* mm, and the tab is 56 mm long"):
-        build_coupon_shape(model, step)
+        build_coupon_shape(model.spec, step)
     assert not step.exists()
 
 
 @needs_gmsh
 def test_a_file_that_is_not_named_as_a_step_file_is_refused(tmp_path):
     with pytest.raises(ShapeError, match=r"ends in \.step or \.stp"):
-        build_coupon_shape(model_of(strip()), tmp_path / "coupon.inp")
+        build_coupon_shape(model_of(strip()).spec, tmp_path / "coupon.inp")
     assert list(tmp_path.iterdir()) == []
 
 
@@ -513,3 +635,200 @@ def test_a_warm_worker_answers_a_step_request_with_one_line_and_goes_on(tmp_path
         assert worker.wait(timeout=30) == 0
     finally:
         worker.kill()
+
+
+# --- no mesh for a shape, sizes the kernel cannot hold, and the header's lines (ADR-0146, review) ----------------------------------
+
+
+def studio_tool():
+    import importlib.util
+
+    made = importlib.util.spec_from_file_location("studio_tool_for_shapes", STUDIO)
+    module = importlib.util.module_from_spec(made)
+    made.loader.exec_module(module)
+    return module
+
+
+def without_the_time(step: Path) -> str:
+    """A STEP file's text less the one thing that differs between two writings of one shape: the time in its FILE_NAME."""
+    import re
+
+    text, count = re.subn(r"(FILE_NAME\('[^']*',')[0-9T:-]+(')", r"\1\2", step.read_text(encoding="ascii"))
+    assert count == 1
+    return text
+
+
+@needs_gmsh
+@pytest.mark.parametrize("fill", ["PUBLIC_FILL", "OHT_FILL"])
+def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as_a_coarse_one_with_the_same_file(tmp_path, monkeypatch, fill):
+    """The shape has no mesh. The request for it once built the whole mesh first, with no limit on its elements: 29 s for a 16 kB box
+    at 0.15 mm, and past 150 s and 800 MB at 0.05 mm. Here the meshers are stood in by a spy that fails the test if anything calls it."""
+    import time
+
+    import test_intake
+    from anisotropy_fea import checks, enabled, femodel, mesher
+
+    called: list[str] = []
+
+    def spy(name):
+        def refuse(*args, **kwargs):
+            called.append(name)
+            raise AssertionError(f"{name} was called for a shape")
+        return refuse
+
+    for module, name in ((femodel, "mesh_for_spec"), (femodel, "build_model"), (checks, "build_model"), (mesher, "structured_rectangle"),
+                         (mesher, "gmsh_open_hole_plate")):
+        monkeypatch.setattr(module, name, spy(name))
+    tool = studio_tool()
+    rows = {k: v for k, v in getattr(test_intake, fill).items() if not k.startswith("mesh_")}
+    files, seconds = {}, {}
+    with enabled.every_test(True):
+        for size in (5.0, 0.002):  # 0.002 mm on this strip is more than a billion elements
+            folder = tmp_path / str(size)
+            folder.mkdir()
+            source = folder / "values.json"
+            source.write_text(json.dumps({"form_version": FORM_VERSION, **rows, "element_size": size}), encoding="utf-8")
+            clock = time.perf_counter()
+            state = tool.model_file(source, "step", folder / "out", tmp_path / "root")
+            seconds[size] = time.perf_counter() - clock
+            head = json.loads((folder / "out" / "model.json").read_text(encoding="utf-8")) if state != "blocked" else {}
+            assert state == "written", json.loads((folder / "out" / "checklist.json").read_text(encoding="utf-8"))["problems"]
+            files[size] = without_the_time(folder / "out" / head["name"])
+    assert called == []
+    assert files[0.002] == files[5.0]
+    assert seconds[0.002] < 5.0, seconds
+
+
+def test_the_shapes_checklist_judges_the_rows_the_spec_and_the_material_and_leaves_what_a_mesh_decides_pending(tmp_path):
+    from anisotropy_fea.checks import setup_checklist, shape_checklist
+    from anisotropy_fea.intake import read_values
+
+    def form(**changes):
+        folder = tmp_path / str(len(list(tmp_path.iterdir())))
+        return read_values(values_file(folder, **changes))
+
+    whole, model, _ = setup_checklist(form(), tmp_path / "root", element_limit=None)
+    shape, spec = shape_checklist(form(), tmp_path / "root")
+    assert spec is not None and spec == model.spec and shape.designation == whole.designation == DESIGNATION
+    states = {item.id: item.state for item in shape.items}
+    assert {states[item] for item in ("constraints", "load", "mesh", "probes")} == {"pending"}  # judged on a mesh, which a shape has not
+    assert states["standard"] == {item.id: item.state for item in whole.items}["standard"]
+    # what the rows, the spec or the material refuse stops a shape as it stops the other files, in the same words
+    for changes in ({"length": None}, {"tab_length": 200.0}, {"library": None}):
+        whole, model, _ = setup_checklist(form(**changes), tmp_path / "root", element_limit=None)
+        shape, spec = shape_checklist(form(**changes), tmp_path / "root")
+        assert model is None and spec is None, changes
+        stops = lambda checklist: [(item.id, item.state, item.message) for item in checklist.items if item.state in ("fail", "missing")]  # noqa: E731
+        assert stops(shape) == stops(whole) and stops(shape), changes
+
+
+@needs_gmsh
+@pytest.mark.parametrize("tabs, words", [
+    ({"thickness": 1e-9, "bevel": 90.0}, "The shape cannot be drawn: the tabs' thickness is 1e-09 mm, under the 0.001 mm that is the smallest size drawn"),
+    ({"thickness": 56.0 - 1e-7, "bevel": 45.0}, "so it has no outer face left"),
+    ({"thickness": 56.0 - 5e-4, "bevel": 45.0}, "so it has no outer face left"),  # an outer face of half a micrometre is none
+])
+def test_a_tab_the_kernel_cannot_hold_is_refused_with_its_reason_before_the_kernel_is_asked(tmp_path, monkeypatch, tabs, words):
+    from anisotropy_fea import coupon_shape
+
+    model = model_of(strip(**tabs))
+    monkeypatch.setattr(coupon_shape, "_gmsh", lambda: pytest.fail("the kernel was asked"))
+    step = tmp_path / "coupon.step"
+    with pytest.raises(ShapeError) as refused:
+        build_coupon_shape(model.spec, step)
+    assert words in str(refused.value) and str(refused.value).startswith(("The shape cannot be drawn", "The tabs cannot be drawn"))
+    assert not step.exists()
+
+
+@needs_gmsh
+def test_a_tab_a_micrometre_thick_with_an_outer_face_a_micrometre_long_is_still_drawn(tmp_path):
+    """The smallest sizes that are drawn, so the refusals above stop no shape the kernel holds."""
+    step = tmp_path / "coupon.step"
+    shape = build_coupon_shape(model_of(strip(thickness=1e-3, bevel=90.0)).spec, step)
+    assert len(shape.parts) == 5 and len(read_step_solids(step)) == 5
+    assert len(build_coupon_shape(model_of(strip(thickness=56.0 - 2e-3, bevel=45.0)).spec, tmp_path / "long-bevel.step").parts) == 5
+
+
+@needs_gmsh
+def test_what_the_kernel_cannot_build_is_a_plain_refusal_that_carries_none_of_its_words(tmp_path, monkeypatch):
+    from anisotropy_fea import coupon_shape
+
+    def fails(*args, **kwargs):
+        raise Exception("Could not create line in /tmp/model-abc123/out/kernel.brep at BRepBuilderAPI_MakeEdge")
+
+    step = tmp_path / "coupon.step"
+    for name in ("_laminate", "_tab"):
+        with monkeypatch.context() as patched:
+            patched.setattr(coupon_shape, name, fails)
+            with pytest.raises(ShapeError) as refused:
+                build_coupon_shape(model_of(strip(thickness=1.5, bevel=7.0)).spec, step)
+        assert str(refused.value) == "The shape cannot be drawn from these sizes: the geometry kernel could not build it"
+        assert isinstance(refused.value.__cause__, Exception) and "BRepBuilderAPI" in str(refused.value.__cause__)  # the cause, for the log alone
+        assert not step.exists()
+    assert len(build_coupon_shape(model_of(strip(thickness=1.5, bevel=7.0)).spec, step).parts) == 5  # the kernel is left fit for the next shape
+
+
+@needs_gmsh
+def test_a_refusal_states_its_sizes_in_the_coupons_own_units(tmp_path):
+    table = strip(thickness=0.4, bevel=7.0)  # inches: a bevel of 7 degrees over 0.4 in runs 3.26 in, past a 2.2 in tab
+    table["units"] = "in-psi"
+    table["geometry"].update(length=10.0, width=1.0, tab_length=2.2)
+    table["layup"]["ply_thickness"] = 0.0072
+    table["mesh"] = {"mesher": "structured", "element_order": 1, "nx": 4, "ny": 50}
+    table["probes"] = {}
+    table["strain"]["gauge_length"] = 2.0
+    model = model_of(table)
+    with pytest.raises(ShapeError) as refused:
+        build_coupon_shape(model.spec, tmp_path / "coupon.step")
+    said = str(refused.value)
+    assert "a thickness of 0.4 in runs 3.25774 in, and the tab is 2.2 in long" in said and " mm" not in said
+
+
+def test_the_headers_description_is_strings_of_at_most_its_width_as_written_broken_between_words_then_after_a_slash_then_anywhere():
+    from anisotropy_fea.coupon_shape import header_strings
+    from anisotropy_fea.wing_shape import _step_string
+
+    layup = "[" + "/".join(f"{angle}.25" for angle in (12, -12, 33, -33, 47, -47, 61, -61, 75, -75, 88, -88, 5, -5, 19, -19)) + "]s"
+    cases = [f"Laminate: layup {layup}, 32 plies of 0.18288 mm, 5.85216 mm thick, IM7-8552.",  # sixteen angles with fractions: one long word
+             "Top tab, top face: bonded tab, 1.5 mm thick, " + "G" * 300 + ". Drawn as stated.",  # a word longer than four strings
+             "Bob's tab of E-glass \u00b145\u00b0 on a\\b, 1.5 mm thick, " + "\u03b1" * 40 + "."]  # every character that is written longer than itself
+    for line in cases:
+        pieces = header_strings(line)
+        assert all(0 < len(_step_string(piece)) <= HEADER_WIDTH for piece in pieces), line
+        assert "".join(pieces).replace(" ", "") == line.replace(" ", ""), line  # nothing lost, nothing added, in order
+        assert all(not piece.startswith(" ") and not piece.endswith(" ") for piece in pieces)
+    short = "IM7-UNT-L1: shape only, in millimetres. x across the width, y along the length, z through the thickness, z = 0 at mid-thickness."
+    assert " ".join(header_strings(short)) == short  # an ordinary sentence breaks between words alone
+    assert header_strings("Bottom tab, top face: bonded tab, 1.5 mm thick, E-glass/epoxy. Drawn.") == ["Bottom tab, top face: bonded tab, 1.5 mm thick, E-glass/epoxy.", "Drawn."]
+    assert HEADER_WIDTH + len("  '") + len("'),'2;1');") < 80
+
+
+@needs_gmsh
+def test_no_line_of_the_files_description_is_longer_than_80_characters_and_every_string_reads_back(tmp_path):
+    table = strip(thickness=1.5, bevel=7.0, material="E-glass \u00b145\u00b0, Bob's own, lot a\\b " + "G" * 120)
+    table["layup"]["angles"] = [12.25, -12.25, 33.25, -33.25, 47.25, -47.25, 61.25, -61.25, 75.25, -75.25, 88.25, -88.25, 5.25, -5.25, 19.25, -19.25]
+    model = model_of(table)
+    step = tmp_path / "coupon.step"
+    shape = build_coupon_shape(model.spec, step)
+    text = step.read_text(encoding="ascii")
+    described = text.split("FILE_DESCRIPTION((")[1].split("),'2;1');")[0]
+    lines = ("FILE_DESCRIPTION((" + described + "),'2;1');").splitlines()
+    assert max(len(line) for line in lines) < 80 and len(lines) > 12
+    strings = [part21_text(line.strip().removesuffix(",")[1:-1]) for line in described.splitlines() if line.strip()]
+    assert "".join(strings).replace(" ", "") == "".join(header_lines(shape)).replace(" ", "")
+    assert "E-glass \u00b145\u00b0, Bob's own, lot a\\b" in " ".join(strings)
+    assert len(read_step_solids(step)) == 5  # and the file still opens
+
+
+@needs_gmsh
+@pytest.mark.parametrize("changes, state, words", [
+    ({"tab_thickness": 1e-9, "tab_bevel": 90.0}, "refused", "the tabs' thickness is 1e-09 mm, under the 0.001 mm that is the smallest size drawn"),
+    ({"tab_thickness": 56.0 - 1e-7, "tab_bevel": 45.0}, "refused", "so it has no outer face left"),
+])
+def test_the_tool_refuses_a_tab_the_kernel_cannot_hold_and_does_not_stop(tmp_path, changes, state, words):
+    out = tmp_path / "model"
+    done = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path, **changes)), "--program", "step", "--out", str(out))
+    assert done.returncode == 0, done.stderr[-600:]
+    head = json.loads((out / "model.json").read_text(encoding="utf-8"))
+    assert head["state"] == state and words in head["problem"] and "Traceback" not in done.stdout + done.stderr
+    assert not list(out.glob("*.step"))

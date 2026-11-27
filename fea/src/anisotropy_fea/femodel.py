@@ -197,10 +197,11 @@ def plate_sets(mesh: Mesh2D, spec: CouponSpec) -> Mesh2D:
     return mesh
 
 
-def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
+def laminate_section(spec: CouponSpec) -> tuple[MaterialDefinition, SectionDefinition]:
+    """The model's material and its one section from the spec, with no mesh: the plies in order, each with the spec's ply thickness.
+    The model takes them from here, and so does the shape a CAD program opens (`coupon_shape`, ADR-0146), which needs no mesh."""
     if not spec.si:
-        raise SpecError("build_model needs the spec in SI (load_spec)")
-    mesh = mesh if mesh is not None else mesh_for_spec(spec)
+        raise SpecError("the section is built from a spec in SI (load_spec)")
     material = spec_material(spec)
     thickness = spec_ply_thickness(spec)
     angles = full_angles(spec)
@@ -209,8 +210,17 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
     plies = tuple(PlyDefinition(thickness, angle, material.name, f"Ply-{k}", fibre) for k, (angle, fibre) in enumerate(zip(angles, fibres), start=1))
     symmetric = spec.layup is not None and spec.layup.symmetric
     listed = plies[: len(spec.layup.angles)] if symmetric else plies
-    section = SectionDefinition(elset=names["section_set"], layup=names["layup"], plies=plies, symmetric=symmetric, listed=listed,
-                                homogeneous=is_isotropic(spec))
+    return material, SectionDefinition(elset=names["section_set"], layup=names["layup"], plies=plies, symmetric=symmetric, listed=listed,
+                                       homogeneous=is_isotropic(spec))
+
+
+def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
+    if not spec.si:
+        raise SpecError("build_model needs the spec in SI (load_spec)")
+    mesh = mesh if mesh is not None else mesh_for_spec(spec)
+    material, section = laminate_section(spec)
+    thickness, angles, fibres = spec_ply_thickness(spec), full_angles(spec), fibre_angles(spec)  # as the section holds them, for the notes below
+    names = spec.names.model_dump() if spec.names is not None else DEFAULT_NAMES
     orientation_angles = tuple(sorted(set(angles)))
     orientation_fibres = tuple(fibre_angle(angle) for angle in orientation_angles)
     probe_nodes = {name: mesh.nearest_node(point) for name, point in spec.probes.nodes.items()}

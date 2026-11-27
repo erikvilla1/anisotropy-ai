@@ -1,10 +1,11 @@
-"""A coupon's or a plate's shape from its model: each part one solid at its real thickness, named, in a STEP file (ADR-0146).
+"""A coupon's or a plate's shape from its spec: each part one solid at its real thickness, named, in a STEP file (ADR-0146).
 
-The shape is built in Gmsh's OpenCASCADE kernel from the model the setup check built (`femodel.FEModel`), the model the mesh is cut from,
-so the STEP file a CAD program opens and the finite element model describe one part (the rule ADR-0116 set for the wing). Nothing is
-typed here a second time: the width, the length, the tab length and the hole's diameter are the spec's geometry as `mesh_for_spec` reads
-it, the hole sits where the mesher puts it (`mesher.hole_centre`), a dog-bone's outline is `dogbone.Outline`, whose `width_at` the mesh's
-node rows follow, and the thickness is the sum of the section's plies.
+The shape is built in Gmsh's OpenCASCADE kernel from the spec the setup check judged (`spec.CouponSpec`, in SI), the description the mesh
+is cut from, so the STEP file a CAD program opens and the finite element model describe one part (the rule ADR-0116 set for the wing).
+Nothing is typed here a second time: the width, the length, the tab length and the hole's diameter are the spec's geometry as
+`mesh_for_spec` reads it, the hole sits where the mesher puts it (`mesher.hole_centre`), a dog-bone's outline is `dogbone.Outline`, whose
+`width_at` the mesh's node rows follow, and the thickness is the sum of the plies of the section the model builds
+(`femodel.laminate_section`). No mesh is cut for a shape: it has none, and a fine one would cost it minutes.
 
 Axes, as the mesh's: x across the width from 0, y along the length from 0, z through the thickness with z = 0 at mid-thickness, where the
 shell elements lie. The shape is built in millimetres, the unit its STEP file states.
@@ -21,19 +22,20 @@ A STEP file holds shape and names only: no plies, no fibre angles and no materia
 ply count, thickness and material, and the same lines are written into the file's header (`FILE_DESCRIPTION`), where they travel with it.
 
 What cannot be drawn without a rule nobody stated is refused with a `ShapeError`, never drawn by a guess: tabs that reach a dog-bone's
-fillet (their outline there is not stated), and a bevel so shallow that the tab has no outer face left.
+fillet (their outline there is not stated), and a bevel so shallow that the tab has no outer face left. A size under `SMALLEST_MM` is
+refused before the kernel is asked, and anything the kernel still cannot build is refused in plain words: a refusal states sizes in the
+coupon's own units and never a path, a module or the kernel's own message.
 """
 
 from __future__ import annotations
 
 import math
 import re
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
 from .dogbone import Outline
-from .femodel import FEModel
+from .femodel import laminate_section
 from .mesher import hole_centre
 from .spec import CouponSpec, full_angles, is_isotropic, layup_text, outline_of
 from .units import UNIT_LABEL, from_si
@@ -42,7 +44,10 @@ from .wing_shape import ShapeError, _gmsh, _quiet, _step_string, name_step_produ
 MM = 1e-3  # metres per millimetre
 ENDING = ".step"  # how the file's name ends: Gmsh picks the STEP writer by it
 BOX_TOLERANCE_MM = 1e-6  # a solid whose bounding box is further than this from its stated size is refused
-HEADER_WIDTH = 68  # the header's sentences are broken between words into strings of this length, so the file's lines stay under 80 characters
+SMALLEST_MM = 1e-3  # a size under a micrometre is not drawn: far below any ply, and well above the 1e-7 mm at which the kernel merges points
+# The header's description is a list of strings, each at most this long as written (escapes counted), so each line of it stays under 80
+# characters and far under the 256 a description string may hold. Nothing is claimed of the file's other lines: the kernel writes them.
+HEADER_WIDTH = 64
 TAB_ENDS = (("Bottom", 0), ("Top", 1))  # the end at y = 0 and the end at y = length, as the mesh names its tab regions
 TAB_FACES = (("top", 1), ("bottom", -1))  # the face at +z, where the last ply listed lies, and the face at -z (ADR-0004)
 
@@ -70,24 +75,41 @@ class FlatShape:
     parts: tuple[SolidPart, ...]
 
 
-def laminate_thickness(model: FEModel) -> float:
-    """The thickness of the model's one section, metres: the sum of its plies, or the one layer of an isotropic material."""
-    return sum(ply.thickness_m for ply in model.section.plies)
+def _size(spec: CouponSpec, metres: float) -> str:
+    """A length as a refusal states it: in the coupon's own unit, as the setup check's reasons are."""
+    return f"{from_si(metres, 'length', spec.units):g} {UNIT_LABEL[spec.units]['length']}"
 
 
 def tab_run(spec: CouponSpec) -> float:
     """How much shorter a bonded tab's outer face is than its face on the coupon, metres: thickness / tan(bevel), nothing for a square
-    end. Refuses tabs that cannot be drawn from what the coupon states."""
+    end. Refuses tabs that cannot be drawn from what the coupon states: an outer face under `SMALLEST_MM` is none."""
     tabs, g = spec.tabs, spec.geometry
     run = 0.0 if tabs.bevel >= 90.0 else tabs.thickness / math.tan(math.radians(tabs.bevel))
-    if run >= g.tab_length:
-        raise ShapeError(f"The tabs cannot be drawn: a bevel of {tabs.bevel:g} degrees over a thickness of {tabs.thickness / MM:g} mm runs "
-                         f"{run / MM:g} mm, and the tab is {g.tab_length / MM:g} mm long, so it has no outer face left")
+    if not g.tab_length - run >= SMALLEST_MM * MM:
+        raise ShapeError(f"The tabs cannot be drawn: a bevel of {tabs.bevel:g} degrees over a thickness of {_size(spec, tabs.thickness)} runs "
+                         f"{_size(spec, run)}, and the tab is {_size(spec, g.tab_length)} long, so it has no outer face left")
     outline = outline_of(spec)
     if outline is not None and g.tab_length > outline.half_length - outline.s_full + 1e-12:
-        raise ShapeError(f"The tabs cannot be drawn: they are {g.tab_length / MM:g} mm long and the dog-bone's full width ends "
-                         f"{(outline.half_length - outline.s_full) / MM:g} mm from each end, so they reach the fillet, where their outline is not stated")
+        raise ShapeError(f"The tabs cannot be drawn: they are {_size(spec, g.tab_length)} long and the dog-bone's full width ends "
+                         f"{_size(spec, outline.half_length - outline.s_full)} from each end, so they reach the fillet, where their outline is not stated")
     return run
+
+
+def refuse_small_sizes(spec: CouponSpec, thickness: float) -> None:
+    """Refuse, before the kernel is asked, a shape with a size it cannot hold: one that is not a finite number, or one under
+    `SMALLEST_MM`. The kernel treats points 1e-7 mm apart as one and then fails with words of its own."""
+    g = spec.geometry
+    sizes = [("its length", g.length), ("its width", g.width), ("its thickness", thickness)]
+    if g.hole_diameter is not None:
+        sizes += [("the hole's diameter", g.hole_diameter), ("the material beside the hole", (g.width - g.hole_diameter) / 2)]
+    if spec.tabs is not None:
+        sizes += [("the tabs' thickness", spec.tabs.thickness), ("the tabs' length", g.tab_length)]
+    for name, value in sizes:
+        if not math.isfinite(value) or not math.isfinite(value / MM):
+            raise ShapeError(f"The shape cannot be drawn: {name} is not a finite size")
+        if value < SMALLEST_MM * MM:
+            raise ShapeError(f"The shape cannot be drawn: {name} is {_size(spec, value)}, under the {_size(spec, SMALLEST_MM * MM)} that is the "
+                             "smallest size drawn")
 
 
 def _dogbone_loop(occ, outline: Outline, width_mm: float, z: float) -> int:
@@ -215,35 +237,59 @@ def name_step_solids(path: Path, title: str, names: list[str]) -> None:
     path.write_text(pattern.sub(lambda _: f"PRODUCT('{label}',\n  '{label}'", text), encoding="ascii")
 
 
+def header_strings(line: str, width: int = HEADER_WIDTH) -> list[str]:
+    """One sentence as the strings of the header's description, each at most `width` characters as written in the file (an apostrophe
+    and a backslash count twice, a letter outside ASCII as its escape). It is broken between words; a word longer than a string, a long
+    layup, is broken after a `/`; one still longer is cut between two characters. Read one after another, the strings are the sentence."""
+    written = lambda text: len(_step_string(text))  # noqa: E731
+    atoms = [(bit, " " if k == 0 else "") for word in line.split()
+             for k, bit in enumerate([word] if written(word) <= width else re.findall(r"[^/]*/|[^/]+", word))]
+    pieces: list[str] = []
+    current = ""
+    for bit, glue in atoms:
+        joined = current + (glue if current else "") + bit
+        if current and written(joined) > width:
+            pieces.append(current)
+            current = bit
+        else:
+            current = joined
+        while written(current) > width:
+            cut = max(n for n in range(1, len(current)) if written(current[:n]) <= width or n == 1)
+            pieces.append(current[:cut])
+            current = current[cut:]
+    return pieces + ([current] if current else [])
+
+
 def describe_step(path: Path, lines: list[str]) -> None:
     """Write `lines` into a STEP file's header as its description, in place of the writer's own ("Open CASCADE Model"): a list of
-    strings, each sentence broken between words so that no line of the file is longer than a reader of any age takes. A file whose
-    header is not the one Gmsh's OpenCASCADE writes is refused rather than half described."""
+    strings (`header_strings`), one to a line of the file, each line of the description under 80 characters. A file whose header is not
+    the one Gmsh's OpenCASCADE writes is refused rather than half described."""
     text = path.read_text(encoding="ascii")
     pattern = re.compile(r"FILE_DESCRIPTION\(\('Open CASCADE Model'\),\s*'2;1'\);")
     if len(pattern.findall(text)) != 1:
         raise ShapeError("The STEP file's header is not the one expected; it was not described")
-    pieces = [piece for line in lines for piece in textwrap.wrap(line, HEADER_WIDTH, break_long_words=False, break_on_hyphens=False)]
-    strings = ",\n  ".join(f"'{_step_string(piece)}'" for piece in pieces)
+    strings = ",\n  ".join(f"'{_step_string(piece)}'" for line in lines for piece in header_strings(line))
     path.write_text(pattern.sub(lambda _: f"FILE_DESCRIPTION((\n  {strings}),'2;1');", text), encoding="ascii")
 
 
-def build_coupon_shape(model: FEModel, step_path: Path | str | None = None) -> FlatShape:
-    """The model's parts as solids; with `step_path`, its STEP file there, each solid under its part's name and the part table's lines
-    in the header. Raises `ShapeError` for a model that cannot be drawn, and writes no file then."""
-    spec = model.spec
+def build_coupon_shape(spec: CouponSpec, step_path: Path | str | None = None) -> FlatShape:
+    """The spec's parts as solids; with `step_path`, its STEP file there, each solid under its part's name and the part table's lines
+    in the header. The spec is in SI, as the model's is. No mesh is cut. Raises `ShapeError` for a shape that cannot be drawn, and
+    writes no file then."""
     if not spec.si:
-        raise ShapeError("The shape is built from a model in SI")
+        raise ShapeError("The shape is built from a spec in SI")
     if step_path is not None and Path(step_path).suffix.lower() not in (".step", ".stp"):
         raise ShapeError("A STEP file's name ends in .step or .stp")
     g = spec.geometry
-    thickness = laminate_thickness(model)
+    material, section = laminate_section(spec)
+    thickness = sum(ply.thickness_m for ply in section.plies)
     isotropic = is_isotropic(spec)
     plies = None if isotropic else len(full_angles(spec))
+    refuse_small_sizes(spec, thickness)
     run = tab_run(spec) if spec.tabs is not None else None
     title = spec.coupon.designation if spec.coupon is not None else "Model"
     stated = [("Coupon" if isotropic else "Laminate", "coupon" if isotropic else "laminate", layup_text(spec), plies,
-               None if isotropic else model.section.plies[0].thickness_m, thickness, model.material.name, True)]
+               None if isotropic else section.plies[0].thickness_m, thickness, material.name, True)]
     if run is not None:
         stated += [(f"{end} tab, {face} face", "tab", None, None, None, spec.tabs.thickness, spec.tabs.material, False)
                    for end, _ in TAB_ENDS for face, _ in TAB_FACES]
@@ -257,23 +303,34 @@ def build_coupon_shape(model: FEModel, step_path: Path | str | None = None) -> F
         gmsh.option.setNumber("General.Verbosity", 0)
         gmsh.model.add("coupon")
         occ = gmsh.model.occ
-        tags = [_laminate(occ, spec, thickness / MM)]
-        if run is not None:
-            tags += [_tab(occ, spec, thickness / MM, run / MM, end, face) for _, end in TAB_ENDS for _, face in TAB_FACES]
-        occ.synchronize()
-        if len(gmsh.model.getEntities(3)) != len(stated):
+        try:
+            tags = [_laminate(occ, spec, thickness / MM)]
+            if run is not None:
+                tags += [_tab(occ, spec, thickness / MM, run / MM, end, face) for _, end in TAB_ENDS for _, face in TAB_FACES]
+            occ.synchronize()
+            solids = len(gmsh.model.getEntities(3))
+            box = occ.getBoundingBox(3, tags[0])
+            volumes = [occ.getMass(3, tag) * MM**3 for tag in tags]
+        except ShapeError:
+            raise
+        except Exception as exc:  # the kernel's own failure (its message names its internals): a plain refusal, the cause chained for the log
+            raise ShapeError("The shape cannot be drawn from these sizes: the geometry kernel could not build it") from exc
+        if solids != len(stated):
             raise ShapeError("The model's solids were not all built")
         # the laminate fills the box the model states, to the tolerance: a wrong shape is refused here, before any file is written
-        if not _in_box(occ.getBoundingBox(3, tags[0]), (0.0, 0.0, -thickness / MM / 2, g.width / MM, g.length / MM, thickness / MM / 2)):
+        if not _in_box(box, (0.0, 0.0, -thickness / MM / 2, g.width / MM, g.length / MM, thickness / MM / 2)):
             raise ShapeError("The laminate's solid does not have the model's length, width and thickness")
-        volumes = [occ.getMass(3, tag) * MM**3 for tag in tags]
         if min(volumes) <= 0.0:
             raise ShapeError("A solid of the model has no volume")
         shape = FlatShape(title=title, parts=tuple(SolidPart(*row[:7], volume_m3=volume, in_model=row[7]) for row, volume in zip(stated, volumes)))
         if step_path is not None:
             step_path = Path(step_path)
-            with _quiet():  # OpenCASCADE's STEP writer prints its transfer statistics to the terminal
-                gmsh.write(str(step_path))
+            try:
+                with _quiet():  # OpenCASCADE's STEP writer prints its transfer statistics to the terminal
+                    gmsh.write(str(step_path))
+            except Exception as exc:  # as above: the kernel's words stay out of the refusal
+                step_path.unlink(missing_ok=True)
+                raise ShapeError("The shape was built, and its STEP file could not be written") from exc
             try:
                 # the writer puts the solids in the order of their tags
                 name_step_solids(step_path, title, [part.name for _, part in sorted(zip(tags, shape.parts), key=lambda made: made[0])])
