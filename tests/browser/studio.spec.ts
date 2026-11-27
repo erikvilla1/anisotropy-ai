@@ -2449,6 +2449,65 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
 });
 
+test("the model's shape downloads as a STEP file from the menu, named after the coupon, and the page lists the layup the file cannot hold (ADR-0146)", async ({ page, browserName }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // a customer's sign-in: the shape is everyone's, as the other two files are
+  // the STEP file, played: the text the fea package would write, its name and its part table in headers a page on another origin may read
+  const table = { title: "IM7-UNT-L1", units: { length: "mm", volume: "mm³", step: "mm" }, parts: [
+    { name: "Laminate", kind: "laminate", layup: "[45/0/-45/90]s", plies: 8, ply_thickness: 0.18288, thickness: 1.46304, material: "IM7-8552", volume: 9144, in_model: true },
+    { name: "Bottom tab, top face", kind: "tab", layup: null, plies: null, ply_thickness: null, thickness: 1.5, material: "E-glass/epoxy", volume: 1870.94, in_model: false }] };
+  const ascii = JSON.stringify(table).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`); // as the API sends it
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  let refuse = false;
+  await page.route(API, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname !== "/v1/coupon-jobs/model" || request.method() !== "POST") return route.fallback();
+    asked.push({ program: url.searchParams.get("program"), values: (request.postDataJSON() as { values: Record<string, unknown> }).values });
+    if (refuse) return route.fulfill({ status: 422, contentType: "application/json",
+      body: JSON.stringify({ detail: "This model cannot be drawn as a STEP file yet: The tabs cannot be drawn: a bevel of 1 degrees over a thickness of 1.5 mm runs 85.9 mm, and the tab is 56 mm long, so it has no outer face left." }) });
+    return route.fulfill({ status: 200, contentType: "model/step", body: "ISO-10303-21;\nHEADER;\n",
+      headers: { "Content-Disposition": 'attachment; filename="IM7-UNT-L1.step"', "X-Anisotropy-Model-File": "IM7-UNT-L1.step", "X-Anisotropy-Model-Parts": ascii,
+        "Access-Control-Expose-Headers": "X-Anisotropy-Model-File, X-Anisotropy-Model-Parts" } });
+  });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem").last()).toHaveText("CAD (STEP)"); // after the solver files
+  const solved = calls.solves.length; // Build ran the analysis; a file asked for must run nothing more
+  await expectNoBannedTerms(page, "the download menu open, with the STEP file");
+  const file = browserName === "webkit" ? null : page.waitForEvent("download");
+  await menu.getByTestId("model-download-step").click();
+  if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1.step");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the STEP file.");
+  await expect(menu.getByTestId("model-download-opening")).toHaveText("Each part is one solid at its thickness, in millimetres. A STEP file holds no plies, so the layup is listed here and in the file's first lines.");
+  await expect(menu.getByTestId("model-download-part")).toHaveText([
+    "Laminate: [45/0/-45/90]s, 8 plies of 0.1829 mm, 1.463 mm thick, IM7-8552.",
+    "Bottom tab, top face: 1.5 mm thick, E-glass/epoxy. Drawn as stated. The analysis grips this length and does not include the tab's material."]);
+  await expect(menu.getByRole("menuitem")).toHaveCount(0); // the menu closes once a file is picked
+  await expectNoBannedTerms(page, "the STEP file saved, with its parts");
+  expect(asked).toHaveLength(1);
+  expect(asked[0].program).toBe("step");
+  expect(asked[0].values).toMatchObject({ ply_3: -45, ply_4: 90, symmetric: "yes" }); // the rows of the setup, as the other files send them
+  // a shape the model does not state is said in the service's own words, and the lines of the last file are gone
+  refuse = true;
+  await menu.getByTestId("model-download-open").click();
+  await menu.getByTestId("model-download-step").click();
+  await expect(menu.getByTestId("model-download-problem")).toHaveText(/^This model cannot be drawn as a STEP file yet: The tabs cannot be drawn: a bevel of 1 degrees/);
+  await expect(menu.getByTestId("model-download-part")).toHaveCount(0);
+  await expect(menu.getByTestId("model-download-saved")).toHaveCount(0);
+  expect(calls.solves).toHaveLength(solved);
+  expect(browserErrors).toEqual([]);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
