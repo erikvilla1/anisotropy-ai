@@ -80,7 +80,9 @@ def _refused(status: int, detail: str) -> JSONResponse:
 
 class AccessMiddleware:
     """Refuses, with 401, any request that lacks a valid Access token while Access is on, and sets `request.state.user_email`
-    for the handlers. `app.state.access_verifier` is the check, set by the lifespan from the settings; None means Access is off."""
+    for the handlers, with `request.state.email_as_signed`: the same email exactly as the token states it, before any space around it
+    is taken off, for the one check that reads it so (the founders' AI activity page, ADR-0145).
+    `app.state.access_verifier` is the check, set by the lifespan from the settings; None means Access is off."""
 
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -91,6 +93,7 @@ class AccessMiddleware:
             return
         state = scope.setdefault("state", {})
         state.setdefault("user_email", None)
+        state.setdefault("email_as_signed", None)
         verify = getattr(scope["app"].state, "access_verifier", None)
         if verify is None or scope["path"] in EXEMPT_PATHS or scope["method"] == "OPTIONS":
             await self.app(scope, receive, send)
@@ -122,4 +125,5 @@ class AccessMiddleware:
             await _refused(401, f"The Cloudflare Access token is not valid: {exc}")(scope, receive, send)
             return
         state["user_email"] = signed_in_email(claims)
+        state["email_as_signed"] = claims.get("email") if isinstance(claims.get("email"), str) else None
         await self.app(scope, receive, send)

@@ -232,6 +232,43 @@ def test_a_plan_that_fails_twice_is_refused_with_the_reasons():
     assert gone.state == "refused" and "2000" in gone.reason
 
 
+def test_each_answer_the_checks_turned_back_is_kept_with_its_reasons():
+    # ADR-0145: a retry that passed used to leave no trace of the first answer; the oversight page shows it
+    bad = with_args(GOOD, 2, value="2000", unit="N")
+    reason = "step 2: 2000 is not a number the sentence writes; a value is copied as written and the tools convert it"
+    passed = planner.make_plan(FakeWriter(bad, GOOD), ASK, PLATE, [])
+    assert passed.state == "proposed" and passed.tried == [{"plan": bad, "reasons": [reason]}]
+    refused = planner.make_plan(FakeWriter(bad, bad), ASK, PLATE, [])
+    assert refused.state == "refused" and refused.tried == [{"plan": bad, "reasons": [reason]}, {"plan": bad, "reasons": [reason]}]
+    gone = planner.make_plan(FakeWriter(bad, None), ASK, PLATE, [])
+    assert gone.tried == [{"plan": bad, "reasons": [reason]}]
+    assert planner.make_plan(FakeWriter(GOOD), ASK, PLATE, []).tried == []
+
+
+def test_what_is_kept_of_an_answer_turned_back_is_what_the_records_can_hold_and_a_request_can_carry():
+    # the review of ADR-0145 on 2026-11-27: PostgreSQL keeps no NUL, no half of a surrogate pair and no NaN in JSON, and a request to
+    # the model cannot carry half a pair, so an answer that held one failed the engineer's request when it was kept or sent back
+    kept = planner.storable({"a\x00": ["x\x00y", "x\ud83dy", "\udc00", "é “q” 😀", 1.5, float("nan"), float("inf"), -float("inf"), None, True, 3,
+                                       {"k": "ok"}]})
+    assert kept == {"a�": ["x�y", "x�y", "�", "é “q” 😀", 1.5, "nan", "inf", "-inf", None, True, 3, {"k": "ok"}]}
+    json.dumps(kept, ensure_ascii=False, allow_nan=False).encode("utf-8")  # it can be written, as JSON and as UTF-8
+    bad = with_args(GOOD, 2, value="2000", unit="N")
+    assert planner.storable(bad) == bad and planner.storable("plain") == "plain"  # anything else is as it was
+    for sent, clean in (("x\x00y", "x�y"), ("x\ud800y", "x�y")):
+        odd = {**bad, "unread": [{"quote": sent, "reason": "not_offered"}]}
+        writer = FakeWriter(odd, GOOD)
+        made = planner.make_plan(writer, ASK, PLATE, [])
+        assert made.state == "proposed" and made.steps == PROPOSED["steps"]  # the plan is the one a clean first answer leads to
+        assert made.tried[0]["plan"]["unread"] == [{"quote": clean, "reason": "not_offered"}] and made.tried[0]["plan"]["steps"] == bad["steps"]
+        assert writer.views[1]["refused"] == made.tried[0]  # what the model is sent back is what is kept
+        json.dumps(writer.views[1], ensure_ascii=False).encode("utf-8")
+        said = plan(question="You want it clamped" + sent[1:])  # the model's own words, no question: they are the refusal's reason
+        refused = planner.make_plan(FakeWriter(said, said), ASK, PLATE, [])
+        assert refused.state == "refused" and refused.reason == "You want it clamped" + clean[1:]
+        gone = planner.make_plan(FakeWriter(said, None), ASK, PLATE, [])
+        assert gone.state == "refused" and gone.reason == refused.reason
+
+
 def test_no_model_is_unavailable_and_the_cap_on_calls_says_so():
     assert planner.make_plan(TemplateAssistant(), ASK, PLATE, []).state == "unavailable"
     limited = planner.make_plan(LimitedAssistant(5), ASK, PLATE, [])
@@ -433,6 +470,21 @@ def test_a_number_not_in_the_sentence_is_tried_again_then_refused(planning, monk
     assert body["requests_left"] == 29  # a model was asked: it counts
     assert len(model.asked) == 2 and "refused" in json.loads(model.asked[1]["messages"][0]["content"])
     assert [c.feature for c in calls(planning.engine)] == ["plan_steps", "plan_steps"]
+
+
+@needs_test_database
+def test_a_plans_calls_name_it_say_the_model_was_checked_and_keep_a_fingerprint_of_the_words(planning, monkeypatch):
+    # ADR-0145: one query finds a plan's calls; a stand-in model shows as unchecked; what was turned back stays on the plan
+    bad = with_args(GOOD, 2, value="2000", unit="N")
+    scripted(monkeypatch, bad, GOOD)
+    body = a_plan(planning.client, project(planning.client)).json()
+    assert body["state"] == "proposed"
+    made = calls(planning.engine)
+    assert [str(c.plan_id) for c in made] == [body["id"], body["id"]] and [c.checked for c in made] == [True, True]
+    assert all(len(c.sent_sha256) == 64 for c in made) and made[0].sent_sha256 != made[1].sent_sha256  # the retry sent the reasons too
+    with Session(planning.engine) as session:
+        kept = session.get(AgentPlanRow, uuid.UUID(body["id"]))
+    assert [a["plan"] for a in kept.attempts] == [bad] and kept.attempts[0]["reasons"][0].startswith("step 2: 2000")
 
 
 @needs_test_database

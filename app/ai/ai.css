@@ -1,0 +1,51 @@
+/* The founders' AI activity page (ADR-0145): a feed on the left, a plan's story on the right, the weeks under their own tab. */
+.ai-page { max-width: 1320px; margin: 0 auto; padding: 32px 20px 48px; }
+.ai-top { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px; }
+.ai-top h1 { font-family: var(--heading); font-size: 24px; letter-spacing: -0.4px; margin: 0; }
+.ai-tabs { display: flex; gap: 6px; }
+.ai-tabs button { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 16px; padding: 4px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.ai-tabs button[aria-pressed=true] { color: var(--text); border-color: var(--accent); }
+.ai-note { margin-left: auto; font-size: 12px; color: var(--muted); }
+.ai-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
+.ai-feed { min-width: 0; overflow-x: auto; }
+.ai-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ai-table th, .ai-table td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+.ai-table th { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.ai-table td:first-child { white-space: nowrap; color: var(--muted); }
+.ai-num { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ai-pickable { cursor: pointer; }
+.ai-pickable:hover, .ai-pickable:focus-within { background: var(--raised); }
+/* The button a plan's row is picked with: it reads as the row's text, and shows where the keyboard is. */
+.ai-pick { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+.ai-pick[aria-pressed=true] { text-decoration-color: var(--accent); text-decoration-style: solid; }
+.ai-pick:focus-visible, .ai-tabs button:focus-visible, .ai-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.ai-table tr[data-picked=true] { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+.ai-ask { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.ai-flag { color: #e0a040; font-size: 11.5px; }
+.ai-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; background: #5a5a5a; flex: none; transform: translateY(-1px); }
+.ai-dot[data-tone=good] { background: #3fae5c; }
+.ai-dot[data-tone=warn] { background: #e0a040; }
+.ai-dot[data-tone=bad] { background: #e05a4f; }
+.ai-story { position: sticky; top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px; min-width: 0; }
+.ai-story h2 { font-family: var(--heading); font-size: 16px; margin: 0 0 4px; }
+.ai-lines { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.ai-lines li { display: flex; align-items: flex-start; gap: 0; font-size: 13px; line-height: 1.45; }
+.ai-lines .ai-dot { margin-top: 6px; }
+.ai-detail { display: block; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ai-muted { color: var(--muted); font-size: 13px; }
+.ai-error { color: #e05a4f; font-size: 13px; }
+.ai-more:disabled { color: var(--muted); cursor: default; }
+.ai-error .ai-more { margin: 0 0 0 8px; }
+.ai-more { margin-top: 12px; background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.ai-week h2 { font-family: var(--heading); font-size: 15px; margin: 24px 0 8px; }
+.ai-week .ai-table { margin-bottom: 4px; }
+.ai-empty { padding: 80px 0; text-align: center; }
+@media (max-width: 1000px) {
+  .ai-columns { grid-template-columns: minmax(0, 1fr); }
+  .ai-story { position: static; }
+  .ai-note { margin-left: 0; flex-basis: 100%; }
+}
+@media (max-width: 600px) {
+  .ai-page { padding: 20px 16px 40px; }
+  .ai-table th:nth-child(6), .ai-table td:nth-child(6) { display: none; }
+}

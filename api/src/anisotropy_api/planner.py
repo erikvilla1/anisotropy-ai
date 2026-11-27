@@ -26,6 +26,7 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -637,6 +638,29 @@ class Planned:
     reason: str | None = None
     writer: str = "template"
     model: str | None = None
+    tried: list[dict[str, Any]] = field(default_factory=list)  # each answer the checks turned back, with their reasons (ADR-0145)
+
+
+_NOT_KEPT = re.compile("[\x00\ud800-\udfff]")  # what PostgreSQL keeps in no text and no JSON: a NUL, and half of a surrogate pair
+
+
+def storable(value: Any) -> Any:
+    """What the model wrote, as the records can keep it and a request can carry it (ADR-0145): the same, with each character
+    PostgreSQL refuses in text and in JSON (a NUL, an unpaired surrogate, which UTF-8 cannot write either) replaced by U+FFFD and a
+    number that is no number (NaN, an infinity) written as its word. Every answer of the model is read through this before the checks
+    see it, so whatever is kept of it (the plan's steps, a question asked back, an answer turned back and its reasons, a refusal in
+    the model's own words) and whatever is sent back to the model for its one more try can be: one such character must not fail the
+    engineer's request. An answer without one is as it was. The engineer's own sentence is never changed: one that holds such a
+    character is refused when it is asked (`schemas.PlanRequest`)."""
+    if isinstance(value, str):
+        return _NOT_KEPT.sub("\ufffd", value)
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, list):
+        return [storable(item) for item in value]
+    if isinstance(value, dict):
+        return {storable(key): storable(item) for key, item in value.items()}
+    return value
 
 
 def _billed(calls: list, reading: Any) -> Any:
@@ -662,22 +686,28 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
               check: Callable[[dict[str, Any]], Checked], system: str | None = None) -> Planned:
     """A plan of any kind: one call to the model with `view(None)`; when its plan fails `check`, one more with `view({"plan",
     "reasons"})`; then the plan, the question asked back, or `refused` with why. With no model, or none that answered, `unavailable`
-    with the writer's reason and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120)."""
+    with the writer's reason and the page reads the sentence as before. Every call made is added to `calls`, kept or not (ADR-0120), and
+    every answer the checks turned back is kept in `tried` with their reasons, so that it can be read later (ADR-0145)."""
     reading = _billed(calls, _asked(assistant, view(None), schema, system))
     if reading.raw is None:
-        return Planned("unavailable", reason=reading.reason, writer="template")
-    checked = check(reading.raw)
+        return Planned("unavailable", reason=storable(reading.reason), writer="template")
+    raw = storable(reading.raw)  # as the records can keep it, before anything is read from it
+    checked = check(raw)
+    tried: list[dict[str, Any]] = []
     if not checked.ok:
-        again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
+        tried.append({"plan": raw, "reasons": list(checked.reasons)})
+        again = _billed(calls, _asked(assistant, view(tried[0]), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons))
-        retried = check(again.raw)
+            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons), tried=tried)
+        raw = storable(again.raw)
+        retried = check(raw)
         if not retried.ok:
-            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons))
+            tried.append({"plan": raw, "reasons": list(retried.reasons)})
+            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons), tried=tried)
         reading, checked = again, retried
     if checked.question is not None:
-        return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model)
-    return Planned("proposed", steps=checked.steps, unread=checked.unread, writer=reading.writer, model=reading.model)
+        return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)
+    return Planned("proposed", steps=checked.steps, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)
 
 
 def make_plan(assistant: Any, sentence: str, content: dict[str, Any], calls: list) -> Planned:

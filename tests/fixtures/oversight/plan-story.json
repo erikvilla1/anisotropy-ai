@@ -1,0 +1,27 @@
+{
+  "id": "6f1c2a9e-1b7d-4c55-9a51-3d7f2b1e8c40", "kind": "coupon", "who": "founder@example.com", "words_shown": true, "actor": "studio",
+  "state": "running", "ask": "set the width to 30 mm and run it", "question": null, "reason": null, "unread": 0, "writer": "anthropic",
+  "model": "claude-opus-5-5", "created_at": "2026-11-27T18:03:50+00:00", "approved_at": "2026-11-27T18:04:12+00:00",
+  "updated_at": "2026-11-27T18:04:13+00:00",
+  "turned_back": [
+    {"plan": {"steps": [{"tool": "row", "args": {"field": "width", "value": "30", "unit": "in"}, "quote": "set the width to 30 mm"}],
+              "question": null, "unread": []},
+     "reasons": ["step 1: in is not the unit the sentence writes; a value is copied as written and the tools convert it"]}
+  ],
+  "calls": [
+    {"at": "2026-11-27T18:03:44+00:00", "what": "plan_steps", "model": "claude-opus-5-5", "checked": true, "input_tokens": 5210, "output_tokens": 640,
+     "seconds": 5.8, "cost_usd": 0.038, "stop_reason": "end_turn", "outcome": "turned back", "sent": "3b9f0c1d2e4a", "run": "0b7e4f7a-55d1-4a9f-8f0e-2c6c3a7d9b12"},
+    {"at": "2026-11-27T18:03:49+00:00", "what": "plan_steps", "model": "claude-opus-5-5", "checked": true, "input_tokens": 5480, "output_tokens": 590,
+     "seconds": 6.2, "cost_usd": 0.041, "stop_reason": "end_turn", "outcome": "running", "sent": "7c2e1a9b0f3d", "run": "0b7e4f7a-55d1-4a9f-8f0e-2c6c3a7d9b12"}
+  ],
+  "steps": [
+    {"n": 1, "role": "Geometry", "tool": "row", "state": "done", "line": "Set the width to 30 mm", "note": null},
+    {"n": 2, "role": "Solver", "tool": "check", "state": "done", "line": "Check the setup before the run", "note": null},
+    {"n": 3, "role": "Solver", "tool": "run", "state": "running", "line": "Run the analysis", "note": null},
+    {"n": 4, "role": "QA", "tool": "qa", "state": "planned", "line": "Read the result's own checks", "note": null}
+  ],
+  "version": {"n": 4, "made_by": "assistant", "why": "set the width to 30 mm and run it", "changes": 1,
+              "change_lines": ["{'field': 'width', 'value': '30', 'unit': 'mm'}"], "at": "2026-11-27T18:04:12+00:00"},
+  "job": {"id": "e2d4c6b8-a0f1-4e3d-9c5b-7a8f6e4d2c10", "state": "running", "stage": "Solving the coupon", "stages_done": 2, "stages": 6,
+          "started_at": "2026-11-27T18:04:13+00:00", "finished_at": null, "message": null}
+}

@@ -16,10 +16,10 @@ import math
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from .model_costs import ModelCall, measure
+from .model_costs import ModelCall, measure, sent_fingerprint
 from .proposals import UNREAD_REASONS
 from .verdict_guard import verdict_guard
 
@@ -508,6 +508,8 @@ class ClaudeAssistant:
             return None, "the model could not be reached; the template's prose stands", None
         answer = "".join(block.text for block in response.content or [] if getattr(block, "type", "") == "text")
         call = measure(feature, self.model, EFFORT, response, answer, time.monotonic() - started)
+        if call is not None:
+            call = replace(call, sent_sha256=sent_fingerprint(system, user, schema))
         if response.stop_reason == "refusal":
             return None, "the model declined the request; the template's prose stands", call
         if response.stop_reason == "max_tokens":

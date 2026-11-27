@@ -26,7 +26,7 @@ The questions are the banks in `tests/assistant-questions/` (ADR-0121): checked 
 - **One model for the site**, named by `ANISOTROPY_ASSISTANT_MODEL` (today `claude-opus-5-5`), at low effort, with a cap on the tokens of each answer (`assistant.py`).
 - **A cap per person per day**: `ANISOTROPY_MODEL_CALLS_PER_USER_PER_DAY` in `wrangler.jsonc` (100). Past it the chat reads with its own patterns until midnight UTC and says so ("Reading simple phrases until tomorrow"). Counted from `model_calls` by the sign-in's email. A service token of ours (the deploy check, the site check) has no email and is not counted: the site check keeps a budget of its own (ADR-0138). Locally there is no cap.
 - **A cap on planned requests**: `ANISOTROPY_AGENT_REQUESTS_PER_DAY` in `wrangler.jsonc` (30 per signed-in person per day, counted from `agent_plans`). Past it the sentence is read as before, without a plan, until midnight UTC.
-- **Every call is a row** of `model_calls` with who asked, for what, the tokens and the cost (ADR-0120), and every request is a run record that says what became of the model's answer (ADR-0026).
+- **Every call is a row** of `model_calls` with who asked, for what, the tokens and the cost (ADR-0120), and every request is a run record that says what became of the model's answer (ADR-0026). Since ADR-0145 a row also keeps a fingerprint of the words sent (`sent_sha256`; the words themselves are not kept), whether the model that answered was in `CHECKED_MODELS` then (`checked`) and the plan it was made for (`plan_id`); a plan keeps each answer its checks turned back, with the reasons (`agent_plans.attempts`).
 - **What a model is never shown**: another person's work, a coupon's name, the engineer's notes, the team's files, a key. Every chat that sends a message to a model (the coupon chat, the FEA assistant of a blank project, the laminate chat) answers a question for a key, the hidden prompt or another person's work itself, before any model sees it (`lib/chat-private.ts`).
 
 ## Switch the model off
@@ -68,6 +68,12 @@ FROM assistant_guards_by_feature LIMIT 20;
 ```
 
 For a flagged week, read that route's run records of the week with the owner's login: `response->>'reason'` says what was set aside and why.
+
+## See what the model did
+
+The AI activity page at `/ai` (ADR-0145, proposed; not deployed yet) is for founders only and changes nothing. "Now" lists each call to the model, each plan and each approval, newest first, with the model that answered; a call answered by a model outside `CHECKED_MODELS` is marked "not checked". Picking a plan's row shows its story from its records, read again when the feed shows the plan's rows changed or the row is picked again: the sentence, each answer the checks turned back and why, each call and whether its own answer was turned back, the approval, the version, the steps and the job. "Weekly" shows the last eight weeks: the guards' view above, the cost per feature, plans by how they ended, why plans were refused, and the calls answered by a model outside the checked list.
+
+A customer's rows show what happened, not what they wrote: the person is a tag (a pseudonym that keeps the email off the page, not anonymity), and a reason is one of a fixed set of lines, never its own words: the model's own sentence is always hidden, and a step's number shows only when the answer has that step. This default awaits the founder's confirmation. The API answers anyone but a founder 404 (`/v1/oversight/activity`, `/v1/oversight/plans/{plan_id}`, `/v1/oversight/weekly`), and anything else under `/v1/oversight` as an address with no route, and each view is a run record, except the page's refresh, every 10 seconds while its tab is in view, which reads again everything the page shows so that no event is missed. The page is no switch: to stop the model, see "Switch the model off" above.
 
 ## Add an AI feature
 

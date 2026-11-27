@@ -16,7 +16,7 @@ from anisotropy_api import access
 from anisotropy_api.assistant import ClaudeAssistant
 from anisotropy_api.cost_report import report, table
 from anisotropy_api.main import MODEL_COST_HEADER, app
-from anisotropy_api.model_costs import FEATURES, PRICES_AS_OF, measure
+from anisotropy_api.model_costs import FEATURES, PRICES_AS_OF, measure, sent_fingerprint
 from anisotropy_api.records import ModelCallRow, record_model_calls
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, AccessSettings
 
@@ -120,6 +120,16 @@ def test_every_writer_carries_its_call_whatever_became_of_the_answer():
     assert words.call.feature == "answer_question"
 
 
+def test_a_call_carries_a_fingerprint_of_the_words_it_sent_and_not_the_words():
+    # ADR-0145: two calls with one fingerprint were sent the same words; a change of instructions shows as a new fingerprint
+    one = ClaudeAssistant("claude-opus-5-5", client=Billing(answer('{"prose": "x"}'))).answer_question({"question": "why"}, {})
+    same = ClaudeAssistant("claude-opus-5-5", client=Billing(answer('{"prose": "y"}'))).answer_question({"question": "why"}, {})
+    other = ClaudeAssistant("claude-opus-5-5", client=Billing(answer('{"prose": "x"}'))).answer_question({"question": "why not"}, {})
+    assert len(one.call.sent_sha256) == 64 and one.call.sent_sha256 == same.call.sent_sha256 != other.call.sent_sha256
+    assert sent_fingerprint("a", "b", None) != sent_fingerprint("a", "b", {}) != sent_fingerprint("ab", "", {})
+    assert "why" not in repr(one.call)
+
+
 def test_a_call_that_never_answered_carries_none():
     import anthropic
     import httpx2
@@ -153,9 +163,21 @@ def test_the_report_table_aligns_its_columns():
 def _call(feature="explain_result", **changes):
     fields = dict(model="claude-opus-5-5", effort="low", input_tokens=3000, output_tokens=900, thinking_tokens=700, cache_read_tokens=0,
                   cache_write_tokens=0, answer_characters=120, stop_reason="end_turn", seconds=1.0, cost_usd=Decimal("0.030000"),
-                  prices_as_of=PRICES_AS_OF, attempts=None, answered_at=dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc))
+                  prices_as_of=PRICES_AS_OF, attempts=None, sent_sha256=None, answered_at=dt.datetime(2026, 11, 18, 12, tzinfo=dt.timezone.utc))
     fields.update(changes)
     return SimpleNamespace(feature=feature, **fields)
+
+
+@needs_test_database
+def test_a_row_says_whether_the_model_that_answered_had_been_checked(empty_runs):
+    # ADR-0145: a declined request may be answered by another model; the row says it was not one the assistant check ran with
+    record_model_calls(empty_runs, [_call(), _call(model="claude-stand-in-1")], actor="test", user_email=None, run_id=None,
+                       checked_models={"claude-opus-5-5"})
+    record_model_calls(empty_runs, [_call(feature="read_question")], actor="test", user_email=None, run_id=None)
+    with Session(empty_runs) as session:
+        rows = list(session.scalars(select(ModelCallRow).order_by(ModelCallRow.feature, ModelCallRow.model)))
+    assert [(r.feature, r.model, r.checked, r.plan_id) for r in rows] == [
+        ("explain_result", "claude-opus-5-5", True, None), ("explain_result", "claude-stand-in-1", False, None), ("read_question", "claude-opus-5-5", None, None)]
 
 
 @needs_test_database
@@ -164,7 +186,7 @@ def test_the_migration_makes_the_table_and_its_views_and_refuses_to_drop_them_ov
     columns = [column["name"] for column in inspect(engine).get_columns("model_calls")]
     assert columns == ["id", "called_at", "user_email", "actor", "feature", "model", "effort", "input_tokens", "output_tokens", "thinking_tokens",
                        "cache_read_tokens", "cache_write_tokens", "answer_characters", "stop_reason", "seconds", "cost_usd", "prices_as_of",
-                       "run_id", "attempts"]
+                       "run_id", "attempts", "sent_sha256", "checked", "plan_id"]
     assert set(inspect(engine).get_view_names()) >= {"model_costs_by_person", "model_costs_by_feature", "model_costs_by_day"}
     config = alembic_config(TEST_URL)
     command.downgrade(config, "0012")
