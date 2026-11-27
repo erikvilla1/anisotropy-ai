@@ -8,6 +8,7 @@ Every test that builds a shape skips with a reason when Gmsh is not installed (`
 import copy
 import json
 import math
+import re
 import subprocess
 import sys
 import tomllib
@@ -18,12 +19,13 @@ import pytest
 
 from anisotropy_fea import paths
 from anisotropy_fea.coupon_shape import (
-    HEADER_WIDTH, MM, build_coupon_shape, describe_step, header_lines, name_step_solids, part_table, read_step_solids, tab_run,
+    DRAWN_SIZES, HEADER_WIDTH, MM, NOT_DRAWN, SMALLEST_MM, build_coupon_shape, describe_step, header_lines, name_step_solids, part_table,
+    read_step_solids, tab_run,
 )
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.intake import FORM_VERSION
+from anisotropy_fea.intake import FORM_VERSION, size_that_fits
 from anisotropy_fea.mesher import gmsh_available, hole_centre
-from anisotropy_fea.spec import outline_of, spec_from_table, spec_plies, to_si
+from anisotropy_fea.spec import MOST_ELEMENTS_STATED, Dogbone, Geometry, Tabs, outline_of, spec_from_table, spec_plies, to_si
 from anisotropy_fea.wing_shape import ShapeError
 
 from public_coupon import DESIGNATION
@@ -651,8 +653,6 @@ def studio_tool():
 
 def without_the_time(step: Path) -> str:
     """A STEP file's text less the one thing that differs between two writings of one shape: the time in its FILE_NAME."""
-    import re
-
     text, count = re.subn(r"(FILE_NAME\('[^']*',')[0-9T:-]+(')", r"\1\2", step.read_text(encoding="ascii"))
     assert count == 1
     return text
@@ -662,7 +662,8 @@ def without_the_time(step: Path) -> str:
 @pytest.mark.parametrize("fill", ["PUBLIC_FILL", "OHT_FILL"])
 def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as_a_coarse_one_with_the_same_file(tmp_path, monkeypatch, fill):
     """The shape has no mesh. The request for it once built the whole mesh first, with no limit on its elements: 29 s for a 16 kB box
-    at 0.15 mm, and past 150 s and 800 MB at 0.05 mm. Here the meshers are stood in by a spy that fails the test if anything calls it."""
+    at 0.15 mm, and past 150 s and 800 MB at 0.05 mm. Here the meshers are stood in by a spy that fails the test if anything calls it,
+    and the fine size is the finest a setup may state (ADR-0086 amendment 2: 200,000 elements, whatever is made of them)."""
     import time
 
     import test_intake
@@ -681,9 +682,11 @@ def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as
         monkeypatch.setattr(module, name, spy(name))
     tool = studio_tool()
     rows = {k: v for k, v in getattr(test_intake, fill).items() if not k.startswith("mesh_")}
+    fine = size_that_fits(rows["length"], rows["width"], MOST_ELEMENTS_STATED)
+    assert fine < 0.25  # 0.18 mm on the strip, 0.24 mm on the coupon with a hole: more than 190,000 elements each
     files, seconds = {}, {}
     with enabled.every_test(True):
-        for size in (5.0, 0.002):  # 0.002 mm on this strip is more than a billion elements
+        for size in (5.0, fine):
             folder = tmp_path / str(size)
             folder.mkdir()
             source = folder / "values.json"
@@ -695,8 +698,8 @@ def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as
             assert state == "written", json.loads((folder / "out" / "checklist.json").read_text(encoding="utf-8"))["problems"]
             files[size] = without_the_time(folder / "out" / head["name"])
     assert called == []
-    assert files[0.002] == files[5.0]
-    assert seconds[0.002] < 5.0, seconds
+    assert files[fine] == files[5.0]
+    assert seconds[fine] < 5.0, seconds
 
 
 def test_the_shapes_checklist_judges_the_rows_the_spec_and_the_material_and_leaves_what_a_mesh_decides_pending(tmp_path):
@@ -711,7 +714,12 @@ def test_the_shapes_checklist_judges_the_rows_the_spec_and_the_material_and_leav
     shape, spec = shape_checklist(form(), tmp_path / "root")
     assert spec is not None and spec == model.spec and shape.designation == whole.designation == DESIGNATION
     states = {item.id: item.state for item in shape.items}
-    assert {states[item] for item in ("constraints", "load", "mesh", "probes")} == {"pending"}  # judged on a mesh, which a shape has not
+    # every item the check words from the built model is left pending for a shape, which builds none: these ten, and no other
+    worded_from_the_model = {"identity", "units", "geometry", "material", "laminate", "constraints", "load", "mesh", "criterion", "probes"}
+    assert {item for item, state in states.items() if state == "pending"} == worded_from_the_model
+    assert {item.id for item in whole.items if item.state == "pending"} == set()  # with its model built, the same setup leaves none
+    assert {item: states[item] for item in states if item not in worded_from_the_model} == {
+        item.id: item.state for item in whole.items if item.id not in worded_from_the_model}  # the rest is judged alike: the standard, the solver, the document
     assert states["standard"] == {item.id: item.state for item in whole.items}["standard"]
     # what the rows, the spec or the material refuse stops a shape as it stops the other files, in the same words
     for changes in ({"length": None}, {"tab_length": 200.0}, {"library": None}):
@@ -725,8 +733,15 @@ def test_the_shapes_checklist_judges_the_rows_the_spec_and_the_material_and_leav
 @needs_gmsh
 @pytest.mark.parametrize("tabs, words", [
     ({"thickness": 1e-9, "bevel": 90.0}, "The shape cannot be drawn: the tabs' thickness is 1e-09 mm, under the 0.001 mm that is the smallest size drawn"),
-    ({"thickness": 56.0 - 1e-7, "bevel": 45.0}, "so it has no outer face left"),
-    ({"thickness": 56.0 - 5e-4, "bevel": 45.0}, "so it has no outer face left"),  # an outer face of half a micrometre is none
+    # a face is left, too short to draw: its own length is said. "runs 56 mm, and the tab is 56 mm long" was said before, which is no reason
+    ({"thickness": 56.0 - 1e-6, "bevel": 45.0}, "The tabs cannot be drawn: a bevel of 45 degrees over a thickness of 56 mm leaves the tab's outer face "
+                                                "1e-06 mm long, under the 0.001 mm that is the smallest size drawn"),
+    ({"thickness": 56.0 - 1e-7, "bevel": 45.0}, "leaves the tab's outer face 1e-07 mm long, under the 0.001 mm that is the smallest size drawn"),
+    ({"thickness": 56.0 - 5e-4, "bevel": 45.0}, "leaves the tab's outer face 0.0005 mm long, under the 0.001 mm that is the smallest size drawn"),
+    # no face is left, and the run and the tab's length print alike: said in words
+    ({"thickness": 56.0, "bevel": 45.0}, "over a thickness of 56 mm runs the tab's whole length, 56 mm, so it has no outer face left"),
+    ({"thickness": 56.0 + 1e-6, "bevel": 45.0}, "over a thickness of 56 mm runs the tab's whole length, 56 mm, so it has no outer face left"),
+    ({"thickness": 60.0, "bevel": 45.0}, "over a thickness of 60 mm runs 60 mm, and the tab is 56 mm long, so it has no outer face left"),
 ])
 def test_a_tab_the_kernel_cannot_hold_is_refused_with_its_reason_before_the_kernel_is_asked(tmp_path, monkeypatch, tabs, words):
     from anisotropy_fea import coupon_shape
@@ -737,6 +752,7 @@ def test_a_tab_the_kernel_cannot_hold_is_refused_with_its_reason_before_the_kern
     with pytest.raises(ShapeError) as refused:
         build_coupon_shape(model.spec, step)
     assert words in str(refused.value) and str(refused.value).startswith(("The shape cannot be drawn", "The tabs cannot be drawn"))
+    assert not re.search(r"runs (\S+ mm), and the tab is \1 long", str(refused.value))  # never two numbers that print alike as the reason
     assert not step.exists()
 
 
@@ -823,7 +839,8 @@ def test_no_line_of_the_files_description_is_longer_than_80_characters_and_every
 @needs_gmsh
 @pytest.mark.parametrize("changes, state, words", [
     ({"tab_thickness": 1e-9, "tab_bevel": 90.0}, "refused", "the tabs' thickness is 1e-09 mm, under the 0.001 mm that is the smallest size drawn"),
-    ({"tab_thickness": 56.0 - 1e-7, "tab_bevel": 45.0}, "refused", "so it has no outer face left"),
+    ({"tab_thickness": 56.0 - 1e-7, "tab_bevel": 45.0}, "refused", "leaves the tab's outer face 1e-07 mm long, under the 0.001 mm that is the smallest size drawn"),
+    ({"tab_thickness": 56.0 + 1e-6, "tab_bevel": 45.0}, "refused", "runs the tab's whole length, 56 mm, so it has no outer face left"),
 ])
 def test_the_tool_refuses_a_tab_the_kernel_cannot_hold_and_does_not_stop(tmp_path, changes, state, words):
     out = tmp_path / "model"
@@ -832,3 +849,123 @@ def test_the_tool_refuses_a_tab_the_kernel_cannot_hold_and_does_not_stop(tmp_pat
     head = json.loads((out / "model.json").read_text(encoding="utf-8"))
     assert head["state"] == state and words in head["problem"] and "Traceback" not in done.stdout + done.stderr
     assert not list(out.glob("*.step"))
+
+
+# --- every size a shape is drawn from, by the table (ADR-0146, the review's second round) -----------------------------------------
+
+
+def spec_of(table: dict):
+    return to_si(spec_from_table(copy.deepcopy(table), "0" * 64))
+
+
+def resized(spec, tabs: dict | None = None, dogbone: dict | None = None, **geometry):
+    """The spec with sizes changed past its own rules, as a caller that built one by hand could: the shape's refusals are its last word."""
+    g = spec.geometry
+    if dogbone:
+        g = g.model_copy(update={"dogbone": g.dogbone.model_copy(update=dogbone)})
+    made = spec.model_copy(update={"geometry": g.model_copy(update=geometry)})
+    return made.model_copy(update={"tabs": made.tabs.model_copy(update=tabs)}) if tabs else made
+
+
+TINY = 1e-6 * MM  # a nanometre, in metres: the 1e-6 mm of the review, a thousandth of the smallest size drawn
+TABBED_STRIP = lambda: strip(thickness=1.5, bevel=30.0)  # noqa: E731
+TYPE_I = lambda: table_of("d638-type-i-plastic")  # noqa: E731
+OPEN_HOLE = lambda: table_of("open-hole-im7-8552")  # noqa: E731
+
+
+def short_dogbone(spec):
+    """The dog-bone with its length cut until its full width at each end is a nanometre long."""
+    return resized(spec, length=2 * (outline_of(spec).s_full + TINY))
+
+
+# For each row of the table: a coupon that has the size, and the same coupon with that size a nanometre long
+TOO_SMALL = {
+    "geometry.length": (strip, lambda spec: resized(spec, length=TINY)),
+    "geometry.width": (strip, lambda spec: resized(spec, width=TINY)),
+    "geometry.thickness": (TYPE_I, lambda spec: resized(spec, thickness=TINY)),
+    "geometry.hole_diameter": (OPEN_HOLE, lambda spec: resized(spec, hole_diameter=TINY)),
+    "beside the hole": (OPEN_HOLE, lambda spec: resized(spec, hole_diameter=spec.geometry.width - 2 * TINY)),
+    "hole to end": (plate_with_a_hole, lambda spec: resized(spec, length=spec.geometry.hole_diameter + 2 * TINY)),
+    "tabs.thickness": (TABBED_STRIP, lambda spec: resized(spec, tabs={"thickness": TINY})),
+    "geometry.tab_length": (TABBED_STRIP, lambda spec: resized(spec, tab_length=TINY)),
+    "between the tabs": (TABBED_STRIP, lambda spec: resized(spec, tab_length=spec.geometry.length / 2 - TINY / 2)),
+    "geometry.dogbone.narrow_width": (TYPE_I, lambda spec: resized(spec, dogbone={"narrow_width": TINY})),
+    "geometry.dogbone.narrow_length": (TYPE_I, lambda spec: resized(spec, dogbone={"narrow_length": TINY})),
+    "geometry.dogbone.radius": (TYPE_I, lambda spec: resized(spec, dogbone={"radius": TINY})),
+    "geometry.dogbone.outer_radius": (dogbone_type_iv, lambda spec: resized(spec, dogbone={"outer_radius": TINY})),
+    "dog-bone step": (TYPE_I, lambda spec: resized(spec, dogbone={"narrow_width": spec.geometry.width - 2 * TINY})),
+    "dog-bone end": (TYPE_I, short_dogbone),
+}
+
+
+def test_every_row_of_the_table_of_drawn_sizes_is_tried_here_and_every_size_of_the_spec_is_in_the_table_or_named_as_not_drawn():
+    assert list(TOO_SMALL) == [size.key for size in DRAWN_SIZES] and len({size.words for size in DRAWN_SIZES}) == len(DRAWN_SIZES)
+    stated = ({f"geometry.{name}" for name in Geometry.model_fields} | {f"geometry.dogbone.{name}" for name in Dogbone.model_fields}
+              | {f"tabs.{name}" for name in Tabs.model_fields})
+    drawn = {size.key for size in DRAWN_SIZES}
+    assert stated <= drawn | set(NOT_DRAWN), sorted(stated - drawn - set(NOT_DRAWN))  # a key added to the spec is judged before it is drawn
+    assert not drawn & set(NOT_DRAWN) and set(NOT_DRAWN) <= stated and all(NOT_DRAWN.values())
+
+
+@pytest.mark.parametrize("key", list(TOO_SMALL))
+def test_a_size_a_nanometre_long_is_refused_by_its_own_name_before_the_kernel_is_asked(tmp_path, monkeypatch, key):
+    """A dog-bone's narrow width of 1e-6 mm was drawn before: the refusal held a list of seven sizes, and a dog-bone's were not on it."""
+    from anisotropy_fea import coupon_shape
+
+    size = next(size for size in DRAWN_SIZES if size.key == key)
+    make, shrink = TOO_SMALL[key]
+    spec = spec_of(make())
+    thickness = sum(ply.thickness_m for ply in coupon_shape.laminate_section(spec)[1].plies)
+    assert size.read(spec, thickness) >= SMALLEST_MM * MM  # the coupon has the size, and as it stands it is drawn
+    small = shrink(spec)
+    monkeypatch.setattr(coupon_shape, "_gmsh", lambda: pytest.fail("the kernel was asked"))
+    step = tmp_path / "coupon.step"
+    with pytest.raises(ShapeError) as refused:
+        build_coupon_shape(small, step)
+    assert re.fullmatch(rf"The shape cannot be drawn: {re.escape(size.words)} is \S+ mm, under the 0\.001 mm that is the smallest size drawn",
+                        str(refused.value)), str(refused.value)
+    value = float(str(refused.value).split(" is ")[1].split(" mm")[0])
+    assert 0.9e-6 <= value <= 1.1e-6 and not step.exists()
+
+
+@pytest.mark.parametrize("key", [size.key for size in DRAWN_SIZES if "." in size.key])
+def test_a_stated_size_that_is_no_finite_number_is_refused_by_its_own_name(tmp_path, key):
+    size = next(size for size in DRAWN_SIZES if size.key == key)
+    make, _ = TOO_SMALL[key]
+    spec = spec_of(make())
+    table, _, name = key.rpartition(".")
+    broken = (resized(spec, tabs={name: math.inf}) if table == "tabs" else resized(spec, dogbone={name: math.inf}) if table == "geometry.dogbone"
+              else resized(spec, **{name: math.inf}))
+    with pytest.raises(ShapeError) as refused:
+        build_coupon_shape(broken, tmp_path / "coupon.step")
+    assert str(refused.value) == f"The shape cannot be drawn: {size.words} is not a finite size"
+
+
+def test_each_kind_is_judged_on_the_sizes_it_has_and_no_other():
+    from anisotropy_fea.coupon_shape import laminate_section
+
+    base = {"geometry.length", "geometry.width", "geometry.thickness"}
+    tabs = {"tabs.thickness", "geometry.tab_length", "between the tabs"}
+    hole = {"geometry.hole_diameter", "beside the hole", "hole to end"}
+    dogbone = {"geometry.dogbone.narrow_width", "geometry.dogbone.narrow_length", "geometry.dogbone.radius", "dog-bone step", "dog-bone end"}
+    expected = {
+        "unnotched tension, gripped strip": base,
+        "unnotched tension, bonded tabs with a 7 degree bevel": base | tabs,
+        "unnotched tension, bonded tabs with a square end": base | tabs,
+        "unnotched tension, dog-bone": base | dogbone,
+        "unnotched tension, dog-bone with an outer radius": base | dogbone | {"geometry.dogbone.outer_radius"},
+        "open-hole tension": base | hole,
+        "compression": base,
+        "in-plane shear": base,
+        "three-point bending": base,
+        "four-point bending": base,
+        "plate": base,
+        "plate with a hole": base | hole,
+    }
+    assert set(expected) == set(KINDS)
+    for name, make in KINDS.items():
+        spec = spec_of(make())
+        thickness = sum(ply.thickness_m for ply in laminate_section(spec)[1].plies)
+        read = {size.key: size.read(spec, thickness) for size in DRAWN_SIZES}
+        assert {key for key, value in read.items() if value is not None} == expected[name], name
+        assert all(value >= SMALLEST_MM * MM for value in read.values() if value is not None), name

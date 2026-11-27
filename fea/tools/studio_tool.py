@@ -271,14 +271,15 @@ def model_file(values_path: Path, program: str, out: Path, root: Path) -> str:
         return "blocked"
     if program == STEP:
         # a shape has no mesh: the rows, the spec, the material and the plies are judged as for the other files, and no mesh is cut, so
-        # an element size of any fineness costs the shape nothing (ADR-0146)
+        # an element size costs the shape nothing, inside the element count any setup may state (ADR-0146, ADR-0086 amendment 2)
         checklist, spec = shape_checklist(form, root)
         write_json(out / "checklist.json", checklist.as_dict())
         if not solvable(checklist, spec):
             print(f"{checklist.state}: no model written")
             return "blocked"
         return shape_file(spec, out, file_stem(spec))
-    # the file is for another program on the engineer's own machine: no limit on its elements (ADR-0086 amendment 1; the founder, 2026-11-24)
+    # the file is for another program on the engineer's own machine: not held to our solver's limit (ADR-0086 amendment 1; the founder,
+    # 2026-11-24), and held, as every setup is, to the most elements a setup may state (amendment 2)
     checklist, model, _ = setup_checklist(form, root, element_limit=None)
     write_json(out / "checklist.json", checklist.as_dict())
     if not solvable(checklist, model):

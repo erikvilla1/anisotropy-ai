@@ -32,7 +32,7 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 from . import __version__, enabled, forms, paths, tension_input
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
-from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, load_spec, parse_spec,
+from .spec import (MOST_ELEMENTS_STATED, AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, element_count_text, load_spec, parse_spec,
                    to_si)
 from .spec import test_name as test_word
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
@@ -74,7 +74,35 @@ WORD_OF_CRITERION = {criterion: word for word, criterion in CRITERION_OF_WORD.it
 VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the workspace sends (ADR-0046 amendment 2)
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
-NAME_LENGTH = 80  # the most characters of a coupon's name and of a material's: what the API's coupon field and a name of a deck hold
+# The most a coupon's name and a tab's material hold, counted in bytes of UTF-8, as a file counts: what the API's coupon field and a
+# name of a deck hold. A coupon's name is capitals, digits and hyphens (`spec.DESIGNATION`), so its bytes are its characters; a tab's
+# material is free text, where a letter outside ASCII takes 2 to 4 bytes.
+NAME_LENGTH = 80
+# The most bytes of UTF-8 in one word of a text row that is written into a model's file (`FILE_TEXT`). Such a row goes in as comment
+# lines broken between words and never inside one (a source's address would break). A line of an Abaqus input file holds 256 bytes, the text as typed
+# (`write_abaqus.MAX_LINE`); one of a Mechanical APDL file holds 640 characters of ASCII, a letter outside ASCII written as its code
+# of up to ten characters (`write_ansys.ascii_text`). A word of 200 bytes fits both with its line's prefix: at most 205 bytes in the
+# first, and at most 504 characters in the second (fifty letters of four bytes, ten characters each).
+WORD_BYTES = 200
+# The free text rows the writers put into a file for Abaqus or Ansys (`tests/test_studio_tool.py` holds the list against the files). A
+# tab's material goes in too, and into a STEP file, under its own bound, `NAME_LENGTH`. Who filled the form in and the notes reach no file.
+FILE_TEXT = ("size_from", "team_model", "test_data", "own_source")
+
+
+class TooLarge(ValueError):
+    """A whole number too large for a float: JSON may hold one of hundreds of digits."""
+
+
+def real(value) -> float:
+    """A value of a list row as a finite number, or ValueError as for text that is no number: JSON as Python reads it holds Infinity,
+    NaN and whole numbers too large for a float."""
+    try:
+        number = float(value)
+    except OverflowError:
+        raise TooLarge("the number is too large") from None
+    if not math.isfinite(number):
+        raise ValueError(f"{number:g} is not a finite number")
+    return number
 LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
                 "this cell shows its constants")  # shown until a material is picked; an Excel text in a formula holds at most 255 characters
 assert len(LIBRARY_HELP) <= 255 and '"' not in LIBRARY_HELP
@@ -995,6 +1023,10 @@ def check_form(form: FormInput) -> Values:
         value = forms.text_of(cells.get(key))
         if not value and FIELDS[key].required:
             problems.append(f"{form.label(key)}: required")
+        longest = max((len(word.encode("utf-8")) for word in value.split()), default=0)
+        if key in FILE_TEXT and longest > WORD_BYTES:  # no file of the model can hold the word on one line, and none cuts a word
+            problems.append(f"{form.label(key)}: one word of it takes {longest} bytes, and a line of a model file holds a word of at most {WORD_BYTES}; "
+                            "shorten it or put a space in it")
         return value
 
     def number(key: str, whole: bool = False) -> float | int | None:
@@ -1008,6 +1040,9 @@ def check_form(form: FormInput) -> Values:
             number_ = float(str(value).replace(",", ".")) if isinstance(value, str) else float(value)
         except (TypeError, ValueError):
             problems.append(f"{label}: a number is needed, not {forms.text_of(value)!r}")
+            return None
+        except OverflowError:  # a whole number of hundreds of digits, which JSON may hold and a float may not
+            problems.append(f"{label}: the number is too large")
             return None
         if not math.isfinite(number_):  # inf and nan are numbers to Python and to no model: said here, before a size is divided by one
             problems.append(f"{label}: a finite number is needed, not {number_:g}")
@@ -1145,8 +1180,9 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"{L('tab_thickness')} and {L('tab_bevel')}: give both for bonded tabs, or leave the three tab rows blank")
             if not tab_length:
                 problems.append(f"{L('tab_thickness')}: bonded tabs need a {L('tab_length')} above 0")
-    if tab_material is not None and len(tab_material) > NAME_LENGTH:
-        problems.append(f"{L('tab_material')}: at most {NAME_LENGTH} characters, not {len(tab_material)}")
+    if tab_material is not None and len(tab_material.encode("utf-8")) > NAME_LENGTH:  # in bytes, as a file counts it
+        problems.append(f"{L('tab_material')}: at most {NAME_LENGTH} bytes (a letter outside the basic Latin letters takes 2 to 4), not "
+                        f"{len(tab_material.encode('utf-8'))}")
     if tab_bevel is not None and tab_bevel > 90:
         problems.append(f"{L('tab_bevel')}: at most 90 (a square end), not {tab_bevel:g}")
     strain_device, strain_length = word("strain_device") or None, number("strain_length")
@@ -1208,7 +1244,9 @@ def check_form(form: FormInput) -> Values:
             problems.append(f"Ply {i}: a blank ply row above it; list the plies without gaps")
             continue
         try:
-            angles.append(float(value))
+            angles.append(real(value))
+        except TooLarge:  # said without its digits, which may be hundreds
+            problems.append(f"Ply {i}: the number is too large")
         except (TypeError, ValueError):
             problems.append(f"Ply {i}: an angle in degrees is needed, not {forms.text_of(value)!r}")
     if not angles and isotropic is None:
@@ -1345,7 +1383,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Regions: entry {i} needs name, x0, x1, y0, y1")
             continue
         try:
-            regions.append({"name": str(r["name"]).strip(), **{k: float(r[k]) for k in ("x0", "x1", "y0", "y1")}})
+            regions.append({"name": str(r["name"]).strip(), **{k: real(r[k]) for k in ("x0", "x1", "y0", "y1")}})
         except (TypeError, ValueError):
             problems.append(f"Regions: entry {i} ({r.get('name')!r}) has a bound that is not a number")
     known = plate_regions_of(tab_length, hole_diameter, regions)
@@ -1362,7 +1400,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Supports: entry {i} ({region}) needs dofs as a list of distinct numbers from 1 to 6")
             dofs = []
         try:
-            value = float(s.get("value") or 0.0)
+            value = real(s.get("value") or 0.0)
         except (TypeError, ValueError):
             problems.append(f"Supports: entry {i} ({region}) has a value that is not a number")
             value = 0.0
@@ -1377,7 +1415,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Loads: entry {i} names region {region!r}, not one of {', '.join(known)}")
         if keys == {"region", "pressure"}:
             try:
-                pressure = float(ld["pressure"])
+                pressure = real(ld["pressure"])
             except (TypeError, ValueError):
                 problems.append(f"Loads: entry {i} ({region}) has a pressure that is not a number")
                 continue
@@ -1387,7 +1425,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
         elif keys == {"region", "dof", "total"}:
             dof = ld["dof"]
             try:
-                total = float(ld["total"])
+                total = real(ld["total"])
             except (TypeError, ValueError):
                 problems.append(f"Loads: entry {i} ({region}) has a total that is not a number")
                 continue
@@ -1616,6 +1654,39 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
         data["ny"] = rows(L)
         comments["mesh.ny"] = f"about {size:g} {unit} rows"
     return data, comments
+
+
+def stated_elements(values: Values) -> int | None:
+    """How many elements the rows' mesh would have, from the counts `mesh_data` writes into the spec: arithmetic, with nothing built.
+    It is `spec.element_estimate` of the spec these rows make. None when the counts are beyond any number (an element size so small
+    that a length over it is infinite), which is past every limit."""
+    try:
+        data, _ = mesh_data(values)
+        if data["mesher"] == "gmsh":
+            rings = data["hole"]["circumferential"] * data["hole"]["radial_layers"]
+            return math.ceil(values.width / data["element_size"]) * math.ceil(values.length / data["element_size"]) + rings
+        return data["nx"] * (sum(data["y_seeds"]) if "y_seeds" in data else data["ny"])
+    except OverflowError:  # a length over a size too small to divide by: more rows than any number
+        return None
+
+
+def size_named(fits: float) -> float:
+    """An element size as a refusal names it: two significant figures, rounded up, so the size named fits."""
+    step = 10 ** math.floor(math.log10(fits) - 1)
+    return float(f"{math.ceil(fits / step) * step:.2g}")  # printed plainly: a size of 100 or more reads "160", never "1.6e+02"
+
+
+def size_that_fits(length: float, width: float, limit: int) -> float:
+    """An element size at which a coupon of this length and width has at most `limit` square elements, in the unit of the two sizes."""
+    return size_named(math.sqrt(length * width / limit))
+
+
+def too_many_stated(values: Values, count: int | None) -> str:
+    """Why rows whose mesh would have `count` elements are refused whatever is made of them (ADR-0086 amendment 2): the count, the most
+    a setup holds, and what to change, in the form's units."""
+    change = ("give fewer elements across the width or fewer rows per segment" if values.seeds is not None else
+              f"use an element size of {size_that_fits(values.length, values.width, MOST_ELEMENTS_STATED):g} {UNIT_LABEL[values.units]['length']} or more")
+    return f"the mesh would have {element_count_text(count)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}, whatever is made of it: {change}"
 
 
 def bending_lines_of(values: Values) -> list[float]:
@@ -1900,7 +1971,13 @@ def form_rows_of(message: str, units: str = UNITS) -> list[str]:
 
 
 def build_specs(values: Values, designation: Designation, form_name: str) -> tuple[str, str]:
-    """The team's build and its CalculiX twin as TOML texts, each judged by `parse_spec` before it is returned."""
+    """The team's build and its CalculiX twin as TOML texts, each judged by `parse_spec` before it is returned. Rows whose mesh would
+    pass the most elements a setup holds are refused first, from the counts, before a spec is made of them (ADR-0086 amendment 2)."""
+    count = stated_elements(values)
+    if count is None or count > MOST_ELEMENTS_STATED:
+        rows = ("mesh_nx", "mesh_seeds") if values.seeds is not None else ("element_size",)
+        raise IntakeError(f"{form_name}: the spec refuses the inputs: {too_many_stated(values, count)} "
+                          f"(form rows: {', '.join(FIELDS[key].label_in(values.units) for key in rows)})")
     texts = []
     for grips_kind, stem in ((values.grips, designation.name), ("nodal", f"{designation.name}-nodal")):
         data, comments, header = spec_data(values, designation, grips_kind, form_name)

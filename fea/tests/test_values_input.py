@@ -8,9 +8,10 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea import paths
-from anisotropy_fea.intake import (FIELDS, FORM_VERSION, IntakeError, build_specs, check_form, convert, designation_for, fill_form, read_form,
-                                   read_input, read_values, spec_from_values, values_of_spec, write_blank_form)
-from anisotropy_fea.spec import load_spec, parse_spec, to_si
+from anisotropy_fea.intake import (FIELDS, FILE_TEXT, FORM_VERSION, WORD_BYTES, IntakeError, build_specs, check_form, convert, designation_for, fill_form,
+                                   read_form, read_input, read_values, size_that_fits, spec_from_values, stated_elements, values_of_spec,
+                                   write_blank_form)
+from anisotropy_fea.spec import MOST_ELEMENTS_STATED, element_estimate, load_spec, parse_spec, to_si
 
 from public_coupon import DESIGNATION, PUBLIC_COUPON
 from test_intake import OHT_FILL, PUBLIC_FILL, own_constants
@@ -110,7 +111,22 @@ def test_a_blank_row_in_the_values_is_refused_as_on_the_form(tmp_path):
     ({"tab_thickness": float("inf"), "tab_bevel": 30}, "Tab thickness (mm): a finite number is needed, not inf"),
     ({"material_code": "A" * 300}, "Material code and Layup code: the coupon's name would be 307 characters, and a name is at most 80; give shorter codes"),
     ({"layup_code": "L" + "1" * 90}, "the coupon's name would be 99 characters, and a name is at most 80"),
-    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "g" * 81}, "Tab material: at most 80 characters, not 81"),
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "g" * 81},
+     "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 81"),
+    # a name is bounded in bytes, as a file counts it: 80 emoji are 320 bytes, more than a line of an Abaqus file holds
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "\U0001F600" * 80}, "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 320"),
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "\u00e9" * 41}, "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 82"),
+    # a whole number of hundreds of digits, which JSON holds and a float does not
+    ({"length": 10 ** 400}, "Length (mm): the number is too large"),
+    ({"mesh_nx": 10 ** 400}, "Your Abaqus mesh: elements across the width: the number is too large"),
+    ({"value": -10 ** 400}, ": the number is too large"),
+    ({"angles": [45, 10 ** 400, -45, 90]}, "Ply 2: the number is too large"),
+    # a word no line of a model file can hold: neither writer cuts a word
+    ({"size_from": "x" * 5000}, "Where the size comes from: one word of it takes 5000 bytes, and a line of a model file holds a word of at most 200; "
+                                "shorten it or put a space in it"),
+    ({"team_model": "job " + "\u00e9" * 101}, "Your Abaqus model of this coupon: one word of it takes 202 bytes, and a line of a model file holds a word of at most 200"),
+    ({"test_data": "\U0001F600" * 51 + " report"}, "Test data: one word of it takes 204 bytes"),
+    ({**own_constants(), "own_source": "report-" + "n" * 194}, ": one word of it takes 201 bytes, and a line of a model file holds a word of at most 200"),
 ])
 def test_a_size_that_is_no_finite_number_or_a_name_too_long_is_refused_at_its_row(tmp_path, changes, said):
     """What a values file may hold and no model may (JSON as Python reads it takes Infinity and NaN, and 1e999 is infinite): each
@@ -125,6 +141,93 @@ def test_a_name_at_its_limit_is_taken(tmp_path):
     main, _ = specs_of(tmp_path, PUBLIC_FILL, material_code=longest, layup_code="L1", tab_thickness=1.5, tab_bevel=30, tab_material="g" * 80)
     spec = parse_spec(main)
     assert spec.coupon.designation == f"{longest}-UNT-L1" and len(spec.coupon.designation) == 80 and spec.tabs.material == "g" * 80
+    for material in ("\u00e9" * 40, "\U0001F600" * 20):  # 80 bytes of letters that take two and four
+        assert parse_spec(specs_of(tmp_path, PUBLIC_FILL, tab_thickness=1.5, tab_bevel=30, tab_material=material)[0]).tabs.material == material
+
+
+@pytest.mark.parametrize("word", ["w" * WORD_BYTES, "\u00e9" * (WORD_BYTES // 2), "\U0001F600" * (WORD_BYTES // 4)], ids=["ascii", "two bytes", "four bytes"])
+def test_a_word_at_its_limit_is_taken_in_every_text_row_as_typed(tmp_path, word):
+    assert len(word.encode("utf-8")) == WORD_BYTES == 200 and FILE_TEXT == ("size_from", "team_model", "test_data", "own_source")
+    rows = {key: f"see {word} there" for key in ("size_from", "team_model", "test_data", "notes", "filled_by")}
+    values = check_form(read_values(values_file(tmp_path, PUBLIC_FILL, **rows)))
+    assert all(getattr(values, key) == text for key, text in rows.items())
+    assert check_form(read_values(values_file(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_source": f"see {word}"}))).own["source"] == f"see {word}"
+    # a row that reaches no model file is not bounded by what a file's line holds: a long address in the notes is taken
+    long = check_form(read_values(values_file(tmp_path, PUBLIC_FILL, notes="https://example.org/" + word * 3, filled_by=word * 2)))
+    assert long.notes.endswith(word * 3) and long.filled_by == word * 2
+
+
+@pytest.mark.parametrize("changes, said", [
+    ({"length": 10 ** 400}, "Length (mm): the number is too large"),
+    ({"regions": [{"name": "Patch", "x0": 10 ** 400, "x1": 20, "y0": 10, "y1": 20}]}, "Regions: entry 1 ('Patch') has a bound that is not a number"),
+    ({"supports": [{"region": "Edge-Bottom", "dofs": [1, 2, 3], "value": 10 ** 400}]}, "Supports: entry 1 (Edge-Bottom) has a value that is not a number"),
+    ({"loads": [{"region": "Face", "pressure": 10 ** 400}]}, "Loads: entry 1 (Face) has a pressure that is not a number"),
+    ({"loads": [{"region": "Edge-Top", "dof": 2, "total": 10 ** 400}]}, "Loads: entry 1 (Edge-Top) has a total that is not a number"),
+])
+def test_a_whole_number_too_large_for_a_float_is_refused_at_its_row_in_a_plates_lists_too(tmp_path, changes, said):
+    """A length of 1 followed by 400 zeros is JSON, and `float` raises OverflowError for it, which no row caught: the tool stopped and
+    the route answered 503 (ADR-0146, the review's second round)."""
+    from anisotropy_fea import enabled
+
+    plate = dict(filled_by="A. Engineer", date="2026-10-25", test="plate", material_code="AL", layup_code="L1", size_from="a plate",
+                 length=200.0, width=100.0, material_kind="isotropic", own_name="Aluminium", own_E=70000.0, own_nu=0.33, own_source="a handbook",
+                 thickness=2.0, element_size=10.0, supports=[{"region": "Edge-Bottom", "dofs": [1, 2, 3]}], loads=[{"region": "Face", "pressure": 0.01}])
+    with enabled.every_test(True), pytest.raises(IntakeError) as refused:
+        check_form(read_values(values_file(tmp_path, plate, **changes)))
+    assert said in str(refused.value) and len(str(refused.value)) < 600  # and never the number's hundreds of digits
+
+
+# --------------------------------------------------------------------------------------------- the most elements a setup holds (ADR-0086 amendment 2)
+
+def rows_of(fill: dict, **changes) -> dict:
+    return {**{key: value for key, value in fill.items() if not key.startswith("mesh_")}, **changes}
+
+
+@pytest.mark.parametrize("fill", [PUBLIC_FILL, OHT_FILL], ids=["strip", "open hole"])
+def test_the_count_the_rows_state_is_the_count_of_the_spec_they_make(tmp_path, fill):
+    """`stated_elements` is arithmetic on the rows, done before a spec is made of them; it is the spec's own estimate."""
+    from anisotropy_fea import enabled
+
+    finest = size_that_fits(fill["length"], fill["width"], MOST_ELEMENTS_STATED)
+    with enabled.every_test(True):
+        for size in (5.0, 2.0, 0.7, finest):
+            values = check_form(read_values(values_file(tmp_path, rows_of(fill, element_size=size))))
+            spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+            assert stated_elements(values) == element_estimate(spec) <= MOST_ELEMENTS_STATED, size
+        seeded = check_form(read_values(values_file(tmp_path, PUBLIC_FILL)))
+        assert stated_elements(seeded) == 10 * (28 + 27 + 10 + 27 + 28) == element_estimate(spec_from_values(seeded, designation_for(seeded, tmp_path / "none"), "v"))
+
+
+@pytest.mark.parametrize("changes, count, change", [
+    ({"element_size": 0.1}, "625,000", "use an element size of 0.18 mm or more"),
+    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),
+    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),
+    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),  # a length over it is beyond any number
+    ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999999999, 27, 28"},
+     "more than 1,000,000,000,000", "give fewer elements across the width or fewer rows per segment"),
+    ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999, 27, 28"},
+     "1,001,090", "give fewer elements across the width or fewer rows per segment"),
+    ({"element_size": None, "mesh_nx": 10 ** 12, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 10, 27, 28"},
+     "more than 1,000,000,000,000", "give fewer elements across the width or fewer rows per segment"),
+])
+def test_rows_whose_mesh_would_pass_the_most_a_setup_holds_are_refused_by_arithmetic_before_a_spec_is_made(tmp_path, monkeypatch, changes, count, change):
+    """An element size of 1e-5 mm once cost the STEP file 12 s and 1.2 GB, 1e-6 mm over 10 GB, and 99999999999 rows in a segment a 504 for
+    every program: the spec's check built one row per element row (ADR-0086 amendment 2). Here nothing is built: the spec's parser is
+    stood in by one that fails the test if it is called."""
+    import time
+
+    from anisotropy_fea import intake
+
+    values = check_form(read_values(values_file(tmp_path, rows_of(PUBLIC_FILL, **changes))))
+    monkeypatch.setattr(intake, "parse_spec", lambda *args, **kwargs: pytest.fail("a spec was made of the rows"))
+    monkeypatch.setattr(intake, "render_toml", lambda *args, **kwargs: pytest.fail("a spec was written from the rows"))
+    clock = time.perf_counter()
+    with pytest.raises(IntakeError) as refused:
+        build_specs(values, designation_for(values, tmp_path / "none"), "values.json")
+    assert time.perf_counter() - clock < 1.0
+    rows = "Your Abaqus mesh: elements across the width, Your Abaqus mesh: rows per segment" if "mesh_seeds" in changes else "Element size (mm)"
+    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 200,000, "
+                                  f"whatever is made of it: {change} (form rows: {rows})")
 
 
 # --------------------------------------------------------------------------------------------- the failure criterion rows (form 0.3)

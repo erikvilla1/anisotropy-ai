@@ -208,6 +208,33 @@ def test_invalid_seeding_is_refused_by_name(old, new, message):
         spec_with(old, new, base=PUBLIC_COUPON)
 
 
+def test_a_spec_whose_mesh_would_pass_the_most_a_setup_holds_is_refused_from_its_counts_before_a_row_is_built(monkeypatch):
+    """The last line of defence behind the intake (ADR-0086 amendment 2): the spec's own check once built one coordinate per element row
+    to judge the node lines, so 99999999999 rows in a segment took the memory before anything was refused."""
+    import time
+
+    from anisotropy_fea import spec as spec_module
+
+    assert spec_module.MOST_ELEMENTS_STATED == 200_000 > spec_module.MOST_ELEMENTS
+    assert mesh_counts(spec_with("ny = 125 ", "ny = 20000 ")) == (10, 20000)  # 200,000 elements: the most, and taken
+    monkeypatch.setattr(spec_module, "row_coordinates", lambda spec: pytest.fail("the rows were built"))
+    monkeypatch.setattr(spec_module, "on_a_row", lambda *args: pytest.fail("the rows were judged"))
+    open_hole = paths.spec_path("open-hole-im7-8552").read_text(encoding="utf-8")
+    sized = NODAL.replace("nx = 10\n", "", 1)
+    cases = [(NODAL, "ny = 125 ", "ny = 20025 ", "200,250"),
+             (PUBLIC_COUPON, SEEDS[1], "y_seeds = [28, 27, 99999, 27, 28]", "1,001,090"),
+             (PUBLIC_COUPON, SEEDS[1], "y_seeds = [28, 27, 99999999999, 27, 28]", "more than 1,000,000,000,000"),
+             (sized, "ny = 125 ", "element_size = 1e-5 ", "more than 1,000,000,000,000"),
+             (sized, "ny = 125 ", "element_size = 5e-324 ", "more than 1,000,000,000,000"),  # a length over it is beyond any number
+             (open_hole, "element_size = 2.0", "element_size = 1e-6", "more than 1,000,000,000,000")]
+    for base, old, new, count in cases:
+        clock = time.perf_counter()
+        with pytest.raises(SpecError) as refused:
+            spec_with(old, new, base=base)
+        assert str(refused.value).endswith(f"the mesh would have {count} elements; a setup holds at most 200,000: give a larger mesh.element_size or fewer rows")
+        assert time.perf_counter() - clock < 1.0
+
+
 def test_admissible_ny_names_counts_that_hit_every_line():
     assert admissible_ny(250.0, [56.0, 194.0], 100) == [] or all(ny % 125 == 0 for ny in admissible_ny(250.0, [56.0, 194.0], 100))
     assert 125 in admissible_ny(250.0, [56.0, 194.0], 125)

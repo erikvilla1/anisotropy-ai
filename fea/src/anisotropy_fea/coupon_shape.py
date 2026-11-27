@@ -23,18 +23,19 @@ ply count, thickness and material, and the same lines are written into the file'
 
 What cannot be drawn without a rule nobody stated is refused with a `ShapeError`, never drawn by a guess: tabs that reach a dog-bone's
 fillet (their outline there is not stated), and a bevel so shallow that the tab has no outer face left. A size under `SMALLEST_MM` is
-refused before the kernel is asked, and anything the kernel still cannot build is refused in plain words: a refusal states sizes in the
-coupon's own units and never a path, a module or the kernel's own message.
+refused before the kernel is asked, every size of every kind by one table (`DRAWN_SIZES`), and anything the kernel still cannot build
+is refused in plain words: a refusal states sizes in the coupon's own units and never a path, a module or the kernel's own message.
 """
 
 from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .dogbone import Outline
+from .dogbone import Outline, OutlineError
 from .femodel import laminate_section
 from .mesher import hole_centre
 from .spec import CouponSpec, full_angles, is_isotropic, layup_text, outline_of
@@ -85,9 +86,16 @@ def tab_run(spec: CouponSpec) -> float:
     end. Refuses tabs that cannot be drawn from what the coupon states: an outer face under `SMALLEST_MM` is none."""
     tabs, g = spec.tabs, spec.geometry
     run = 0.0 if tabs.bevel >= 90.0 else tabs.thickness / math.tan(math.radians(tabs.bevel))
-    if not g.tab_length - run >= SMALLEST_MM * MM:
-        raise ShapeError(f"The tabs cannot be drawn: a bevel of {tabs.bevel:g} degrees over a thickness of {_size(spec, tabs.thickness)} runs "
-                         f"{_size(spec, run)}, and the tab is {_size(spec, g.tab_length)} long, so it has no outer face left")
+    face = g.tab_length - run  # the outer face's length
+    if not face >= SMALLEST_MM * MM:
+        bevel = f"The tabs cannot be drawn: a bevel of {tabs.bevel:g} degrees over a thickness of {_size(spec, tabs.thickness)}"
+        ran, long = _size(spec, run), _size(spec, g.tab_length)
+        if face > 0:  # a face is left, too short to draw: its own length is said, since the run and the tab's length may print alike
+            raise ShapeError(f"{bevel} leaves the tab's outer face {_size(spec, face)} long, under the {_size(spec, SMALLEST_MM * MM)} that is "
+                             "the smallest size drawn")
+        if ran == long:  # the two print alike: two equal numbers would not say why
+            raise ShapeError(f"{bevel} runs the tab's whole length, {long}, so it has no outer face left")
+        raise ShapeError(f"{bevel} runs {ran}, and the tab is {long} long, so it has no outer face left")
     outline = outline_of(spec)
     if outline is not None and g.tab_length > outline.half_length - outline.s_full + 1e-12:
         raise ShapeError(f"The tabs cannot be drawn: they are {_size(spec, g.tab_length)} long and the dog-bone's full width ends "
@@ -95,20 +103,80 @@ def tab_run(spec: CouponSpec) -> float:
     return run
 
 
+@dataclass(frozen=True)
+class DrawnSize:
+    """One size a shape is drawn from: a length the spec states, or one that follows from several of them."""
+
+    key: str  # the spec's key for a stated size; a name of its own for one that follows from several
+    words: str  # as a refusal names it
+    read: Callable[[CouponSpec, float], float | None]  # metres, from the spec and the laminate's thickness; None when the coupon has none
+
+
+def _dogbone(read: Callable[[CouponSpec], float | None]) -> Callable[[CouponSpec, float], float | None]:
+    return lambda spec, _: read(spec) if spec.geometry.dogbone is not None else None
+
+
+def _hole(read: Callable[[CouponSpec], float]) -> Callable[[CouponSpec, float], float | None]:
+    return lambda spec, _: read(spec) if spec.geometry.hole_diameter is not None else None
+
+
+def _tabs(read: Callable[[CouponSpec], float]) -> Callable[[CouponSpec, float], float | None]:
+    return lambda spec, _: read(spec) if spec.tabs is not None else None
+
+
+def _outline(spec: CouponSpec) -> Outline:
+    try:
+        return outline_of(spec)
+    except OutlineError:
+        raise ShapeError("The shape cannot be drawn: these sizes make no dog-bone") from None
+
+
+# Every size a shape is drawn from, for every kind of coupon and plate: each is refused when it is not finite or is under `SMALLEST_MM`.
+# A row is read where the coupon has that size (a hole, tabs, a dog-bone) and passed over where it has none; within each of those the
+# stated sizes come first, so that a refusal names the row the engineer typed before a size that follows from it. A dog-bone's fillet
+# has no row of its own along the length: it runs at least as far as the step it makes, which has one.
+DRAWN_SIZES: tuple[DrawnSize, ...] = (
+    DrawnSize("geometry.length", "its length", lambda spec, _: spec.geometry.length),
+    DrawnSize("geometry.width", "its width", lambda spec, _: spec.geometry.width),
+    DrawnSize("geometry.thickness", "its thickness", lambda _, thickness: thickness),  # the plies' sum, or the stated thickness of one material
+    DrawnSize("geometry.hole_diameter", "the hole's diameter", _hole(lambda spec: spec.geometry.hole_diameter)),
+    DrawnSize("beside the hole", "the material beside the hole", _hole(lambda spec: (spec.geometry.width - spec.geometry.hole_diameter) / 2)),
+    DrawnSize("hole to end", "the material between the hole and each end", _hole(lambda spec: (spec.geometry.length - spec.geometry.hole_diameter) / 2)),
+    DrawnSize("tabs.thickness", "the tabs' thickness", _tabs(lambda spec: spec.tabs.thickness)),
+    DrawnSize("geometry.tab_length", "the tabs' length", _tabs(lambda spec: spec.geometry.tab_length)),
+    DrawnSize("between the tabs", "the length between the tabs", _tabs(lambda spec: spec.geometry.length - 2 * spec.geometry.tab_length)),
+    DrawnSize("geometry.dogbone.narrow_width", "the dog-bone's narrow width", _dogbone(lambda spec: spec.geometry.dogbone.narrow_width)),
+    DrawnSize("geometry.dogbone.narrow_length", "the dog-bone's narrow length", _dogbone(lambda spec: spec.geometry.dogbone.narrow_length)),
+    DrawnSize("geometry.dogbone.radius", "the dog-bone's fillet radius", _dogbone(lambda spec: spec.geometry.dogbone.radius)),
+    DrawnSize("geometry.dogbone.outer_radius", "the dog-bone's outer radius", _dogbone(lambda spec: spec.geometry.dogbone.outer_radius)),
+    DrawnSize("dog-bone step", "the step from the dog-bone's narrow section to its full width",
+              _dogbone(lambda spec: (spec.geometry.width - spec.geometry.dogbone.narrow_width) / 2)),
+    DrawnSize("dog-bone end", "the dog-bone's full width at each end", _dogbone(lambda spec: _outline(spec).half_length - _outline(spec).s_full)),
+)
+# The keys of the spec's geometry and tabs that are no size of the shape, each with why. With `DRAWN_SIZES` they name every key of
+# `spec.Geometry`, `spec.Dogbone` and `spec.Tabs` (`tests/test_coupon_shape.py` holds that), so a new key is judged here before it is drawn.
+NOT_DRAWN: dict[str, str] = {
+    "geometry.dogbone": "a table of sizes, each a row of its own above",
+    "geometry.span": "the supports of a bending coupon are lines of the model, not parts of the shape",
+    "geometry.overhang": "it is the length less the span, and the length is judged",
+    "geometry.load_span": "the loading noses are lines of the model, not parts of the shape",
+    "tabs.bevel": "an angle: `tab_run` judges the outer face it leaves",
+    "tabs.material": "a name",
+}
+
+
 def refuse_small_sizes(spec: CouponSpec, thickness: float) -> None:
     """Refuse, before the kernel is asked, a shape with a size it cannot hold: one that is not a finite number, or one under
-    `SMALLEST_MM`. The kernel treats points 1e-7 mm apart as one and then fails with words of its own."""
-    g = spec.geometry
-    sizes = [("its length", g.length), ("its width", g.width), ("its thickness", thickness)]
-    if g.hole_diameter is not None:
-        sizes += [("the hole's diameter", g.hole_diameter), ("the material beside the hole", (g.width - g.hole_diameter) / 2)]
-    if spec.tabs is not None:
-        sizes += [("the tabs' thickness", spec.tabs.thickness), ("the tabs' length", g.tab_length)]
-    for name, value in sizes:
+    `SMALLEST_MM`. The kernel treats points 1e-7 mm apart as one and then fails with words of its own. Every size is a row of
+    `DRAWN_SIZES`, judged in the table's order."""
+    for size in DRAWN_SIZES:
+        value = size.read(spec, thickness)
+        if value is None:  # the coupon has no such size
+            continue
         if not math.isfinite(value) or not math.isfinite(value / MM):
-            raise ShapeError(f"The shape cannot be drawn: {name} is not a finite size")
+            raise ShapeError(f"The shape cannot be drawn: {size.words} is not a finite size")
         if value < SMALLEST_MM * MM:
-            raise ShapeError(f"The shape cannot be drawn: {name} is {_size(spec, value)}, under the {_size(spec, SMALLEST_MM * MM)} that is the "
+            raise ShapeError(f"The shape cannot be drawn: {size.words} is {_size(spec, value)}, under the {_size(spec, SMALLEST_MM * MM)} that is the "
                              "smallest size drawn")
 
 

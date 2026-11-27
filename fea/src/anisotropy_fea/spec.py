@@ -38,8 +38,14 @@ AREA_REGIONS = ("Face",)  # every element; Tab-Bottom and Tab-Top join when ther
 RESERVED_REGIONS = (*EDGE_REGIONS, "Hole", *AREA_REGIONS, "Tab-Bottom", "Tab-Top", "Gauge", "Grip-Bottom", "Grip-Top")
 LINE_TOLERANCE = 1e-9  # relative to the length: a node row must sit on a tab or support line within this
 # The most elements our kernel builds and solves in one model: the setup check refuses a mesh past it before meshing (ADR-0086
-# amendment 1), and the mesh study leaves out a refinement past it (ADR-0068). The file written for Abaqus or Ansys is not held to it.
+# amendment 1), and the mesh study leaves out a refinement past it (ADR-0068). The file written for Abaqus or Ansys is not held to it,
+# and is held to `MOST_ELEMENTS_STATED`.
 MOST_ELEMENTS = 40_000
+# The most elements a spec may state at all, whatever is made of it: a preview, a run, a file for Abaqus or Ansys, a STEP file (ADR-0086
+# amendment 2). Judged from the counts, by arithmetic, before a row, a node or an element is built. It is the largest mesh the model
+# file's route was measured to write inside the 30 s it is given (2026-11-27: 200,208 elements in 26 to 28 s), so it refuses no file
+# that route delivered.
+MOST_ELEMENTS_STATED = 200_000
 # A coupon's ply angles are counted from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in
 # bending, the length of a plate. The engine counts from the laminate x axis (ADR-0004), so a stated angle has its fibre this far past x.
 LENGTH_AXIS_ROTATION_DEG = 90.0
@@ -481,6 +487,15 @@ def validate_spec(spec: CouponSpec) -> None:
         need((m.nx is None) == (m.ny is None), "mesh.nx and mesh.ny go together")
         if m.nx is not None:
             need(m.nx >= 1 and m.ny >= 1, "mesh.nx and mesh.ny must be at least 1")
+    try:  # arithmetic on the counts: nothing is built yet, and nothing is built for a mesh past the limit (ADR-0086 amendment 2)
+        stated = element_estimate(spec)
+    except OverflowError:  # a count beyond any number
+        stated = None
+    except TypeError:  # a count that is missing: the rules above and below name it
+        stated = 0
+    need(stated is not None and stated <= MOST_ELEMENTS_STATED,
+         f"the mesh would have {element_count_text(stated)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}: give a larger mesh.element_size "
+         f"or fewer rows")
     if m.mesher == "structured":
         nx, ny = mesh_counts(spec)
         lines = node_lines(spec)
@@ -681,6 +696,12 @@ def element_estimate(spec: CouponSpec) -> int:
         return nx * ny
     rings = m.hole.circumferential * m.hole.radial_layers if m.hole is not None else 0
     return math.ceil(g.width / m.element_size) * math.ceil(g.length / m.element_size) + rings
+
+
+def element_count_text(count: int | None) -> str:
+    """An element count as a refusal prints it: with its thousands marked, and a count past a million million, or beyond any number
+    (None), in words, since its digits would say nothing more."""
+    return "more than 1,000,000,000,000" if count is None or count > 10**12 else f"{count:,}"
 
 
 def row_coordinates(spec: CouponSpec) -> list[float] | None:
