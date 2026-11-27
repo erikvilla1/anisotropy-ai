@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  BEGINNING, firstPage, givenUp, mergeNewer, money, NO_ADDRESS, NOT_REACHED, NotHere, PAGE, PlanGone, poll, readActivity, readPlanStory, readWeekly,
-  REFRESH_PAGE, refreshed, SHOWN_MAX, storyLines, toneOf, watchFeed, whoShort, withOlder,
+  BEGINNING, firstPage, givenUp, mergeNewer, money, NO_ADDRESS, NOT_REACHED, NotHere, PAGE, PlanGone, planRows, poll, readActivity, readPlanStory,
+  readWeekly, REFRESH_PAGE, refreshed, SHOWN_MAX, storyLines, toneOf, watchFeed, whoShort, withOlder,
   type ActivityEvent, type Feed, type FeedAsk, type FeedReader, type PlanStory, type PollEnv,
 } from "../lib/oversight";
 
@@ -89,8 +89,10 @@ function records(kept: ActivityEvent[] = []) {
   const read: FeedReader = async (ask) => {
     asked.push(ask);
     const sorted = [...kept].sort((a, b) => (after(a.key, b.key) ? -1 : 1));
-    return sorted.filter((e) => (!ask.before || after(ask.before, e.key)) && (!ask.since || after(e.key, ask.since))
-      && (!ask.from || e.key === ask.from || after(e.key, ask.from))).slice(0, ask.limit ?? 50);
+    const there = sorted.filter((e) => (!ask.before || after(ask.before, e.key)) && (!ask.since || after(e.key, ask.since))
+      && (!ask.from || e.key === ask.from || after(e.key, ask.from)));
+    const limit = ask.limit ?? 50;
+    return { events: there.slice(0, limit), older: there.length > limit };
   };
   const all = () => [...kept].sort((a, b) => (after(a.key, b.key) ? -1 : 1));
   return { kept, asked, read, all };
@@ -110,7 +112,7 @@ test("a refresh shows a call recorded after newer ones, which a read of what is 
   const first = event(100, "call", 1, { outcome: "turned back" });  // answered before the other's call, written after it
   db.kept.push(first, event(130, "call", 2), event(131, "plan", 3));
   const newer = await db.read({ since: other.key });
-  assert.ok(!keys(newer).includes(first.key));  // what the page asked for before the review
+  assert.ok(!keys(newer.events).includes(first.key));  // what the page asked for before the review
   feed = await refreshed(db.read, feed);
   assert.deepEqual(keys(feed), keys(db.all()).slice(0, PAGE + 3));
   assert.ok(keys(feed).includes(first.key));
@@ -123,7 +125,7 @@ test("a refresh shows every new event, however many came since the last one", as
   let feed = await firstPage(db.read);
   assert.deepEqual(feed, { events: [db.kept[0]], floor: null });  // the whole feed: the refresh reads from the beginning
   for (let i = 1; i <= 2 * REFRESH_PAGE + 30; i += 1) db.kept.push(event(i));
-  assert.equal((await db.read({ limit: REFRESH_PAGE, since: feed.events[0].key })).length, REFRESH_PAGE);  // one read is one page of them
+  assert.equal((await db.read({ limit: REFRESH_PAGE, since: feed.events[0].key })).events.length, REFRESH_PAGE);  // one read is one page of them
   db.asked.length = 0;
   feed = await refreshed(db.read, feed);
   assert.equal(feed.events.length, 2 * REFRESH_PAGE + 31);
@@ -387,9 +389,9 @@ test("a request that gets no answer, and a page built without the API's address,
 });
 
 test("a read of the feed asks the route for its places by name", async () => {
-  await fetching(() => answered(200, { events }), async (asked) => {
-    assert.deepEqual(await readActivity("http://api.test/", { limit: 200, from: events[5].key, before: events[1].key }), events);
-    await readActivity("http://api.test", { limit: 200, since: BEGINNING });
+  await fetching((url) => answered(200, url.includes("since=") ? { events, older: true } : fixture("activity.json")), async (asked) => {
+    assert.deepEqual(await readActivity("http://api.test/", { limit: 200, from: events[5].key, before: events[1].key }), { events, older: false });
+    assert.equal((await readActivity("http://api.test", { limit: 200, since: BEGINNING })).older, true);
     await readActivity("http://api.test");
     const [first, second, third] = asked.map((url) => new URL(url));
     assert.equal(first.pathname, "/v1/oversight/activity");
@@ -418,9 +420,61 @@ test("a call says what became of its own answer", () => {
   assert.equal(toneOf({ outcome: "declined", checked: true }), "bad");
 });
 
+// ------------------------------------------------------------------ the second review of 2026-11-27: what it found, held fixed
+
+test("a feed that fits its page exactly has no floor, and a refresh of a full read is one request", async () => {
+  // the second review: a full page was taken to mean there are older events, so a feed of exactly a page kept "Show older" with
+  // nothing behind it, and a refresh that came back full asked once more for nothing
+  const exact = records(Array.from({ length: PAGE }, (_, i) => event(i)));
+  let feed = await firstPage(exact.read);
+  assert.equal(feed.events.length, PAGE);
+  assert.equal(feed.floor, null);  // so the page shows no "Show older"
+  feed = await refreshed(exact.read, feed);
+  assert.deepEqual(exact.asked, [{ limit: PAGE }, { limit: REFRESH_PAGE, since: BEGINNING }]);
+  exact.kept.push(event(PAGE));  // one more, and there is an older one
+  assert.equal((await firstPage(exact.read)).floor, keys(exact.all())[PAGE - 1]);
+
+  const db = records(Array.from({ length: REFRESH_PAGE }, (_, i) => event(i)));  // exactly what one read of a refresh gives
+  feed = await firstPage(db.read);
+  for (let i = 0; i < 2; i += 1) feed = await withOlder(db.read, feed);
+  assert.equal(feed.floor, keys(db.all())[3 * PAGE - 1]);
+  feed = await withOlder(db.read, feed);  // the last page is exactly full, and nothing is past it
+  assert.equal(feed.events.length, REFRESH_PAGE);
+  assert.equal(feed.floor, null);
+  db.asked.length = 0;
+  feed = await refreshed(db.read, feed);
+  assert.deepEqual(db.asked, [{ limit: REFRESH_PAGE, since: BEGINNING }]);
+  assert.deepEqual(keys(feed), keys(db.all()));
+
+  const more = records(Array.from({ length: REFRESH_PAGE + PAGE }, (_, i) => event(i)));  // a floor with exactly one read above it
+  feed = await firstPage(more.read);
+  for (let i = 0; i < 3; i += 1) feed = await withOlder(more.read, feed);
+  const floor = keys(more.all())[REFRESH_PAGE - 1];
+  assert.equal(feed.floor, floor);
+  more.asked.length = 0;
+  feed = await refreshed(more.read, feed);
+  assert.deepEqual(more.asked, [{ limit: REFRESH_PAGE, from: floor }]);
+  assert.equal(feed.events.length, REFRESH_PAGE);
+  assert.equal(feed.floor, floor);
+});
+
+test("what the feed shows of a plan changes when one of its rows does, and not when another plan's does", () => {
+  // the second review: the story's panel kept the story it read when the row was picked, whatever the feed showed of the plan since
+  const shown = [event(3, "call", 1, { plan: "p", outcome: "proposed" }), event(2, "plan", 2, { plan: "p", outcome: "proposed" }),
+    event(1, "plan", 3, { plan: "q", outcome: "proposed" }), event(0)];
+  const before = planRows(shown, "p");
+  assert.equal(planRows([...shown], "p"), before);  // a refresh that changed nothing
+  assert.equal(planRows([event(9), ...shown.map((e) => (e.plan === "q" ? { ...e, outcome: "refused" } : e))], "p"), before);
+  assert.notEqual(planRows(shown.map((e) => (e.kind === "plan" && e.plan === "p" ? { ...e, outcome: "running" } : e)), "p"), before);
+  assert.notEqual(planRows([event(5, "approval", 2, { plan: "p", outcome: "proposed" }), ...shown], "p"), before);  // it was approved
+  assert.notEqual(planRows(shown.slice(1), "p"), before);
+  assert.equal(planRows(shown, "nobody's"), "");
+});
+
 test("the contract's examples carry what the page reads", () => {
   assert.ok(events.every((e) => e.key === `${e.at}|${e.kind}|${e.key.split("|")[2]}` && /^[0-9a-f-]{36}$/.test(e.key.split("|")[2])));
   assert.equal(new Set(events.map((e) => e.key)).size, events.length);
   assert.ok(events.filter((e) => !e.words_shown).every((e) => /^customer [0-9a-f]{10}$/.test(e.who)));
   assert.equal(new Date(`${fixture("weekly.json").since}T00:00:00Z`).getUTCDay(), 1);  // a Monday
+  assert.equal(fixture("activity.json").older, false);
 });

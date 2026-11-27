@@ -90,10 +90,13 @@ async function read<T>(apiBase: string, path: string, signal?: AbortSignal): Pro
 /** What one read of the feed asks for: at most `limit` events, newest first; `before` a place (older ones), `since` a place (what is
  * after it) or `from` a place on (that place included). A place is an event's key, or a time with its offset. */
 export type FeedAsk = { limit?: number; before?: string; since?: string; from?: string };
-export type FeedReader = (ask: FeedAsk) => Promise<ActivityEvent[]>;
+/** One read's answer: its events, newest first, and whether the same reading has older ones past them (the API reads one more than
+ * it gives, so a page that is exactly full still says when nothing is behind it). */
+export type FeedPage = { events: ActivityEvent[]; older: boolean };
+export type FeedReader = (ask: FeedAsk) => Promise<FeedPage>;
 
 /** One read of the feed. The API keeps a read as a view of the page unless it has `since` or `from`, which only a refresh sends. */
-export async function readActivity(apiBase: string, ask: FeedAsk = {}, signal?: AbortSignal): Promise<ActivityEvent[]> {
+export async function readActivity(apiBase: string, ask: FeedAsk = {}, signal?: AbortSignal): Promise<FeedPage> {
   const query = new URLSearchParams();
   if (ask.limit) query.set("limit", String(ask.limit));
   for (const name of ["before", "since", "from"] as const) {
@@ -101,7 +104,8 @@ export async function readActivity(apiBase: string, ask: FeedAsk = {}, signal?: 
     if (place) query.set(name, place);
   }
   const tail = query.toString();
-  return (await read<{ events: ActivityEvent[] }>(apiBase, `/v1/oversight/activity${tail ? `?${tail}` : ""}`, signal)).events;
+  const page = await read<{ events: ActivityEvent[]; older?: boolean }>(apiBase, `/v1/oversight/activity${tail ? `?${tail}` : ""}`, signal);
+  return { events: page.events, older: page.older === true };
 }
 
 export function readPlanStory(apiBase: string, plan: string, signal?: AbortSignal): Promise<PlanStory> {
@@ -115,8 +119,8 @@ export function readWeekly(apiBase: string, signal?: AbortSignal): Promise<Weekl
 // ------------------------------------------------------------------------------------------------------------------ the feed
 
 /** The feed as the page holds it: its events, newest first, and its floor. The floor is the key of the oldest event shown while
- * there may be older ones in the records; null when the page holds the feed from its beginning. The page holds every event from
- * its floor on that was recorded when it last read, and "Show older" lowers the floor. */
+ * the records hold older ones, as the API said when the page last read that far; null when the page holds the feed from its
+ * beginning. The page holds every event from its floor on that was recorded when it last read, and "Show older" lowers the floor. */
 export type Feed = { events: ActivityEvent[]; floor: string | null };
 
 export const PAGE = 50;  // the first read's size, and each "Show older"
@@ -128,18 +132,19 @@ export const BEGINNING = "1970-01-01T00:00:00+00:00";
 
 const oldest = (events: ActivityEvent[]): string => events[events.length - 1].key;
 
-/** The first read: the newest events, and whether there may be older ones. */
+/** The first read: the newest events, and a floor when the API says there are older ones. */
 export async function firstPage(read: FeedReader): Promise<Feed> {
-  const events = await read({ limit: PAGE });
-  return { events, floor: events.length === PAGE ? oldest(events) : null };
+  const { events, older } = await read({ limit: PAGE });
+  return { events, floor: older && events.length ? oldest(events) : null };
 }
 
-/** The feed read again from its floor on, whole: page by page, each `before` the last event of the one before, until a page is not
- * full. It replaces what was shown, so nothing is missed whenever its row was written (a plan's first call is recorded when the
- * request ends, after calls that came later), however many new events there are and however many share one instant; an event whose
- * outcome changed shows the new one, and a plan since deleted goes. The page holds at most SHOWN_MAX events, or as many as it
- * already shows when "Show older" took it further: when there are more from the floor on, the newest that many are kept and the
- * floor rises to the oldest of them, so the page still holds everything from its floor on. */
+/** The feed read again from its floor on, whole: page by page, each `before` the last event of the one before, until the API
+ * says nothing is past a page (so a feed that fits one read is one request). It replaces what was shown, so nothing is missed
+ * whenever its row was written (a plan's first call is recorded when the request ends, after calls that came later), however many
+ * new events there are and however many share one instant; an event whose outcome changed shows the new one, and a plan since
+ * deleted goes. The page holds at most SHOWN_MAX events, or as many as it already shows when "Show older" took it further: when
+ * there are more from the floor on, the newest that many are kept and the floor rises to the oldest of them, so the page still
+ * holds everything from its floor on. */
 export async function refreshed(read: FeedReader, feed: Feed): Promise<Feed> {
   const start: FeedAsk = feed.floor === null ? { since: BEGINNING } : { from: feed.floor };
   const most = Math.max(SHOWN_MAX, feed.events.length);
@@ -147,8 +152,8 @@ export async function refreshed(read: FeedReader, feed: Feed): Promise<Feed> {
   for (;;) {
     const limit = Math.min(REFRESH_PAGE, most - events.length);
     const page = await read({ limit, ...start, ...(events.length ? { before: oldest(events) } : {}) });
-    events = events.concat(page);
-    if (page.length < limit) return { events, floor: feed.floor };
+    events = events.concat(page.events);
+    if (!page.older || page.events.length === 0) return { events, floor: feed.floor };
     if (events.length >= most) return { events, floor: oldest(events) };
   }
 }
@@ -157,8 +162,8 @@ export async function refreshed(read: FeedReader, feed: Feed): Promise<Feed> {
 export async function withOlder(read: FeedReader, feed: Feed): Promise<Feed> {
   if (feed.floor === null) return feed;
   const page = await read({ limit: PAGE, before: feed.floor });
-  const events = mergeNewer(page, feed.events);
-  return { events, floor: page.length === PAGE ? oldest(page) : null };
+  const events = mergeNewer(page.events, feed.events);
+  return { events, floor: page.older && page.events.length ? oldest(page.events) : null };
 }
 
 export type Watch = {
@@ -273,6 +278,12 @@ export function toneOf(event: Pick<ActivityEvent, "outcome" | "checked">): Tone 
 export function mergeNewer(shown: ActivityEvent[], newer: ActivityEvent[]): ActivityEvent[] {
   const seen = new Set(shown.map((e) => e.key));
   return [...newer.filter((e) => !seen.has(e.key)), ...shown];
+}
+
+/** What the feed shows of one plan, as one text: each of its rows (the plan, its calls, its approval) with how it ended. It changes
+ * when a row of the plan changes or a new one comes, and only then; the page reads the plan's story again when it does. */
+export function planRows(events: ActivityEvent[], plan: string): string {
+  return events.filter((e) => e.plan === plan).map((e) => `${e.key} ${e.outcome}`).join("\n");
 }
 
 /** US dollars the way the page prints them: cents for most calls, tenths of a cent for the small ones; a dash when not priced. */

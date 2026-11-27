@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  clock, givenUp, money, NO_ADDRESS, NotHere, PlanGone, poll, readActivity, readPlanStory, readWeekly, REFRESH_MS, storyLines, toneOf,
-  watchFeed, whoShort, type Feed, type PlanStory, type Watch, type Weekly,
+  clock, givenUp, money, NO_ADDRESS, NotHere, PlanGone, planRows, poll, readActivity, readPlanStory, readWeekly, REFRESH_MS, storyLines,
+  toneOf, watchFeed, whoShort, type Feed, type PlanStory, type Watch, type Weekly,
 } from "@/lib/oversight";
 
 type Tab = "now" | "weekly";
@@ -13,7 +13,8 @@ type Read<T> = { value: T } | { error: string } | null;
 const words = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** The founders' AI activity page (ADR-0145): every call to the model, plan and approval newest first, read again every few seconds
- * while the tab is in view; a plan's story beside the feed when its row is picked; and the last eight weeks. Read only. What goes
+ * while the tab is in view; a plan's story beside the feed when its row is picked, read again when a row of that plan changes in the
+ * feed or is picked again; and the last eight weeks. Read only. What goes
  * wrong with one reading is said where that reading shows, and goes when the reading next succeeds. */
 export function AiActivity({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [tab, setTab] = useState<Tab>("now");
@@ -21,7 +22,9 @@ export function AiActivity({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [error, setError] = useState<string | null>(apiBaseUrl ? null : NO_ADDRESS);
   const [notHere, setNotHere] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  const [picks, setPicks] = useState(0);  // every pick of a row, the one already shown too: each asks for the story
   const [story, setStory] = useState<Read<PlanStory>>(null);
+  const storyOf = useRef<string | null>(null);  // the plan the story shown, or being read, is of
   const [week, setWeek] = useState<Read<Weekly>>(null);
   const [weekAsked, setWeekAsked] = useState(0);
   const [olderAsked, setOlderAsked] = useState(false);
@@ -44,9 +47,14 @@ export function AiActivity({ apiBaseUrl }: { apiBaseUrl: string }) {
     return () => { end(); watching.stop(); stop.abort(); watch.current = null; };
   }, [apiBaseUrl]);
 
-  // A plan's story. A plan that is no longer there, or a story that could not be read, is said in the story's panel: the feed stays.
+  // A plan's story: read when a plan is picked, when its row is picked again, and when the feed shows a row of it changed or a new
+  // one (it was approved, its call was turned back, its run ended), so the panel does not keep a story the feed has moved past. The
+  // read before is given up first, so one is out at a time; nothing the story sets is among what the effect waits on, so a story
+  // read asks for no other. The story shown stays while the same plan's is read again. A plan that is no longer there, or a story
+  // that could not be read, is said in the story's panel: the feed stays.
+  const pickedRows = picked && feed ? planRows(feed.events, picked) : "";
   useEffect(() => {
-    setStory(null);
+    if (storyOf.current !== picked) { storyOf.current = picked; setStory(null); }
     if (!picked) return;
     const stop = new AbortController();
     readPlanStory(apiBaseUrl, picked, stop.signal).then((value) => setStory({ value }), (e) => {
@@ -55,7 +63,9 @@ export function AiActivity({ apiBaseUrl }: { apiBaseUrl: string }) {
       else if (!givenUp(e)) setStory({ error: words(e) });
     });
     return () => stop.abort();
-  }, [apiBaseUrl, picked]);
+  }, [apiBaseUrl, picked, picks, pickedRows]);
+
+  const pick = (plan: string) => { setPicked(plan); setPicks((n) => n + 1); };
 
   // The weeks, read when the tab is opened; "Try again" asks once more after a failure.
   const weekRead = week !== null && "value" in week;
@@ -107,13 +117,13 @@ export function AiActivity({ apiBaseUrl }: { apiBaseUrl: string }) {
                       const shown = plan !== null && plan === picked;
                       return (
                         // A click anywhere on a plan's row shows its story; the keyboard and a screen reader have the button in it.
-                        <tr key={e.key} data-picked={shown} className={plan ? "ai-pickable" : undefined} onClick={plan ? () => setPicked(plan) : undefined}>
+                        <tr key={e.key} data-picked={shown} className={plan ? "ai-pickable" : undefined} onClick={plan ? () => pick(plan) : undefined}>
                           <td>{clock(e.at)}</td>
                           <td title={e.who}>{whoShort(e.who)}</td>
                           <td>
                             {plan ? (
                               <button type="button" className="ai-pick" aria-pressed={shown} aria-controls="ai-story"
-                                aria-label={`${e.what}: show this plan's story`} onClick={() => setPicked(plan)}>{e.what}</button>
+                                aria-label={`${e.what}: show this plan's story`} onClick={() => pick(plan)}>{e.what}</button>
                             ) : e.what}
                             {e.ask && e.kind !== "call" ? <span className="ai-ask">{e.ask}</span> : null}
                           </td>

@@ -6,7 +6,9 @@ import { pageErrors } from "./page-errors";
  * (tests/fixtures/oversight, which the API's tests hold its answers to). What the review of 2026-11-27 found on the page is held
  * here: a plan's row is picked by keyboard and says so to a screen reader, a plan that is gone is said in the story's panel and the
  * feed stays, a first read that fails is tried again and its error goes, a hidden tab reads nothing, and "Show older" pressed twice
- * adds one page. Every read the page makes is recorded. */
+ * adds one page. And what the second review found: a feed that fits its page exactly offers nothing older and refreshes in one read,
+ * and a plan's story is read again when the feed shows its row changed and when its row is picked again. Every read the page makes is
+ * recorded. */
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/oversight/${name}.json`, "utf-8"));
 const EVENTS: Record<string, unknown>[] = fixture("activity").events;
 const STORY = fixture("plan-story");
@@ -17,7 +19,7 @@ type Answer = { status?: number; body: unknown };
 type Played = {
   /** What the feed route answers the page's `n`th read of it. */
   events: (ask: URLSearchParams, n: number) => Answer | Promise<Answer>;
-  plan?: (id: string) => Answer;
+  plan?: (id: string, n: number) => Answer | Promise<Answer>;
   weekly?: (n: number) => Answer;
 };
 
@@ -38,8 +40,8 @@ async function play(page: Page, played: Played) {
     }
     const id = url.pathname.split("/").at(-1)!;
     asked.plans.push(id);
-    const answer: Answer = played.plan?.(id) ?? { body: { ...STORY, id } };
-    return json(route, answer.body, answer.status);
+    const answer: Answer = (await played.plan?.(id, asked.plans.length)) ?? { body: { ...STORY, id } };
+    return json(route, answer.body, answer.status).catch(() => {});  // a read the page gave up has nobody to answer
   });
   return asked;
 }
@@ -54,12 +56,32 @@ function calls(n: number) {
     const [before, from] = [ask.get("before"), ask.get("from")];
     const start = before ? all.findIndex((e) => e.key === before) + 1 : 0;
     const end = from ? all.findIndex((e) => e.key === from) + 1 : all.length;
-    return { body: { events: all.slice(start, end).slice(0, Number(ask.get("limit") ?? 50)) } };
+    const [there, limit] = [all.slice(start, end), Number(ask.get("limit") ?? 50)];
+    return { body: { events: there.slice(0, limit), older: there.length > limit } };
   };
   return { all, read };
 }
 
 const rows = (page: Page) => page.locator("[data-testid=ai-feed] tbody tr");
+
+/** Counts, in the page, the reads of the feed it has taken in. The route hears of a request before the page has its answer, and
+ * the page sets its next timer only when the read has ended; a test that moves the clock between the two finds no timer to fire
+ * (seen once in twelve runs). So before it moves the clock a test waits, with the function this returns, until the page has taken
+ * in its `n`th read. Call it before the page is opened. */
+async function feedReads(page: Page) {
+  await page.addInitScript(() => {
+    const json = Response.prototype.json;
+    Response.prototype.json = function counted(this: Response) {
+      const feed = this.url.includes("/v1/oversight/activity");
+      return json.call(this).then((body: unknown) => {
+        const tally = window as unknown as { feedReads?: number };
+        if (feed) tally.feedReads = (tally.feedReads ?? 0) + 1;
+        return body;
+      });
+    };
+  });
+  return (n: number) => expect.poll(() => page.evaluate(() => (window as unknown as { feedReads?: number }).feedReads ?? 0)).toBe(n);
+}
 
 test("a plan's row is picked with the keyboard, shows where the keyboard is, and says it is the one shown", async ({ page }) => {
   const errors: string[] = [];
@@ -92,7 +114,7 @@ test("a plan's row is picked with the keyboard, shows where the keyboard is, and
   await page.keyboard.press("Space");
   await expect(other).toHaveAttribute("aria-pressed", "true");
   await expect(first).toHaveAttribute("aria-pressed", "false");
-  expect(asked.plans).toEqual([EVENTS[0].plan, EVENTS[5].plan]);
+  await expect.poll(() => asked.plans).toEqual([EVENTS[0].plan, EVENTS[5].plan]);  // the row says so at once; its read follows
   expect(await page.evaluate(() => window.scrollY)).toBe(0);  // Space picked the row and did not scroll the page
   // a click anywhere on a plan's row still works, and a row with no plan has nothing to pick
   await rows(page).nth(1).locator("td").first().click();
@@ -165,13 +187,16 @@ test("anyone the API answers 404 sees a page that is not there, and the page sto
 test("an open page reads again every ten seconds, a hidden one does not, and a refresh is never kept as a view", async ({ page }) => {
   await page.clock.install();
   const asked = await play(page, { events: () => ({ body: { events: [] } }) });  // an empty feed: before the review each refresh was a view
+  const takenIn = await feedReads(page);
   await page.goto("/ai");
   await expect(page.getByText("Nothing yet.")).toBeVisible();
   expect(asked.feed.map(String)).toEqual(["limit=50"]);
   await page.clock.fastForward(10_000);
   await expect.poll(() => asked.feed.length).toBe(2);
+  await takenIn(2);
   await page.clock.fastForward(10_000);
   await expect.poll(() => asked.feed.length).toBe(3);
+  await takenIn(3);
   for (const refresh of asked.feed.slice(1)) expect(refresh.get("since") ?? refresh.get("from")).toBeTruthy();  // the API keeps no view of these
   const show = (hidden: boolean) => page.evaluate((to) => {
     Object.defineProperty(document, "hidden", { configurable: true, get: () => to });
@@ -183,6 +208,7 @@ test("an open page reads again every ten seconds, a hidden one does not, and a r
   expect(asked.feed.length).toBe(3);  // two minutes hidden: nothing was read
   await show(false);
   await expect.poll(() => asked.feed.length).toBe(4);  // shown again: read at once
+  await takenIn(4);
   await page.clock.fastForward(10_000);
   await expect.poll(() => asked.feed.length).toBe(5);
 });
@@ -236,4 +262,110 @@ test("the weeks say what went wrong where they show, and read again when asked",
   await expect(page.getByTestId("ai-week")).toContainText(`Since ${WEEKLY.since}`);  // opening the tab again asked again
   await expect(page.getByTestId("ai-week-error")).toHaveCount(0);
   expect(asked.weekly).toBe(2);
+});
+
+test("a feed that fits its page exactly offers nothing older, and its refresh is one read", async ({ page }) => {
+  // the second review: a full page was taken to mean there are older events, so "Show older" stood under exactly fifty with nothing
+  // behind it
+  await page.clock.install();
+  const feed = calls(100);
+  // the older fifty of them alone: a feed of exactly one page
+  const exact = (ask: URLSearchParams) => feed.read(new URLSearchParams({ ...Object.fromEntries(ask), before: ask.get("before") ?? feed.all[49].key }));
+  let whole = false;
+  const asked = await play(page, { events: (ask) => (whole ? feed.read(ask) : exact(ask)) });
+  const takenIn = await feedReads(page);
+  await page.goto("/ai");
+  await expect(rows(page)).toHaveCount(50);
+  await expect(page.getByRole("button", { name: "Show older" })).toHaveCount(0);
+  await page.clock.fastForward(10_000);
+  await expect.poll(() => asked.feed.length).toBe(2);
+  await takenIn(2);
+  await page.clock.fastForward(9_000);
+  expect(asked.feed.map(String)).toEqual(["limit=50", "limit=200&since=1970-01-01T00%3A00%3A00%2B00%3A00"]);  // one read, and no second for nothing
+  // fifty newer ones come: the page has them all, still with nothing older to offer
+  whole = true;
+  await page.clock.fastForward(1_000);
+  await expect(rows(page)).toHaveCount(100);
+  await expect(page.getByRole("button", { name: "Show older" })).toHaveCount(0);
+  expect(asked.feed.length).toBe(3);
+});
+
+test("Show older to the feed's exact end takes the button away, and the refresh after it is one read", async ({ page }) => {
+  await page.clock.install();
+  const feed = calls(100);
+  const asked = await play(page, { events: (ask) => feed.read(ask) });
+  const takenIn = await feedReads(page);
+  await page.goto("/ai");
+  await expect(rows(page)).toHaveCount(50);
+  await page.getByRole("button", { name: "Show older" }).click();
+  await expect(rows(page)).toHaveCount(100);
+  await expect(page.getByRole("button", { name: "Show older" })).toHaveCount(0);  // the older page was exactly full, and it was the last
+  await page.clock.fastForward(10_000);
+  await expect.poll(() => asked.feed.length).toBe(3);
+  await takenIn(3);
+  await page.clock.fastForward(9_000);
+  expect(asked.feed.length).toBe(3);
+  expect(asked.feed[2].get("since")).toBeTruthy();  // the whole feed is held, so the refresh reads from the beginning, once
+});
+
+test("a plan's story is read again when the feed shows its row changed and when its row is picked again, one read at a time", async ({ page }) => {
+  // the second review: the panel kept the story it read when the row was picked, though the feed beside it showed the plan had moved
+  // on, and picking the row again read nothing
+  await page.clock.install();
+  const errors: string[] = [];
+  page.on("pageerror", pageErrors(errors));
+  const id = EVENTS[1].plan as string;
+  const said = ["proposed", "running", "stopped", "done"];  // what the plan's story says, read by read
+  let outcome = "proposed";
+  let release: (() => void) | null = null;
+  const givenUp: string[] = [];
+  page.on("requestfailed", (request) => { if (request.url().includes("/oversight/plans/")) givenUp.push(request.url()); });
+  const asked = await play(page, {
+    events: () => ({ body: { events: EVENTS.map((e) => (e.plan === id ? { ...e, outcome } : e)), older: false } }),
+    plan: async (plan, n) => {
+      if (n === 3) await new Promise<void>((go) => { release = go; });  // the third read waits for the test
+      return { body: { ...STORY, id: plan, state: said[n - 1] } };
+    },
+  });
+  const takenIn = await feedReads(page);
+  await page.goto("/ai");
+  const panel = page.getByTestId("ai-story");
+  await page.locator("button.ai-pick").first().click();
+  await expect(panel).toContainText("now proposed");
+  expect(asked.plans).toEqual([id]);
+  await page.clock.fastForward(10_000);  // a refresh that shows nothing new of the plan
+  await expect.poll(() => asked.feed.length).toBe(2);
+  await takenIn(2);
+  expect(asked.plans).toEqual([id]);
+  outcome = "running";  // it was approved and runs: the feed's rows say so at the next refresh
+  await page.clock.fastForward(10_000);
+  await expect(rows(page).first()).toContainText("running");
+  await expect(panel).toContainText("now running");
+  await expect(panel).not.toContainText("now proposed");
+  expect(asked.plans).toEqual([id, id]);
+  await page.clock.fastForward(10_000);  // and the story read did not ask for another: the next refresh changes nothing
+  await expect.poll(() => asked.feed.length).toBe(4);
+  await takenIn(4);
+  await page.clock.fastForward(10_000);
+  await expect.poll(() => asked.feed.length).toBe(5);
+  await takenIn(5);
+  expect(asked.plans).toEqual([id, id]);
+  // the same row picked again reads again; the story shown stays until the new one is in
+  await page.locator("button.ai-pick").first().click();
+  await expect.poll(() => release !== null).toBe(true);
+  expect(asked.plans).toEqual([id, id, id]);
+  await expect(panel).toContainText("now running");
+  await expect(panel.getByText("Reading the plan")).toHaveCount(0);
+  // and picked once more while that read is out: the read before is given up, so one is out at a time and the last one asked is shown
+  await rows(page).nth(1).locator("td").first().click();
+  await expect(panel).toContainText("now done");
+  expect(asked.plans).toEqual([id, id, id, id]);
+  await expect.poll(() => givenUp.length).toBe(1);
+  release!();
+  await page.clock.fastForward(10_000);
+  await expect.poll(() => asked.feed.length).toBe(6);
+  await expect(panel).toContainText("now done");  // the read given up changed nothing when its answer came
+  await expect(panel).not.toContainText("now stopped");
+  expect(asked.plans.length).toBe(4);
+  expect(errors).toEqual([]);
 });
