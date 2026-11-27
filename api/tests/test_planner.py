@@ -245,6 +245,30 @@ def test_each_answer_the_checks_turned_back_is_kept_with_its_reasons():
     assert planner.make_plan(FakeWriter(GOOD), ASK, PLATE, []).tried == []
 
 
+def test_what_is_kept_of_an_answer_turned_back_is_what_the_records_can_hold_and_a_request_can_carry():
+    # the review of ADR-0145 on 2026-11-27: PostgreSQL keeps no NUL, no half of a surrogate pair and no NaN in JSON, and a request to
+    # the model cannot carry half a pair, so an answer that held one failed the engineer's request when it was kept or sent back
+    kept = planner.storable({"a\x00": ["x\x00y", "x\ud83dy", "\udc00", "é “q” 😀", 1.5, float("nan"), float("inf"), -float("inf"), None, True, 3,
+                                       {"k": "ok"}]})
+    assert kept == {"a�": ["x�y", "x�y", "�", "é “q” 😀", 1.5, "nan", "inf", "-inf", None, True, 3, {"k": "ok"}]}
+    json.dumps(kept, ensure_ascii=False, allow_nan=False).encode("utf-8")  # it can be written, as JSON and as UTF-8
+    bad = with_args(GOOD, 2, value="2000", unit="N")
+    assert planner.storable(bad) == bad and planner.storable("plain") == "plain"  # anything else is as it was
+    for sent, clean in (("x\x00y", "x�y"), ("x\ud800y", "x�y")):
+        odd = {**bad, "unread": [{"quote": sent, "reason": "not_offered"}]}
+        writer = FakeWriter(odd, GOOD)
+        made = planner.make_plan(writer, ASK, PLATE, [])
+        assert made.state == "proposed" and made.steps == PROPOSED["steps"]  # the plan is the one a clean first answer leads to
+        assert made.tried[0]["plan"]["unread"] == [{"quote": clean, "reason": "not_offered"}] and made.tried[0]["plan"]["steps"] == bad["steps"]
+        assert writer.views[1]["refused"] == made.tried[0]  # what the model is sent back is what is kept
+        json.dumps(writer.views[1], ensure_ascii=False).encode("utf-8")
+        said = plan(question="You want it clamped" + sent[1:])  # the model's own words, no question: they are the refusal's reason
+        refused = planner.make_plan(FakeWriter(said, said), ASK, PLATE, [])
+        assert refused.state == "refused" and refused.reason == "You want it clamped" + clean[1:]
+        gone = planner.make_plan(FakeWriter(said, None), ASK, PLATE, [])
+        assert gone.state == "refused" and gone.reason == refused.reason
+
+
 def test_no_model_is_unavailable_and_the_cap_on_calls_says_so():
     assert planner.make_plan(TemplateAssistant(), ASK, PLATE, []).state == "unavailable"
     limited = planner.make_plan(LimitedAssistant(5), ASK, PLATE, [])

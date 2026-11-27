@@ -26,6 +26,7 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -640,6 +641,26 @@ class Planned:
     tried: list[dict[str, Any]] = field(default_factory=list)  # each answer the checks turned back, with their reasons (ADR-0145)
 
 
+_NOT_KEPT = re.compile("[\x00\ud800-\udfff]")  # what PostgreSQL keeps in no text and no JSON: a NUL, and half of a surrogate pair
+
+
+def storable(value: Any) -> Any:
+    """An answer the checks turned back, or a refusal's reason, as the records can keep it and a request can carry it (ADR-0145): the
+    same, with each character PostgreSQL refuses in text and in JSON (a NUL, an unpaired surrogate, which UTF-8 cannot write either)
+    replaced by U+FFFD and a number that is no number (NaN, an infinity) written as its word. Such an answer is kept for a founder to
+    read later and is sent back to the model once; one such character in it must not fail the engineer's request. The answer the
+    checks read is not touched, and neither is a plan that passes them."""
+    if isinstance(value, str):
+        return _NOT_KEPT.sub("\ufffd", value)
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, list):
+        return [storable(item) for item in value]
+    if isinstance(value, dict):
+        return {storable(key): storable(item) for key, item in value.items()}
+    return value
+
+
 def _billed(calls: list, reading: Any) -> Any:
     if getattr(reading, "call", None) is not None:
         calls.append(reading.call)
@@ -671,14 +692,14 @@ def plan_with(assistant: Any, calls: list, *, view: Callable[[dict[str, Any] | N
     checked = check(reading.raw)
     tried: list[dict[str, Any]] = []
     if not checked.ok:
-        tried.append({"plan": reading.raw, "reasons": list(checked.reasons)})
-        again = _billed(calls, _asked(assistant, view({"plan": reading.raw, "reasons": checked.reasons}), schema, system))
+        tried.append(storable({"plan": reading.raw, "reasons": list(checked.reasons)}))
+        again = _billed(calls, _asked(assistant, view(tried[0]), schema, system))
         if again.raw is None:
-            return Planned("refused", unread=checked.unread, reason=checked.said or reason_of(checked.reasons), tried=tried)
+            return Planned("refused", unread=checked.unread, reason=storable(checked.said or reason_of(checked.reasons)), tried=tried)
         retried = check(again.raw)
         if not retried.ok:
-            tried.append({"plan": again.raw, "reasons": list(retried.reasons)})
-            return Planned("refused", unread=retried.unread, reason=retried.said or reason_of(retried.reasons), tried=tried)
+            tried.append(storable({"plan": again.raw, "reasons": list(retried.reasons)}))
+            return Planned("refused", unread=retried.unread, reason=storable(retried.said or reason_of(retried.reasons)), tried=tried)
         reading, checked = again, retried
     if checked.question is not None:
         return Planned("question", question=checked.question, unread=checked.unread, writer=reading.writer, model=reading.model, tried=tried)

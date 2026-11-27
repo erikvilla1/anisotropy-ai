@@ -1,5 +1,5 @@
 {
-  "since": "2026-10-02",
+  "since": "2026-10-05",
   "guards": [
     {"week_of": "2026-11-23", "feature": "projects/{project_id}/plans", "asked": 41, "kept": 33, "set_aside": 6, "with_dropped": 0, "no_answer": 2,
      "capped": 0, "set_aside_pct": 14.6, "usual_set_aside_pct": null, "flag": "no earlier week to compare with"},
@@ -16,7 +16,7 @@
     {"week_of": "2026-11-23", "kind": "plate", "state": "question", "plans": 3}
   ],
   "refused": [
-    {"reason": "the sentence asks for changes the plan leaves out (“…”): ask for them rather than run without them", "plans": 3},
+    {"reason": "the sentence asks for a change the plan leaves out", "plans": 3},
     {"reason": "no step on offer does what the sentence asks", "plans": 1}
   ],
   "unchecked": [

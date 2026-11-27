@@ -2870,7 +2870,9 @@ class OversightView(BaseModel):
 def _overseer(request: Request) -> tuple[frozenset[str], bool]:
     """The founders' emails and whether this is a machine with no sign-in, for a request that may read the AI's activity (ADR-0145):
     a signed-in founder, decided here from the email Cloudflare Access verified, or the one user of a machine with no sign-in. Anyone
-    else is answered 404, as if there were no such page; nothing the request says can change it."""
+    else is answered 404, as if there were no such page; nothing the request says can change it. The routes take it as their first
+    dependency, so it is decided before the actor header or any parameter is read: whatever else is wrong with a request, anyone but
+    a founder gets the same 404."""
     settings = getattr(request.app.state, "settings", None)
     founders = frozenset(settings.founder_emails) if settings is not None else frozenset()
     local = getattr(request.app.state, "access_verifier", None) is None
@@ -2880,14 +2882,19 @@ def _overseer(request: Request) -> tuple[frozenset[str], bool]:
     return founders, local
 
 
-def _when(value: str | None, name: str) -> dt.datetime | None:
+Overseer = Annotated[tuple[frozenset[str], bool], Depends(_overseer)]
+
+
+def _place(value: str | None, name: str) -> oversight.Cursor | None:
+    """A place in the feed a request names: a time, which must carry its offset as every time filter must (`_aware`, ADR-0003), or an
+    event's key as the feed gave it."""
     if value is None:
         return None
     try:
-        when = dt.datetime.fromisoformat(value)
+        return oversight.cursor(value)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"{name} must be a time in ISO 8601, such as 2026-11-27T10:00:00Z; got {value!r}") from exc
-    return when if when.tzinfo is not None else when.replace(tzinfo=dt.timezone.utc)
+        raise HTTPException(status_code=422, detail=f"{name} must be a time with its offset, such as 2026-11-27T10:00:00Z, or an event's "
+                                                    f"key as the feed gives it; got {value!r}") from exc
 
 
 def _seen(request: Request, actor: str, view: OversightView, response: dict) -> None:
@@ -2896,26 +2903,28 @@ def _seen(request: Request, actor: str, view: OversightView, response: dict) -> 
 
 
 @app.get(OVERSIGHT + "/activity", response_model=None)
-def oversight_activity(actor: Actor, request: Request, limit: int = 50, before: str | None = None, since: str | None = None) -> dict:
+def oversight_activity(overseer: Overseer, actor: Actor, request: Request, limit: int = 50, before: str | None = None,
+                       since: str | None = None, start: Annotated[str | None, Query(alias="from")] = None) -> dict:
     """The AI's newest events for a founder (ADR-0145): each call to the model, each plan and each approval, newest first, at most
-    `limit` (200 at most). `before` pages back; `since` reads only what came after it, the page's refresh, which is logged and not kept
-    as a run record (the page refreshes every few seconds). 404 for anyone but a founder."""
-    founders, local = _overseer(request)
+    `limit` (200 at most), each with its `key`. `before` pages back from a time or a key. `since` reads what came after a time or a
+    key, and `from` reads from one on, itself included: the page's refresh, which reads again from the oldest event it shows, page by
+    page with `before`, so that no event is missed however late its row was written. A read with `since` or `from` is not kept as a
+    run record (the page refreshes every few seconds); any other is. 404 for anyone but a founder."""
+    founders, local = overseer
     engine = _records_engine(request)
-    events = oversight.activity(engine, founders, local=local, limit=limit, before=_when(before, "before"), since=_when(since, "since"))
-    if since is None:
+    events = oversight.activity(engine, founders, local=local, limit=limit, before=_place(before, "before"), since=_place(since, "since"),
+                                start=_place(start, "from"))
+    if since is None and start is None:
         _seen(request, actor, OversightView(view="activity", before=before), {"events": len(events)})
-    else:
-        print(f"AI activity refreshed by {actor}: {len(events)} new event(s)", flush=True)
     return {"events": events}
 
 
 @app.get(OVERSIGHT + "/plans/{plan_id}", response_model=None)
-def oversight_plan(plan_id: uuid.UUID, actor: Actor, request: Request) -> dict:
+def oversight_plan(overseer: Overseer, plan_id: uuid.UUID, actor: Actor, request: Request) -> dict:
     """One plan's story from its records for a founder (ADR-0145): the sentence, each answer the checks turned back and why, each
     call, the approval, the version, the job and each step. A customer's words are not shown. 404 for anyone but a founder, and for a
     plan there is not."""
-    founders, local = _overseer(request)
+    founders, local = overseer
     story = oversight.plan_story(_records_engine(request), plan_id, founders, local=local)
     if story is None:
         raise HTTPException(status_code=404, detail="There is no such plan.")
@@ -2924,10 +2933,10 @@ def oversight_plan(plan_id: uuid.UUID, actor: Actor, request: Request) -> dict:
 
 
 @app.get(OVERSIGHT + "/weekly", response_model=None)
-def oversight_weekly(actor: Actor, request: Request) -> dict:
+def oversight_weekly(overseer: Overseer, actor: Actor, request: Request) -> dict:
     """The last eight weeks for a founder (ADR-0145): the guards' and the costs' views per feature, plans per kind and state, why plans
     were refused, and the calls answered by a model outside the checked list. 404 for anyone but a founder."""
-    founders, _ = _overseer(request)
+    founders, _ = overseer
     week = oversight.weekly(_records_engine(request), founders)
     _seen(request, actor, OversightView(view="weekly"), {"since": week["since"]})
     return week
