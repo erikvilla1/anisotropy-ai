@@ -2592,6 +2592,56 @@ test("at phone width a long layup wraps inside the card once a STEP file is save
   expect(browserErrors).toEqual([]);
 });
 
+test("at phone width the card is one column before the results are in, a run under way: nothing is wider than its column and the page does not scroll sideways (ADR-0134)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  // the run never finishes, so the card stays as it is from the first model until its results: the project with the run's steps, and
+  // the model's words, with no answer yet. A narrow card's rule for that state once put the words beside the project on a phone too.
+  await mockApi(page, calls, { allTests: false, jobs: () => fixture("job-running") });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByTestId("build-button").click();
+  await expect(page.getByTestId("job-progress")).toBeVisible({ timeout: 30_000 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Close the model tree" }).click(); // on a phone the tree covers the model until it is closed
+  await page.getByTestId("sheet-card").click(); // under the model, the project's card and not the assistant
+  await expect(page.getByTestId("job-progress")).toBeVisible();
+  await expect(page.getByTestId("preview-card")).toBeVisible();
+  await expect(page.getByTestId("workspace-shell")).toHaveAttribute("data-results", "false");
+  const card = await page.evaluate(() => {
+    const grid = document.querySelector<HTMLElement>(".cv-card-grid")!;
+    const style = getComputedStyle(grid);
+    const inside = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const columns = [...grid.querySelectorAll<HTMLElement>(":scope > .cv-col")].filter((column) => getComputedStyle(column).display !== "none");
+    const edge = grid.getBoundingClientRect().left; // the name's box hangs 4 px left of its column by design, inside the card's padding
+    const wide: string[] = []; // every box that is wider inside than it shows, or that reaches past its column's right edge or the card's left
+    for (const column of columns) {
+      const box = column.getBoundingClientRect();
+      if (column.scrollWidth > column.clientWidth + 1) wide.push(`${column.className} ${column.scrollWidth} > ${column.clientWidth}`);
+      for (const part of column.querySelectorAll<HTMLElement>("*")) {
+        const rect = part.getBoundingClientRect();
+        if (rect.width > 0 && (rect.right > box.right + 1 || rect.width > box.width + 1 || rect.left < edge - 1)) wide.push(`${part.tagName}.${part.className} ${Math.round(rect.left)} to ${Math.round(rect.right)} in ${Math.round(box.left)} to ${Math.round(box.right)}`);
+      }
+    }
+    return { inside, wide, window: window.innerWidth, page: document.documentElement.scrollWidth, sheet: document.querySelector<HTMLElement>(".cv-card")!.scrollWidth,
+      columns: columns.map((column) => ({ name: column.className, width: column.getBoundingClientRect().width, left: column.getBoundingClientRect().left,
+        top: column.getBoundingClientRect().top, bottom: column.getBoundingClientRect().bottom })) };
+  });
+  expect(card.window).toBe(390);
+  expect(card.columns.map((column) => column.name)).toEqual(["cv-col cv-project", "cv-col cv-view cv-slot"]); // no answer yet
+  for (const column of card.columns) expect(Math.abs(column.width - card.inside), column.name).toBeLessThanOrEqual(1); // each as wide as the card
+  expect(card.columns[1].left).toBe(card.columns[0].left);
+  expect(card.columns[1].top).toBeGreaterThanOrEqual(card.columns[0].bottom); // the model's words under the project, not beside it
+  expect(card.wide).toEqual([]);
+  expect(card.page).toBeLessThanOrEqual(390);
+  expect(card.sheet).toBeLessThanOrEqual(390);
+  expect(browserErrors).toEqual([]);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

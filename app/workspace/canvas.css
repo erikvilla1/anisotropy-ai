@@ -375,7 +375,9 @@
   .cv-sheet > .cv-card { position: static; flex: 1 1 auto; min-height: 0; max-width: none; margin: 0; overflow-y: auto; padding: 8px; }
   .cv-sheet > .cv-card .cv-card-grid { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 16px; max-height: none; padding: 12px 8px; border: 0; background: transparent; box-shadow: none;
     backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .cv-sheet > .cv-card .cv-col { grid-column: 1; grid-row: auto; }
+  /* one column, whatever the card holds: the grid is named so that this outranks the narrow card's rule for a view with no answer
+     (`.cv-card-grid:has(> .cv-answer:empty) > .cv-view`), which put the model's words beside the project until the results were in */
+  .cv-sheet > .cv-card .cv-card-grid > .cv-col { grid-column: 1; grid-row: auto; }
   .cv-shell .cv-sheet > .cv-chat { position: static; flex: 1 1 auto; width: auto; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .cv-chat-fold, .cv-chat-show { display: none; }
   .cv-details { position: absolute; left: 6px; right: 6px; top: 6px; bottom: 6px; max-height: none; height: auto; margin: 0; }
