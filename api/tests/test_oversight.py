@@ -32,7 +32,7 @@ BAD = with_args(GOOD, 2, value="2000", unit="N")  # a number the sentence does n
 
 # ------------------------------------------------------------------------------------------------------------ the readings alone
 
-def test_a_customer_is_a_tag_that_names_nobody_and_a_founder_or_a_robot_is_shown():
+def test_a_customer_is_a_tag_that_keeps_the_email_off_the_page_and_a_founder_or_a_robot_is_shown():
     founders = frozenset({FOUNDER})
     tag, open_ = oversight.who(EMAIL, founders, local=False)
     assert tag.startswith("customer ") and "engineer" not in tag and not open_
