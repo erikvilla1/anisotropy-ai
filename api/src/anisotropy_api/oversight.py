@@ -330,8 +330,9 @@ def activity(engine: Engine, founders: Collection[str], *, local: bool, limit: i
     approvals, merged by key (time, then kind, then row), newest first. Each carries its `key`. `before` reads what is before a
     place and `since` what is after it; `start` reads from a place on, that place included. When there are older ones, the next page
     is the one `before` the last event's key. Reading from the oldest event shown on, page by page, gives everything there is from
-    it on, however late a row was written: that is the page's refresh. Each kind is read newest first by its time and row, which
-    `model_calls_called_at_idx` and migration 0018's two indexes on `agent_plans` give without a sort."""
+    it on, however late a row was written: that is the page's refresh. Each kind is read newest first by its time and row; for the
+    newest page `model_calls_called_at_idx` and migration 0018's two indexes on `agent_plans` give that order, and a page far back or
+    a read from a place on may still filter and sort (measured in ADR-0145)."""
     limit = max(1, min(limit, FEED_MAX))
     sources = (("call", ModelCallRow, ModelCallRow.called_at, None, CALL_SHOWN), ("plan", AgentPlanRow, AgentPlanRow.created_at, None, PLAN_SHOWN),
                ("approval", AgentPlanRow, AgentPlanRow.approved_at, AgentPlanRow.approved_at.is_not(None), PLAN_SHOWN))
