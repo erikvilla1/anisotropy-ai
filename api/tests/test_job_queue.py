@@ -563,8 +563,10 @@ def test_a_bucket_that_refuses_the_running_files_does_not_silence_the_heartbeat(
     job = solving(solver, job_id, monkeypatch, until=("running",))
     held_until(job, lambda: store.refused >= 2, "asked the bucket twice for the fields")
     first = fetch_job(table, job_id).heartbeat_at
-    held_until(job, lambda: fetch_job(table, job_id).heartbeat_at > first, "a later beat while the bucket refuses")
-    assert fetch_job(table, job_id).stored == {} and fetch_job(table, job_id).stage == "CalculiX"
+    # a beat under way when the tool reached CalculiX still carries the stage before it, so the row is waited for, not read once
+    held_until(job, lambda: fetch_job(table, job_id).heartbeat_at > first and fetch_job(table, job_id).stage == "CalculiX",
+               "a later beat with the tool's stage while the bucket refuses")
+    assert fetch_job(table, job_id).stored == {}
     store.refusing = False
     held_until(job, lambda: "fields" in (fetch_job(table, job_id).stored or {}), "the fields filed once the bucket answered")
     (tmp_path / "refusing" / "release-WAIT-F").touch()
