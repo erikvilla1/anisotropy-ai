@@ -1,0 +1,1237 @@
+{
+  "about": "Setups a version counts as one and setups it tells apart (ADR-0143): the page's setupKey (lib/model-versions.ts, held by tests/model-versions.test.ts) and the server's setup_key (api/src/anisotropy_api/setup_tools.py, held by api/tests/test_setup_tools.py) must agree on every group. `same`: every setup of a group has one key. `different`: no two setups of a group share a key. A setup is a project's content: its form and its plate.",
+  "same": [
+    {
+      "name": "a list that is missing, null or no list reads as empty, and so does a plate that is missing or holds nothing",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [],
+            "loads": [],
+            "regions": []
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [],
+            "loads": []
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "regions": []
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {}
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": null,
+            "loads": null,
+            "regions": null
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [],
+            "loads": [],
+            "regions": "none"
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": null
+        }
+      ]
+    },
+    {
+      "name": "one list missing beside lists that hold something",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": []
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "regions": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the order keys are written in, of the form, the plate and each entry",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "plate": {
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ]
+          },
+          "form": {
+            "date": "2026-11-28",
+            "symmetric": "yes",
+            "ply_2": "90",
+            "ply_1": "0",
+            "width": "36",
+            "length": "250",
+            "test": "plate"
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "loads": [
+              {
+                "total": "2000",
+                "dof": 1,
+                "kind": "force",
+                "region": "Edge-Right"
+              }
+            ],
+            "regions": [
+              {
+                "y1": "20",
+                "y0": "5",
+                "x1": "40",
+                "x0": "10",
+                "name": "Patch"
+              }
+            ],
+            "supports": [
+              {
+                "value": "",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "region": "Edge-Left"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "the date, a blank row, a row that is no text and the space around a value are not the setup's",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2027-01-01"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28",
+            "notes": "",
+            "hole_diameter": "   "
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": " 36 ",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28",
+            "kept_by": 3,
+            "flag": null
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "what a plate holds beside its three lists, and an entry that is no object, are not counted",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ],
+            "note": "from another client",
+            "version": 2
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              },
+              "Edge-Top",
+              4,
+              null,
+              [
+                1,
+                2
+              ]
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "different": [
+    {
+      "name": "a row's value, a row more, and a list's own entries",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "40",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28",
+            "element_size": "2"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2500"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": []
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [],
+            "loads": [],
+            "regions": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "the order of a list's entries and of an entry's own list are the setup's",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              },
+              {
+                "region": "Edge-Top",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Top",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              },
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  3,
+                  2,
+                  1
+                ],
+                "value": ""
+              },
+              {
+                "region": "Edge-Top",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a key an entry holds blank and one it does not hold",
+      "setups": [
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ],
+                "value": ""
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        },
+        {
+          "form": {
+            "test": "plate",
+            "length": "250",
+            "width": "36",
+            "ply_1": "0",
+            "ply_2": "90",
+            "symmetric": "yes",
+            "date": "2026-11-28"
+          },
+          "plate": {
+            "supports": [
+              {
+                "region": "Edge-Left",
+                "dofs": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ],
+            "loads": [
+              {
+                "region": "Edge-Right",
+                "kind": "force",
+                "dof": 1,
+                "total": "2000"
+              }
+            ],
+            "regions": [
+              {
+                "name": "Patch",
+                "x0": "10",
+                "x1": "40",
+                "y0": "5",
+                "y1": "20"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

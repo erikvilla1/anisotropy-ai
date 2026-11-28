@@ -31,7 +31,8 @@ export const MAX_VERSIONS = 50;
 const IGNORED = new Set(["date"]);
 const LAYUP_KEYS = new Set([...PLY_KEYS, "symmetric"]);
 
-const clean = (form: StudioForm): StudioForm => Object.fromEntries(Object.entries(form).filter(([k, v]) => !IGNORED.has(k) && (v ?? "").trim() !== ""));
+const clean = (form: StudioForm): StudioForm => Object.fromEntries(Object.entries(form ?? {})
+  .filter(([k, v]) => !IGNORED.has(k) && typeof v === "string" && v.trim() !== ""));
 
 /** A value with every object's keys in one order. The server keeps a setup as JSON and answers with its own order of keys, so the lists
  * the page wrote and the same lists read back are told apart by their values alone. A list keeps its order: it is part of the setup. */
@@ -39,10 +40,21 @@ const keyed = (value: unknown): unknown => (Array.isArray(value) ? value.map(key
   : typeof value === "object" && value !== null ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, keyed((value as Record<string, unknown>)[k])]))
     : value);
 
-/** The setup as one string, to tell a change from none, whatever order its keys were written in. */
+/** A plate's lists as a version counts them, each one present: a list that is missing or is no list reads as empty, an entry that is no
+ * object is left out, and nothing else the plate holds is counted. This is the server's `lists_of` (`api/src/anisotropy_api/setup_tools.py`),
+ * which another client's setup, written without a list, is read by. */
+const LISTS = ["supports", "loads", "regions"] as const;
+const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const listsOf = (plate: unknown) => Object.fromEntries(LISTS.map((k) => {
+  const list = record(plate) ? plate[k] : null;
+  return [k, Array.isArray(list) ? list.filter(record).map(keyed) : []];
+}));
+
+/** The setup as one string, to tell a change from none, whatever order its keys were written in: the filled rows but the date, and the
+ * plate's three lists. It agrees with the server's `setup_key`, held by `tests/fixtures/setup-tools/setup-keys.json` on both sides. */
 export function setupKey(form: StudioForm, plate: PlateLists): string {
   const rows = clean(form);
-  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), keyed(plate)]);
+  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), listsOf(plate)]);
 }
 
 const label = (key: string) => (key === FOLLOWED_KEY ? FOLLOWED_LABEL : fieldByKey[key]?.label ?? key);

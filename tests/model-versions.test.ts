@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { changesBetween, comparison, MAX_VERSIONS, readVersions, setupKey, withResult, withRun, withVersion, writeVersions } from "../lib/model-versions";
 import { blankForm, fieldByKey } from "../lib/studio-form";
 import { emptyPlate } from "../lib/studio-plate";
@@ -102,4 +103,16 @@ test("a setup read back from the server, its keys in the database's order, is th
   assert.deepEqual(unsent(local, server), []); // the server holds it: before, the last version was sent again without end
   assert.deepEqual(mergeVersions(server, local).map((v) => v.n), [3]);
   assert.equal(withVersion(server, form, mine, "you", null, at), server); // and the page's own copy of it is no new version
+});
+
+test("the page counts as one setup what the server does, a missing list read as empty: the shared fixture (ADR-0143)", () => {
+  // api/tests/test_setup_tools.py holds the server's setup_key to the same file
+  type Group = { name: string; setups: { form: Record<string, string>; plate?: unknown }[] };
+  const held = JSON.parse(readFileSync("tests/fixtures/setup-tools/setup-keys.json", "utf8")) as { same: Group[]; different: Group[] };
+  const keys = (group: Group) => new Set(group.setups.map((s) => setupKey(s.form, s.plate as never)));
+  for (const group of held.same) assert.equal(keys(group).size, 1, group.name);
+  for (const group of held.different) assert.equal(keys(group).size, group.setups.length, group.name);
+  assert.deepEqual([held.same.length, held.different.length], [5, 3]);
+  // the reviewer's case: another client kept the setup with no list of regions
+  assert.equal(setupKey(form, { supports: [], loads: [] } as never), setupKey(form, emptyPlate()));
 });
