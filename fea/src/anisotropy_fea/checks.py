@@ -30,8 +30,8 @@ from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
 from .femodel import BoundaryDefinition, FEModel, build_model, laminate_section
 from .followed_plate import LEVELS as FOLLOWED_LEVELS, why_not as why_not_followed
-from .intake import (FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, size_named,
-                     size_that_fits, spec_from_values, stated_elements, too_many_stated)
+from .intake import (FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of,
+                     has_hole_mesh, hole_mesh_change, mesh_change, size_named, size_that_fits, spec_from_values, stated_elements, too_many_stated)
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
@@ -298,10 +298,11 @@ def too_many_elements(spec, units: str, limit: int = MOST_ELEMENTS) -> str | Non
     return past_the_solver(estimate, size_named(fits), units, limit)
 
 
-def past_the_solver(estimate: int | None, size: float, units: str, limit: int) -> str:
-    """The words for a mesh of `estimate` elements that our kernel does not build, with an element size that fits."""
-    return (f"the mesh would have {element_count_text(estimate)} elements; our solver takes at most {limit:,} in one model: use an element size of "
-            f"{size:g} {UNIT_LABEL[units]['length']} or more")
+def past_the_solver(estimate: int | None, size: float, units: str, limit: int, change: str | None = None) -> str:
+    """The words for a mesh of `estimate` elements that our kernel does not build, with an element size that fits, or with `change`
+    where the element size is not what to change (a plate with a hole whose nodes around the hole or rings pass the limit)."""
+    change = f"use an element size of {size:g} {UNIT_LABEL[units]['length']} or more" if change is None else change
+    return f"the mesh would have {element_count_text(estimate)} elements; our solver takes at most {limit:,} in one model: {change}"
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
@@ -368,11 +369,16 @@ def _judged(form: FormInput, root: Path | str | None, ccx: Callable[[], Path | N
     plies = None
     too_many = too_many_elements(spec, units, element_limit) if spec is not None and element_limit is not None else None
     mesh_rows = (row("element_size"),)
-    if past and element_limit is not None:  # a run: the solver's own limit is the one that concerns it, in the words it always had
+    holed = values is not None and has_hole_mesh(values)  # the nodes around a hole and its rings count too: the words name the cause
+    if holed and element_limit is not None and (past or too_many is not None):
+        change, rows_named = hole_mesh_change(values, element_limit)
+        too_many = past_the_solver(count, 0.0, units, element_limit, change)
+        mesh_rows = tuple(row(key) for key in rows_named)
+    elif past and element_limit is not None:  # a run: the solver's own limit is the one that concerns it, in the words it always had
         too_many = past_the_solver(count, size_that_fits(values.length, values.width, element_limit), units, element_limit)
     elif past:
         too_many = too_many_stated(values, count)
-        mesh_rows = (row("mesh_nx"), row("mesh_seeds")) if values.seeds is not None else mesh_rows
+        mesh_rows = tuple(row(key) for key in mesh_change(values, MOST_ELEMENTS_STATED)[1])
     if too_many is not None:  # refused before meshing: the mesh alone would take the solver's memory
         problems.append(too_many)
         notes.note("mesh", "fail", too_many, mesh_rows)

@@ -433,11 +433,11 @@ def test_the_real_tool_behind_the_route_draws_a_tabbed_strip_end_to_end(real):
 
 @needs_gmsh
 def test_the_real_tool_draws_a_very_fine_model_as_fast_as_a_coarse_one_because_a_shape_cuts_no_mesh(real):
-    """An element size of 0.16 mm is about 182,000 elements of this strip, near the most a setup may state (ADR-0086 amendment 2), which
+    """An element size of 0.22 mm is about 97,000 elements of this strip, near the most a setup may state (ADR-0086 amendment 2), which
     the route once meshed before it drew anything."""
     client.post(ADDRESS, params=STEP, json={"values": ROWS})  # the worker is warm after this
     files, seconds = [], []
-    for size in (2.0, 0.16):
+    for size in (2.0, 0.22):
         started = time.perf_counter()
         answer = client.post(ADDRESS, params=STEP, json={"values": {**ROWS, "element_size": size}})
         seconds.append(time.perf_counter() - started)
@@ -524,7 +524,7 @@ def test_a_name_at_its_limit_is_drawn_and_its_part_table_fits_the_header(real):
 
 
 SEEDS_OF_THE_STRIP = '"element_size": null, "mesh_partitions": "41.9, 195.4", '
-PAST_THE_MOST = "elements; a setup holds at most 200,000, whatever is made of it: "
+PAST_THE_MOST = "elements; a setup holds at most 100,000, whatever is made of it: "
 NOT_A_503 = [  # what the review's second round still got a 503 or a 504 for, each with the reason its row now gives
     ('"length": 1' + "0" * 400, "Length (mm): the number is too large"),
     ('"angles": [45, 1' + "0" * 400 + ', -45, 90]', "Ply 2: the number is too large"),
@@ -536,11 +536,31 @@ NOT_A_503 = [  # what the review's second round still got a 503 or a 504 for, ea
      "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "give fewer elements across the width or fewer rows per segment"),
     (SEEDS_OF_THE_STRIP + '"mesh_nx": 10, "mesh_seeds": "20, 99999999999, 20"',
      "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "give fewer elements across the width or fewer rows per segment"),
-    ('"element_size": 1e-5', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
-    ('"element_size": 1e-6', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
-    ('"element_size": 5e-324', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
-    ('"element_size": 0.1', "the mesh would have 467,481 " + PAST_THE_MOST + "use an element size of 0.16 mm or more"),
+    ('"element_size": 1e-5', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.22 mm or more"),
+    ('"element_size": 1e-6', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.22 mm or more"),
+    ('"element_size": 5e-324', "the mesh would have more than 1,000,000,000,000 " + PAST_THE_MOST + "use an element size of 0.22 mm or more"),
+    ('"element_size": 0.1', "the mesh would have 467,481 " + PAST_THE_MOST + "use an element size of 0.22 mm or more"),
 ]
+
+
+@needs_gmsh
+@pytest.mark.parametrize("program", ["step", "abaqus", "ansys"])
+@pytest.mark.parametrize("around, count", [(39000, "1,113,900"), (190000, "5,417,400")])
+def test_a_plate_with_a_hole_and_far_too_many_nodes_around_it_is_a_422_for_every_program_and_soon(real, program, around, count):
+    """The third review's plate: a hole with 39,000 or 190,000 nodes around it in one ring. Its STEP file came, and its file for Abaqus
+    or Ansys was a 504 at the route's 30 s, because the count the check judged left out the column and the band through the hole
+    (ADR-0086 amendment 2). The refusal names the nodes, which no element size takes out of the plate."""
+    rows = json.loads((Path(__file__).parents[2] / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8"))
+    rows.update(length=200.0, width=100.0, element_size=2.0, hole_diameter=20.0, regions=[], supports=[{"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}],
+                hole_circumferential=around, hole_radial=1)
+    started = time.perf_counter()
+    answer = client.post(ADDRESS, params={"program": program}, json={"values": rows})
+    seconds = time.perf_counter() - started
+    assert answer.status_code == 422, answer.text[:400]
+    assert answer.json()["detail"] == ("The setup is not complete, so there is no model to write yet. Mesh quality acceptable: the mesh would have "
+                                       f"{count} elements; a setup holds at most 100,000, whatever is made of it: give at most 3,424 nodes around the hole")
+    assert seconds < 10.0, seconds
+    assert nothing_of_this_machine(answer, real)
 
 
 @needs_gmsh

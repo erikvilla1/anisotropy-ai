@@ -25,6 +25,7 @@ from anisotropy_engine.laminate import Ply
 from anisotropy_engine.library import library_material
 
 from .dogbone import Outline, OutlineError, dogbone_outline
+from .mesher import hole_blocks
 from .standards import BY_DESIGNATION, PROFILES
 from .standards.astm_d4018 import KIND as TOW_KIND
 from .units import UNIT_LABEL, unit_factors
@@ -42,10 +43,11 @@ LINE_TOLERANCE = 1e-9  # relative to the length: a node row must sit on a tab or
 # and is held to `MOST_ELEMENTS_STATED`.
 MOST_ELEMENTS = 40_000
 # The most elements a spec may state at all, whatever is made of it: a preview, a run, a file for Abaqus or Ansys, a STEP file (ADR-0086
-# amendment 2). Judged from the counts, by arithmetic, before a row, a node or an element is built. It is the largest mesh the model
-# file's route was measured to write inside the 30 s it is given (2026-11-27: 200,208 elements in 26 to 28 s), so it refuses no file
-# that route delivered.
-MOST_ELEMENTS_STATED = 200_000
+# amendment 2). Judged from the counts, by arithmetic, before a row, a node or an element is built. It is set where the slowest file
+# for Abaqus or Ansys came back in about two thirds of the 30 s the model file's route is given (2026-11-28, through the route, three
+# runs each: at about 100,000 elements 15 to 20 s, the dog-bone's Ansys file the slowest at 18.5 to 19.4 s; at 120,000, 18 to 22 s; at
+# 200,000, 33 to 37 s, past the limit). Timings on the hosted machine are not measured.
+MOST_ELEMENTS_STATED = 100_000
 # A coupon's ply angles are counted from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in
 # bending, the length of a plate. The engine counts from the laminate x axis (ADR-0004), so a stated angle has its fibre this far past x.
 LENGTH_AXIS_ROTATION_DEG = 90.0
@@ -495,7 +497,7 @@ def validate_spec(spec: CouponSpec) -> None:
         stated = 0
     need(stated is not None and stated <= MOST_ELEMENTS_STATED,
          f"the mesh would have {element_count_text(stated)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}: give a larger mesh.element_size "
-         f"or fewer rows")
+         + ("or fewer rows" if m.hole is None else "or, round the hole, a smaller mesh.hole.circumferential or fewer mesh.hole.radial_layers"))
     if m.mesher == "structured":
         nx, ny = mesh_counts(spec)
         lines = node_lines(spec)
@@ -689,13 +691,16 @@ def mesh_counts(spec: CouponSpec) -> tuple[int, int]:
 
 def element_estimate(spec: CouponSpec) -> int:
     """How many elements the spec's mesh will have, from its counts alone, before anything is meshed: nx by ny for the structured mesher;
-    for Gmsh's plate with a hole, the rectangle at the element size and the rings around the hole, an upper estimate."""
+    for Gmsh's plate with a hole, the count of the blocks the mesher cuts (`mesher.hole_blocks`), which is the mesh's own: the column and
+    the band through the hole carry a quarter of the nodes around it across the whole plate, so those nodes count far more than once."""
     m, g = spec.mesh, spec.geometry
     if m.mesher == "structured":
         nx, ny = mesh_counts(spec)
         return nx * ny
-    rings = m.hole.circumferential * m.hole.radial_layers if m.hole is not None else 0
-    return math.ceil(g.width / m.element_size) * math.ceil(g.length / m.element_size) + rings
+    if m.hole is None or g.hole_diameter is None:  # a spec the rules refuse by name: the rectangle at the element size
+        return math.ceil(g.width / m.element_size) * math.ceil(g.length / m.element_size)
+    blocks = hole_blocks(g.width, g.length, g.hole_diameter, m.element_size, m.hole.circumferential, m.hole.ring_ratio, g.tab_length or 0.0)
+    return blocks.elements(m.hole.radial_layers)
 
 
 def element_count_text(count: int | None) -> str:

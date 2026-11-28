@@ -9,8 +9,9 @@ import pytest
 
 from anisotropy_fea import paths
 from anisotropy_fea.intake import (FIELDS, FILE_TEXT, FORM_VERSION, WORD_BYTES, IntakeError, build_specs, check_form, convert, designation_for, fill_form,
-                                   read_form, read_input, read_values, size_that_fits, spec_from_values, stated_elements, values_of_spec,
-                                   write_blank_form)
+                                   hole_elements, mesh_change, read_form, read_input, read_values, size_that_fits, spec_from_values, stated_elements,
+                                   values_of_spec, write_blank_form)
+from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.spec import MOST_ELEMENTS_STATED, element_estimate, load_spec, parse_spec, to_si
 
 from public_coupon import DESIGNATION, PUBLIC_COUPON
@@ -199,10 +200,10 @@ def test_the_count_the_rows_state_is_the_count_of_the_spec_they_make(tmp_path, f
 
 
 @pytest.mark.parametrize("changes, count, change", [
-    ({"element_size": 0.1}, "625,000", "use an element size of 0.18 mm or more"),
-    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),
-    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),
-    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more"),  # a length over it is beyond any number
+    ({"element_size": 0.1}, "625,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),  # a length over it is beyond any number
     ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999999999, 27, 28"},
      "more than 1,000,000,000,000", "give fewer elements across the width or fewer rows per segment"),
     ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999, 27, 28"},
@@ -226,8 +227,80 @@ def test_rows_whose_mesh_would_pass_the_most_a_setup_holds_are_refused_by_arithm
         build_specs(values, designation_for(values, tmp_path / "none"), "values.json")
     assert time.perf_counter() - clock < 1.0
     rows = "Your Abaqus mesh: elements across the width, Your Abaqus mesh: rows per segment" if "mesh_seeds" in changes else "Element size (mm)"
-    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 200,000, "
+    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 100,000, "
                                   f"whatever is made of it: {change} (form rows: {rows})")
+
+
+HOLED_PLATE = {**json.loads((Path(__file__).parents[2] / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8")),
+               "length": 200.0, "width": 100.0, "element_size": 2.0, "hole_diameter": 20.0, "regions": [],
+               "supports": [{"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}]}  # the workspace's own plate, with a hole
+NODES, RINGS, SIZE = "Nodes around the hole", "Element rings around the hole", "Element size (mm)"
+
+
+@pytest.mark.parametrize("fill, changes, count, change, rows", [
+    (HOLED_PLATE, {"hole_circumferential": 39000, "hole_radial": 1}, "1,113,900", "give at most 3,424 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_circumferential": 190000, "hole_radial": 1}, "5,417,400", "give at most 3,424 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_circumferential": 10 ** 12}, "more than 1,000,000,000,000", "give at most 2,912 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_radial": 10 ** 6}, "32,003,280", "give at most 3,022 element rings around the hole", [RINGS]),
+    (HOLED_PLATE, {"hole_circumferential": 2000, "hole_radial": 60}, "177,400",
+     "give at most 1,112 nodes around the hole, or at most 21 element rings around it", [NODES, RINGS]),
+    (HOLED_PLATE, {"element_size": 0.01}, "96,176,192", "use an element size of 0.32 mm or more", [SIZE]),
+    (HOLED_PLATE, {"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.32 mm or more", [SIZE]),
+    (HOLED_PLATE, {"element_size": 1e-6, "hole_circumferential": 190000}, "more than 1,000,000,000,000",
+     "use a larger element size, and fewer nodes around the hole or fewer element rings around it", [SIZE, NODES, RINGS]),
+    (OHT_FILL, {"hole_circumferential": 39000}, "1,756,728", "give at most 2,180 nodes around the hole", [NODES]),
+], ids=["39000 nodes, one ring", "190000 nodes, one ring", "10^12 nodes", "a million rings", "2000 nodes and 60 rings", "0.01 mm", "5e-324 mm",
+        "1e-6 mm and 190000 nodes", "the open-hole coupon with 39000 nodes"])
+def test_a_hole_whose_mesh_would_pass_the_most_is_refused_by_arithmetic_with_what_to_change_at_the_hole(tmp_path, monkeypatch, fill, changes, count,
+                                                                                                       change, rows):
+    """A plate with a hole and 39,000 or 190,000 nodes around it, with one ring, once stated 44,000 or 195,000 elements, so it passed the
+    check, and its file for Abaqus or Ansys ended at the route's 30 s (ADR-0086 amendment 2, the third review). The count is now the
+    count of the blocks the mesher cuts, and the refusal names what to change by its cause: the nodes, the rings, the element size, or
+    all of them. What it names fits, and one step more does not."""
+    import time
+
+    from anisotropy_fea import enabled, intake
+
+    with enabled.every_test(True):
+        values = check_form(read_values(values_file(tmp_path, rows_of(fill, **changes))))
+        monkeypatch.setattr(intake, "parse_spec", lambda *args, **kwargs: pytest.fail("a spec was made of the rows"))
+        monkeypatch.setattr(intake, "render_toml", lambda *args, **kwargs: pytest.fail("a spec was written from the rows"))
+        clock = time.perf_counter()
+        with pytest.raises(IntakeError) as refused:
+            build_specs(values, designation_for(values, tmp_path / "none"), "values.json")
+        assert time.perf_counter() - clock < 1.0
+    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 100,000, "
+                                  f"whatever is made of it: {change} (form rows: {', '.join(rows)})")
+    assert mesh_change(values, MOST_ELEMENTS_STATED) == (change, tuple(key for key in ("element_size", "hole_circumferential", "hole_radial")
+                                                                       if FIELDS[key].label in rows))
+    size, around, rings = values.element_size, values.hole["circumferential"], values.hole["radial_layers"]
+    numbers = [int(word.replace(",", "")) for word in change.split() if word.replace(",", "").isdigit()]
+    if change.startswith("give at most") and "nodes" in change:
+        assert hole_elements(values, size, numbers[0], rings) <= MOST_ELEMENTS_STATED < hole_elements(values, size, numbers[0] + 4, rings)
+    if change.startswith("give at most") and "rings" in change:
+        assert hole_elements(values, size, around, numbers[-1]) <= MOST_ELEMENTS_STATED < hole_elements(values, size, around, numbers[-1] + 1)
+    if change.startswith("use an element size of"):
+        named = float(change.split()[5])
+        assert hole_elements(values, named, around, rings) <= MOST_ELEMENTS_STATED < hole_elements(values, named * 0.9, around, rings)
+
+
+@pytest.mark.skipif(gmsh_available() is None, reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
+@pytest.mark.parametrize("fill", [HOLED_PLATE, OHT_FILL], ids=["a plate with a hole", "the open-hole coupon"])
+def test_the_count_a_hole_setup_states_is_the_count_of_the_mesh_built_from_it(tmp_path, fill):
+    """For every kind with a hole, over a grid of element sizes, nodes around the hole, rings and ring ratios: what the rows state, what
+    the spec states and what the mesher builds are one number, so a setup the check lets through is the size the check counted."""
+    from anisotropy_fea import enabled
+    from anisotropy_fea.femodel import build_model
+
+    grid = [(size, around, rings, ratio) for size in (2.0, 5.0) for around, rings in ((8, 1), (32, 6), (400, 1), (400, 30), (2000, 1))
+            for ratio in (1.5, 2.0)]
+    with enabled.every_test(True):
+        for size, around, rings, ratio in grid:
+            rows = rows_of(fill, element_size=size, hole_circumferential=around, hole_radial=rings, hole_ring=ratio)
+            values = check_form(read_values(values_file(tmp_path, rows)))
+            spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+            built = build_model(spec).mesh.element_count
+            assert stated_elements(values) == element_estimate(spec) == built, (size, around, rings, ratio, built)
 
 
 # --------------------------------------------------------------------------------------------- the failure criterion rows (form 0.3)

@@ -375,10 +375,10 @@ def run_tool_bounded(*args: str, gigabytes: int = 4, seconds: int = 60) -> subpr
 
 SEEDED = {"element_size": None, "mesh_partitions": "56, 110, 140, 194"}
 PAST_THE_MOST = [  # the rows, the count the refusal states, what it says to change, and the rows it names
-    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more", ["Element size (mm)"]),
-    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more", ["Element size (mm)"]),
-    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.18 mm or more", ["Element size (mm)"]),
-    ({"element_size": 0.1}, "625,000", "use an element size of 0.18 mm or more", ["Element size (mm)"]),
+    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 0.1}, "625,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
     ({**SEEDED, "mesh_nx": 10, "mesh_seeds": "28, 27, 99999999999, 27, 28"}, "more than 1,000,000,000,000",
      "give fewer elements across the width or fewer rows per segment", ["Your Abaqus mesh: elements across the width", "Your Abaqus mesh: rows per segment"]),
     ({**SEEDED, "mesh_nx": 10 ** 12, "mesh_seeds": "28, 27, 10, 27, 28"}, "more than 1,000,000,000,000",
@@ -390,7 +390,7 @@ PAST_THE_MOST = [  # the rows, the count the refusal states, what it says to cha
 @pytest.mark.parametrize("changes, count, change, rows", PAST_THE_MOST, ids=["1e-5 mm", "1e-6 mm", "5e-324 mm", "0.1 mm", "99999999999 rows", "nx 1e12"])
 def test_a_setup_past_the_most_elements_a_setup_holds_is_blocked_for_every_file_in_a_moment_and_in_little_memory(tmp_path, program, changes, count,
                                                                                                              change, rows):
-    """A setup may state at most 200,000 elements, whatever is made of it (ADR-0086 amendment 2). Before, an element size of 1e-5 mm cost
+    """A setup may state at most 100,000 elements, whatever is made of it (ADR-0086 amendment 2). Before, an element size of 1e-5 mm cost
     a STEP file 12 s and 1.2 GB and 1e-6 mm over 10 GB, and 99999999999 rows in a segment ended every program's request at its 30 s:
     the spec was made, and one row built per element row, before anything was judged. The tool runs here under 4 GB and 60 s."""
     import time
@@ -404,9 +404,56 @@ def test_a_setup_past_the_most_elements_a_setup_holds_is_blocked_for_every_file_
     assert [p.name for p in out.iterdir()] == ["checklist.json"]
     checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
     mesh = next(item for item in checklist["items"] if item["id"] == "mesh")
-    said = f"the mesh would have {count} elements; a setup holds at most 200,000, whatever is made of it: {change}"
+    said = f"the mesh would have {count} elements; a setup holds at most 100,000, whatever is made of it: {change}"
     assert mesh["state"] == "fail" and mesh["message"] == said and mesh["rows"] == rows and checklist["problems"] == [said], mesh
     assert seconds < 20.0, seconds  # the tool's own start is most of it
+
+
+HOLED_PLATE = {**json.loads((TOOLS.parents[1] / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8")),
+               "length": 200.0, "width": 100.0, "element_size": 2.0, "hole_diameter": 20.0, "regions": [],
+               "supports": [{"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}]}  # the workspace's own plate, with a hole
+
+
+@pytest.mark.parametrize("program", ["abaqus", "ansys", "step"])
+@pytest.mark.parametrize("around, count", [(39000, "1,113,900"), (190000, "5,417,400")])
+def test_a_plate_with_a_hole_and_far_too_many_nodes_around_it_is_blocked_for_every_file_in_a_moment(tmp_path, program, around, count):
+    """A plate with a hole and 39,000 or 190,000 nodes around it, in one ring, once counted as 44,000 or 195,000 elements: the STEP file
+    came and the file for Abaqus or Ansys ended at the route's 30 s (the third review). The column and the band through the hole carry
+    a quarter of those nodes across the plate, and the count now says so before anything is built (ADR-0086 amendment 2)."""
+    import time
+
+    folder = tmp_path / "values"
+    folder.mkdir()
+    (folder / "values.json").write_text(json.dumps({"form_version": FORM_VERSION, **HOLED_PLATE, "hole_circumferential": around, "hole_radial": 1}),
+                                        encoding="utf-8")
+    out = tmp_path / "model"
+    clock = time.perf_counter()
+    done = run_tool_bounded("--root", str(tmp_path / "root"), "--every-test", "model", str(folder / "values.json"), "--program", program, "--out", str(out))
+    seconds = time.perf_counter() - clock
+    assert done.returncode == 0 and done.stdout.startswith("blocked: no model written"), done.stdout[-300:] + done.stderr[-600:]
+    assert [p.name for p in out.iterdir()] == ["checklist.json"]
+    checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
+    mesh = next(item for item in checklist["items"] if item["id"] == "mesh")
+    said = (f"the mesh would have {count} elements; a setup holds at most 100,000, whatever is made of it: "
+            "give at most 3,424 nodes around the hole")
+    assert mesh["state"] == "fail" and mesh["message"] == said and mesh["rows"] == ["Nodes around the hole"] and checklist["problems"] == [said], mesh
+    assert seconds < 20.0, seconds  # the tool's own start is most of it
+
+
+def test_a_run_of_a_plate_with_a_hole_past_the_solvers_limit_names_the_nodes_and_not_an_element_size(tmp_path):
+    """2,000 nodes around a plate's hole are 69,400 elements at an element size of 2 mm: inside what a setup holds, past the solver's
+    40,000 (ADR-0086 amendment 1). No element size the plate could be given takes the nodes out of the column and the band through the
+    hole, so the refusal names the nodes, where it named an element size of 0.71 mm, finer than the one stated."""
+    folder = tmp_path / "values"
+    folder.mkdir()
+    (folder / "values.json").write_text(json.dumps({"form_version": FORM_VERSION, **HOLED_PLATE, "hole_circumferential": 2000}), encoding="utf-8")
+    out = tmp_path / "check"
+    done = run_tool_bounded("--root", str(tmp_path / "root"), "--every-test", "check", str(folder / "values.json"), "--out", str(out))
+    assert done.returncode == 0, done.stdout[-300:] + done.stderr[-600:]
+    mesh = next(item for item in json.loads((out / "checklist.json").read_text(encoding="utf-8"))["items"] if item["id"] == "mesh")
+    assert mesh["state"] == "fail" and mesh["rows"] == ["Nodes around the hole"], mesh
+    assert mesh["message"] == ("the mesh would have 69,400 elements; our solver takes at most 40,000 in one model: "
+                               "give at most 1,120 nodes around the hole"), mesh
 
 
 def test_a_run_past_the_most_a_setup_holds_is_refused_in_the_solvers_own_words_as_before(tmp_path):
@@ -421,13 +468,14 @@ def test_a_run_past_the_most_a_setup_holds_is_refused_in_the_solvers_own_words_a
                                                                "in one model: use an element size of 0.4 mm or more"), mesh
 
 
-def test_the_most_a_setup_holds_is_no_less_than_the_file_for_another_program_was_ever_written_with(tmp_path):
-    """The limit is the largest mesh the model file's route was measured to write inside its 30 s (2026-11-27: 200,208 elements in 26 to
-    28 s, 399,854 in 51 to 54 s, which the route ended first), so it refuses no file that route delivered. A mesh past the solver's
-    40,000 and inside it is still written, as the founder asked (2026-11-24)."""
+def test_the_most_a_setup_holds_leaves_a_third_of_the_routes_time_and_still_takes_a_mesh_past_the_solvers(tmp_path):
+    """The limit is set where the slowest file for Abaqus or Ansys came back in about two thirds of the 30 s the model file's route is
+    given (2026-11-28, through the route: at about 100,000 elements 15 to 20 s; at 200,000, 33 to 37 s, past the limit), so a file is
+    not lost to a slow moment of the machine. A mesh past the solver's 40,000 and inside it is still written, as the founder asked
+    (2026-11-24)."""
     from anisotropy_fea.spec import MOST_ELEMENTS, MOST_ELEMENTS_STATED
 
-    assert MOST_ELEMENTS_STATED == 200_000 and MOST_ELEMENTS == 40_000
+    assert MOST_ELEMENTS_STATED == 100_000 and MOST_ELEMENTS == 40_000
     fine = {"element_size": 0.3, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None}
     out = tmp_path / "model"
     written = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path, **fine)), "--program", "ansys", "--out", str(out))

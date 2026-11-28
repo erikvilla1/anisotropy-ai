@@ -663,7 +663,7 @@ def without_the_time(step: Path) -> str:
 def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as_a_coarse_one_with_the_same_file(tmp_path, monkeypatch, fill):
     """The shape has no mesh. The request for it once built the whole mesh first, with no limit on its elements: 29 s for a 16 kB box
     at 0.15 mm, and past 150 s and 800 MB at 0.05 mm. Here the meshers are stood in by a spy that fails the test if anything calls it,
-    and the fine size is the finest a setup may state (ADR-0086 amendment 2: 200,000 elements, whatever is made of them)."""
+    and the fine size is among the finest a setup may state (ADR-0086 amendment 2: 100,000 elements, whatever is made of them)."""
     import time
 
     import test_intake
@@ -683,7 +683,7 @@ def test_a_step_file_cuts_no_mesh_so_a_very_fine_element_size_answers_as_fast_as
     tool = studio_tool()
     rows = {k: v for k, v in getattr(test_intake, fill).items() if not k.startswith("mesh_")}
     fine = size_that_fits(rows["length"], rows["width"], MOST_ELEMENTS_STATED)
-    assert fine < 0.25  # 0.18 mm on the strip, 0.24 mm on the coupon with a hole: more than 190,000 elements each
+    assert fine < 0.35  # 0.25 mm on the strip, 100,000 elements; 0.33 mm on the coupon with a hole, 72,452
     files, seconds = {}, {}
     with enabled.every_test(True):
         for size in (5.0, fine):

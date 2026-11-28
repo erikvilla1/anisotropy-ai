@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
@@ -34,6 +35,7 @@ from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (MOST_ELEMENTS_STATED, AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, element_count_text, load_spec, parse_spec,
                    to_si)
+from .mesher import hole_blocks
 from .spec import test_name as test_word
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
@@ -1663,11 +1665,17 @@ def stated_elements(values: Values) -> int | None:
     try:
         data, _ = mesh_data(values)
         if data["mesher"] == "gmsh":
-            rings = data["hole"]["circumferential"] * data["hole"]["radial_layers"]
-            return math.ceil(values.width / data["element_size"]) * math.ceil(values.length / data["element_size"]) + rings
+            return hole_elements(values, data["element_size"], data["hole"]["circumferential"], data["hole"]["radial_layers"])
         return data["nx"] * (sum(data["y_seeds"]) if "y_seeds" in data else data["ny"])
     except OverflowError:  # a length over a size too small to divide by: more rows than any number
         return None
+
+
+def hole_elements(values: Values, size: float, around: int, rings: int) -> int:
+    """The elements of the rows' plate with a hole at this element size, with this many nodes around the hole and this many rings: the
+    count of the blocks the mesher cuts (`mesher.hole_blocks`), so it is the mesh's own count and not an estimate."""
+    blocks = hole_blocks(values.width, values.length, values.hole_diameter or 0.0, size, around, values.hole["ring_ratio"], values.tab_length or 0.0)
+    return blocks.elements(rings)
 
 
 def size_named(fits: float) -> float:
@@ -1681,12 +1689,75 @@ def size_that_fits(length: float, width: float, limit: int) -> float:
     return size_named(math.sqrt(length * width / limit))
 
 
+def has_hole_mesh(values: Values) -> bool:
+    """Whether the rows' mesh is the one cut round a hole, where the nodes around the hole and the rings count as the element size does."""
+    return values.seeds is None and (values.kind == "open_hole_tension" or (values.kind in PLATE_KINDS and values.hole_diameter is not None))
+
+
+def most(fits: Callable[[int], bool], stated: int) -> int:
+    """The largest whole number from 1 to `stated` that fits, where a smaller one fits if a larger one does; 0 when not even 1 fits."""
+    if not fits(1):
+        return 0
+    low, high = 1, stated  # low fits
+    while low < high:
+        middle = (low + high + 1) // 2
+        low, high = (middle, high) if fits(middle) else (low, middle - 1)
+    return low
+
+
+def hole_mesh_change(values: Values, limit: int) -> tuple[str, tuple[str, ...]]:
+    """What to change in a plate with a hole so that its mesh has at most `limit` elements, and the rows it is changed in. The column
+    and the band through the hole carry a quarter of the nodes around it across the whole plate, so those nodes can pass the limit at
+    any element size; the rings add the nodes once each. An element size is named only when the element size is the cause: when the
+    mesh would pass the limit with the fewest nodes (8) and one ring too. Else the most nodes, or the most rings, that fit as the
+    other rows stand."""
+    unit = UNIT_LABEL[values.units]["length"]
+    size = values.element_size if values.element_size is not None else element_size_default(values.units)
+    around, rings = int(values.hole["circumferential"]), int(values.hole["radial_layers"])
+
+    def fits(size_: float, around_: int, rings_: int) -> bool:
+        try:
+            return hole_elements(values, size_, around_, rings_) <= limit
+        except OverflowError:
+            return False
+
+    coarsest = 2 * max(values.length, values.width)  # every block outside the square is one element across: no size gives fewer
+    if not fits(size, 8, 1):  # the element size is a cause
+        if not fits(coarsest, around, rings):  # and so are the hole's rows: no element size fits them
+            return ("use a larger element size, and fewer nodes around the hole or fewer element rings around it",
+                    ("element_size", "hole_circumferential", "hole_radial"))
+        low, high = size, coarsest  # high fits, low does not
+        for _ in range(200):
+            middle = math.sqrt(low * high) if low > 0 else high / 2
+            low, high = (low, middle) if fits(middle, around, rings) else (middle, high)
+        named = size_named(high)
+        return f"use an element size of {(named if fits(named, around, rings) else high):g} {unit} or more", ("element_size",)
+    nodes = 4 * most(lambda quarter: fits(size, 4 * quarter, rings), around // 4)
+    layers = most(lambda count: fits(size, around, count), rings)
+    if nodes >= 8 and layers >= 1:
+        return (f"give at most {nodes:,} nodes around the hole, or at most {layers:,} element rings around it",
+                ("hole_circumferential", "hole_radial"))
+    if nodes >= 8:
+        return f"give at most {nodes:,} nodes around the hole", ("hole_circumferential",)
+    if layers >= 1:
+        return f"give at most {layers:,} element rings around the hole", ("hole_radial",)
+    return "give fewer nodes around the hole and fewer element rings around it", ("hole_circumferential", "hole_radial")
+
+
+def mesh_change(values: Values, limit: int) -> tuple[str, tuple[str, ...]]:
+    """What to change so that the rows' mesh has at most `limit` elements, in the form's units, and the rows it is changed in."""
+    if values.seeds is not None:
+        return "give fewer elements across the width or fewer rows per segment", ("mesh_nx", "mesh_seeds")
+    if has_hole_mesh(values):
+        return hole_mesh_change(values, limit)
+    return f"use an element size of {size_that_fits(values.length, values.width, limit):g} {UNIT_LABEL[values.units]['length']} or more", ("element_size",)
+
+
 def too_many_stated(values: Values, count: int | None) -> str:
     """Why rows whose mesh would have `count` elements are refused whatever is made of them (ADR-0086 amendment 2): the count, the most
     a setup holds, and what to change, in the form's units."""
-    change = ("give fewer elements across the width or fewer rows per segment" if values.seeds is not None else
-              f"use an element size of {size_that_fits(values.length, values.width, MOST_ELEMENTS_STATED):g} {UNIT_LABEL[values.units]['length']} or more")
-    return f"the mesh would have {element_count_text(count)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}, whatever is made of it: {change}"
+    return (f"the mesh would have {element_count_text(count)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}, whatever is made of it: "
+            f"{mesh_change(values, MOST_ELEMENTS_STATED)[0]}")
 
 
 def bending_lines_of(values: Values) -> list[float]:
@@ -1975,7 +2046,7 @@ def build_specs(values: Values, designation: Designation, form_name: str) -> tup
     pass the most elements a setup holds are refused first, from the counts, before a spec is made of them (ADR-0086 amendment 2)."""
     count = stated_elements(values)
     if count is None or count > MOST_ELEMENTS_STATED:
-        rows = ("mesh_nx", "mesh_seeds") if values.seeds is not None else ("element_size",)
+        rows = mesh_change(values, MOST_ELEMENTS_STATED)[1]
         raise IntakeError(f"{form_name}: the spec refuses the inputs: {too_many_stated(values, count)} "
                           f"(form rows: {', '.join(FIELDS[key].label_in(values.units) for key in rows)})")
     texts = []
