@@ -185,23 +185,30 @@ export function runsToSend(server: ModelVersion[], shown: ModelVersion[]): RunMa
 }
 
 /** The server's side of a project as this browser holds it: its versions as last heard, and what it has answered for. */
-export type ServerSide = { list: ModelVersion[]; answered: Set<string> };
+export type ServerSide = { list: ModelVersion[]; answered: Set<string>;
+  /** Versions sent once since the project opened whose answer could not be read as a version: not sent again while it is open. */
+  unread?: Set<string> };
 
 /** One sending of what this browser holds and the server does not, in order: the versions after the server's last, then the runs marked.
- * Each answer is taken as it comes: a version numbered after the server's last joins its list; any other answer, the server's last again
- * ("the same setup") or one that cannot be read, ends that send all the same, and the version is not sent again. So no answer makes
- * the page send without end, whatever its own key makes of the two setups. `side` is changed in place as the answers come, so what was
+ * Each answer is taken as it comes: a version numbered after the server's last joins its list; the server's last again ("the same
+ * setup") ends that send, and the server holds the version. An answer that cannot be read as a version ends that send too, but says
+ * nothing of what the server holds: the version is not sent again while the project is open (`side.unread`) and stays in this browser,
+ * which sends it once more when the project is next opened. So no answer makes the page send without end, whatever its own key makes
+ * of the two setups, and none takes a version out of this browser unless the server said it holds it. `side` is changed in place as the answers come, so what was
  * answered before a failure is kept. How many requests were made; null when `still` says the project is no longer the one open. What
  * `add` or `mark` throws is the caller's, and what it was thrown for is sent again by the next sending. */
 export async function sendToServer(shown: ModelVersion[], side: ServerSide,
   api: { add(version: ModelVersion): Promise<unknown>; mark(run: RunMark): Promise<unknown> }, still: () => boolean = () => true): Promise<number | null> {
   let sent = 0;
   for (const version of unsent(shown, side.list, side.answered)) {
+    const id = versionId(version);
+    if (side.unread?.has(id)) continue;
     sent += 1;
     const kept = readServerVersions([await api.add(version)]);
     if (!still()) return null;
-    side.answered.add(versionId(version));
-    if (kept.length && kept[0].n > (side.list[side.list.length - 1]?.n ?? 0)) side.list = [...side.list, kept[0]];
+    if (!kept.length) { (side.unread ??= new Set()).add(id); continue; }
+    side.answered.add(id);
+    if (kept[0].n > (side.list[side.list.length - 1]?.n ?? 0)) side.list = [...side.list, kept[0]];
   }
   for (const run of runsToSend(side.list, mergeVersions(side.list, shown, side.answered))) {
     if (side.answered.has(markId(run))) continue;

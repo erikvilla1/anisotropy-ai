@@ -42,8 +42,8 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
   shown.current = list;
   // the server's side: its versions as last heard, what it has answered for since the project opened, whether it keeps none (off), and
   // one sending at a time
-  const server = useRef<{ project: string; list: ModelVersion[] | null; answered: Set<string>; off: boolean; busy: boolean; again: boolean; tries: number }>(
-    { project: "", list: null, answered: new Set(), off: false, busy: false, again: false, tries: 0 });
+  const server = useRef<{ project: string; list: ModelVersion[] | null; answered: Set<string>; unread: Set<string>; off: boolean; busy: boolean; again: boolean; tries: number }>(
+    { project: "", list: null, answered: new Set(), unread: new Set(), off: false, busy: false, again: false, tries: 0 });
   const api = useRef(apiBaseUrl);
   api.current = apiBaseUrl;
 
@@ -54,7 +54,7 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
     if (s.busy) { s.again = true; return; }
     s.busy = true;
     const id = s.project;
-    const side = { list: s.list, answered: s.answered };
+    const side = { list: s.list, answered: s.answered, unread: s.unread };
     try {
       // each version and each run is sent once and its answer ends that send, the server's last again included (`sendToServer`)
       const sent = await sendToServer(shown.current, side, {
@@ -84,7 +84,7 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
   useEffect(() => {
     const kept = readVersions(storage(), project);
     loaded.current = project;
-    server.current = { project, list: null, answered: new Set(), off: false, busy: false, again: false, tries: 0 };
+    server.current = { project, list: null, answered: new Set(), unread: new Set(), off: false, busy: false, again: false, tries: 0 };
     setList(kept.length ? kept : withVersion([], setup.current.form, setup.current.plate, "you", null, new Date().toISOString()));
     if (!apiBaseUrl || !isUuid(project)) return;
     const controller = new AbortController();

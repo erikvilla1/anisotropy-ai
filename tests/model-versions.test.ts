@@ -147,11 +147,19 @@ test("an answer of the server's last again ends the send, whatever the page's ow
   assert.deepEqual(modelVersions.unsent(mine, [theirs], side.answered), []);
   assert.deepEqual(modelVersions.unsent(mine, [theirs]), mine); // by the keys alone it would be sent again: the answer is what ends it
 
-  // an answer that cannot be read ends the send too, with the server holding versions or none
+  // an answer that cannot be read ends the send too, with the server holding versions or none; it says nothing of what the server
+  // holds, so the version stays in this browser (it was dropped from the history, and so from the browser's own copy, and never sent
+  // again), is not sent again while the project is open, and is sent once more when the project is next opened
   for (const held of [[theirs], []]) {
     let unread = 0;
-    await sendings(mine, { list: held, answered: new Set<string>() }, { add: async () => { unread += 1; return { detail: "kept" }; }, mark: async () => null });
+    const odd = { add: async () => { unread += 1; return { detail: "kept" }; }, mark: async () => null };
+    const open = { list: held, answered: new Set<string>() };
+    const still = await sendings(mine, open, odd);
     assert.equal(unread, 1);
+    assert.deepEqual(still.map((v) => v.form.width), [...held.map((v) => v.form.width), "20"], "the version is still in the history");
+    assert.equal(await modelVersions.sendToServer(still, open, odd), 0, "and is not sent again while the project is open");
+    await sendings(still, { list: held, answered: new Set<string>() }, odd); // the project opened again
+    assert.equal(unread, 2);
   }
 
   // a version made after it is another version and is sent, the same setup made again later included; each once
