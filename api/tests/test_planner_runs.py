@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -578,3 +579,32 @@ def test_a_sweep_settles_a_plan_whose_job_has_no_record_once_its_approval_cannot
     running.jobs.swept_at = None
     assert running.jobs.sweep() == 0  # it stopped no job, and told whoever listens that it looked
     assert row_of(running.engine, other["plan"]["id"]).state == "stopped"
+
+
+@needs_test_database
+def test_a_sweep_reads_only_the_plans_approved_within_its_window(running, monkeypatch):
+    # plans kept long ago with their run still under way, as every plan with a run was before the server settled runs
+    long_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=planner.RUN_SWEEP_S + 60)
+    old = [approved(running, monkeypatch) for _ in range(3)]
+    for _, one in old:
+        records.update_plan(running.engine, uuid.UUID(one["plan"]["id"]), approved_at=long_ago)
+        records.update_job(running.engine, uuid.UUID(one["job"]["job_id"]), state="done", finished_at=long_ago)
+    _, new = approved(running, monkeypatch)
+    end_job(running, new["job"]["job_id"], tell=False)
+    asked: list[str] = []
+
+    def seen(_connection, _cursor, statement, *_rest) -> None:
+        asked.append(" ".join(statement.split()))
+
+    event.listen(app.state.records, "before_cursor_execute", seen)
+    try:
+        assert api_main.settle_runs(app) == 1  # the one whose end was missed
+    finally:
+        event.remove(app.state.records, "before_cursor_execute", seen)
+    assert len([one for one in asked if "FROM agent_plans" in one]) == 1
+    assert len([one for one in asked if "FROM jobs" in one]) == 1  # the old plans' jobs are not looked up, sweep after sweep
+    assert states(row_of(running.engine, new["plan"]["id"]).steps)[3] == "done"
+    for route, one in old:  # left as they were, and settled like any other when next read
+        assert states(row_of(running.engine, one["plan"]["id"]).steps) == APPROVED
+        assert states(running.client.get(route).json())[3] == "done"
+

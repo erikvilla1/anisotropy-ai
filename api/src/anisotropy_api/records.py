@@ -722,15 +722,18 @@ def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[s
     amendment 2): `settle(steps, job_state) -> state` is given each plan whose run is still `running` and whose job is in one of the
     `ended` states, and the steps it changed are written back with the state it answers (None changes nothing). With `job_id`, the
     plans of that job alone, and with `state` the job's state as its own process knows it (a job kept in no table). Without one,
-    every such plan whose job ended at or after `since`: a sweep is for an end that was missed, not for the plans kept before the
-    server settled runs; and every such plan whose job has no record at all, once it was approved before `lost_before`, given to
-    `settle` with a state of None (an approval writes the job's id a moment before it starts the job). How many were settled. A row another request holds is left for the next look when every plan is swept, and
-    waited for when one job is named. What `settle` raises for one plan is said on the console with the plan's id, that row is left
-    as it was, and the others are settled all the same."""
+    every such plan approved at or after `since` whose job ended at or after it: a sweep is for an end that was missed, not for the
+    plans kept before the server settled runs, which it does not read; and among them every plan whose job has no record at all,
+    once it was approved before `lost_before`, given to `settle` with a state of None (an approval writes the job's id a moment
+    before it starts the job). How many were settled. A row another request holds is left for the next look when every plan is
+    swept, and waited for when one job is named. What `settle` raises for one plan is said on the console with the plan's id, that
+    row is left as it was, and the others are settled all the same."""
     statement = select(AgentPlanRow).where(AgentPlanRow.kind.in_(kinds), AgentPlanRow.state.in_(("running", "done", "stopped")),
                                            AgentPlanRow.job_id.is_not(None), AgentPlanRow.steps.contains([{"tool": "run", "state": "running"}]))
     if job_id is not None:
         statement = statement.where(AgentPlanRow.job_id == str(job_id))
+    elif since is not None:  # a job ends within hours of its plan's approval, so an older plan is none of a sweep's: it is not read
+        statement = statement.where(AgentPlanRow.approved_at >= since)
     settled = 0
     with Session(engine) as session:
         for row in session.scalars(statement.with_for_update(skip_locked=job_id is None)):
