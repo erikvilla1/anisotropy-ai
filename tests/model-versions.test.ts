@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { changesBetween, comparison, MAX_VERSIONS, readVersions, setupKey, withResult, withRun, withVersion, writeVersions } from "../lib/model-versions";
+import * as modelVersions from "../lib/model-versions";
+import { changesBetween, comparison, MAX_VERSIONS, readVersions, setupKey, withResult, withRun, withVersion, writeVersions, type ModelVersion } from "../lib/model-versions";
 import { blankForm, fieldByKey } from "../lib/studio-form";
 import { emptyPlate } from "../lib/studio-plate";
 
@@ -115,4 +116,77 @@ test("the page counts as one setup what the server does, a missing list read as 
   assert.deepEqual([held.same.length, held.different.length], [5, 3]);
   // the reviewer's case: another client kept the setup with no list of regions
   assert.equal(setupKey(form, { supports: [], loads: [] } as never), setupKey(form, emptyPlate()));
+});
+
+// The sending as components/studio/use-versions.ts makes it: each time the list it shows changes it sends again, and a sending that made
+// a request sets the list anew from what the server holds. `rounds` is far more than any honest exchange needs.
+async function sendings(shown: ModelVersion[], side: { list: ModelVersion[]; answered: Set<string> },
+  api: { add(v: ModelVersion): Promise<unknown>; mark(run: { n: number; job: string }): Promise<unknown> }, rounds = 8): Promise<ModelVersion[]> {
+  for (let round = 0; round < rounds; round++) {
+    const sent = await modelVersions.sendToServer(shown, side, api);
+    if (!sent) break;
+    shown = modelVersions.mergeVersions(side.list, shown, side.answered);
+  }
+  return shown;
+}
+const kept = (n: number, setup: Record<string, string>, more: Partial<ModelVersion> = {}): ModelVersion =>
+  ({ n, at: "2026-11-20T09:00:00.000Z", by: "you", why: null, changes: ["The setup as it started"], form: setup, plate: emptyPlate(), ...more });
+
+test("an answer of the server's last again ends the send, whatever the page's own key makes of the two setups (ADR-0143)", async () => {
+  // a key that disagrees on purpose: the server holds one width and says the page's other width is the same setup
+  const theirs = kept(1, { ...form, width: "21" });
+  const mine = withVersion([], { ...form, width: "20" }, emptyPlate(), "you", null, at);
+  assert.notEqual(setupKey(mine[0].form, mine[0].plate), setupKey(theirs.form, theirs.plate));
+  let posts = 0;
+  const same = { add: async () => { posts += 1; return theirs; }, mark: async () => null };
+  const side = { list: [theirs], answered: new Set<string>() };
+  const shown = await sendings(mine, side, same);
+  assert.equal(posts, 1, "sent once, and never again");
+  assert.deepEqual(shown, [theirs]); // the server's last is the version: the history shows what the server holds
+  assert.deepEqual(side.list, [theirs]);
+  assert.deepEqual(modelVersions.unsent(mine, [theirs], side.answered), []);
+  assert.deepEqual(modelVersions.unsent(mine, [theirs]), mine); // by the keys alone it would be sent again: the answer is what ends it
+
+  // an answer that cannot be read ends the send too, with the server holding versions or none
+  for (const held of [[theirs], []]) {
+    let unread = 0;
+    await sendings(mine, { list: held, answered: new Set<string>() }, { add: async () => { unread += 1; return { detail: "kept" }; }, mark: async () => null });
+    assert.equal(unread, 1);
+  }
+
+  // a version made after it is another version and is sent, the same setup made again later included; each once
+  const later = withVersion(shown, { ...form, width: "20" }, emptyPlate(), "you", null, "2026-11-21T08:00:00.000Z");
+  assert.equal(later.length, 2);
+  const again = await sendings(later, side, same);
+  assert.equal(posts, 2);
+  assert.deepEqual(again, [theirs]);
+
+  // a send that fails is no answer: it is sent again by the next sending, and what was answered before the failure is kept
+  const two = withVersion(withVersion([], form, emptyPlate(), "you", null, at), { ...form, element_size: "4" }, emptyPlate(), "you", null, at);
+  const fresh = { list: [] as ModelVersion[], answered: new Set<string>() };
+  let calls = 0;
+  const failing = { add: async (v: ModelVersion) => { calls += 1; if (calls === 2) throw new Error("the network dropped"); return { ...v, n: fresh.list.length + 1 }; },
+    mark: async () => null };
+  await assert.rejects(modelVersions.sendToServer(two, fresh, failing), /the network dropped/);
+  assert.deepEqual([fresh.list.length, fresh.answered.size], [1, 1]);
+  assert.equal(await modelVersions.sendToServer(two, fresh, failing), 1); // the second alone
+  assert.deepEqual([calls, fresh.list.map((v) => v.n)], [3, [1, 2]]);
+  assert.equal(await modelVersions.sendToServer(two, fresh, failing), 0);
+});
+
+test("a run marked on a version is sent once, whatever the server answers (ADR-0143)", async () => {
+  const theirs = kept(1, form);
+  const mine = withRun(withVersion([], form, emptyPlate(), "you", null, at), "job-1");
+  let marks = 0;
+  const side = { list: [theirs], answered: new Set<string>() };
+  await sendings(mine, side, { add: async () => theirs, mark: async () => { marks += 1; return { detail: "noted" }; } }); // an answer nobody reads
+  assert.equal(marks, 1);
+  // its answer, read later, is another thing to say and is sent once too
+  const answered = withResult(mine, "job-1", { reaction: "1 N", displacement: "1 mm", failure: "holds" });
+  await sendings(answered, side, { add: async () => theirs, mark: async () => { marks += 1; return { detail: "noted" }; } });
+  assert.equal(marks, 2);
+  // an answer that is read is kept on the server's list, as before
+  const read = { list: [theirs], answered: new Set<string>() };
+  await sendings(mine, read, { add: async () => theirs, mark: async (run) => ({ ...theirs, run: { job: run.job, result: null } }) });
+  assert.equal(read.list[0].run?.job, "job-1");
 });

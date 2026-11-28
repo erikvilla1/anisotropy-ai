@@ -689,3 +689,65 @@ test("a kept project opened again sends no version the server holds, whatever or
   await page.waitForTimeout(4_000);
   expect(sent).toBe(settled); // and nothing is sent again and again
 });
+
+test("a version the server says it holds is sent once, a setup another client kept without a list included (ADR-0143)", async ({ page }) => {
+  test.setTimeout(180_000);
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  // The server's own reading of a setup (`setup_key`): the filled rows but the date, and a plate's three lists, a missing one read as
+  // empty. `whatever` makes this server answer its last version to every setup sent, as a key that disagrees with the page's would.
+  const lists = (plate: unknown) => ["supports", "loads", "regions"].map((k) => ((plate ?? {}) as Record<string, unknown[]>)[k] ?? []);
+  const serverKey = (v: { form: Record<string, string>; plate: unknown }) => JSON.stringify([Object.keys(v.form).filter((k) => k !== "date" && v.form[k].trim())
+    .sort().map((k) => [k, v.form[k].trim()]), lists(v.plate)]);
+  let sent = 0, whatever = false;
+  await page.route(/\/v1\/projects\/[^/]+\/versions$/, (route) => {
+    const request = route.request();
+    const id = new URL(request.url()).pathname.split("/")[3];
+    if (request.method() !== "POST" || !store[id]) return route.fallback();
+    sent += 1;
+    const kept = (versions[id] ??= []), last = kept[kept.length - 1], asked = request.postDataJSON() as Kept;
+    if (last && (whatever || serverKey(last) === serverKey(asked))) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(last) });
+    const made = { ...asked, n: (last?.n ?? 0) + 1, at: new Date().toISOString(), run: null };
+    kept.push(made);
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(made) });
+  });
+
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByTestId("project-name").fill("Kept by another client");
+  await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+  await page.locator("#studio-length").fill("260");
+  await expect.poll(() => Object.values(store).some((p) => p.name === "Kept by another client"), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => Object.values(versions).some((list) => list.some((v) => v.form.length === "260")), { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(3_000);
+  const id = Object.keys(versions).find((key) => versions[key].some((v) => v.form.length === "260")) as string;
+  const opened = async () => { // this browser's own copy cleared, as on another computer, and the project opened from the server
+    await page.evaluate((key) => window.localStorage.removeItem(key), `anisotropy.versions.${id}`);
+    await page.reload();
+    await expect(page.getByTestId("project-name")).toHaveValue("Kept by another client", { timeout: 20_000 });
+  };
+
+  // another client keeps the same setup with no list of regions, as the API takes it: the project and its last version
+  const last = versions[id][versions[id].length - 1];
+  versions[id][versions[id].length - 1] = { ...last, plate: { supports: [], loads: [] } };
+  store[id] = { ...store[id], content: { ...(store[id].content as object), plate: { supports: [], loads: [] } } };
+  let before = sent;
+  await opened();
+  await page.waitForTimeout(5_000);
+  let settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(1); // the server holds this setup
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled); // and nothing is sent again and again
+  expect(versions[id].length).toBe(last.n);
+
+  // a server that answers its last version to a setup the page tells apart: each version the page makes is sent once, and that ends it
+  whatever = true;
+  versions[id][versions[id].length - 1] = { ...versions[id][versions[id].length - 1], form: { ...last.form, length: "250" } };
+  before = sent;
+  await opened();
+  await page.waitForTimeout(6_000);
+  settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(2); // the version made on opening, and the one the setup settles into
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled);
+});

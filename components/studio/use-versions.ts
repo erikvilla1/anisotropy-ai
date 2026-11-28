@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { mergeVersions, readServerVersions, readVersions, runsToSend, setupKey, unsent, versionUpload, withResult, withRun, withVersion, writeVersions,
+import { mergeVersions, readServerVersions, readVersions, sendToServer, setupKey, versionUpload, withResult, withRun, withVersion, writeVersions,
   type ModelVersion } from "@/lib/model-versions";
 import { isUuid } from "@/lib/project-store";
 import { addVersion, listVersions, markVersionRun, noProjectStore, StudioError } from "@/lib/studio-api";
@@ -40,9 +40,10 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
   setup.current = { form, plate };
   const shown = useRef<ModelVersion[]>([]);
   shown.current = list;
-  // the server's side: its versions as last heard, whether it keeps none (off), and one sending at a time
-  const server = useRef<{ project: string; list: ModelVersion[] | null; off: boolean; busy: boolean; again: boolean; tries: number }>(
-    { project: "", list: null, off: false, busy: false, again: false, tries: 0 });
+  // the server's side: its versions as last heard, what it has answered for since the project opened, whether it keeps none (off), and
+  // one sending at a time
+  const server = useRef<{ project: string; list: ModelVersion[] | null; answered: Set<string>; off: boolean; busy: boolean; again: boolean; tries: number }>(
+    { project: "", list: null, answered: new Set(), off: false, busy: false, again: false, tries: 0 });
   const api = useRef(apiBaseUrl);
   api.current = apiBaseUrl;
 
@@ -53,26 +54,20 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
     if (s.busy) { s.again = true; return; }
     s.busy = true;
     const id = s.project;
+    const side = { list: s.list, answered: s.answered };
     try {
-      let held = s.list, sent = 0;
-      for (const v of unsent(shown.current, held)) {
-        sent += 1;
-        const kept = readServerVersions([await addVersion(api.current, id, versionUpload(v))]);
-        if (server.current.project !== id) return;
-        held = kept.length && kept[0].n > (held[held.length - 1]?.n ?? 0) ? [...held, kept[0]] : held;
-      }
-      s.list = held;
-      const merged = mergeVersions(held, shown.current);
-      for (const mark of runsToSend(held, merged)) {
-        sent += 1;
-        const marked = readServerVersions([await markVersionRun(api.current, id, mark.n, { job: mark.job, result: mark.result })]);
-        if (server.current.project !== id) return;
-        if (marked.length) s.list = s.list.map((v) => (v.n === marked[0].n ? marked[0] : v));
-      }
+      // each version and each run is sent once and its answer ends that send, the server's last again included (`sendToServer`)
+      const sent = await sendToServer(shown.current, side, {
+        add: (v) => addVersion(api.current, id, versionUpload(v)),
+        mark: (run) => markVersionRun(api.current, id, run.n, { job: run.job, result: run.result }),
+      }, () => server.current.project === id);
+      if (sent === null) return;
+      s.list = side.list;
       s.tries = 0;
       // only what the server answered changes the list: a list set anew each time would send again, without end
-      if (sent) setList((current) => mergeVersions(s.list ?? [], current));
+      if (sent) setList((current) => mergeVersions(s.list ?? [], current, s.answered));
     } catch (error) {
+      if (server.current.project === id) s.list = side.list; // what was answered before the failure is the server's all the same
       if (noProjectStore(error)) { s.off = true; return; }
       // a project the server does not hold yet is sent a moment after it is made: try again, a few times
       if (error instanceof StudioError && error.status === 404 && s.tries < RETRIES) {
@@ -89,14 +84,14 @@ export function useVersions(apiBaseUrl: string, project: string, form: StudioFor
   useEffect(() => {
     const kept = readVersions(storage(), project);
     loaded.current = project;
-    server.current = { project, list: null, off: false, busy: false, again: false, tries: 0 };
+    server.current = { project, list: null, answered: new Set(), off: false, busy: false, again: false, tries: 0 };
     setList(kept.length ? kept : withVersion([], setup.current.form, setup.current.plate, "you", null, new Date().toISOString()));
     if (!apiBaseUrl || !isUuid(project)) return;
     const controller = new AbortController();
     listVersions(apiBaseUrl, project, controller.signal).then((payload) => {
       if (server.current.project !== project) return;
       server.current.list = readServerVersions(payload);
-      setList((current) => mergeVersions(server.current.list ?? [], current));
+      setList((current) => mergeVersions(server.current.list ?? [], current, server.current.answered));
       void flush();
     }).catch((error) => {
       if (noProjectStore(error)) server.current.off = true;
