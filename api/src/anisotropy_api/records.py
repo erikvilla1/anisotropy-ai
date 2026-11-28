@@ -723,7 +723,8 @@ def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[s
     plans of that job alone, and with `state` the job's state as its own process knows it (a job kept in no table). Without one,
     every such plan whose job ended at or after `since`: a sweep is for an end that was missed, not for the plans kept before the
     server settled runs. How many were settled. A row another request holds is left for the next look when every plan is swept, and
-    waited for when one job is named."""
+    waited for when one job is named. What `settle` raises for one plan is said on the console with the plan's id, that row is left
+    as it was, and the others are settled all the same."""
     statement = select(AgentPlanRow).where(AgentPlanRow.kind.in_(kinds), AgentPlanRow.state.in_(("running", "done", "stopped")),
                                            AgentPlanRow.job_id.is_not(None), AgentPlanRow.steps.contains([{"tool": "run", "state": "running"}]))
     if job_id is not None:
@@ -742,8 +743,12 @@ def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[s
                     continue
             if job_state not in ended:
                 continue
-            steps = json.loads(json.dumps(row.steps))
-            after = settle(steps, job_state)
+            try:
+                steps = json.loads(json.dumps(row.steps))
+                after = settle(steps, job_state)
+            except Exception as exc:  # noqa: BLE001  one plan that cannot be settled (steps kept in another shape) is said and left
+                print(f"plan {row.id}: its run was not settled: {exc.__class__.__name__}: {str(exc).splitlines()[0] if str(exc) else ''}", flush=True)
+                continue
             if after is not None:
                 row.steps, row.state, row.updated_at = steps, after, now
                 settled += 1

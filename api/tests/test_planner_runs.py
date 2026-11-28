@@ -8,6 +8,7 @@ import json
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -125,10 +126,10 @@ def test_a_stopped_plan_takes_no_step_start_and_the_same_end_reported_again_rewr
 
 # ------------------------------------------------------------------------------------------- the routes
 
-@pytest.fixture
-def running(empty_runs, monkeypatch, tmp_path):
+@contextmanager
+def serving(empty_runs, monkeypatch, tmp_path):
     """The API behind Cloudflare Access with run records on, the job queue's front with a stand-in check, and no model until a test
-    scripts one (as test_planner.py's `planning`), its jobs listened to as the startup's are."""
+    scripts one (as test_planner.py's `planning`), its jobs listened to as the startup's are. Started on entering, as any start."""
     monkeypatch.setenv(RECORDING_VARIABLE, "on")
     monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
     monkeypatch.setenv(ACCESS_TEAM_DOMAIN_VARIABLE, TEAM)
@@ -148,6 +149,12 @@ def running(empty_runs, monkeypatch, tmp_path):
         monkeypatch.setattr(app.state, "coupon_jobs", jobs, raising=False)
         monkeypatch.setattr(app.state, "assistant", TemplateAssistant(), raising=False)
         yield SimpleNamespace(client=client, jobs=jobs, engine=empty_runs, started=started, tmp=tmp_path)
+
+
+@pytest.fixture
+def running(empty_runs, monkeypatch, tmp_path):
+    with serving(empty_runs, monkeypatch, tmp_path) as api:
+        yield api
 
 
 def row_of(engine, plan_id: str) -> AgentPlanRow:
@@ -447,3 +454,63 @@ def test_a_coupons_plan_ends_as_a_plates_does_and_a_wings_check_is_still_the_pag
     assert states(running.client.get(route).json()) == ["done", "done", "done", "planned"]
     assert running.client.post(f"{route}/steps/4", json={"state": "done"}).json()["state"] == "done"
     assert planner.RUN_KINDS == ("coupon", "plate")  # a wing's check is a job its page reports, as before
+
+
+def without_a_number(engine, plan_id: str) -> list[dict]:
+    """A plan kept in a shape the rules do not read: its run step has no number. The steps as they are then kept."""
+    steps = [{k: v for k, v in one.items() if not (one["tool"] == "run" and k == "n")} for one in row_of(engine, plan_id).steps]
+    records.update_plan(engine, uuid.UUID(plan_id), steps=steps)
+    return steps
+
+
+@needs_test_database
+def test_one_plan_a_sweep_cannot_settle_is_said_and_the_others_are_settled(running, monkeypatch, capsys):
+    _, bad = approved(running, monkeypatch)
+    _, one = approved(running, monkeypatch)
+    _, other = approved(running, monkeypatch)
+    kept = without_a_number(running.engine, bad["plan"]["id"])
+    for approval in (bad, one, other):
+        end_job(running, approval["job"]["job_id"], state="stopped", tell=False)
+    capsys.readouterr()
+    assert api_main.settle_runs(app) == 2  # the two that can be
+    said = capsys.readouterr().out
+    assert f"plan {bad['plan']['id']}: its run was not settled: KeyError" in said
+    for approval in (one, other):
+        assert row_of(running.engine, approval["plan"]["id"]).state == "stopped"
+    left = row_of(running.engine, bad["plan"]["id"])
+    assert left.state == "running" and left.steps == kept  # as it was
+    # told of that job's own end, the server says the same and the job's end goes on
+    assert running.jobs._ended(uuid.UUID(bad["job"]["job_id"]), "stopped") is None
+    assert f"plan {bad['plan']['id']}: its run was not settled" in capsys.readouterr().out
+
+    # whatever else a sweep meets is said too, and nothing is raised: at a start, as a job ends and after a sweep of stale jobs
+    def broken(*_given, **_named):
+        raise RuntimeError("the plans could not be read")
+
+    monkeypatch.setattr(api_main, "settle_plan_runs", broken)
+    assert api_main.settle_runs(app) == 0
+    assert "the plans' runs were not settled: the plans could not be read" in capsys.readouterr().out
+    assert running.jobs._ended() is None and running.jobs._ended(uuid.uuid4(), "done") is None
+
+
+@needs_test_database
+def test_the_api_starts_whatever_its_first_sweep_of_the_plans_meets(empty_runs, monkeypatch, tmp_path, capsys):
+    with serving(empty_runs, monkeypatch, tmp_path) as api:  # a server that stops with two jobs' ends unheard, one of a plan it cannot read
+        _, bad = approved(api, monkeypatch)
+        _, good = approved(api, monkeypatch)
+        without_a_number(empty_runs, bad["plan"]["id"])
+        for approval in (bad, good):
+            end_job(api, approval["job"]["job_id"], state="stopped", tell=False)
+    capsys.readouterr()
+    with TestClient(app) as client:  # the next start
+        assert client.get("/healthz").status_code == 200
+        assert row_of(empty_runs, good["plan"]["id"]).state == "stopped" and row_of(empty_runs, bad["plan"]["id"]).state == "running"
+    assert f"plan {bad['plan']['id']}: its run was not settled" in capsys.readouterr().out
+
+    def broken(*_given, **_named):
+        raise RuntimeError("the plans could not be read")
+
+    monkeypatch.setattr(api_main, "settle_plan_runs", broken)
+    with TestClient(app) as client:
+        assert client.get("/healthz").status_code == 200
+    assert "the plans' runs were not settled: the plans could not be read" in capsys.readouterr().out

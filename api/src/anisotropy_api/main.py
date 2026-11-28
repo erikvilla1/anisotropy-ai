@@ -1104,8 +1104,10 @@ def settle_runs(app_: FastAPI, job_id: uuid.UUID | None = None, state: str | Non
     """The run of each coupon's and plate's plan whose job has ended, settled from the job's own outcome (ADR-0144 amendment 2): the
     server started the job, so the server says how the run ended, and the plan reaches its end whether or not a page is open. Called
     as a job ends (`CouponJobs.on_end`), after a sweep of the jobs nothing will finish, and at startup; with no job named, the plans
-    whose job ended within `planner.RUN_SWEEP_S`. Housekeeping: a database that does not answer is said on the console, and the next
-    look at the plan settles it (`_settle_run`). How many were settled."""
+    whose job ended within `planner.RUN_SWEEP_S`. Housekeeping, so nothing it meets stops a start or a job's end: a plan that cannot
+    be settled is said on the console by its id and the others are settled all the same (`settle_plan_runs`), and whatever else goes
+    wrong, a database that does not answer included, is said there too; the next look at a plan settles it (`_settle_run`). How many
+    were settled."""
     engine = getattr(app_.state, "records", None)
     if engine is None:
         return 0
@@ -1113,8 +1115,8 @@ def settle_runs(app_: FastAPI, job_id: uuid.UUID | None = None, state: str | Non
     try:
         return settle_plan_runs(engine, _run_settled, now, kinds=planner.RUN_KINDS, ended=planner.JOB_ENDED, job_id=job_id, state=state,
                                 since=now - dt.timedelta(seconds=planner.RUN_SWEEP_S))
-    except SQLAlchemyError as exc:
-        print(f"the plans' runs were not settled: {str(exc).splitlines()[0]}", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"the plans' runs were not settled: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}", flush=True)
         return 0
 
 
