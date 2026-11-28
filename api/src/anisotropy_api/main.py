@@ -1104,7 +1104,8 @@ def settle_runs(app_: FastAPI, job_id: uuid.UUID | None = None, state: str | Non
     """The run of each coupon's and plate's plan whose job has ended, settled from the job's own outcome (ADR-0144 amendment 2): the
     server started the job, so the server says how the run ended, and the plan reaches its end whether or not a page is open. Called
     as a job ends (`CouponJobs.on_end`), after a sweep of the jobs nothing will finish, and at startup; with no job named, the plans
-    whose job ended within `planner.RUN_SWEEP_S`. Housekeeping, so nothing it meets stops a start or a job's end: a plan that cannot
+    whose job ended within `planner.RUN_SWEEP_S`, and those whose job has no record once their approval is older than
+    `planner.RUN_LOST_AFTER_S`, as a look at the plan reads it (`_run_end`). Housekeeping, so nothing it meets stops a start or a job's end: a plan that cannot
     be settled is said on the console by its id and the others are settled all the same (`settle_plan_runs`), and whatever else goes
     wrong, a database that does not answer included, is said there too; the next look at a plan settles it (`_settle_run`). How many
     were settled."""
@@ -1114,7 +1115,8 @@ def settle_runs(app_: FastAPI, job_id: uuid.UUID | None = None, state: str | Non
     now = dt.datetime.now(dt.timezone.utc)
     try:
         return settle_plan_runs(engine, _run_settled, now, kinds=planner.RUN_KINDS, ended=planner.JOB_ENDED, job_id=job_id, state=state,
-                                since=now - dt.timedelta(seconds=planner.RUN_SWEEP_S))
+                                since=now - dt.timedelta(seconds=planner.RUN_SWEEP_S),
+                                lost_before=now - dt.timedelta(seconds=planner.RUN_LOST_AFTER_S))
     except Exception as exc:  # noqa: BLE001
         print(f"the plans' runs were not settled: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}", flush=True)
         return 0
@@ -1293,7 +1295,9 @@ def _check_and_run(request: Request, actor: str, jobs: CouponJobs, response: Res
     setup as it now stands (`workspaceValues`); when it passes, the run, as the page starts it (by the form's Filled in by or "studio",
     over the coupon's earlier attempts when it has some, and no PDF). A check that does not pass, or a start refused, stops the plan at
     that step with the reason. The job's id is chosen here and the plan is written with it (`named`) before the job is started, so no
-    job runs that its plan does not name; what `named` raises is the caller's, and nothing has been started then."""
+    job runs that its plan does not name; what `named` raises is the caller's, and nothing has been started then. A start that fails
+    in any other way and leaves no job stops the plan at its run step too, in plain words, so the plan names no job that does not
+    exist; the changes stand as the version they were kept as, and the engineer asks for the run again."""
     check_n = planner.step_of(steps, "check")["n"]
     run_n = planner.step_of(steps, "run")["n"]
     values = planner.run_values(content, _every_test(request))
@@ -1323,6 +1327,16 @@ def _check_and_run(request: Request, actor: str, jobs: CouponJobs, response: Res
         job = _start_job(request, actor, jobs, job_request, response, project_id, job_id=job_id)
     except (JobBusy, JobLimited, JobRefused, ValidationError) as exc:
         planner.stop_at(steps, run_n, str(exc).splitlines()[0])
+        return check, None
+    except Exception as exc:  # noqa: BLE001  the start itself failed: a disk that is full, no thread to run it on
+        try:
+            kept = jobs.get(job_id) is not None
+        except Exception:  # noqa: BLE001  whether it left a job cannot be read now: the plan goes on naming it, and a sweep settles it
+            kept = True
+        if kept:  # the start left a job: the plan names it, and that job's own end settles the run
+            raise
+        print(f"job {job_id} of a plan was not started: {exc.__class__.__name__}: {str(exc).splitlines()[0] if str(exc) else ''}", flush=True)
+        planner.stop_at(steps, run_n, planner.RUN_START_FAILED_NOTE)
         return check, None
     return check, job
 

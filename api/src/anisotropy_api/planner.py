@@ -842,6 +842,7 @@ RUN_KINDS = ("coupon", "plate")  # the plans whose run is a job the approval sta
 JOB_ENDED = ("done", "stopped", "refused")  # a job's states once it has ended; `done` alone is a run that gave a result
 RUN_STOPPED_NOTE = "The analysis stopped before it finished."
 RUN_LOST_NOTE = "The record of this analysis is gone, so its result cannot be read."
+RUN_START_FAILED_NOTE = "The analysis could not be started, so nothing ran."
 # An approval names the job on the plan, then starts it; the setup check before that may take two minutes (`CHECK_TIMEOUT_S`). A plan
 # approved longer ago than this whose job has no record names a job that never started, or one whose record is gone.
 RUN_LOST_AFTER_S = 600

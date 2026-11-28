@@ -252,7 +252,7 @@ def test_a_run_that_fails_or_is_stopped_stops_its_plan(running, monkeypatch):
     route, approval = approved(running, monkeypatch)
     with running.engine.begin() as connection:
         connection.exec_driver_sql("DELETE FROM jobs WHERE id = %s", (approval["job"]["job_id"],))
-    assert api_main.settle_runs(app) == 0  # a sweep of every plan leaves it: only a look at this plan says its record is gone
+    assert api_main.settle_runs(app) == 0  # a sweep leaves it too while its approval may be about to start the job
     assert running.client.get(route).json()["state"] == "running"  # so new that its approval may be about to start the job
     long_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=planner.RUN_LOST_AFTER_S + 1)
     records.update_plan(running.engine, uuid.UUID(approval["plan"]["id"]), approved_at=long_ago)
@@ -514,3 +514,67 @@ def test_the_api_starts_whatever_its_first_sweep_of_the_plans_meets(empty_runs, 
     with TestClient(app) as client:
         assert client.get("/healthz").status_code == 200
     assert "the plans' runs were not settled: the plans could not be read" in capsys.readouterr().out
+
+
+@needs_test_database
+def test_a_start_that_fails_stops_the_plan_which_names_no_job(running, monkeypatch, capsys):
+    start = running.jobs.start
+    for error in (OSError(28, "No space left on device"), RuntimeError("can't start new thread")):
+        def failing(*_args, error=error, **_more):
+            raise error
+
+        monkeypatch.setattr(running.jobs, "start", failing)
+        capsys.readouterr()
+        route, approval = approved(running, monkeypatch)  # answered 200, as a start refused is
+        plan = approval["plan"]
+        assert approval["job"] is None and plan["job"] is None and plan["state"] == "stopped"
+        assert states(plan) == ["done", "done", "done", "failed", "skipped", "skipped"] and plan["steps"][3]["note"] == planner.RUN_START_FAILED_NOTE
+        row = row_of(running.engine, plan["id"])
+        assert row.state == "stopped" and row.job_id is None and jobs_kept(running.engine) == []
+        assert "of a plan was not started: " + error.__class__.__name__ in capsys.readouterr().out
+        late = running.client.post(f"{route}/steps/5", json={"state": "done"})
+        assert late.status_code == 409 and "has ended: it is skipped" in late.json()["detail"]
+        assert api_main.settle_runs(app) == 0 and running.client.get(route).json()["state"] == "stopped"
+    assert approval["project"]["content"]["plate"]["supports"]  # the changes stand, as the version they were kept as
+
+    # a start that fails once its job is kept: the error is the approval's, and the plan names a job that exists, whose end settles it
+    def half(*args, **more):
+        start(*args, **more)
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(running.jobs, "start", half)
+    scripted(monkeypatch, GOOD)
+    pid = project(running.client)
+    proposed = a_plan(running.client, pid).json()
+    with pytest.raises(RuntimeError, match="can't start new thread"):
+        running.client.post(f"/v1/projects/{pid}/plans/{proposed['id']}/approve", json={"base": proposed["base"]})
+    row = row_of(running.engine, proposed["id"])
+    assert row.state == "running" and jobs_kept(running.engine) == [row.job_id]
+    end_job(running, row.job_id, state="stopped")
+    assert row_of(running.engine, proposed["id"]).state == "stopped"
+
+
+@needs_test_database
+def test_a_sweep_settles_a_plan_whose_job_has_no_record_once_its_approval_cannot_be_under_way(running, monkeypatch):
+    route, approval = approved(running, monkeypatch)
+    _, going = approved(running, monkeypatch)
+    with running.engine.begin() as connection:
+        connection.exec_driver_sql("DELETE FROM jobs WHERE id = %s", (approval["job"]["job_id"],))
+    assert api_main.settle_runs(app) == 0 and row_of(running.engine, approval["plan"]["id"]).state == "running"  # it may be about to start
+    long_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=planner.RUN_LOST_AFTER_S + 1)
+    for one in (approval, going):
+        records.update_plan(running.engine, uuid.UUID(one["plan"]["id"]), approved_at=long_ago)
+    assert api_main.settle_runs(app) == 1 and api_main.settle_runs(app) == 0  # after the wait a read uses, and once
+    lost = row_of(running.engine, approval["plan"]["id"])
+    assert lost.state == "stopped" and states(lost.steps) == ["done", "done", "done", "failed", "skipped", "skipped"]
+    assert lost.steps[3]["note"] == planner.RUN_LOST_NOTE
+    assert states(row_of(running.engine, going["plan"]["id"]).steps) == APPROVED  # its job has a record and is still queued
+    assert running.client.get(route).json()["steps"][3]["note"] == planner.RUN_LOST_NOTE
+    # the stale-job sweep's own timer carries it too: a plan left naming a job that never started is settled with no one reading it
+    _, other = approved(running, monkeypatch)
+    with running.engine.begin() as connection:
+        connection.exec_driver_sql("DELETE FROM jobs WHERE id = %s", (other["job"]["job_id"],))
+    records.update_plan(running.engine, uuid.UUID(other["plan"]["id"]), approved_at=long_ago)
+    running.jobs.swept_at = None
+    assert running.jobs.sweep() == 0  # it stopped no job, and told whoever listens that it looked
+    assert row_of(running.engine, other["plan"]["id"]).state == "stopped"

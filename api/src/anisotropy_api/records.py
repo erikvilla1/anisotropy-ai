@@ -716,13 +716,15 @@ def edit_plan(engine: Engine, plan_id: uuid.UUID, edit, now: dt.datetime) -> Age
 
 
 def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[str, ...], ended: tuple[str, ...],
-                     job_id: uuid.UUID | str | None = None, state: str | None = None, since: dt.datetime | None = None) -> int:
+                     job_id: uuid.UUID | str | None = None, state: str | None = None, since: dt.datetime | None = None,
+                     lost_before: dt.datetime | None = None) -> int:
     """The run of every plan of `kinds` whose job has ended, settled from the job's own outcome with the plan's row locked (ADR-0144
     amendment 2): `settle(steps, job_state) -> state` is given each plan whose run is still `running` and whose job is in one of the
     `ended` states, and the steps it changed are written back with the state it answers (None changes nothing). With `job_id`, the
     plans of that job alone, and with `state` the job's state as its own process knows it (a job kept in no table). Without one,
     every such plan whose job ended at or after `since`: a sweep is for an end that was missed, not for the plans kept before the
-    server settled runs. How many were settled. A row another request holds is left for the next look when every plan is swept, and
+    server settled runs; and every such plan whose job has no record at all, once it was approved before `lost_before`, given to
+    `settle` with a state of None (an approval writes the job's id a moment before it starts the job). How many were settled. A row another request holds is left for the next look when every plan is swept, and
     waited for when one job is named. What `settle` raises for one plan is said on the console with the plan's id, that row is left
     as it was, and the others are settled all the same."""
     statement = select(AgentPlanRow).where(AgentPlanRow.kind.in_(kinds), AgentPlanRow.state.in_(("running", "done", "stopped")),
@@ -741,7 +743,9 @@ def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[s
                 job_state = None if job is None else job.state
                 if job is not None and since is not None and (job.finished_at is None or job.finished_at < since):
                     continue
-            if job_state not in ended:
+                if job is None and (lost_before is None or row.approved_at is None or row.approved_at >= lost_before):
+                    continue  # no record of its job, and its approval may still be about to start it
+            if job_state is not None and job_state not in ended:
                 continue
             try:
                 steps = json.loads(json.dumps(row.steps))

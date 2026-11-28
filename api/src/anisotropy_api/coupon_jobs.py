@@ -448,7 +448,8 @@ class CouponJobs:
 
     def sweep(self, force: bool = False) -> int:
         """With the job queue, stop the jobs nothing will finish (`records.sweep_stale`), at most every SWEEP_EVERY_S unless `force`;
-        0 without the queue."""
+        0 without the queue. Whoever listens is told each time it looked (`on_end`, with no job named), whether or not it stopped one:
+        an end that was missed, or a job that never started, is found by the listener's own look."""
         if self.role is None or (not force and self.swept_at is not None and time.monotonic() - self.swept_at < SWEEP_EVERY_S):
             return 0
         self.swept_at = time.monotonic()
@@ -456,8 +457,7 @@ class CouponJobs:
             stopped = sweep_stale(self.table, dt.datetime.now(dt.timezone.utc), silent_after=SILENT_AFTER, queued_after=QUEUED_AFTER)
         except SQLAlchemyError:
             return 0  # a sweep is housekeeping; the request it rides on goes on
-        if stopped:
-            self._ended()
+        self._ended()
         return stopped
 
     def root_of(self, user_email: str | None) -> Path:
