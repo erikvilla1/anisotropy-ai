@@ -1,11 +1,14 @@
 """The model's shape as a STEP file through the API (ADR-0146): POST /v1/coupon-jobs/model?program=step answers the rows with the file
 the fea package drew, under the rules of the other two downloads (ADR-0129). A stand-in for fea/tools/studio_tool.py plays `model` in
 most of these tests, once and warm, so they need neither the fea environment nor Gmsh; fea/tests/test_coupon_shape.py draws the shapes
-themselves and runs the tool. The tests at the end run the real tool behind the route, where the fea environment holds Gmsh. Some
-answers are read over a real HTTP server on this machine, because the test client refuses nothing a browser or Node refuses."""
+themselves and runs the tool. The tests at the end run the real tool behind the route, where the fea environment holds Gmsh, and are
+skipped where it does not; with `ANISOTROPY_TESTS_REQUIRE_GMSH=on`, which CI's fea job sets for this file (ADR-0114 amendment 4), they
+fail there instead, so a step that is there to run them cannot pass without running them. Some answers are read over a real HTTP
+server on this machine, because the test client refuses nothing a browser or Node refuses."""
 
 import json
 import math
+import os
 import re
 import shutil
 import socket
@@ -381,8 +384,30 @@ def gmsh_in_the_fea_environment() -> bool:
     return asked.returncode == 0
 
 
-needs_gmsh = pytest.mark.skipif(not gmsh_in_the_fea_environment(),
-                                reason="Gmsh is not in the fea environment: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
+GMSH_REQUIRED = "ANISOTROPY_TESTS_REQUIRE_GMSH"  # on: a test that needs Gmsh fails where Gmsh is not found, where it is otherwise skipped
+NO_GMSH = "Gmsh is not in the fea environment: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)"
+
+
+def gmsh_required(environ=None) -> bool:
+    """Whether a missing Gmsh is a failure here: the switch is `on`. Unset, blank or `off` keeps the skip; another word is refused."""
+    word = (os.environ if environ is None else environ).get(GMSH_REQUIRED, "").strip().lower()
+    if word not in ("", "on", "off"):
+        raise ValueError(f"{GMSH_REQUIRED} must be 'on' or 'off', not {word!r}")
+    return word == "on"
+
+
+def needs_gmsh_marker(found: bool, required: bool):
+    """The mark of a test that runs the real tool: nothing to skip where Gmsh is found, a skip with the reason where it is not, and
+    where it is not and is required, a fixture that fails the test with the same reason."""
+    return pytest.mark.usefixtures("gmsh_was_required") if required and not found else pytest.mark.skipif(not found, reason=NO_GMSH)
+
+
+@pytest.fixture
+def gmsh_was_required():
+    pytest.fail(f"{NO_GMSH}. {GMSH_REQUIRED}=on makes this a failure, where it is otherwise a skip.")
+
+
+needs_gmsh = needs_gmsh_marker(gmsh_in_the_fea_environment(), gmsh_required())
 ROWS = {"form_version": "0.9", "filled_by": "A. Tester", "date": "2026-11-27", "material_code": "IM7", "layup_code": "L1", "standard": "none",
         "size_from": "own", "team_model": "not built yet", "test_data": "none", "symmetric": "yes", "library": "im7-8552", "G13": 4688.43,
         "G23": 3000.0, "control": "displacement", "value": 1.0, "element_size": 2.0, "angles": [45, 0, -45, 90], "test": "unnotched tension",
@@ -561,6 +586,24 @@ def test_a_plate_with_a_hole_and_far_too_many_nodes_around_it_is_a_422_for_every
                                        f"{count} elements; a setup holds at most 100,000, whatever is made of it: give at most 3,424 nodes around the hole")
     assert seconds < 10.0, seconds
     assert nothing_of_this_machine(answer, real)
+
+
+@pytest.mark.parametrize("found, required, marks", [(True, False, "skipif(False)"), (True, True, "skipif(False)"), (False, False, "skipif(True)"),
+                                                    (False, True, "usefixtures('gmsh_was_required')")])
+def test_a_test_that_needs_gmsh_runs_where_it_is_found_is_skipped_where_it_is_not_and_fails_there_when_it_is_required(found, required, marks):
+    """CI's fea job runs this file to run the real tool (ADR-0114 amendment 4). With the tool not found the step once ended green with
+    its real-tool tests skipped; under the switch they fail."""
+    mark = needs_gmsh_marker(found, required).mark
+    assert f"{mark.name}({', '.join(repr(a) for a in mark.args)})" == marks
+    if mark.name == "skipif":
+        assert mark.kwargs == {"reason": NO_GMSH}
+
+
+def test_the_switch_that_requires_gmsh_reads_on_or_off_and_refuses_any_other_word():
+    assert [gmsh_required({GMSH_REQUIRED: word}) for word in ("on", " ON ", "off", "", "  ")] == [True, True, False, False, False]
+    assert gmsh_required({}) is False
+    with pytest.raises(ValueError, match="ANISOTROPY_TESTS_REQUIRE_GMSH must be 'on' or 'off', not 'yes'"):
+        gmsh_required({GMSH_REQUIRED: "yes"})
 
 
 @needs_gmsh
