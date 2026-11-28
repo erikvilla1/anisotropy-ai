@@ -701,15 +701,16 @@ def update_plan(engine: Engine, plan_id: uuid.UUID, **fields) -> AgentPlanRow:
 
 def edit_plan(engine: Engine, plan_id: uuid.UUID, edit, now: dt.datetime) -> AgentPlanRow | None:
     """A plan's steps and state changed by `edit(steps, job_id) -> state` with its row locked, so two reports at once never lose one;
-    `job_id` is the job the row names as it then stands, or None. Whatever `edit` raises leaves the row as it was, and so does a
-    state of None. None when there is no such plan."""
+    `job_id` is the job the row names as it then stands, or None. Whatever `edit` raises leaves the row as it was, and so do a
+    state of None and an edit that leaves the steps and the state as they were: nothing is written then, the row's time of change
+    neither. None when there is no such plan."""
     with Session(engine, expire_on_commit=False) as session:
         row = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id).with_for_update()).first()
         if row is None:
             return None
         steps = json.loads(json.dumps(row.steps))
         state = edit(steps, row.job_id)
-        if state is not None:
+        if state is not None and (steps != row.steps or state != row.state):  # an edit that changes nothing writes nothing
             row.steps, row.state, row.updated_at = steps, state, now
         session.commit()
         return row

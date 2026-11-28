@@ -608,3 +608,19 @@ def test_a_sweep_reads_only_the_plans_approved_within_its_window(running, monkey
         assert states(row_of(running.engine, one["plan"]["id"]).steps) == APPROVED
         assert states(running.client.get(route).json())[3] == "done"
 
+
+@needs_test_database
+def test_a_report_that_changes_nothing_writes_nothing(running, monkeypatch):
+    route, approval = approved(running, monkeypatch)
+    plan_id = approval["plan"]["id"]
+    before = row_of(running.engine, plan_id).updated_at
+    for said in ("done", "failed", "running"):  # a report of the run, with its job under way
+        assert running.client.post(f"{route}/steps/4", json={"state": said, "note": "said by a page"}).status_code == 200
+        assert row_of(running.engine, plan_id).updated_at == before
+    assert running.client.post(f"{route}/steps/5", json={"state": "done", "note": "every check passes"}).status_code == 200
+    reported = row_of(running.engine, plan_id).updated_at
+    assert reported > before  # a report that changes a step is written, with its time
+    assert running.client.post(f"{route}/steps/5", json={"state": "done", "note": "another note"}).status_code == 200  # the same end again
+    assert row_of(running.engine, plan_id).updated_at == reported
+    assert running.client.get(route).json()["steps"][4]["note"] == "every check passes"
+    assert row_of(running.engine, plan_id).updated_at == reported  # a read with nothing to settle
