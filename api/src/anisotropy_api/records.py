@@ -700,17 +700,55 @@ def update_plan(engine: Engine, plan_id: uuid.UUID, **fields) -> AgentPlanRow:
 
 
 def edit_plan(engine: Engine, plan_id: uuid.UUID, edit, now: dt.datetime) -> AgentPlanRow | None:
-    """A plan's steps and state changed by `edit(steps) -> state` with its row locked, so two reports at once never lose one; whatever
-    `edit` raises leaves the row as it was. None when there is no such plan."""
+    """A plan's steps and state changed by `edit(steps, job_id) -> state` with its row locked, so two reports at once never lose one;
+    `job_id` is the job the row names as it then stands, or None. Whatever `edit` raises leaves the row as it was, and so does a
+    state of None. None when there is no such plan."""
     with Session(engine, expire_on_commit=False) as session:
         row = session.scalars(select(AgentPlanRow).where(AgentPlanRow.id == plan_id).with_for_update()).first()
         if row is None:
             return None
         steps = json.loads(json.dumps(row.steps))
-        state = edit(steps)
-        row.steps, row.state, row.updated_at = steps, state, now
+        state = edit(steps, row.job_id)
+        if state is not None:
+            row.steps, row.state, row.updated_at = steps, state, now
         session.commit()
         return row
+
+
+def settle_plan_runs(engine: Engine, settle, now: dt.datetime, *, kinds: tuple[str, ...], ended: tuple[str, ...],
+                     job_id: uuid.UUID | str | None = None, state: str | None = None, since: dt.datetime | None = None) -> int:
+    """The run of every plan of `kinds` whose job has ended, settled from the job's own outcome with the plan's row locked (ADR-0144
+    amendment 2): `settle(steps, job_state) -> state` is given each plan whose run is still `running` and whose job is in one of the
+    `ended` states, and the steps it changed are written back with the state it answers (None changes nothing). With `job_id`, the
+    plans of that job alone, and with `state` the job's state as its own process knows it (a job kept in no table). Without one,
+    every such plan whose job ended at or after `since`: a sweep is for an end that was missed, not for the plans kept before the
+    server settled runs. How many were settled. A row another request holds is left for the next look when every plan is swept, and
+    waited for when one job is named."""
+    statement = select(AgentPlanRow).where(AgentPlanRow.kind.in_(kinds), AgentPlanRow.state.in_(("running", "done", "stopped")),
+                                           AgentPlanRow.job_id.is_not(None), AgentPlanRow.steps.contains([{"tool": "run", "state": "running"}]))
+    if job_id is not None:
+        statement = statement.where(AgentPlanRow.job_id == str(job_id))
+    settled = 0
+    with Session(engine) as session:
+        for row in session.scalars(statement.with_for_update(skip_locked=job_id is None)):
+            job_state = state
+            if job_state is None:
+                try:
+                    job = session.get(JobRow, uuid.UUID(row.job_id))
+                except ValueError:
+                    continue
+                job_state = None if job is None else job.state
+                if job is not None and since is not None and (job.finished_at is None or job.finished_at < since):
+                    continue
+            if job_state not in ended:
+                continue
+            steps = json.loads(json.dumps(row.steps))
+            after = settle(steps, job_state)
+            if after is not None:
+                row.steps, row.state, row.updated_at = steps, after, now
+                settled += 1
+        session.commit()
+    return settled
 
 
 def plans_since(engine: Engine, user_email: str, since: dt.datetime) -> int:

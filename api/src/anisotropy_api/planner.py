@@ -21,7 +21,9 @@ the workspace's own tools (`setup_tools.py`, ADR-0143), which work out every cha
   `plan_with` is the same for any kind's view, schema and checks (a wing's and a repair's are in `planner_kinds.py`, build step 5).
 - `run_values`: the values a run and its check take for the setup, exactly as the page's `workspaceValues` (`lib/tension-screen.ts`)
   writes them, so a plan's run is the run the page would start.
-- `report_step`: a step the page carries (`run`, `qa`, `answer`) reported, and the plan's state that follows.
+- `report_step`: a step the page carries (`qa`, `answer`) reported, and the plan's state that follows; `report_run_plan` is the same
+  for a coupon's or a plate's plan, whose run is a job the server started: `run_ended` settles that step from the job's own outcome,
+  and no report changes it.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ MAX_VALUE = 120  # a step's value as written: a number, a choice, a material's i
 MAX_UNIT = 16
 STATES = ("proposed", "question", "refused", "unavailable", "capped", "approved", "running", "done", "stopped")
 STEP_STATES = ("planned", "running", "done", "failed", "skipped")
+ENDED = ("done", "failed", "skipped")  # a step's states once it has ended
 # What a plan plans on: a kept `fea` project's coupon or plate, a kept `wing` project, or a repair the page holds (no project).
 KINDS = ("coupon", "plate", "wing", "repair")
 # A request that asked no model is no plan: it is not counted against the day's planned requests.
@@ -808,17 +811,79 @@ def plan_state(steps: list[dict[str, Any]]) -> str:
 
 def report_step(steps: list[dict[str, Any]], n: int, state: str, note: str | None, reported: tuple[str, ...] = REPORTED) -> str:
     """A step the page carries reported (`reported`, a coupon's and a plate's `run`, `qa` and `answer` unless another kind's are given),
-    in place; the plan's state after it. A failed step stops the plan. The same report twice changes nothing; a step that has ended in
-    another state, or one of the server's, is refused."""
+    in place; the plan's state after it. A failed step stops the plan, and what had not started is skipped. The same end reported
+    twice changes nothing, its note neither; a step that has ended in another state, one of the server's, and a step that would start
+    on a plan a failed step has stopped are refused."""
     step = next((s for s in steps if s["n"] == n), None)
     if step is None:
         raise LookupError(f"the plan has no step {n}")
     if step["tool"] not in reported:
         raise StepRefused(f"step {n} ({step['tool']}) is the server's to carry out; the page reports {', '.join(reported)}")
-    if step["state"] in ("done", "failed", "skipped") and step["state"] != state:
-        raise StepRefused(f"step {n} has ended: it is {step['state']}")
+    if step["state"] in ENDED:
+        if step["state"] != state:
+            raise StepRefused(f"step {n} has ended: it is {step['state']}")
+        return plan_state(steps)  # the same end reported again: nothing changes, its note neither
+    failed = next((s["n"] for s in steps if s["state"] == "failed"), None)
+    if failed is not None and step["state"] == "planned" and state != "skipped":
+        raise StepRefused(f"the plan stopped at step {failed}, so step {n} does not start")
     if state == "failed":
         stop_at(steps, n, note)
+        for earlier in steps:  # reported out of order: what had not started never will
+            if earlier["n"] < n and earlier["state"] == "planned":
+                earlier["state"] = "skipped"
     else:
         step["state"], step["note"] = state, None if note is None else note[:MAX_NOTE]
     return plan_state(steps)
+
+
+# ----------------------------------------------------------------------------------------------- a run that is a job of the server's
+
+RUN_KINDS = ("coupon", "plate")  # the plans whose run is a job the approval starts: the job's own outcome says how the run ended
+JOB_ENDED = ("done", "stopped", "refused")  # a job's states once it has ended; `done` alone is a run that gave a result
+RUN_STOPPED_NOTE = "The analysis stopped before it finished."
+RUN_LOST_NOTE = "The record of this analysis is gone, so its result cannot be read."
+# An approval names the job on the plan, then starts it; the setup check before that may take two minutes (`CHECK_TIMEOUT_S`). A plan
+# approved longer ago than this whose job has no record names a job that never started, or one whose record is gone.
+RUN_LOST_AFTER_S = 600
+# A sweep of every plan (at startup, and after the jobs nothing will finish are stopped) settles the runs whose job ended within the
+# last day: an end nobody was told of. A plan kept before the server settled runs is left as it is until it is next read or reported.
+RUN_SWEEP_S = 24 * 3600
+RUN_NOT_STARTED = "The run of this plan has not been started, so step {n} has nothing to report."
+
+
+def run_plan_state(steps: list[dict[str, Any]]) -> str:
+    """The state of a plan whose run is a job under way: stopped once a step failed; done once every other step is done or skipped,
+    which is once its last step is; running until then. The run's own end is the job's to say (`run_ended`): a job that ends done
+    leaves the plan as it is, and one that fails stops it."""
+    return plan_state([step for step in steps if step["tool"] != "run" or step["state"] != "running"])
+
+
+def run_ended(steps: list[dict[str, Any]], ok: bool, note: str | None = None) -> str | None:
+    """The run of a coupon's or a plate's plan settled from its job's own outcome, in place: the server started the job, so the server
+    says how the run ended, whatever a page reports and whether or not one is open. `done`, or `failed` with a plain reason, which
+    stops the plan and skips the steps that had not ended. The plan's state after it; None when the run is not under way, and nothing
+    changes then."""
+    step = step_of(steps, "run")
+    if step is None or step["state"] != "running":
+        return None
+    if ok:
+        step["state"] = "done"
+    else:
+        stop_at(steps, step["n"], note or RUN_STOPPED_NOTE)
+    return plan_state(steps)
+
+
+def report_run_plan(steps: list[dict[str, Any]], n: int, state: str, note: str | None, *, job: bool) -> str:
+    """`report_step` for a coupon's or a plate's plan, in place; the plan's state after it. The QA and the answers are the page's to
+    report, as before. The run is not: `job` says whether the plan names the job its approval started, and that job's outcome alone
+    settles the step (`run_ended`). A report of the run is taken and changes nothing, so no caller's word stands where the job says
+    otherwise; it is refused when the run has ended in another state, as any ended step's is, and when no job was started."""
+    step = next((s for s in steps if s["n"] == n), None)
+    if step is not None and step["tool"] == "run":
+        if step["state"] in ENDED and step["state"] != state:
+            raise StepRefused(f"step {n} has ended: it is {step['state']}")
+        if not job and step["state"] not in ENDED:
+            raise StepRefused(RUN_NOT_STARTED.format(n=n))
+    else:
+        report_step(steps, n, state, note)
+    return run_plan_state(steps) if job else plan_state(steps)
