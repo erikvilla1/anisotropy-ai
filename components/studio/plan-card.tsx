@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, Circle, CircleAlert, LoaderCircle, Minus, X } from "lucide-react";
 import { answerResult, reportPlanStep, type Plan, type StepState } from "@/lib/studio-api";
-import { planCount, planDrawing, stepsToReport, stepViews, type StepView } from "@/lib/plan-steps";
+import { answerDue, planCount, planDrawing, stepsToReport, stepViews, type StepView } from "@/lib/plan-steps";
 import { qaNote, qaReady, readQa, type QaReading } from "@/lib/plan-qa";
 import { factsOf, readAt, whyLines } from "@/lib/result-why";
 import { answerStat } from "@/lib/studio-answer";
@@ -15,7 +15,7 @@ import { UnreadList } from "./proposal-card";
 import { useProject } from "./project-context";
 
 /** Where a plan stands on the page (ADR-0144): shown and waiting for the engineer, being approved, approved and running, changed under
- * it (the server's 409), put back into the chat box to edit, or not approved for another reason (`problem`). The QA and the answer are
+ * it (the server's 409), put back into the chat box to edit, or not approved for another reason (`problem`). The QA and the answers are
  * the page's own steps, kept here with what was reported of each, so the card survives the chat re-rendering it. */
 export type PlanFlow = {
   plan: Plan;
@@ -27,7 +27,8 @@ export type PlanFlow = {
   /** the setup check's lines when the server stopped the plan at its check */
   blocked: string[];
   qa: QaReading | null;
-  answer: PlanAnswerShown | null;
+  /** each answer step as it was given, by its step's number: a plan may ask more than one */
+  answers: Record<number, PlanAnswerShown>;
   reported: Record<number, StepState>;
   /** whether the Results tab was opened for this plan's run */
   opened: boolean;
@@ -35,7 +36,7 @@ export type PlanFlow = {
 /** An answer step as the card shows it: under way, given (its heading first, the rest under Details) or not given. */
 export type PlanAnswerShown = { state: "running" | "done" | "failed"; heading: string | null; more: string[]; note: string | null };
 
-export const newFlow = (plan: Plan): PlanFlow => ({ plan, stage: "proposed", job: null, problem: null, blocked: [], qa: null, answer: null, reported: {}, opened: false });
+export const newFlow = (plan: Plan): PlanFlow => ({ plan, stage: "proposed", job: null, problem: null, blocked: [], qa: null, answers: {}, reported: {}, opened: false });
 
 const ROLE_CLASS: Record<string, string> = { Geometry: "geometry", Setup: "setup", Solver: "solver", QA: "qa", Report: "report" };
 const QA_MARK = { pass: <Check size={13} aria-label="pass" />, warning: <CircleAlert size={13} aria-label="warning" />, stop: <X size={13} aria-label="stop" /> };
@@ -67,8 +68,8 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
   const job = ours ? run.job : null;
   const lastJob = useRef(job);
   if (job) lastJob.current = job;
-  const views = useMemo(() => stepViews(plan, { approved: stage === "approved", job: job ?? (stage === "approved" ? lastJob.current : null), qa: flow.qa,
-    answer: flow.answer ? { state: flow.answer.state, line: flow.answer.heading } : null }), [plan, stage, job, flow.qa, flow.answer]);
+  const views = useMemo(() => stepViews(plan, { approved: stage === "approved", job: job ?? (stage === "approved" ? lastJob.current : null), qa: flow.qa, answer: null,
+    answers: Object.fromEntries(Object.entries(flow.answers).map(([n, a]) => [n, { state: a.state, line: a.heading }])) }), [plan, stage, job, flow.qa, flow.answers]);
   const results = ours && run.loadedJob === flow.job ? run.fields : null;
 
   // the Results tab opens once the run's results are read
@@ -84,13 +85,17 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
     onFlow((f) => ({ ...f, qa: readQa(job, results) }));
   }, [flow.qa, job, results, onFlow]);
 
-  // the answer: the step's question, answered in words from the result's fact sheet; the package's own verdict where none is written
-  const asking = useRef(false);
-  const answerStep = plan.steps.find((s) => s.tool === "answer");
+  // the answers: each answer step's own question, answered in words from the result's fact sheet (the package's own verdict where none
+  // is written), one at a time in the plan's order, each asked once
+  const asked = useRef(new Set<number>());
+  const due = stage === "approved" ? answerDue(views) : null;
+  const answerStep = due === null ? undefined : plan.steps.find((s) => s.n === due);
   useEffect(() => {
-    if (!answerStep || !flow.qa || flow.qa.verdict === "stop" || flow.answer || asking.current || !results) return;
-    asking.current = true;
-    onFlow((f) => ({ ...f, answer: { state: "running", heading: null, more: [], note: null } }));
+    if (!answerStep || !results || asked.current.has(answerStep.n)) return;
+    const n = answerStep.n;
+    asked.current.add(n);
+    const given = (answer: PlanAnswerShown) => onFlow((f) => ({ ...f, answers: { ...f.answers, [n]: answer } }));
+    given({ state: "running", heading: null, more: [], note: null });
     const facts = factsOf(run.explanation);
     const stat = answerStat(results, printed);
     const fallback = () => (stat ? { state: "done" as const, heading: `${stat.verdict}, R = ${stat.factor}`, more: [], note: stat.facts }
@@ -99,10 +104,10 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
     (facts && apiBaseUrl ? answerResult(apiBaseUrl, question, facts) : Promise.reject(new Error("no fact sheet")))
       .then((answer) => {
         const lines = whyLines(answer, false, readAt(facts));
-        onFlow((f) => ({ ...f, answer: lines.prose.length ? { state: "done", heading: lines.heading, more: lines.more, note: lines.note } : fallback() }));
+        given(lines.prose.length ? { state: "done", heading: lines.heading, more: lines.more, note: lines.note } : fallback());
       })
-      .catch(() => onFlow((f) => ({ ...f, answer: fallback() })));
-  }, [answerStep, flow.qa, flow.answer, results, run.explanation, apiBaseUrl, plan.ask, onFlow]);
+      .catch(() => given(fallback()));
+  }, [answerStep, results, run.explanation, apiBaseUrl, plan.ask, onFlow]);
 
   // each step the page carries is reported to the plan as it starts and ends; a report that does not go through is not tried again
   const sent = useRef(new Set<string>());
@@ -127,7 +132,8 @@ export function PlanCard({ flow, onFlow, onApprove, onEdit, onPlanAgain, onUsual
           {flow.qa.checks.map((c) => <li key={c.id} data-check={c.id} data-verdict={c.verdict} className={`plan-qa-${c.verdict}`}>{QA_MARK[c.verdict]} <span>{c.line}</span></li>)}
         </ul>
       ) : null}
-      {flow.answer && flow.answer.state !== "running" ? <PlanAnswerBlock answer={flow.answer} /> : null}
+      {plan.steps.filter((s) => s.tool === "answer" && flow.answers[s.n] && flow.answers[s.n].state !== "running")
+        .map((s) => <PlanAnswerBlock key={s.n} answer={flow.answers[s.n]} n={s.n} />)}
     </PlanFrame>
   );
 }

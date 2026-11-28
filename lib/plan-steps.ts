@@ -13,12 +13,17 @@ export const PAGE_TOOLS = new Set(["qa", "answer"]);
 const SOLVER_TOOLS = new Set(["check", "run"]);
 const ENDED = new Set<StepState>(["done", "failed", "skipped"]);
 
-/** What the page holds of a plan's run: whether the approval came back, the job it started as last polled, the QA once read, the answer. */
+/** An answer step as the page holds it: under way, given (its first line) or not given. */
+export type AnswerProgress = { state: "running" | "done" | "failed"; line: string | null };
+/** What the page holds of a plan's run: whether the approval came back, the job it started as last polled, the QA once read, and the
+ * answers. A plan may have several answer steps: `answers` holds each by its step's number; `answer` is the first answer step's, for a
+ * caller that holds one, and no other answer step ever takes its words. */
 export type PlanProgress = {
   approved: boolean;
   job: Pick<JobStatus, "state" | "stage" | "message" | "result" | "documents" | "outputs"> | null;
   qa: QaReading | null;
-  answer: { state: "running" | "done" | "failed"; line: string | null } | null;
+  answer: AnswerProgress | null;
+  answers?: Record<number, AnswerProgress>;
 };
 export type StepView = { n: number; role: PlanRole; tool: string; line: string; state: StepState; note: string | null };
 
@@ -44,10 +49,12 @@ function stateOf(step: PlanStep, plan: Plan, p: PlanProgress, before: Map<string
     if (!p.qa) return { state: ran === "done" ? "running" : "planned", note: null };
     return { state: p.qa.verdict === "stop" ? "failed" : "done", note: p.qa.headline };
   }
-  // the answer: given only on a result the QA let through
-  if (stopped || before.get("qa") === "failed" || before.get("qa") === "skipped") return { state: "skipped", note: null };
-  if (!p.answer) return { state: "planned", note: null };
-  return { state: p.answer.state, note: p.answer.line };
+  // an answer: given only on a result the QA let through, each answer step its own, in order; none after one that was not given
+  const earlier = before.get("answer");
+  if (stopped || before.get("qa") === "failed" || before.get("qa") === "skipped" || earlier === "failed" || earlier === "skipped") return { state: "skipped", note: null };
+  const mine = p.answers ? p.answers[step.n] ?? null : earlier === undefined ? p.answer : null;
+  if (!mine) return { state: "planned", note: null };
+  return { state: mine.state, note: mine.line };
 }
 
 /** Every step with its state as the run goes, in the plan's order. */
@@ -58,6 +65,16 @@ export function stepViews(plan: Plan, progress: PlanProgress): StepView[] {
     before.set(step.tool, state);
     return { n: step.n, role: step.role, tool: step.tool, line: step.line, state, note };
   });
+}
+
+/** The answer step to ask now, by its number: the first one that is not done, when it has not started, the QA let the result through
+ * and every answer before it is done. Null while one is under way, after one that was not given, and when none is left. So a plan's
+ * answers are asked one at a time, in the plan's order, each once. */
+export function answerDue(views: StepView[]): number | null {
+  const qa = views.find((v) => v.tool === "qa");
+  if (qa && qa.state !== "done") return null;
+  const next = views.filter((v) => v.tool === "answer").find((v) => v.state !== "done");
+  return next && next.state === "planned" ? next.n : null;
 }
 
 /** Whether every step has ended, and how many are done: the card's count ("4 of 6 done"). */

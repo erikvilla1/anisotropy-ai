@@ -546,4 +546,105 @@ test.describe("the planner (ADR-0144)", () => {
     await expect(message).toHaveValue("fix the end and pull it with 2 kN, then run it. the bottom one");
     await expect(page.getByTestId("plan-card").last()).toHaveAttribute("data-state", "edited");
   });
+
+  test("a plan with two answers asks each once, in the plan's order, and shows each with its own words (ADR-0144 amendment 2)", async ({ page }) => {
+    test.setTimeout(240_000); // the whole run of a plate is played, on a machine other suites share
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const store: Record<string, Record<string, unknown>> = {};
+    const versions: Record<string, Kept[]> = {};
+    await quietApi(page, store, [], versions);
+    const planner = (name: string) => JSON.parse(readFileSync(`tests/fixtures/planner/${name}.json`, "utf8"));
+    const stored = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
+    const proposed = planner("plan-proposed"), running = planner("approve-running");
+    // the contract's plan with a second answer after its first: "one run, the changes before it and the answers after it"
+    const SECOND = "What is the largest deflection?";
+    const two = (plan: { steps: Record<string, unknown>[] }) => ({ ...plan, steps: [...plan.steps, { ...plan.steps[5], n: 7, question: SECOND, line: `Answer: ${SECOND}` }] });
+    const JOB = running.job.job_id as string;
+    const WORDS: Record<string, string[]> = { "Does it hold at 2 kN?": ["Yes, it holds at 2 kN.", "No ply reaches its strength under this load."],
+      [SECOND]: ["The largest deflection is 0.4 mm.", "It is at the middle of the top edge."] };
+    const reported: { n: number; state: string; note: string | null }[] = [], answered: string[] = [];
+    let polls = 0, answering = 0, together = 0;
+    await page.route(API, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/v1/coupon-tests") return json({ all: false, plates: true, ansys_model: false });
+      if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+      if (path === "/v1/wake") return json({ waking: false }, 202);
+      if (path === "/v1/coupon-jobs/live") return;
+      if (path === "/v1/coupon-jobs/check") {
+        return json({ run_id: "run-4", state: "ready", designation: "NOM-PLT-L1", checklist: stored("checklist", "studio-plate"), preview: stored("preview", "studio-plate") });
+      }
+      const plans = /^\/v1\/projects\/([^/]+)\/plans(?:\/([^/]+))?(\/approve|\/steps\/(\d+))?$/.exec(path);
+      if (plans) {
+        const [, id, planId, tail, n] = plans;
+        if (!planId) return json({ ...two(proposed), project: id });
+        if (tail === "/approve") {
+          const kept = store[id] as { content: { form: Record<string, string> } };
+          const content = { form: kept.content.form, plate: running.project.content.plate };
+          store[id] = { ...kept, content, updated_at: new Date().toISOString() };
+          const list = (versions[id] ??= []);
+          const version = { ...running.version, n: (list[list.length - 1]?.n ?? 0) + 1, form: content.form, plate: content.plate };
+          list.push(version);
+          return json({ ...running, plan: { ...two(running.plan), project: id, version }, project: store[id], version });
+        }
+        if (n) { reported.push({ n: Number(n), ...(request.postDataJSON() as { state: string; note: string | null }) }); return json({ ...two(running.plan), project: id }); }
+        return json({ ...two(proposed), project: id });
+      }
+      if (path === `/v1/coupon-jobs/${JOB}`) {
+        polls += 1;
+        return json({ ...stored(polls < 2 ? "job-running" : polls < 3 ? "job-engine-done" : polls < 4 ? "job-result-in" : "job-done"), job_id: JOB });
+      }
+      if (path === `/v1/coupon-jobs/${JOB}/files/fields`) return json(stored("fields", "studio-plate"));
+      if (path === `/v1/coupon-jobs/${JOB}/files/explanation`) return json(stored("explanation", "studio-plate"));
+      if (path === "/v1/workspace/result-answers") { // each answer step's own question; slow enough that two asked at once would be seen
+        const question = (request.postDataJSON() as { question: string }).question;
+        answered.push(question);
+        answering += 1;
+        together = Math.max(together, answering);
+        await new Promise((done) => setTimeout(done, 400));
+        answering -= 1;
+        return json({ run_id: "run-a", writer: "anthropic", model: "claude-stand-in", prose: WORDS[question] ?? ["An answer to another question."], sources: [], covered: false,
+          withheld: false, reason: null });
+      }
+      return route.fallback();
+    });
+
+    await page.goto("/workspace/fea?for=coupon");
+    await page.getByTestId("panel-test").locator("summary").click();
+    await page.getByTestId("tension-screen").getByRole("radio", { name: "Plate", exact: true }).check();
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    const layup = page.getByLabel("Layup, bottom ply first", { exact: true });
+    await layup.fill("[45/0/-45/90]s");
+    await layup.press("Enter");
+    await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+    await page.locator("#studio-length").fill("100");
+    await page.locator("#studio-width").fill("100");
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await message.fill("check");
+    await message.press("Enter");
+    await expect(page.getByTestId("preview")).toBeVisible({ timeout: 30_000 });
+    await message.fill("clamp the bottom edge, pull the top edge with 2 kN, tell me if it holds and what the largest deflection is");
+    await message.press("Enter");
+    const card = page.getByTestId("plan-card").last();
+    await expect(card).toHaveAttribute("data-state", "proposed", { timeout: 30_000 });
+    await expect(card.getByTestId("plan-heading")).toHaveText("Plan · 7 steps");
+    await expect(card.locator("[data-tool=answer] .plan-line")).toHaveText(["Answer: does it hold at 2 kN?", `Answer: ${SECOND}`]);
+    await card.getByTestId("plan-approve").click();
+    await expect(card).toHaveAttribute("data-state", "approved", { timeout: 30_000 });
+
+    // the run ends, the QA reads it, and the answers are given one after the other, each under its own step
+    await expect(card.locator("[data-tool=run]")).toHaveAttribute("data-state", "done", { timeout: 120_000 });
+    await expect(card.getByTestId("plan-heading")).toHaveText("Plan done · 7 of 7 steps", { timeout: 60_000 });
+    expect(await card.locator("[data-tool=answer]").evaluateAll((steps) => steps.map((step) => step.getAttribute("data-state")))).toEqual(["done", "done"]);
+    await expect(card.getByTestId("plan-answer-heading")).toHaveText(["Yes, it holds at 2 kN.", "The largest deflection is 0.4 mm."]);
+    expect(await card.getByTestId("plan-answer").evaluateAll((blocks) => blocks.map((block) => block.getAttribute("data-step")))).toEqual(["6", "7"]);
+    expect(answered).toEqual(["Does it hold at 2 kN?", SECOND]); // each asked once, the first before the second
+    expect(together).toBe(1); // never two at once
+    await expect.poll(() => reported.map((r) => `${r.n} ${r.state}`).sort()).toEqual(["5 done", "6 done", "6 running", "7 done", "7 running"]);
+    expect(reported.find((r) => r.n === 6 && r.state === "done")?.note).toBe("Yes, it holds at 2 kN.");
+    expect(reported.find((r) => r.n === 7 && r.state === "done")?.note).toBe("The largest deflection is 0.4 mm."); // its own words, not the first answer's
+    expect(browserErrors).toEqual([]);
+  });
 });
