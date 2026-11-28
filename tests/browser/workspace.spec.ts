@@ -648,3 +648,44 @@ test.describe("the planner (ADR-0144)", () => {
     expect(browserErrors).toEqual([]);
   });
 });
+
+test("a kept project opened again sends no version the server holds, whatever order the server writes a setup's keys in (ADR-0143)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  // The real API keeps a setup as JSON in its database and answers every read with the database's own order of keys (the shorter key
+  // first, then by letter): a plate's lists come back as loads, regions, supports. A version just written is answered as it was sent.
+  const asKept = (value: unknown): unknown => (Array.isArray(value) ? value.map(asKept)
+    : typeof value === "object" && value !== null ? Object.fromEntries(Object.keys(value).sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+      .map((k) => [k, asKept((value as Record<string, unknown>)[k])])) : value);
+  let sent = 0;
+  await page.route(/\/v1\/projects(?:\/[^/]+(?:\/versions)?)?$/, (route) => {
+    const request = route.request();
+    const [, , , id, tail] = new URL(request.url()).pathname.split("/");
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(asKept(body)) });
+    if (tail === "versions" && request.method() === "POST") sent += 1;
+    if (request.method() !== "GET") return route.fallback();
+    if (!id) return json(Object.values(store).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
+    if (!store[id]) return route.fallback();
+    return json(tail === "versions" ? versions[id] ?? [] : store[id]);
+  });
+
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByTestId("project-name").fill("Kept and opened again");
+  await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+  await page.locator("#studio-length").fill("260");
+  // the project and its first versions reach the server
+  await expect.poll(() => Object.values(store).some((p) => p.name === "Kept and opened again"), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => Object.values(versions).some((list) => list.some((v) => v.form.length === "260")), { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(3_000);
+  const before = sent;
+
+  await page.reload(); // the project and its versions come back from the server, their keys in its order
+  await expect(page.getByTestId("project-name")).toHaveValue("Kept and opened again", { timeout: 20_000 });
+  await page.waitForTimeout(5_000);
+  const settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(1); // the server holds the setup: at most what this page had still to say
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled); // and nothing is sent again and again
+});

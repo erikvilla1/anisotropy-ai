@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { changesBetween, comparison, MAX_VERSIONS, readVersions, withResult, withRun, withVersion, writeVersions } from "../lib/model-versions";
+import { changesBetween, comparison, MAX_VERSIONS, readVersions, setupKey, withResult, withRun, withVersion, writeVersions } from "../lib/model-versions";
 import { blankForm, fieldByKey } from "../lib/studio-form";
 import { emptyPlate } from "../lib/studio-plate";
 
@@ -85,4 +85,21 @@ test("the server's versions are read in their shape only, and this browser's new
   assert.equal(unsent(local, []).length, 3);
   assert.deepEqual(unsent(local, [{ ...server[0], form: { ...form, element_size: "9" } }]).map((v) => v.form.element_size), ["1"]);
   assert.deepEqual(Object.keys(versionUpload(local[0])).sort(), ["by", "changes", "form", "plate", "why"]);
+});
+
+test("a setup read back from the server, its keys in the database's order, is the same setup: nothing is sent again (ADR-0143)", async () => {
+  const { mergeVersions, readServerVersions, unsent } = await import("../lib/model-versions");
+  // the page writes a plate's lists as supports, loads, regions; the server keeps them as JSON and answers with its own order of keys
+  const mine = { supports: [{ region: "Edge-Bottom", dofs: [1, 2, 3, 4, 5, 6], value: "" }], loads: [{ region: "Edge-Top", kind: "force" as const, dof: 2, total: "2000" }], regions: [] };
+  const theirs = { loads: [{ dof: 2, kind: "force", total: "2000", region: "Edge-Top" }], regions: [], supports: [{ dofs: [1, 2, 3, 4, 5, 6], value: "", region: "Edge-Bottom" }] };
+  assert.equal(setupKey(form, mine), setupKey(form, theirs as never));
+  // a coupon's project too: its three empty lists come back in the database's order
+  assert.equal(setupKey(form, { supports: [], loads: [], regions: [] }), setupKey(form, { loads: [], regions: [], supports: [] } as never));
+  assert.notEqual(setupKey(form, mine), setupKey(form, { ...mine, supports: [] })); // a list that differs is still another setup
+  assert.notEqual(setupKey(form, { ...mine, supports: [{ ...mine.supports[0], dofs: [2, 1, 3, 4, 5, 6] }] }), setupKey(form, mine)); // a list's own order is the setup's
+  const local = withVersion([], form, mine, "assistant", "clamp the bottom edge", at);
+  const server = readServerVersions([{ n: 3, at, by: "assistant", why: "clamp the bottom edge", changes: ["Edge-Bottom: fixed (encastre)"], form, plate: theirs }]);
+  assert.deepEqual(unsent(local, server), []); // the server holds it: before, the last version was sent again without end
+  assert.deepEqual(mergeVersions(server, local).map((v) => v.n), [3]);
+  assert.equal(withVersion(server, form, mine, "you", null, at), server); // and the page's own copy of it is no new version
 });

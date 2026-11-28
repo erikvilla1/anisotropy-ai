@@ -33,10 +33,16 @@ const LAYUP_KEYS = new Set([...PLY_KEYS, "symmetric"]);
 
 const clean = (form: StudioForm): StudioForm => Object.fromEntries(Object.entries(form).filter(([k, v]) => !IGNORED.has(k) && (v ?? "").trim() !== ""));
 
-/** The setup as one string, to tell a change from none. */
+/** A value with every object's keys in one order. The server keeps a setup as JSON and answers with its own order of keys, so the lists
+ * the page wrote and the same lists read back are told apart by their values alone. A list keeps its order: it is part of the setup. */
+const keyed = (value: unknown): unknown => (Array.isArray(value) ? value.map(keyed)
+  : typeof value === "object" && value !== null ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, keyed((value as Record<string, unknown>)[k])]))
+    : value);
+
+/** The setup as one string, to tell a change from none, whatever order its keys were written in. */
 export function setupKey(form: StudioForm, plate: PlateLists): string {
   const rows = clean(form);
-  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), plate]);
+  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), keyed(plate)]);
 }
 
 const label = (key: string) => (key === FOLLOWED_KEY ? FOLLOWED_LABEL : fieldByKey[key]?.label ?? key);
