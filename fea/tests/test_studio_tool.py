@@ -362,6 +362,172 @@ def test_a_mesh_past_the_limit_is_refused_before_meshing_and_the_file_for_anothe
     assert json.loads((model / "model.json").read_text(encoding="utf-8"))["elements"] == count  # the count the check judged, before meshing
 
 
+def run_tool_bounded(*args: str, gigabytes: int = 4, seconds: int = 60) -> subprocess.CompletedProcess:
+    """The tool with a limit on its memory and its time, so that a test of a setup that once exhausted both fails here and takes
+    nothing else down with it."""
+    import resource
+
+    def limit():
+        resource.setrlimit(resource.RLIMIT_AS, (gigabytes * 2 ** 30, gigabytes * 2 ** 30))
+
+    return subprocess.run([sys.executable, str(STUDIO), *args], capture_output=True, text=True, encoding="utf-8", preexec_fn=limit, timeout=seconds)
+
+
+SEEDED = {"element_size": None, "mesh_partitions": "56, 110, 140, 194"}
+PAST_THE_MOST = [  # the rows, the count the refusal states, what it says to change, and the rows it names
+    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({"element_size": 0.1}, "625,000", "use an element size of 0.25 mm or more", ["Element size (mm)"]),
+    ({**SEEDED, "mesh_nx": 10, "mesh_seeds": "28, 27, 99999999999, 27, 28"}, "more than 1,000,000,000,000",
+     "give fewer elements across the width or fewer rows per segment", ["Your Abaqus mesh: elements across the width", "Your Abaqus mesh: rows per segment"]),
+    ({**SEEDED, "mesh_nx": 10 ** 12, "mesh_seeds": "28, 27, 10, 27, 28"}, "more than 1,000,000,000,000",
+     "give fewer elements across the width or fewer rows per segment", ["Your Abaqus mesh: elements across the width", "Your Abaqus mesh: rows per segment"]),
+]
+
+
+@pytest.mark.parametrize("program", ["abaqus", "ansys", "step"])
+@pytest.mark.parametrize("changes, count, change, rows", PAST_THE_MOST, ids=["1e-5 mm", "1e-6 mm", "5e-324 mm", "0.1 mm", "99999999999 rows", "nx 1e12"])
+def test_a_setup_past_the_most_elements_a_setup_holds_is_blocked_for_every_file_in_a_moment_and_in_little_memory(tmp_path, program, changes, count,
+                                                                                                             change, rows):
+    """A setup may state at most 100,000 elements, whatever is made of it (ADR-0086 amendment 2). Before, an element size of 1e-5 mm cost
+    a STEP file 12 s and 1.2 GB and 1e-6 mm over 10 GB, and 99999999999 rows in a segment ended every program's request at its 30 s:
+    the spec was made, and one row built per element row, before anything was judged. The tool runs here under 4 GB and 60 s."""
+    import time
+
+    fine = {"mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None, **changes}
+    out = tmp_path / "model"
+    clock = time.perf_counter()
+    done = run_tool_bounded("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path, **fine)), "--program", program, "--out", str(out))
+    seconds = time.perf_counter() - clock
+    assert done.returncode == 0 and done.stdout.startswith("blocked: no model written"), done.stdout[-300:] + done.stderr[-600:]
+    assert [p.name for p in out.iterdir()] == ["checklist.json"]
+    checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
+    mesh = next(item for item in checklist["items"] if item["id"] == "mesh")
+    said = f"the mesh would have {count} elements; a setup holds at most 100,000, whatever is made of it: {change}"
+    assert mesh["state"] == "fail" and mesh["message"] == said and mesh["rows"] == rows and checklist["problems"] == [said], mesh
+    assert seconds < 20.0, seconds  # the tool's own start is most of it
+
+
+HOLED_PLATE = {**json.loads((TOOLS.parents[1] / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8")),
+               "length": 200.0, "width": 100.0, "element_size": 2.0, "hole_diameter": 20.0, "regions": [],
+               "supports": [{"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}]}  # the workspace's own plate, with a hole
+
+
+@pytest.mark.parametrize("program", ["abaqus", "ansys", "step"])
+@pytest.mark.parametrize("around, count", [(39000, "1,113,900"), (190000, "5,417,400")])
+def test_a_plate_with_a_hole_and_far_too_many_nodes_around_it_is_blocked_for_every_file_in_a_moment(tmp_path, program, around, count):
+    """A plate with a hole and 39,000 or 190,000 nodes around it, in one ring, once counted as 44,000 or 195,000 elements: the STEP file
+    came and the file for Abaqus or Ansys ended at the route's 30 s (the third review). The column and the band through the hole carry
+    a quarter of those nodes across the plate, and the count now says so before anything is built (ADR-0086 amendment 2)."""
+    import time
+
+    folder = tmp_path / "values"
+    folder.mkdir()
+    (folder / "values.json").write_text(json.dumps({"form_version": FORM_VERSION, **HOLED_PLATE, "hole_circumferential": around, "hole_radial": 1}),
+                                        encoding="utf-8")
+    out = tmp_path / "model"
+    clock = time.perf_counter()
+    done = run_tool_bounded("--root", str(tmp_path / "root"), "--every-test", "model", str(folder / "values.json"), "--program", program, "--out", str(out))
+    seconds = time.perf_counter() - clock
+    assert done.returncode == 0 and done.stdout.startswith("blocked: no model written"), done.stdout[-300:] + done.stderr[-600:]
+    assert [p.name for p in out.iterdir()] == ["checklist.json"]
+    checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
+    mesh = next(item for item in checklist["items"] if item["id"] == "mesh")
+    said = (f"the mesh would have {count} elements; a setup holds at most 100,000, whatever is made of it: "
+            "give at most 3,424 nodes around the hole")
+    assert mesh["state"] == "fail" and mesh["message"] == said and mesh["rows"] == ["Nodes around the hole"] and checklist["problems"] == [said], mesh
+    assert seconds < 20.0, seconds  # the tool's own start is most of it
+
+
+def test_a_run_of_a_plate_with_a_hole_past_the_solvers_limit_names_the_nodes_and_not_an_element_size(tmp_path):
+    """2,000 nodes around a plate's hole are 69,400 elements at an element size of 2 mm: inside what a setup holds, past the solver's
+    40,000 (ADR-0086 amendment 1). No element size the plate could be given takes the nodes out of the column and the band through the
+    hole, so the refusal names the nodes, where it named an element size of 0.71 mm, finer than the one stated."""
+    folder = tmp_path / "values"
+    folder.mkdir()
+    (folder / "values.json").write_text(json.dumps({"form_version": FORM_VERSION, **HOLED_PLATE, "hole_circumferential": 2000}), encoding="utf-8")
+    out = tmp_path / "check"
+    done = run_tool_bounded("--root", str(tmp_path / "root"), "--every-test", "check", str(folder / "values.json"), "--out", str(out))
+    assert done.returncode == 0, done.stdout[-300:] + done.stderr[-600:]
+    mesh = next(item for item in json.loads((out / "checklist.json").read_text(encoding="utf-8"))["items"] if item["id"] == "mesh")
+    assert mesh["state"] == "fail" and mesh["rows"] == ["Nodes around the hole"], mesh
+    assert mesh["message"] == ("the mesh would have 69,400 elements; our solver takes at most 40,000 in one model: "
+                               "give at most 1,120 nodes around the hole"), mesh
+
+
+def test_a_run_past_the_most_a_setup_holds_is_refused_in_the_solvers_own_words_as_before(tmp_path):
+    """For a run the limit that concerns the engineer is the solver's 40,000 (ADR-0086 amendment 1): its words stand, whatever the count."""
+    fine = {"element_size": 1e-6, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None}
+    for command in ("live", "check"):
+        out = tmp_path / command
+        done = run_tool_bounded("--root", str(tmp_path / "root"), command, str(values_file(tmp_path / f"{command}-values", **fine)), "--out", str(out))
+        assert done.returncode == 0, done.stdout[-300:] + done.stderr[-600:]
+        mesh = next(item for item in json.loads((out / "checklist.json").read_text(encoding="utf-8"))["items"] if item["id"] == "mesh")
+        assert mesh["state"] == "fail" and mesh["message"] == ("the mesh would have more than 1,000,000,000,000 elements; our solver takes at most 40,000 "
+                                                               "in one model: use an element size of 0.4 mm or more"), mesh
+
+
+def test_the_most_a_setup_holds_leaves_a_third_of_the_routes_time_and_still_takes_a_mesh_past_the_solvers(tmp_path):
+    """The limit is set where the slowest file for Abaqus or Ansys came back in about two thirds of the 30 s the model file's route is
+    given (2026-11-28, through the route: at about 100,000 elements 15 to 20 s; at 200,000, 33 to 37 s, past the limit), so a file is
+    not lost to a slow moment of the machine. A mesh past the solver's 40,000 and inside it is still written, as the founder asked
+    (2026-11-24)."""
+    from anisotropy_fea.spec import MOST_ELEMENTS, MOST_ELEMENTS_STATED
+
+    assert MOST_ELEMENTS_STATED == 100_000 and MOST_ELEMENTS == 40_000
+    fine = {"element_size": 0.3, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None}
+    out = tmp_path / "model"
+    written = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path, **fine)), "--program", "ansys", "--out", str(out))
+    assert written.returncode == 0 and written.stdout.startswith("written: "), written.stdout + written.stderr
+    assert MOST_ELEMENTS < json.loads((out / "model.json").read_text(encoding="utf-8"))["elements"] <= MOST_ELEMENTS_STATED
+
+
+@pytest.mark.parametrize("word", ["w" * 200, "\u00e9" * 100, "\u03b1" * 100, "\u4e2d" * 66, "\U0001F600" * 50],
+                         ids=["ascii", "two bytes, a plain form", "two bytes", "three bytes", "four bytes"])
+def test_a_word_at_its_limit_fits_a_line_of_each_file_and_the_abaqus_file_holds_it_as_typed(tmp_path, word):
+    """What a model file holds (ADR-0146): a line of an Abaqus input file 256 bytes, the text as typed in UTF-8; a line of a Mechanical
+    APDL file 640 characters of ASCII, a letter outside ASCII written as its plain form or its code. Neither writer cuts a word, so the
+    intake bounds a word at 200 bytes and a tab's material at 80; a word of 5000 once stopped both writers, and the route said 503."""
+    rows = {"size_from": f"see {word} there", "team_model": word, "test_data": f"{word} {word}", "tab_thickness": 1.5, "tab_bevel": 30,
+            "tab_material": word[:80 // len(word[0].encode("utf-8"))]}
+    assert len(rows["tab_material"].encode("utf-8")) in (78, 80)
+    for program, most, counted in (("abaqus", 256, lambda line: len(line.encode("utf-8"))), ("ansys", 640, len)):
+        out = tmp_path / program
+        done = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path / f"{program}-values", **rows)), "--program", program,
+                        "--out", str(out))
+        assert done.returncode == 0 and done.stdout.startswith("written: "), done.stdout[-300:] + done.stderr[-600:]
+        text = (out / json.loads((out / "model.json").read_text(encoding="utf-8"))["name"]).read_text(encoding="utf-8")
+        assert max(counted(line) for line in text.splitlines()) <= most
+        if program == "abaqus":
+            assert text.count(word) == 4  # once in each of two rows and twice in the third, never changed and never cut
+        else:
+            assert text.isascii()
+    refused = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path / "long", size_from=word + word[0])), "--program", "abaqus",
+                       "--out", str(tmp_path / "long-out"))
+    assert refused.returncode == 0 and refused.stdout.startswith("blocked: no model written"), refused.stdout + refused.stderr
+    problems = json.loads((tmp_path / "long-out" / "checklist.json").read_text(encoding="utf-8"))["problems"]
+    assert len(problems) == 1 and "Where the size comes from: one word of it takes" in problems[0] and "holds a word of at most 200" in problems[0]
+
+
+def test_the_text_rows_bounded_for_a_file_are_the_rows_the_files_hold(tmp_path):
+    """The bound on a word is put on the rows a writer puts into a file (`intake.FILE_TEXT`), and on no other: this reads each program's
+    file for every free text row, so a row a writer starts to write is seen here before a long word of it stops that writer."""
+    from anisotropy_fea.intake import FIELDS, FILE_TEXT
+    from test_intake import own_constants
+
+    marks = {"filled_by": "QFB", "notes": "QNT", "size_from": "QSF", "team_model": "QTM", "test_data": "QTD", "own_source": "QOS", "tab_material": "QTB"}
+    assert all(FIELDS[key].kind == "text" for key in marks)
+    rows = {**own_constants(), **{key: f"{mark} words" for key, mark in marks.items()}, "tab_thickness": 1.5, "tab_bevel": 30}
+    for program in ("abaqus", "ansys"):
+        out = tmp_path / program
+        done = run_tool("--root", str(tmp_path / "root"), "model", str(values_file(tmp_path / f"{program}-values", **rows)), "--program", program,
+                        "--out", str(out))
+        assert done.returncode == 0 and done.stdout.startswith("written: "), done.stdout[-300:] + done.stderr[-600:]
+        text = (out / json.loads((out / "model.json").read_text(encoding="utf-8"))["name"]).read_text(encoding="utf-8")
+        assert {key for key, mark in marks.items() if mark in text} == {*FILE_TEXT, "tab_material"}, program
+
+
 def test_serve_writes_a_model_for_a_request_that_names_a_program(tmp_path):
     worker = subprocess.Popen([sys.executable, str(STUDIO), "--root", str(tmp_path / "root"), "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL, text=True, encoding="utf-8")

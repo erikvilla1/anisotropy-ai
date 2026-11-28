@@ -263,6 +263,46 @@ def gmsh_available() -> str | None:
     return str(gmsh.__version__)
 
 
+def hole_centre(width: float, length: float) -> tuple[float, float]:
+    """Where a plate's or a coupon's one hole sits: the middle of the width and of the length. The mesh is cut round it and the STEP
+    file's solid is drilled at it (ADR-0146), so both read it here."""
+    return width / 2, length / 2
+
+
+@dataclass(frozen=True)
+class HoleBlocks:
+    """The transfinite blocks of a plate with a central hole, as counts: the three columns' and the bands' lines and element counts, and
+    the band that holds the square round the hole. `gmsh_open_hole_plate` meshes exactly these, so `elements` is the mesh's own count
+    before anything is built (ADR-0086 amendment 2)."""
+    xs: tuple[float, ...]
+    ys: tuple[float, ...]
+    square_band: int
+    columns: tuple[int, ...]  # elements across each column; the middle one follows a quarter of the hole
+    bands: tuple[int, ...]  # elements up each band; the square's follows a quarter of the hole
+    quarter: int
+
+    def elements(self, radial_layers: int) -> int:
+        """Every block's elements: the grid of columns by bands without the square, and the four ringed blocks in its place."""
+        return sum(self.columns) * sum(self.bands) - self.quarter ** 2 + 4 * self.quarter * radial_layers
+
+
+def hole_blocks(width: float, length: float, hole_diameter: float, element_size: float, circumferential: int, ring_ratio: float,
+                tab_length: float = 0.0) -> HoleBlocks:
+    """The blocks `gmsh_open_hole_plate` cuts, by arithmetic. The column and the band through the hole carry a quarter of the nodes
+    around it from edge to edge of the plate, so many nodes around the hole are many elements far from it. It judges nothing: a square
+    outside the plate gives counts of 1 where a span is not positive, and the mesher refuses such a plate itself."""
+    half = ring_ratio * (hole_diameter / 2)
+    cx, cy = hole_centre(width, length)
+    quarter = circumferential // 4
+    xs = (0.0, cx - half, cx + half, width)
+    ys = (0.0, *((tab_length,) if tab_length else ()), cy - half, cy + half, *((length - tab_length,) if tab_length else ()), length)
+    square_band = ys.index(cy - half)
+    count = lambda span: max(1, math.ceil(span / element_size - 1e-9))  # noqa: E731
+    columns = (count(xs[1] - xs[0]), quarter, count(xs[3] - xs[2]))
+    bands = tuple(quarter if j == square_band else count(ys[j + 1] - ys[j]) for j in range(len(ys) - 1))
+    return HoleBlocks(xs, ys, square_band, columns, bands, quarter)
+
+
 def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, element_size: float, circumferential: int, radial_layers: int,
                          ring_ratio: float, growth: float, order: int = 1, tab_length: float = 0.0,
                          node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
@@ -293,18 +333,16 @@ def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, elem
         raise MeshError("element_size must be positive")
     radius = hole_diameter / 2
     half = ring_ratio * radius
-    cx, cy = width / 2, length / 2
+    cx, cy = hole_centre(width, length)
     if not radius < half < min(cx, cy):
         raise MeshError(f"the inner square (half-side {half:g}) must enclose the hole (radius {radius:g}) and lie inside the plate ({cx:g} by {cy:g} half-sizes)")
     if tab_length < 0 or (tab_length and tab_length >= cy - half):
         raise MeshError(f"tab_length {tab_length:g} must be zero or end before the inner square at y = {cy - half:g}")
-    n_quarter = circumferential // 4
-    xs = [0.0, cx - half, cx + half, width]
-    ys = [0.0] + ([tab_length] if tab_length else []) + [cy - half, cy + half] + ([length - tab_length] if tab_length else []) + [length]
-    jc = ys.index(cy - half)  # the band holding the inner square
-    count = lambda span: max(1, math.ceil(span / element_size - 1e-9))  # noqa: E731
-    col_nodes = [count(xs[1] - xs[0]) + 1, n_quarter + 1, count(xs[3] - xs[2]) + 1]
-    band_nodes = [n_quarter + 1 if j == jc else count(ys[j + 1] - ys[j]) + 1 for j in range(len(ys) - 1)]
+    blocks = hole_blocks(width, length, hole_diameter, element_size, circumferential, ring_ratio, tab_length)
+    n_quarter, xs, ys = blocks.quarter, blocks.xs, blocks.ys
+    jc = blocks.square_band  # the band holding the inner square
+    col_nodes = [n + 1 for n in blocks.columns]
+    band_nodes = [n + 1 for n in blocks.bands]
 
     owned = not gmsh.isInitialized()
     if owned:

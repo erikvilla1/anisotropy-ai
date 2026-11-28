@@ -546,4 +546,208 @@ test.describe("the planner (ADR-0144)", () => {
     await expect(message).toHaveValue("fix the end and pull it with 2 kN, then run it. the bottom one");
     await expect(page.getByTestId("plan-card").last()).toHaveAttribute("data-state", "edited");
   });
+
+  test("a plan with two answers asks each once, in the plan's order, and shows each with its own words (ADR-0144 amendment 2)", async ({ page }) => {
+    test.setTimeout(240_000); // the whole run of a plate is played, on a machine other suites share
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const store: Record<string, Record<string, unknown>> = {};
+    const versions: Record<string, Kept[]> = {};
+    await quietApi(page, store, [], versions);
+    const planner = (name: string) => JSON.parse(readFileSync(`tests/fixtures/planner/${name}.json`, "utf8"));
+    const stored = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
+    const proposed = planner("plan-proposed"), running = planner("approve-running");
+    // the contract's plan with a second answer after its first: "one run, the changes before it and the answers after it"
+    const SECOND = "What is the largest deflection?";
+    const two = (plan: { steps: Record<string, unknown>[] }) => ({ ...plan, steps: [...plan.steps, { ...plan.steps[5], n: 7, question: SECOND, line: `Answer: ${SECOND}` }] });
+    const JOB = running.job.job_id as string;
+    const WORDS: Record<string, string[]> = { "Does it hold at 2 kN?": ["Yes, it holds at 2 kN.", "No ply reaches its strength under this load."],
+      [SECOND]: ["The largest deflection is 0.4 mm.", "It is at the middle of the top edge."] };
+    const reported: { n: number; state: string; note: string | null }[] = [], answered: string[] = [];
+    let polls = 0, answering = 0, together = 0;
+    await page.route(API, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/v1/coupon-tests") return json({ all: false, plates: true, ansys_model: false });
+      if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+      if (path === "/v1/wake") return json({ waking: false }, 202);
+      if (path === "/v1/coupon-jobs/live") return;
+      if (path === "/v1/coupon-jobs/check") {
+        return json({ run_id: "run-4", state: "ready", designation: "NOM-PLT-L1", checklist: stored("checklist", "studio-plate"), preview: stored("preview", "studio-plate") });
+      }
+      const plans = /^\/v1\/projects\/([^/]+)\/plans(?:\/([^/]+))?(\/approve|\/steps\/(\d+))?$/.exec(path);
+      if (plans) {
+        const [, id, planId, tail, n] = plans;
+        if (!planId) return json({ ...two(proposed), project: id });
+        if (tail === "/approve") {
+          const kept = store[id] as { content: { form: Record<string, string> } };
+          const content = { form: kept.content.form, plate: running.project.content.plate };
+          store[id] = { ...kept, content, updated_at: new Date().toISOString() };
+          const list = (versions[id] ??= []);
+          const version = { ...running.version, n: (list[list.length - 1]?.n ?? 0) + 1, form: content.form, plate: content.plate };
+          list.push(version);
+          return json({ ...running, plan: { ...two(running.plan), project: id, version }, project: store[id], version });
+        }
+        if (n) { reported.push({ n: Number(n), ...(request.postDataJSON() as { state: string; note: string | null }) }); return json({ ...two(running.plan), project: id }); }
+        return json({ ...two(proposed), project: id });
+      }
+      if (path === `/v1/coupon-jobs/${JOB}`) {
+        polls += 1;
+        return json({ ...stored(polls < 2 ? "job-running" : polls < 3 ? "job-engine-done" : polls < 4 ? "job-result-in" : "job-done"), job_id: JOB });
+      }
+      if (path === `/v1/coupon-jobs/${JOB}/files/fields`) return json(stored("fields", "studio-plate"));
+      if (path === `/v1/coupon-jobs/${JOB}/files/explanation`) return json(stored("explanation", "studio-plate"));
+      if (path === "/v1/workspace/result-answers") { // each answer step's own question; slow enough that two asked at once would be seen
+        const question = (request.postDataJSON() as { question: string }).question;
+        answered.push(question);
+        answering += 1;
+        together = Math.max(together, answering);
+        await new Promise((done) => setTimeout(done, 400));
+        answering -= 1;
+        return json({ run_id: "run-a", writer: "anthropic", model: "claude-stand-in", prose: WORDS[question] ?? ["An answer to another question."], sources: [], covered: false,
+          withheld: false, reason: null });
+      }
+      return route.fallback();
+    });
+
+    await page.goto("/workspace/fea?for=coupon");
+    await page.getByTestId("panel-test").locator("summary").click();
+    await page.getByTestId("tension-screen").getByRole("radio", { name: "Plate", exact: true }).check();
+    await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+    const layup = page.getByLabel("Layup, bottom ply first", { exact: true });
+    await layup.fill("[45/0/-45/90]s");
+    await layup.press("Enter");
+    await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+    await page.locator("#studio-length").fill("100");
+    await page.locator("#studio-width").fill("100");
+    const message = page.getByLabel("Message the coupon assistant", { exact: true });
+    await message.fill("check");
+    await message.press("Enter");
+    await expect(page.getByTestId("preview")).toBeVisible({ timeout: 30_000 });
+    await message.fill("clamp the bottom edge, pull the top edge with 2 kN, tell me if it holds and what the largest deflection is");
+    await message.press("Enter");
+    const card = page.getByTestId("plan-card").last();
+    await expect(card).toHaveAttribute("data-state", "proposed", { timeout: 30_000 });
+    await expect(card.getByTestId("plan-heading")).toHaveText("Plan · 7 steps");
+    await expect(card.locator("[data-tool=answer] .plan-line")).toHaveText(["Answer: does it hold at 2 kN?", `Answer: ${SECOND}`]);
+    await card.getByTestId("plan-approve").click();
+    await expect(card).toHaveAttribute("data-state", "approved", { timeout: 30_000 });
+
+    // the run ends, the QA reads it, and the answers are given one after the other, each under its own step
+    await expect(card.locator("[data-tool=run]")).toHaveAttribute("data-state", "done", { timeout: 120_000 });
+    await expect(card.getByTestId("plan-heading")).toHaveText("Plan done · 7 of 7 steps", { timeout: 60_000 });
+    expect(await card.locator("[data-tool=answer]").evaluateAll((steps) => steps.map((step) => step.getAttribute("data-state")))).toEqual(["done", "done"]);
+    await expect(card.getByTestId("plan-answer-heading")).toHaveText(["Yes, it holds at 2 kN.", "The largest deflection is 0.4 mm."]);
+    expect(await card.getByTestId("plan-answer").evaluateAll((blocks) => blocks.map((block) => block.getAttribute("data-step")))).toEqual(["6", "7"]);
+    expect(answered).toEqual(["Does it hold at 2 kN?", SECOND]); // each asked once, the first before the second
+    expect(together).toBe(1); // never two at once
+    await expect.poll(() => reported.map((r) => `${r.n} ${r.state}`).sort()).toEqual(["5 done", "6 done", "6 running", "7 done", "7 running"]);
+    expect(reported.find((r) => r.n === 6 && r.state === "done")?.note).toBe("Yes, it holds at 2 kN.");
+    expect(reported.find((r) => r.n === 7 && r.state === "done")?.note).toBe("The largest deflection is 0.4 mm."); // its own words, not the first answer's
+    expect(browserErrors).toEqual([]);
+  });
+});
+
+test("a kept project opened again sends no version the server holds, whatever order the server writes a setup's keys in (ADR-0143)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  // The real API keeps a setup as JSON in its database and answers every read with the database's own order of keys (the shorter key
+  // first, then by letter): a plate's lists come back as loads, regions, supports. A version just written is answered as it was sent.
+  const asKept = (value: unknown): unknown => (Array.isArray(value) ? value.map(asKept)
+    : typeof value === "object" && value !== null ? Object.fromEntries(Object.keys(value).sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+      .map((k) => [k, asKept((value as Record<string, unknown>)[k])])) : value);
+  let sent = 0;
+  await page.route(/\/v1\/projects(?:\/[^/]+(?:\/versions)?)?$/, (route) => {
+    const request = route.request();
+    const [, , , id, tail] = new URL(request.url()).pathname.split("/");
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(asKept(body)) });
+    if (tail === "versions" && request.method() === "POST") sent += 1;
+    if (request.method() !== "GET") return route.fallback();
+    if (!id) return json(Object.values(store).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
+    if (!store[id]) return route.fallback();
+    return json(tail === "versions" ? versions[id] ?? [] : store[id]);
+  });
+
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByTestId("project-name").fill("Kept and opened again");
+  await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+  await page.locator("#studio-length").fill("260");
+  // the project and its first versions reach the server
+  await expect.poll(() => Object.values(store).some((p) => p.name === "Kept and opened again"), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => Object.values(versions).some((list) => list.some((v) => v.form.length === "260")), { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(3_000);
+  const before = sent;
+
+  await page.reload(); // the project and its versions come back from the server, their keys in its order
+  await expect(page.getByTestId("project-name")).toHaveValue("Kept and opened again", { timeout: 20_000 });
+  await page.waitForTimeout(5_000);
+  const settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(1); // the server holds the setup: at most what this page had still to say
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled); // and nothing is sent again and again
+});
+
+test("a version the server says it holds is sent once, a setup another client kept without a list included (ADR-0143)", async ({ page }) => {
+  test.setTimeout(180_000);
+  const store: Record<string, Record<string, unknown>> = {};
+  const versions: Record<string, Kept[]> = {};
+  await quietApi(page, store, [], versions);
+  // The server's own reading of a setup (`setup_key`): the filled rows but the date, and a plate's three lists, a missing one read as
+  // empty. `whatever` makes this server answer its last version to every setup sent, as a key that disagrees with the page's would.
+  const lists = (plate: unknown) => ["supports", "loads", "regions"].map((k) => ((plate ?? {}) as Record<string, unknown[]>)[k] ?? []);
+  const serverKey = (v: { form: Record<string, string>; plate: unknown }) => JSON.stringify([Object.keys(v.form).filter((k) => k !== "date" && v.form[k].trim())
+    .sort().map((k) => [k, v.form[k].trim()]), lists(v.plate)]);
+  let sent = 0, whatever = false;
+  await page.route(/\/v1\/projects\/[^/]+\/versions$/, (route) => {
+    const request = route.request();
+    const id = new URL(request.url()).pathname.split("/")[3];
+    if (request.method() !== "POST" || !store[id]) return route.fallback();
+    sent += 1;
+    const kept = (versions[id] ??= []), last = kept[kept.length - 1], asked = request.postDataJSON() as Kept;
+    if (last && (whatever || serverKey(last) === serverKey(asked))) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(last) });
+    const made = { ...asked, n: (last?.n ?? 0) + 1, at: new Date().toISOString(), run: null };
+    kept.push(made);
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(made) });
+  });
+
+  await page.goto("/workspace/fea?for=coupon");
+  await page.getByTestId("project-name").fill("Kept by another client");
+  await page.getByTestId("panel-geometry").evaluate((panel) => { (panel as HTMLDetailsElement).open = true; });
+  await page.locator("#studio-length").fill("260");
+  await expect.poll(() => Object.values(store).some((p) => p.name === "Kept by another client"), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => Object.values(versions).some((list) => list.some((v) => v.form.length === "260")), { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(3_000);
+  const id = Object.keys(versions).find((key) => versions[key].some((v) => v.form.length === "260")) as string;
+  const opened = async () => { // this browser's own copy cleared, as on another computer, and the project opened from the server
+    await page.evaluate((key) => window.localStorage.removeItem(key), `anisotropy.versions.${id}`);
+    await page.reload();
+    await expect(page.getByTestId("project-name")).toHaveValue("Kept by another client", { timeout: 20_000 });
+  };
+
+  // another client keeps the same setup with no list of regions, as the API takes it: the project and its last version
+  const last = versions[id][versions[id].length - 1];
+  versions[id][versions[id].length - 1] = { ...last, plate: { supports: [], loads: [] } };
+  store[id] = { ...store[id], content: { ...(store[id].content as object), plate: { supports: [], loads: [] } } };
+  let before = sent;
+  await opened();
+  await page.waitForTimeout(5_000);
+  let settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(1); // the server holds this setup
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled); // and nothing is sent again and again
+  expect(versions[id].length).toBe(last.n);
+
+  // a server that answers its last version to a setup the page tells apart: each version the page makes is sent once, and that ends it
+  whatever = true;
+  versions[id][versions[id].length - 1] = { ...versions[id][versions[id].length - 1], form: { ...last.form, length: "250" } };
+  before = sent;
+  await opened();
+  await page.waitForTimeout(6_000);
+  settled = sent;
+  expect(settled - before).toBeLessThanOrEqual(2); // the version made on opening, and the one the setup settles into
+  await page.waitForTimeout(4_000);
+  expect(sent).toBe(settled);
 });

@@ -28,13 +28,14 @@ from . import paths
 from .audit import CRITERION
 from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
-from .femodel import BoundaryDefinition, FEModel, build_model
+from .femodel import BoundaryDefinition, FEModel, build_model, laminate_section
 from .followed_plate import LEVELS as FOLLOWED_LEVELS, why_not as why_not_followed
-from .intake import FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
+from .intake import (FIELDS, FOLLOWED_LABEL, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of,
+                     has_hole_mesh, hole_mesh_change, mesh_change, size_named, size_that_fits, spec_from_values, stated_elements, too_many_stated)
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import (BENDING_KINDS, MOST_ELEMENTS, PLATE_KINDS, TEST_CODES, SpecError, element_estimate, follows_shape, full_angles, is_isotropic, layup_text,
+from .spec import (BENDING_KINDS, MOST_ELEMENTS, MOST_ELEMENTS_STATED, PLATE_KINDS, TEST_CODES, CouponSpec, SpecError, element_count_text, element_estimate, follows_shape, full_angles, is_isotropic, layup_text,
                    spec_plies)
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
@@ -294,17 +295,43 @@ def too_many_elements(spec, units: str, limit: int = MOST_ELEMENTS) -> str | Non
         return None
     g = spec.geometry
     fits = from_si(math.sqrt(g.length * g.width / limit), "length", units)  # square elements over the whole coupon, at the limit
-    step = 10 ** math.floor(math.log10(fits) - 1)  # two significant figures, rounded up, so the size named fits
-    size = float(f"{math.ceil(fits / step) * step:.2g}")  # printed plainly: a size of 100 or more reads "160", never "1.6e+02"
-    return (f"the mesh would have {estimate:,} elements; our solver takes at most {limit:,} in one model: use an element size of "
-            f"{size:g} {UNIT_LABEL[units]['length']} or more")
+    return past_the_solver(estimate, size_named(fits), units, limit)
+
+
+def past_the_solver(estimate: int | None, size: float, units: str, limit: int, change: str | None = None) -> str:
+    """The words for a mesh of `estimate` elements that our kernel does not build, with an element size that fits, or with `change`
+    where the element size is not what to change (a plate with a hole whose nodes around the hole or rings pass the limit)."""
+    change = f"use an element size of {size:g} {UNIT_LABEL[units]['length']} or more" if change is None else change
+    return f"the mesh would have {element_count_text(estimate)} elements; our solver takes at most {limit:,} in one model: {change}"
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
                     tectonic: Callable[[], str | None] = find_tectonic, gmsh: Callable[[], str | None] = gmsh_available,
                     element_limit: int | None = MOST_ELEMENTS) -> tuple[Checklist, FEModel | None, QualityField | None]:
     """Every item judged as far as the inputs allow. Returns the checklist, and the model and its mesh quality when the inputs build one.
-    A mesh past `element_limit` elements is not built (ADR-0086 amendment 1); None, for the file written for Abaqus or Ansys, builds any."""
+    A mesh past `element_limit` elements is not built (ADR-0086 amendment 1); None, for the file written for Abaqus or Ansys, builds
+    any that a setup may state (`MOST_ELEMENTS_STATED`, amendment 2)."""
+    checklist, model, quality, _ = _judged(form, root, ccx, tectonic, gmsh, element_limit, cut_mesh=True)
+    return checklist, model, quality
+
+
+def shape_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
+                    tectonic: Callable[[], str | None] = find_tectonic) -> tuple[Checklist, CouponSpec | None]:
+    """The setup check as far as a model's shape goes (ADR-0146), and the spec the shape is drawn from when the rows give one. The rows,
+    the names, the spec's own rules (the most elements a setup may state among them), the material and the plies are judged as
+    `setup_checklist` judges them, by the same lines. No model is built, so every item the check words from the built model stays
+    pending, ten of them: identity, units, geometry, material, laminate, constraints, load, mesh, criterion and probes. Of what can
+    stop the other files, a shape is not stopped by what only the built model can fail: the supports and grips on the mesh's nodes, a
+    criterion the material cannot report, and a mesh that cannot be cut."""
+    checklist, _, _, spec = _judged(form, root, ccx, tectonic, gmsh_available, None, cut_mesh=False)
+    return checklist, spec
+
+
+def _judged(form: FormInput, root: Path | str | None, ccx: Callable[[], Path | None], tectonic: Callable[[], str | None],
+            gmsh: Callable[[], str | None], element_limit: int | None, *, cut_mesh: bool,
+            ) -> tuple[Checklist, FEModel | None, QualityField | None, CouponSpec | None]:
+    """The checklist, the model and its mesh quality when one is built, and the spec when the rows, the material and the plies stand.
+    With `cut_mesh` off the model is not built: the section is, as the model would build it."""
     root = Path(root) if root is not None else paths.LOCAL
     notes = _Notes()
     problems: list[str] = []
@@ -315,6 +342,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     spec = None
     model: FEModel | None = None
     quality: QualityField | None = None
+    described: CouponSpec | None = None  # the spec, once its material and its plies stand
     try:
         values = check_form(form)
     except IntakeError as exc:
@@ -326,7 +354,11 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         except IntakeError as exc:
             problems.append(str(exc))
             notes.refused(str(exc), rows=("Material code", "Layup code"))
-    if named is not None:
+    # The element count the rows state, by arithmetic. Past the most a setup holds, no spec is made of them: its rows alone would take
+    # the solver's memory, whatever was asked for, a file for another program and a shape included (ADR-0086 amendment 2).
+    count = stated_elements(values) if named is not None else 0
+    past = count is None or count > MOST_ELEMENTS_STATED
+    if named is not None and not past:
         try:
             spec = spec_from_values(values, named, form.path.name)
         except IntakeError as exc:
@@ -336,13 +368,28 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             notes.note(item_id, "fail", str(exc).split(": the spec refuses the inputs: ", 1)[-1], concerned)
     plies = None
     too_many = too_many_elements(spec, units, element_limit) if spec is not None and element_limit is not None else None
+    mesh_rows = (row("element_size"),)
+    holed = values is not None and has_hole_mesh(values)  # the nodes around a hole and its rings count too: the words name the cause
+    if holed and element_limit is not None and (past or too_many is not None):
+        change, rows_named = hole_mesh_change(values, element_limit)
+        too_many = past_the_solver(count, 0.0, units, element_limit, change)
+        mesh_rows = tuple(row(key) for key in rows_named)
+    elif past and element_limit is not None:  # a run: the solver's own limit is the one that concerns it, in the words it always had
+        too_many = past_the_solver(count, size_that_fits(values.length, values.width, element_limit), units, element_limit)
+    elif past:
+        too_many = too_many_stated(values, count)
+        mesh_rows = tuple(row(key) for key in mesh_change(values, MOST_ELEMENTS_STATED)[1])
     if too_many is not None:  # refused before meshing: the mesh alone would take the solver's memory
         problems.append(too_many)
-        notes.note("mesh", "fail", too_many, (row("element_size"),))
+        notes.note("mesh", "fail", too_many, mesh_rows)
     elif spec is not None:
         try:
-            model = build_model(spec)
+            if cut_mesh:
+                model = build_model(spec)
+            else:
+                laminate_section(spec)  # the material and the section as the model builds them, with no mesh (ADR-0146)
             plies = spec_plies(spec)  # the engine's plies: it refuses a lamina whose compliance is not positive
+            described = spec
         except (SpecError, MeshError) as exc:
             problems.append(str(exc))
             notes.note("mesh", "fail", str(exc), (row("element_size"),))
@@ -561,7 +608,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
-    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality
+    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality, described
 
 
 def support_clash(model: FEModel) -> tuple[BoundaryDefinition, BoundaryDefinition, int, int] | None:
@@ -599,6 +646,9 @@ def plate_shape(form: FormInput, root: Path | str | None = None) -> tuple[FEMode
     try:
         values = check_form(stood)
         if values.kind not in PLATE_KINDS:
+            return None
+        count = stated_elements(values)
+        if count is None or count > MOST_ELEMENTS:  # judged from the rows, before a spec is made of them (ADR-0086 amendment 2)
             return None
         spec = spec_from_values(values, designation_for(values, Path(root) if root is not None else paths.LOCAL), form.path.name)
         if element_estimate(spec) > MOST_ELEMENTS:  # the checklist says why; the shape is not drawn (ADR-0086 amendment 1)

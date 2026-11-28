@@ -15,7 +15,8 @@ import pytest
 from anisotropy_engine.wing import wing_from_dict
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.wing_shape import (
-    ShapeError, build_wing_shape, layup_thickness, main, mid_surface_section, name_step_products, part_table, reference_depth, rib_stations,
+    ShapeError, _quiet, _step_string, build_wing_shape, layup_thickness, main, mid_surface_section, name_step_products, part_table,
+    reference_depth, rib_stations,
 )
 
 EXAMPLE = Path(__file__).parents[2] / "engine" / "examples" / "example-wing.toml"
@@ -341,6 +342,103 @@ def test_an_open_trailing_edge_gets_a_strip_of_skin():
     shape = build_wing_shape(wing, element_size_m=0.03)
     assert "Trailing edge strip" in [p.name for p in shape.parts]
     assert set(shape.mesh.element_sets) >= {"Trailing edge strip"}
+
+
+def part21_text(written: str) -> str:
+    """The text a string of a STEP file stands for, read by the standard's rules alone (ISO 10303-21): `''` an apostrophe, a doubled
+    backslash one backslash, `\\X\\hh` a character up to U+00FF, `\\X2\\...\\X0\\` and `\\X4\\...\\X0\\` runs of four and eight hex
+    digits. Anything else after a backslash is refused: a reader would take it for a directive nobody wrote."""
+    out, k = [], 0
+    while k < len(written):
+        ch = written[k]
+        if ch == "'":
+            assert written[k:k + 2] == "''", "a single apostrophe ends the string"
+            out.append("'")
+            k += 2
+        elif ch != "\\":
+            assert 32 <= ord(ch) < 127
+            out.append(ch)
+            k += 1
+        elif written[k:k + 2] == "\\\\":
+            out.append("\\")
+            k += 2
+        elif written[k:k + 3] == "\\X\\":
+            out.append(chr(int(written[k + 3:k + 5], 16)))
+            k += 5
+        elif written[k:k + 4] in ("\\X2\\", "\\X4\\"):
+            digits = 4 if written[k + 2] == "2" else 8
+            end = written.index("\\X0\\", k)
+            run = written[k + 4:end]
+            assert run and len(run) % digits == 0
+            out += [chr(int(run[i:i + digits], 16)) for i in range(0, len(run), digits)]
+            k = end + 4
+        else:
+            raise AssertionError(f"a backslash that opens no directive of the standard: {written[k:k + 6]!r}")
+    return "".join(out)
+
+
+PLAIN_NAMES = ["Upper skin", "Lower skin", "Front spar web", "Rib 12", "Trailing edge strip", "Example straight wing", "Patch ply 3 (45)",
+               "Laminate", "Bottom tab, top face", "IM7/8552 [45/0/-45/90]s, 1.5 mm: lot #7 & 8 @ 23 C; (a+b)*c = \"d\" ~ 100% <ok>"]
+WRITTEN_AS = {"Bob's wing": "Bob''s wing",
+              "glass\\epoxy \\X2\\03B1\\X0\\": "glass\\\\epoxy \\\\X2\\\\03B1\\\\X0\\\\",  # a directive somebody typed is text, not a directive
+              "E-glass \u00b145\u00b0": "E-glass \\X\\B145\\X\\B0",
+              "\u03b1-\u03b2 tape": "\\X2\\03B1\\X0\\-\\X2\\03B2\\X0\\ tape",
+              "\u78b3\u7ea4\u7ef4 T700": "\\X2\\78B37EA47EF4\\X0\\ T700",  # a run of the basic plane under one directive
+              "a\U0001f600b": "a\\X4\\0001F600\\X0\\b",
+              "tab\there": "tab\\X\\09here",
+              "\u00e9\u03b1\U0001f600'\\": "\\X\\E9\\X2\\03B1\\X0\\\\X4\\0001F600\\X0\\''\\\\"}
+
+
+def test_a_name_of_plain_ascii_is_written_into_a_step_file_as_it_is():
+    """What the wing's, the repair's and the coupon's files held before the encoding below: nothing changes for these."""
+    for name in PLAIN_NAMES:
+        assert _step_string(name) == name
+
+
+def test_a_step_string_doubles_an_apostrophe_and_a_backslash_and_writes_any_other_character_by_its_directive():
+    for text, written in WRITTEN_AS.items():
+        assert _step_string(text) == written
+        assert written.isascii() and all(32 <= ord(ch) < 127 for ch in written)
+
+
+def test_every_step_string_reads_back_as_the_text_it_was_written_from():
+    for text in [*PLAIN_NAMES, *WRITTEN_AS, "E-glass \u00b145\u00b0", "", "'", "\\", "\\X\\", "''\\\\''", "\u00ff\u0100\uffff\U00010000"]:
+        assert part21_text(_step_string(text)) == text
+    assert part21_text(_step_string("E-glass \u00b145\u00b0")) == "E-glass \u00b145\u00b0"
+    with pytest.raises(AssertionError):
+        part21_text("glass\\epoxy")  # what was written before: a lone backslash opens no directive of the standard
+
+
+@needs_gmsh
+def test_a_parts_name_with_a_backslash_an_apostrophe_or_another_alphabet_reads_back_from_the_step_file_as_itself(tmp_path):
+    import gmsh
+
+    names = ["E-glass \u00b145\u00b0", "glass\\epoxy \\X2\\03B1\\X0\\ of Bob's", "\u78b3\u7ea4\u7ef4 \u03b1"]
+    step = tmp_path / "named.step"
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.model.add("named")
+        for k in range(len(names)):
+            gmsh.model.occ.addBox(2.0 * k, 0.0, 0.0, 1.0, 1.0, 1.0)
+        gmsh.model.occ.synchronize()
+        with _quiet():
+            gmsh.write(str(step))
+    finally:
+        gmsh.finalize()
+    name_step_products(step, "W\u00fcng n\u00b0 1", names)
+    assert step.read_text(encoding="ascii").count("PRODUCT('E-glass \\X\\B145\\X\\B0',") == 1
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        with _quiet():
+            entities = gmsh.model.occ.importShapes(str(step))
+        gmsh.model.occ.synchronize()
+        read = [gmsh.model.getEntityName(d, t) for d, t in entities]
+    finally:
+        gmsh.finalize()
+    assert [name.split("/")[1] for name in read] == ["W\u00fcng n\u00b0 1"] * 3  # as OpenCASCADE reads the file
+    assert [name.rsplit("/", 1)[-1] for name in read] == names
 
 
 def test_step_names_are_refused_when_the_file_has_another_number_of_parts(tmp_path):

@@ -2350,7 +2350,7 @@ test("the model downloads as a file for the engineer's own program, from the men
   // the menu over the model: one item per file, named as the program's own file
   const menu = page.getByTestId("model-download");
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)", "CAD (STEP)"]);
   const fromMenu = saving();
   await menu.getByTestId("model-download-ansys").click();
   if (fromMenu) expect((await fromMenu).suggestedFilename()).toBe("IM7-UNT-L1-ansys.cdb");
@@ -2401,7 +2401,7 @@ test("where the Ansys file is closed, a customer is offered the Abaqus file alon
   await page.getByTestId("build-button").click();
   await expect(menu).toBeVisible({ timeout: 30_000 }); // the model is built and checked
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "CAD (STEP)"]);
   await expectNoBannedTerms(page, "the download menu open");
   const file = browserName === "webkit" ? null : page.waitForEvent("download");
   await menu.getByTestId("model-download-abaqus").click();
@@ -2433,7 +2433,7 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   await page.getByTestId("build-button").click();
   await expect(menu).toBeVisible({ timeout: 30_000 });
   await menu.getByTestId("model-download-open").click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)"]);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Abaqus input file (.inp)", "Ansys input file (.cdb)", "CAD (STEP)"]);
   await expectNoBannedTerms(page, "the download menu open, both files");
   const file = browserName === "webkit" ? null : page.waitForEvent("download");
   await menu.getByTestId("model-download-ansys").click();
@@ -2447,6 +2447,199 @@ test("a customer is offered both files, by the menu and by asking (ADR-0129 amen
   await expect(page.getByTestId("chat-model-file").last()).toHaveAttribute("data-offers", "ansys");
   await expect(page.getByTestId("chat-model-file").last()).toContainText("Compare the Ansys file's reaction with the one shown here");
   await expectNoBannedTerms(page, "the assistant's answer with the Ansys file");
+});
+
+test("the model's shape downloads as a STEP file from the menu, named after the coupon, and the page lists the layup the file cannot hold (ADR-0146)", async ({ page, browserName }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // a customer's sign-in: the shape is everyone's, as the other two files are
+  // the STEP file, played: the text the fea package would write, its name and its part table in headers a page on another origin may read
+  const table = { title: "IM7-UNT-L1", units: { length: "mm", volume: "mm³", step: "mm" }, parts: [
+    { name: "Laminate", kind: "laminate", layup: "[45/0/-45/90]s", plies: 8, ply_thickness: 0.18288, thickness: 1.46304, material: "IM7-8552", volume: 9144, in_model: true },
+    { name: "Bottom tab, top face", kind: "tab", layup: null, plies: null, ply_thickness: null, thickness: 1.5, material: "E-glass/epoxy", volume: 1870.94, in_model: false }] };
+  const ascii = JSON.stringify(table).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`); // as the API sends it
+  const asked: { program: string | null; values: Record<string, unknown> }[] = [];
+  let refuse = false;
+  await page.route(API, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname !== "/v1/coupon-jobs/model" || request.method() !== "POST") return route.fallback();
+    asked.push({ program: url.searchParams.get("program"), values: (request.postDataJSON() as { values: Record<string, unknown> }).values });
+    if (refuse) return route.fulfill({ status: 422, contentType: "application/json",
+      body: JSON.stringify({ detail: "This model cannot be drawn as a STEP file yet: The tabs cannot be drawn: a bevel of 1 degrees over a thickness of 1.5 mm runs 85.9 mm, and the tab is 56 mm long, so it has no outer face left." }) });
+    return route.fulfill({ status: 200, contentType: "model/step", body: "ISO-10303-21;\nHEADER;\n",
+      headers: { "Content-Disposition": 'attachment; filename="IM7-UNT-L1.step"', "X-Anisotropy-Model-File": "IM7-UNT-L1.step", "X-Anisotropy-Model-Parts": ascii,
+        "Access-Control-Expose-Headers": "X-Anisotropy-Model-File, X-Anisotropy-Model-Parts" } });
+  });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await menu.getByTestId("model-download-open").click();
+  await expect(menu.getByRole("menuitem").last()).toHaveText("CAD (STEP)"); // after the solver files
+  const solved = calls.solves.length; // Build ran the analysis; a file asked for must run nothing more
+  await expectNoBannedTerms(page, "the download menu open, with the STEP file");
+  const file = browserName === "webkit" ? null : page.waitForEvent("download");
+  await menu.getByTestId("model-download-step").click();
+  if (file) expect((await file).suggestedFilename()).toBe("IM7-UNT-L1.step");
+  await expect(menu.getByTestId("model-download-saved")).toHaveText("Saved the STEP file.");
+  await expect(menu.getByTestId("model-download-opening")).toHaveText("Each part is one solid at its thickness, in millimetres. A STEP file holds no plies, so the layup is listed here and in the file's first lines.");
+  await expect(menu.getByTestId("model-download-part")).toHaveText([
+    "Laminate: [45/0/-45/90]s, 8 plies of 0.1829 mm, 1.463 mm thick, IM7-8552.",
+    "Bottom tab, top face: 1.5 mm thick, E-glass/epoxy. Drawn as stated. The analysis grips this length and does not include the tab's material."]);
+  await expect(menu.getByRole("menuitem")).toHaveCount(0); // the menu closes once a file is picked
+  await expectNoBannedTerms(page, "the STEP file saved, with its parts");
+  expect(asked).toHaveLength(1);
+  expect(asked[0].program).toBe("step");
+  expect(asked[0].values).toMatchObject({ ply_3: -45, ply_4: 90, symmetric: "yes" }); // the rows of the setup, as the other files send them
+  // a shape the model does not state is said in the service's own words, and the lines of the last file are gone
+  refuse = true;
+  await menu.getByTestId("model-download-open").click();
+  await menu.getByTestId("model-download-step").click();
+  await expect(menu.getByTestId("model-download-problem")).toHaveText(/^This model cannot be drawn as a STEP file yet: The tabs cannot be drawn: a bevel of 1 degrees/);
+  await expect(menu.getByTestId("model-download-part")).toHaveCount(0);
+  await expect(menu.getByTestId("model-download-saved")).toHaveCount(0);
+  expect(calls.solves).toHaveLength(solved);
+  expect(browserErrors).toEqual([]);
+});
+
+test("at phone width a long layup wraps inside the card once a STEP file is saved, and a pick by keyboard gives the focus back to the button for every file (ADR-0146)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  // sixteen angles with fractions, which a layup writes as one word of 114 characters, and a tab material that is one word of 80
+  const layup = `[${[12, -12, 33, -33, 47, -47, 61, -61, 75, -75, 88, -88, 5, -5, 19, -19].map((angle) => `${angle}.25`).join("/")}]s`;
+  const table = { title: "IM7-UNT-L1", units: { length: "mm", volume: "mm³", step: "mm" }, parts: [
+    { name: "Laminate", kind: "laminate", layup, plies: 32, ply_thickness: 0.18288, thickness: 5.85216, material: "IM7-8552", volume: 36576, in_model: true },
+    { name: "Bottom tab, top face", kind: "tab", layup: null, plies: null, ply_thickness: null, thickness: 1.5, material: "G".repeat(80), volume: 1870.94, in_model: false }] };
+  const ascii = JSON.stringify(table).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  const files: Record<string, { name: string; type: string; body: string; saved: string }> = {
+    abaqus: { name: "IM7-UNT-L1-abaqus.inp", type: "text/plain; charset=utf-8", body: "** IM7-UNT-L1\n*Heading\n", saved: "Saved the Abaqus input file (.inp)." },
+    ansys: { name: "IM7-UNT-L1-ansys.cdb", type: "text/plain; charset=utf-8", body: "! IM7-UNT-L1\n/PREP7\n", saved: "Saved the Ansys input file (.cdb)." },
+    step: { name: "IM7-UNT-L1.step", type: "model/step", body: "ISO-10303-21;\nHEADER;\n", saved: "Saved the STEP file." } };
+  await page.route(API, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname !== "/v1/coupon-jobs/model" || request.method() !== "POST") return route.fallback();
+    const program = url.searchParams.get("program") ?? "";
+    const file = files[program];
+    return route.fulfill({ status: 200, contentType: file.type, body: file.body, headers: { "Content-Disposition": `attachment; filename="${file.name}"`,
+      "X-Anisotropy-Model-File": file.name, ...(program === "step" ? { "X-Anisotropy-Model-Parts": ascii } : {}),
+      "Access-Control-Expose-Headers": "X-Anisotropy-Model-File, X-Anisotropy-Model-Parts" } });
+  });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  const menu = page.getByTestId("model-download");
+  await page.getByTestId("build-button").click();
+  await expect(menu).toBeVisible({ timeout: 30_000 });
+  await page.setViewportSize({ width: 390, height: 844 }); // the model is set up on a wide window and read on a phone: the card is the window's foot
+  // The card measured below is the one a finished run leaves: its results shown and its steps put away. The menu is there from the first
+  // model on, while the played solve is still under way, and until the results are in the card is laid out otherwise (the model's words
+  // beside the project, the run's steps over the menu). A measurement taken then was of another card, and it failed two runs in eight.
+  const shell = page.getByTestId("workspace-shell");
+  await expect(shell).toHaveAttribute("data-results", "true", { timeout: 60_000 });
+  await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 60_000 });
+  await expect(shell).toHaveAttribute("data-tree", "closed"); // on a phone the first results close the tree, which covers the model
+  await expect(page.getByTestId("ws-sheet")).toHaveAttribute("data-sheet", "card"); // and show the project's card under it, not the assistant
+  await expect(menu).toBeVisible();
+  const opener = menu.getByTestId("model-download-open");
+  // every file of the menu, picked with the keyboard: the entry leaves the page with its menu, and the focus goes back to the button
+  for (const program of ["abaqus", "ansys", "step"]) {
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    const entry = menu.getByTestId(`model-download-${program}`);
+    await entry.focus();
+    await expect(entry).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu.getByTestId("model-download-saved")).toHaveText(files[program].saved);
+    await expect(opener).toBeFocused();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe("BUTTON"); // not BODY: the next Tab goes on from the menu
+  }
+  // Escape closes the menu from an entry and leaves the focus on the button too
+  await page.keyboard.press("Enter");
+  await menu.getByTestId("model-download-step").focus();
+  await page.keyboard.press("Escape");
+  await expect(menu.getByRole("menuitem")).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  // the STEP file's note, with a layup and a material that are each one long word: inside the card, which does not scroll sideways
+  await expect(menu.getByTestId("model-download-part")).toHaveText([
+    `Laminate: ${layup}, 32 plies of 0.1829 mm, 5.852 mm thick, IM7-8552.`,
+    `Bottom tab, top face: 1.5 mm thick, ${"G".repeat(80)}. Drawn as stated. The analysis grips this length and does not include the tab's material.`]);
+  const widths = await page.evaluate(() => {
+    const note = document.querySelector<HTMLElement>("[data-testid=model-download] .studio-model-note")!;
+    const scrolls: string[] = []; // every box round the note that is wider inside than it shows
+    for (let box = note.parentElement; box; box = box.parentElement) if (box.scrollWidth > box.clientWidth + 1) scrolls.push(`${box.tagName}.${box.className} ${box.scrollWidth} > ${box.clientWidth}`);
+    const parts = [...note.querySelectorAll<HTMLElement>("[data-testid=model-download-part]")].map((part) => part.getBoundingClientRect());
+    return { note: note.getBoundingClientRect().width, right: Math.max(note.getBoundingClientRect().right, ...parts.map((part) => part.right)),
+      left: note.getBoundingClientRect().left, lines: parts.map((part) => part.height), window: window.innerWidth, scrolls };
+  });
+  expect(widths.window).toBe(390);
+  expect(widths.scrolls).toEqual([]);
+  expect(widths.note).toBeLessThanOrEqual(390);
+  expect(widths.left).toBeGreaterThanOrEqual(0);
+  expect(widths.right).toBeLessThanOrEqual(390);
+  expect(Math.min(...widths.lines)).toBeGreaterThan(30); // each part's line is broken over several: 12 px type on one line is under 20
+  await expectNoBannedTerms(page, "the STEP file saved at phone width");
+  expect(browserErrors).toEqual([]);
+});
+
+test("at phone width the card is one column before the results are in, a run under way: nothing is wider than its column and the page does not scroll sideways (ADR-0134)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  // the run never finishes, so the card stays as it is from the first model until its results: the project with the run's steps, and
+  // the model's words, with no answer yet. A narrow card's rule for that state once put the words beside the project on a phone too.
+  await mockApi(page, calls, { allTests: false, jobs: () => fixture("job-running") });
+  await page.goto("/workspace/fea?for=coupon");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByTestId("build-button").click();
+  await expect(page.getByTestId("job-progress")).toBeVisible({ timeout: 30_000 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Close the model tree" }).click(); // on a phone the tree covers the model until it is closed
+  await page.getByTestId("sheet-card").click(); // under the model, the project's card and not the assistant
+  await expect(page.getByTestId("job-progress")).toBeVisible();
+  await expect(page.getByTestId("preview-card")).toBeVisible();
+  await expect(page.getByTestId("workspace-shell")).toHaveAttribute("data-results", "false");
+  const card = await page.evaluate(() => {
+    const grid = document.querySelector<HTMLElement>(".cv-card-grid")!;
+    const style = getComputedStyle(grid);
+    const inside = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const columns = [...grid.querySelectorAll<HTMLElement>(":scope > .cv-col")].filter((column) => getComputedStyle(column).display !== "none");
+    const edge = grid.getBoundingClientRect().left; // the name's box hangs 4 px left of its column by design, inside the card's padding
+    const wide: string[] = []; // every box that is wider inside than it shows, or that reaches past its column's right edge or the card's left
+    for (const column of columns) {
+      const box = column.getBoundingClientRect();
+      if (column.scrollWidth > column.clientWidth + 1) wide.push(`${column.className} ${column.scrollWidth} > ${column.clientWidth}`);
+      for (const part of column.querySelectorAll<HTMLElement>("*")) {
+        const rect = part.getBoundingClientRect();
+        if (rect.width > 0 && (rect.right > box.right + 1 || rect.width > box.width + 1 || rect.left < edge - 1)) wide.push(`${part.tagName}.${part.className} ${Math.round(rect.left)} to ${Math.round(rect.right)} in ${Math.round(box.left)} to ${Math.round(box.right)}`);
+      }
+    }
+    return { inside, wide, window: window.innerWidth, page: document.documentElement.scrollWidth, sheet: document.querySelector<HTMLElement>(".cv-card")!.scrollWidth,
+      columns: columns.map((column) => ({ name: column.className, width: column.getBoundingClientRect().width, left: column.getBoundingClientRect().left,
+        top: column.getBoundingClientRect().top, bottom: column.getBoundingClientRect().bottom })) };
+  });
+  expect(card.window).toBe(390);
+  expect(card.columns.map((column) => column.name)).toEqual(["cv-col cv-project", "cv-col cv-view cv-slot"]); // no answer yet
+  for (const column of card.columns) expect(Math.abs(column.width - card.inside), column.name).toBeLessThanOrEqual(1); // each as wide as the card
+  expect(card.columns[1].left).toBe(card.columns[0].left);
+  expect(card.columns[1].top).toBeGreaterThanOrEqual(card.columns[0].bottom); // the model's words under the project, not beside it
+  expect(card.wide).toEqual([]);
+  expect(card.page).toBeLessThanOrEqual(390);
+  expect(card.sheet).toBeLessThanOrEqual(390);
+  expect(browserErrors).toEqual([]);
 });
 
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {

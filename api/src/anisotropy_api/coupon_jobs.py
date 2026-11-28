@@ -404,6 +404,9 @@ class CouponJobs:
         self.lock = threading.Lock()
         self.reports: dict[uuid.UUID, str] = {}  # the reports asked for in this process and not written: "writing" or "failed" (ADR-0064 amendment 3)
         self.typesetting = threading.Lock()  # one report at a time: Tectonic takes a core of this container for its half minute
+        # told as a job ends (its id and its state) and after a sweep stopped some (no id): the plans whose run the job was settle it
+        # there (ADR-0144 amendment 2). None tells no one.
+        self.on_end: Callable[..., object] | None = None
 
     def get(self, job_id: uuid.UUID) -> Job | None:
         """A job of this process, or of an earlier one from the jobs table."""
@@ -419,6 +422,15 @@ class CouponJobs:
             with self.lock:
                 job.report = self.reports.get(job.id)
         return job
+
+    def _ended(self, job_id: uuid.UUID | None = None, state: str | None = None) -> None:
+        """Whoever listens is told a job ended (`on_end`). Housekeeping: what it raises is said on the console and goes no further."""
+        if self.on_end is None:
+            return
+        try:
+            self.on_end(job_id, state)
+        except Exception as exc:  # noqa: BLE001
+            print(f"coupon job {job_id}: its end was not passed on: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}", flush=True)
 
     def busy(self) -> bool:
         """Whether this process runs a job now: what a solver answers when the pool is asked which of its solvers is free."""
@@ -436,14 +448,17 @@ class CouponJobs:
 
     def sweep(self, force: bool = False) -> int:
         """With the job queue, stop the jobs nothing will finish (`records.sweep_stale`), at most every SWEEP_EVERY_S unless `force`;
-        0 without the queue."""
+        0 without the queue. Whoever listens is told each time it looked (`on_end`, with no job named), whether or not it stopped one:
+        an end that was missed, or a job that never started, is found by the listener's own look."""
         if self.role is None or (not force and self.swept_at is not None and time.monotonic() - self.swept_at < SWEEP_EVERY_S):
             return 0
         self.swept_at = time.monotonic()
         try:
-            return sweep_stale(self.table, dt.datetime.now(dt.timezone.utc), silent_after=SILENT_AFTER, queued_after=QUEUED_AFTER)
+            stopped = sweep_stale(self.table, dt.datetime.now(dt.timezone.utc), silent_after=SILENT_AFTER, queued_after=QUEUED_AFTER)
         except SQLAlchemyError:
             return 0  # a sweep is housekeeping; the request it rides on goes on
+        self._ended()
+        return stopped
 
     def root_of(self, user_email: str | None) -> Path:
         """Where the coupons of whoever asked are kept (ADR-0106): a signed-in person's own folder, named by their key; with no email
@@ -493,17 +508,20 @@ class CouponJobs:
         return self.root
 
     def start(self, actor: str, inputs: dict, options: list[str], *, form: tuple[str, bytes] | None = None, coupon: str | None = None,
-              values: bytes | None = None, user_email: str | None = None, project_id: uuid.UUID | None = None) -> Job:
+              values: bytes | None = None, user_email: str | None = None, project_id: uuid.UUID | None = None,
+              job_id: uuid.UUID | None = None) -> Job:
         """Start a job from a filled-in form (its file name and bytes), the values (the JSON file's bytes) or a coupon's name; refused
         while another runs. `user_email` is the signed-in email, when Access is in front of the API, kept for the job's receipt;
         `project_id` the workspace project the job is run for, already known to be the requester's (ADR-0062 part 6). With the job
-        queue the job is filed, not run (`_enqueue`)."""
+        queue the job is filed, not run (`_enqueue`). `job_id` is the id the job is given when the caller has written it down before
+        the start (a plan's approval, ADR-0144 amendment 2); a new one otherwise."""
         if self.role == "solver":
             raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
         if sum(x is not None for x in (form, coupon, values)) != 1:
             raise ValueError("a job starts from a form, the values or a coupon: one of the three")
         if self.role == "queue":
-            return self._enqueue(actor, inputs, options, form=form, coupon=coupon, values=values, user_email=user_email, project_id=project_id)
+            return self._enqueue(actor, inputs, options, form=form, coupon=coupon, values=values, user_email=user_email, project_id=project_id,
+                                 job_id=job_id)
         if self.command is None:
             raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
         if self.per_day is not None:
@@ -513,7 +531,7 @@ class CouponJobs:
             if busy is not None:
                 print(f"coupon job refused: {busy.id} is running; one runs at a time", flush=True)
                 raise JobBusy(busy.id)
-            job_id = uuid.uuid4()
+            job_id = job_id or uuid.uuid4()
             job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email, project_id=project_id)
             job.folder.mkdir(parents=True)
             source = coupon
@@ -539,13 +557,13 @@ class CouponJobs:
         return job
 
     def _enqueue(self, actor: str, inputs: dict, options: list[str], *, form: tuple[str, bytes] | None, coupon: str | None, values: bytes | None,
-                 user_email: str | None, project_id: uuid.UUID | None) -> Job:
+                 user_email: str | None, project_id: uuid.UUID | None, job_id: uuid.UUID | None = None) -> Job:
         """The job queue's start (ADR-0056 amendment 3): the per-user limits, the input filed in the store, the row `queued` with the
         source and the options a solver needs. The Worker hands the job to the queue once the answer says so."""
         self.sweep()
         if self.per_day is not None:
             self._within_limits(actor, user_email)
-        job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
+        job_id, now = job_id or uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
         source = coupon
         if coupon is None:
             name, data = form if form is not None else (f"values-{job_id.hex[:8]}.json", values)
@@ -724,6 +742,7 @@ class CouponJobs:
         with self.lock:
             job.outcome, job.run_id, job.finished_at = outcome, run_id, finished_at
             job.state = state
+        self._ended(job.id, state)
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
         """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder,

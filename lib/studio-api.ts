@@ -7,6 +7,7 @@ import type { RepairChange, RepairChangePreview, RepairSweep, RepairSweepAnswer 
 import type { WingAnswer, WingDescription, WingFeCheck, WingShape } from "./wing";
 import type { PlyChange, WingChangePreview } from "./wing-chat";
 import type { Checklist, StudioValues } from "./studio-form";
+import { readShapeParts, type ModelDownload, type ShapeParts } from "./model-shape";
 import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
 export const ACTOR = "studio";
@@ -361,7 +362,8 @@ export async function liveSolve(apiBase: string, values: StudioValues, signal?: 
 /** The programs the model is written for on request (ADR-0129), and how each file is named on the page: the customer's own program,
  * named as the file that opens in it (`ALLOWED_PHRASE` in `studio-copy.ts` for the first). */
 export type ModelProgram = "abaqus" | "ansys";
-export const MODEL_FILE_LABELS: Record<ModelProgram, string> = { abaqus: "Abaqus input file (.inp)", ansys: "Ansys input file (.cdb)" };
+/** The menu's files and their names on the page: the two above and the model's shape as a STEP file for a CAD program (ADR-0146). */
+export const MODEL_FILE_LABELS: Record<ModelDownload, string> = { abaqus: "Abaqus input file (.inp)", ansys: "Ansys input file (.cdb)", step: "CAD (STEP)" };
 /** How the engineer's own program opens the file (ADR-0129 amendment 5), said under the file wherever the page offers it and in the
  * assistant's answer: Abaqus/CAE's File > Import > Part reads the mesh alone, and a job made from it has no elements ("THIS MODEL HAS
  * EITHER INCORRECT OR NO ELEMENT DEFINITIONS"). The file says the same in its first lines. The menus are the program's own, so the line
@@ -370,17 +372,20 @@ export const MODEL_FILE_OPENING: Partial<Record<ModelProgram, string>> = {
   abaqus: "Open it with File > Import > Model, then create the job from the model that makes. File > Import > Part brings in the mesh only, so a job from it has no elements.",
 };
 const MODEL_FILE_HEADER = "X-Anisotropy-Model-File";
-const MODEL_FILE_ENDINGS: Record<ModelProgram, string> = { abaqus: "-abaqus.inp", ansys: "-ansys.cdb" };
+const MODEL_PARTS_HEADER = "X-Anisotropy-Model-Parts"; // a STEP file's part table (ADR-0146)
+const MODEL_FILE_ENDINGS: Record<ModelDownload, string> = { abaqus: "-abaqus.inp", ansys: "-ansys.cdb", step: ".step" };
 
-/** The model the rows build, as a file for the engineer's own program (ADR-0129): the fea package writes it from the rows as they
- * stand, with no solve; the page computes nothing and changes nothing in it. A setup the check stops is refused in the API's words. */
-export async function modelFile(apiBase: string, values: StudioValues, program: ModelProgram, signal?: AbortSignal): Promise<{ name: string; text: string }> {
+/** The model the rows build, as a file for the engineer's own program (ADR-0129) or its shape as a STEP file (ADR-0146): the fea
+ * package writes it from the rows as they stand, with no solve; the page computes nothing and changes nothing in it. A setup the check
+ * stops is refused in the API's words. `parts` is the part table that comes with a STEP file, null for the other files. */
+export async function modelFile(apiBase: string, values: StudioValues, program: ModelDownload, signal?: AbortSignal): Promise<{ name: string; text: string; parts: ShapeParts | null }> {
   const response = await send(`${base(apiBase)}/v1/coupon-jobs/model?program=${program}`, { method: "POST", headers, body: JSON.stringify({ values }), signal });
   const text = await response.text();
   if (!response.ok) answered(response, text, "the model file");
   if (!text) throw unreadable("the model file: empty");
   const named = response.headers?.get(MODEL_FILE_HEADER) ?? "";
-  return { name: /^[A-Za-z0-9._-]+$/.test(named) ? named : `model${MODEL_FILE_ENDINGS[program]}`, text };
+  const parts = program === "step" ? readShapeParts(response.headers?.get(MODEL_PARTS_HEADER)) : null;
+  return { name: /^[A-Za-z0-9._-]+$/.test(named) ? named : `model${MODEL_FILE_ENDINGS[program]}`, text, parts };
 }
 
 /** A model brought in as an Abaqus input file (ADR-0105). `reading` is what the reader took from the file and what it skipped, in counts

@@ -116,6 +116,16 @@ checks/              proofs that are not team models: cases/, decks/ (tiny fixtu
 examples/             deck_summary.py, solve_deck.py
 ```
 
+## A coupon's or a plate's shape and STEP file
+
+`anisotropy_fea.coupon_shape` draws the spec a coupon or a plate states as solids in Gmsh's OpenCASCADE, without cutting a mesh, and writes them as a STEP file in millimetres (ADR-0146). The laminate is one solid at its whole thickness: the outline the mesh is cut from (`geometry`, `dogbone.Outline`, the hole at `mesher.hole_centre`), extruded by the sum of the model's ply thicknesses, with z = 0 at mid-thickness. Bonded tabs are four more solids when the coupon states their thickness, with the bevel it states; a coupon that gives only the gripped length gets no tab. Every solid is named, and the file's header states each part's layup, ply count, thickness and material, because a STEP file holds no plies. It needs the optional extra `mesh`:
+
+```
+uv run --extra mesh python tools/studio_tool.py model <values>.json --program step --out <folder>
+```
+
+writes `<designation>.step` and, in `model.json`, the part table in the coupon's units. `model.json` says `unavailable` and no file is written where Gmsh is not installed, and `refused` with the reason, in the coupon's units, for a shape the model does not state (tabs that reach a dog-bone's fillet, a bevel longer than the tab) or a size under 0.001 mm, which the kernel is not asked to draw: every size of every kind is a row of one table (`coupon_shape.DRAWN_SIZES`). The setup check for a shape (`checks.shape_checklist`) judges the rows, the spec, the material and the plies and leaves pending the ten items it words from a built model (identity, units, geometry, material, laminate, constraints, load, mesh, criterion, probes). A setup whose mesh would pass 100,000 elements is blocked for a shape as for every file, from its rows (`spec.MOST_ELEMENTS_STATED`, ADR-0086 amendment 2). Names are written as ISO 10303-21 strings (`wing_shape._step_string`), so any character reads back as itself. `tests/test_coupon_shape.py` reads every kind's file back and holds its outline, its thickness and its hole against the model and the mesh's corner nodes to 1e-6 mm (a midside node of a second-order mesh lies on the chord between its corners, so on a curve it is off the outline by the chord's sagitta), and its volume against the outline's area times the thickness. The files have been read back by OpenCASCADE only; none has been opened in a CAD program yet.
+
 ## A wing's shape and STEP file
 
 `anisotropy_fea.wing_shape` builds a wing file's parts (the engine's wing description, ADR-0115) as surfaces at their mid-thickness in Gmsh's OpenCASCADE, writes them as a STEP file in millimetres with every part named, and meshes them with four-node shells (ADR-0116). It needs the optional extra `mesh`:

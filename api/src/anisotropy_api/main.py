@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, NamedTuple, TypeVar
 from urllib.parse import unquote
 
 import numpy as np
@@ -53,7 +53,7 @@ from .coupon_jobs import (EVERY_TEST, FEA, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECK
                           SolverBusy, UnknownCoupon, REPAIR_PLIES, WING, is_repair_plies, is_wing, neutral_deck, repair_bond_command, repair_model_command, repair_plies_command, repair_shape_command, runner_command, studio_command, wing_check_command,
                           wing_shape_command)
 from .records import (ACTORS, EVERYONE, STATUSES, KindChanged, ProjectTaken, add_version, apply_setup, check_ready, list_versions, mark_version_run, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
-                      model_calls_since, PlanTaken, STALE_PLAN, STALE_REPAIR, add_plan, approve_plan, approve_repair_plan, edit_plan, fetch_plan, fetch_repair_plan, fetch_version, owns_plan, plans_since, update_plan,
+                      model_calls_since, PlanTaken, STALE_PLAN, STALE_REPAIR, add_plan, approve_plan, approve_repair_plan, edit_plan, fetch_plan, fetch_repair_plan, fetch_version, owns_plan, plans_since, settle_plan_runs, update_plan,
                       fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_model_calls, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
@@ -89,6 +89,11 @@ ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 MODEL_PROGRAM_NAMES = {"abaqus": "Abaqus", "ansys": "Ansys"}  # as a refusal names them (ADR-0129)
 MODEL_FILE_HEADER = "X-Anisotropy-Model-File"  # the written file's name, which a page on another origin reads without parsing Content-Disposition
+MODEL_PARTS_HEADER = "X-Anisotropy-Model-Parts"  # a STEP file's part table as JSON in ASCII (ADR-0146): the file itself holds no plies
+MODEL_PARTS_LIMIT = 4096  # the most bytes of a part table a header carries: an ordinary table is under 1000, and a fetch refuses headers near 16 kB
+MODEL_NOT_WRITTEN = "The model file could not be written here"  # a 503 of the model's address, whatever stopped the tool
+STEP_MEDIA_TYPE = "model/step"
+SHAPE_BUILDER_ABSENT = "The shape builder is not installed here"  # as the wing's and the repair's shape routes say it
 WAKE = "/v1/wake"  # the page says an analysis may be started soon (ADR-0056 amendment 11)
 WAKE_HEADER = "X-Anisotropy-Wake"  # what the Worker reads on the answer to start a solver (worker/routing.ts)
 SOLVER_STATE = "/v1/solver/state"  # whether a solver container runs a job: the wake-up's question (ADR-0056 amendment 11)
@@ -155,6 +160,9 @@ async def lifespan(app: FastAPI):
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
                                        per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role, wing=wing_check_command(), plies=repair_plies_command())
+    # a plan's run is settled from its job's own outcome as the job ends, whoever is looking, and at each start (ADR-0144 amendment 2)
+    app.state.coupon_jobs.on_end = lambda job_id=None, state=None: settle_runs(app, job_id, state)
+    settle_runs(app)
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     if settings.assistant.model is not None and settings.assistant.model not in CHECKED_MODELS:  # said, not refused (ADR-0121 amendment 8)
         print(f"the assistant's model {settings.assistant.model} is not one the Assistant check has been run with (CHECKED_MODELS)", flush=True)
@@ -196,7 +204,7 @@ app.add_middleware(
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor", MODEL_NAME_HEADER],
-    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_FILE_HEADER, "Location"],
+    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, MODEL_FILE_HEADER, MODEL_PARTS_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -563,16 +571,17 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
 
 
 def _start_job(request: Request, actor: str, jobs: CouponJobs, job_request: CouponJobRequest, response: Response,
-               project_id: uuid.UUID | None) -> Job:
+               project_id: uuid.UUID | None, job_id: uuid.UUID | None = None) -> Job:
     """A coupon job started as `POST /v1/coupon-jobs` starts it, for that route and for a plan's approval (ADR-0144): the same options,
     the same per-user limits, and the same headers on the answer (where to poll it, and with the queue the id the Worker queues).
-    JobBusy, JobLimited and JobRefused are the caller's to answer."""
+    JobBusy, JobLimited and JobRefused are the caller's to answer. `job_id` is the id the job is started as, when the caller has
+    written it down already (a plan's approval); a new one otherwise."""
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
     values = job_request.values_bytes() if job_request.values is not None else None
     # a founder's job carries the option to its tool, here or through the queue to a solver, which is not told who the founders are
     options = [*job_request.options(), *EVERY_TEST[_every_for(request, values)]]
     job = jobs.start(actor, job_request.recorded_inputs(), options, form=form, coupon=job_request.coupon, values=values,
-                     user_email=getattr(request.state, "user_email", None), project_id=project_id)
+                     user_email=getattr(request.state, "user_email", None), project_id=project_id, **({} if job_id is None else {"job_id": job_id}))
     response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
     if job.state == "queued":
         response.headers[ENQUEUE_HEADER] = str(job.id)
@@ -710,13 +719,21 @@ def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> R
     return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
 
 
-@app.post(COUPON_JOBS + "/model", response_model=None, responses={200: {"content": {"text/plain": {}}, "description": "The model file"}})
+@app.post(COUPON_JOBS + "/model", response_model=None,
+          responses={200: {"content": {"text/plain": {}, STEP_MEDIA_TYPE: {}}, "description": "The model file"}})
 def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, program: ModelProgram) -> Response:
     """The model the rows build, as a file another program reads (ADR-0129): `program=abaqus` gives the Abaqus input deck a run writes,
     `program=ansys` a Mechanical APDL input file of the same model. The fea package judges the rows as a live solve does and writes the
     file; nothing is solved and nothing is kept. The answer is the file, named in `Content-Disposition`. The Abaqus file is everyone's;
     the Ansys file is too since ADR-0129 amendment 3 (403 if it is closed again, `_ansys_model`). 422 when the setup check stops the model, with its first reason, or the program's writer cannot state it; 429, 504 and
-    503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256."""
+    503 as the live solve. Recorded with its actor (ADR-0026): the values' digest, the program and the file's name, size and SHA-256.
+
+    `program=step` gives the model's shape as a STEP file for a CAD program instead (ADR-0146): each part one solid at its thickness, in
+    millimetres, built by the fea package from the same model, under the same rules as the other two files. Its part table (each part's
+    layup, ply count, thickness and material, which a STEP file does not hold) comes as JSON in the header `X-Anisotropy-Model-Parts`.
+    The header is left out when the table is over `MODEL_PARTS_LIMIT` bytes, so the answer's headers stay small whatever the rows name.
+    422 when the shape cannot be drawn from what the model states, with the reason; 503 where Gmsh is not installed. A 503 of this
+    address says what happened and never why in the tool's words, which may name a folder of this machine: the cause is in the log."""
     if program == "ansys" and not _ansys_model(request):
         raise HTTPException(status_code=403, detail="The Ansys model is not offered yet.")
     receipt = CouponModelReceipt(**problem.receipt().model_dump(exclude_none=True), program=program)
@@ -729,10 +746,17 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except LiveTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
-    except LiveRefused as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except LiveRefused as exc:  # the cause may name a folder of this machine: it stays in the log, and the answer names none (ADR-0146)
+        print(f"the model file was not written: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail=MODEL_NOT_WRITTEN) from exc
+    if found.state == "unavailable":  # Gmsh is not installed with the fea package here: the tool's own words stay in the log
+        print(f"the model's shape was not built: {found.head.get('problem', 'no reason given')}", flush=True)
+        run_id = _record(request, actor, receipt, error="the shape builder is not installed")
+        raise HTTPException(status_code=503, detail=SHAPE_BUILDER_ABSENT, headers=_run_header(run_id))
     if found.state != "written" or found.content is None:
-        if found.state == "refused":
+        if found.state == "refused" and program == "step":  # closed as a sentence, so the page shows it as it stands (ADR-0091)
+            detail = f"This model cannot be drawn as a STEP file yet: {str(found.head.get('problem', 'no reason given')).rstrip('.')}."
+        elif found.state == "refused":
             detail = f"This model cannot be written for {MODEL_PROGRAM_NAMES[program]} yet: {found.head.get('problem', 'no reason given')}"
         else:
             reasons = [f"{item.get('label', item.get('id'))}: {item.get('message')}" for item in found.checklist.get("items", [])
@@ -744,8 +768,14 @@ def coupon_model(problem: CouponCheckRequest, actor: Actor, request: Request, pr
     run_id = _record(request, actor, receipt, response={
         "state": found.state, "designation": found.checklist.get("designation"), "program": program, "name": name, "units": found.head.get("units"),
         "bytes": len(found.content), "sha256": hashlib.sha256(found.content).hexdigest(), "nodes": found.head.get("nodes"),
-        "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3)})
+        "elements": found.head.get("elements"), "warm": found.warm, "seconds": round(found.seconds, 3),
+        **({"solids": found.head.get("solids")} if program == "step" else {})})
     headers = {"Content-Disposition": f'attachment; filename="{name}"', MODEL_FILE_HEADER: name, **(_run_header(run_id) or {})}
+    if program == "step":
+        table = json.dumps(found.head["parts"], ensure_ascii=True, separators=(",", ":")) if isinstance(found.head.get("parts"), dict) else ""
+        if 0 < len(table) <= MODEL_PARTS_LIMIT:  # a larger table is left out, and the page says where the layup is instead
+            headers[MODEL_PARTS_HEADER] = table
+        return Response(content=found.content, media_type=STEP_MEDIA_TYPE, headers=headers)
     return Response(content=found.content, media_type="text/plain; charset=utf-8", headers=headers)
 
 
@@ -1064,6 +1094,72 @@ def _plan_output(request: Request, engine, plan, version=None) -> PlanOutput:
     return PlanOutput.of(plan, version, requests_left=_plans_left(request, engine, _email(request)))
 
 
+def _run_settled(steps: list[dict[str, Any]], job_state: str | None) -> str | None:
+    """A plan's run settled by its job's state once the job has ended (`planner.run_ended`): done, stopped or refused, or None for a
+    job whose record is gone. The plan's state after it, or None when nothing changed."""
+    return planner.run_ended(steps, job_state == "done", planner.RUN_LOST_NOTE if job_state is None else None)
+
+
+def settle_runs(app_: FastAPI, job_id: uuid.UUID | None = None, state: str | None = None) -> int:
+    """The run of each coupon's and plate's plan whose job has ended, settled from the job's own outcome (ADR-0144 amendment 2): the
+    server started the job, so the server says how the run ended, and the plan reaches its end whether or not a page is open. Called
+    as a job ends (`CouponJobs.on_end`), after a sweep of the jobs nothing will finish, and at startup; with no job named, the plans
+    whose job ended within `planner.RUN_SWEEP_S`, and those whose job has no record once their approval is older than
+    `planner.RUN_LOST_AFTER_S`, as a look at the plan reads it (`_run_end`). Housekeeping, so nothing it meets stops a start or a job's end: a plan that cannot
+    be settled is said on the console by its id and the others are settled all the same (`settle_plan_runs`), and whatever else goes
+    wrong, a database that does not answer included, is said there too; the next look at a plan settles it (`_settle_run`). How many
+    were settled."""
+    engine = getattr(app_.state, "records", None)
+    if engine is None:
+        return 0
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        return settle_plan_runs(engine, _run_settled, now, kinds=planner.RUN_KINDS, ended=planner.JOB_ENDED, job_id=job_id, state=state,
+                                since=now - dt.timedelta(seconds=planner.RUN_SWEEP_S),
+                                lost_before=now - dt.timedelta(seconds=planner.RUN_LOST_AFTER_S))
+    except Exception as exc:  # noqa: BLE001
+        print(f"the plans' runs were not settled: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}", flush=True)
+        return 0
+
+
+class _RunEnd(NamedTuple):
+    """How a plan's job stands once it has ended: its state, or None when its record is gone."""
+
+    state: str | None
+
+
+def _run_end(request: Request, plan) -> _RunEnd | None:
+    """How the job of a coupon's or a plate's plan ended, as the job stands now; None while it is under way, when the plan has no run
+    under way, and when the job cannot be read right now. A job with no record is lost once the plan's approval is older than
+    `planner.RUN_LOST_AFTER_S`: an approval writes the job's id on the plan a moment before it starts the job."""
+    if plan.kind not in planner.RUN_KINDS or plan.job_id is None:
+        return None
+    run = planner.step_of(plan.steps, "run")
+    jobs = getattr(request.app.state, "coupon_jobs", None)
+    if run is None or run["state"] != "running" or jobs is None:
+        return None
+    try:
+        job = jobs.get(uuid.UUID(plan.job_id))
+    except (ValueError, SQLAlchemyError):
+        return None
+    if job is None:  # no record of it: lost, unless the plan is so new that its approval may be about to start the job it names
+        new = plan.approved_at is not None and dt.datetime.now(dt.timezone.utc) - plan.approved_at < dt.timedelta(seconds=planner.RUN_LOST_AFTER_S)
+        return None if new else _RunEnd(None)
+    return _RunEnd(job.state) if job.state in planner.JOB_ENDED else None
+
+
+def _settle_run(request: Request, engine, plan):
+    """A coupon's or a plate's plan with its run settled from its job as the job stands now, before the plan is read: done when the
+    job is done, failed with a plain reason when the job stopped or its record is gone. The plan as it then stands."""
+    end = _run_end(request, plan)
+    if end is None:
+        return plan
+    try:
+        return edit_plan(engine, plan.id, lambda steps, _job: _run_settled(steps, end.state), dt.datetime.now(dt.timezone.utc)) or plan
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+
+
 def _plan_and_keep(request: Request, actor: str, engine, ask: str, *, kind: str, project_id: uuid.UUID | None, base: str,
                    make: Callable[[Any], planner.Planned], calls: list[ModelCall]) -> PlanOutput:
     """One planned request of any kind, kept as a row: `capped` with no call past the day's planned requests (every kind counted together),
@@ -1122,9 +1218,10 @@ def plan_a_request(project_id: uuid.UUID, problem: PlanRequest, actor: Actor, re
 
 @app.get(PLANS + "/{plan_id}", response_model=PlanOutput)
 def read_plan(project_id: uuid.UUID, plan_id: uuid.UUID, actor: Actor, request: Request) -> PlanOutput:
-    """A plan as it stands (ADR-0144): its steps with their states and notes as they ran and as the page reported them."""
+    """A plan as it stands (ADR-0144): its steps with their states and notes as they ran and as the page reported them, and the run
+    of a coupon's or a plate's plan as its job ended it."""
     engine, _, plan = _requesters_plan(request, actor, project_id, plan_id)
-    return _plan_output(request, engine, plan)
+    return _plan_output(request, engine, _settle_run(request, engine, plan))
 
 
 @app.post(PLANS + "/{plan_id}/approve", response_model=ApproveOutput)
@@ -1163,16 +1260,21 @@ def approve_a_plan(project_id: uuid.UUID, plan_id: uuid.UUID, approval: ApproveR
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except SQLAlchemyError as exc:
             raise _database_error(exc) from exc
+
+        def named(job_id: uuid.UUID) -> None:
+            """The plan written with its run under way and the job that run is about to be started as."""
+            update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), job_id=str(job_id), updated_at=dt.datetime.now(dt.timezone.utc))
+
         check, job = None, None
-        if jobs is not None:
-            check, job = _check_and_run(request, actor, jobs, response, steps, dict(project.content), row.id)
         try:
+            if jobs is not None:
+                check, job = _check_and_run(request, actor, jobs, response, steps, dict(project.content), row.id, named)
+            kept = update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), job_id=None if job is None else str(job.id),
+                               updated_at=dt.datetime.now(dt.timezone.utc))
             if job is not None and version is not None:
                 version = mark_version_run(engine, row.id, version.n, job_id=str(job.id), result=None) or version
             if check is not None and check.designation and check.designation != project.designation:
                 project = update_project(engine, row.id, designation=check.designation)
-            kept = update_plan(engine, plan.id, steps=steps, state=planner.plan_state(steps), job_id=None if job is None else str(job.id),
-                               updated_at=dt.datetime.now(dt.timezone.utc))
         except SQLAlchemyError as exc:
             raise _database_error(exc) from exc
         except LookupError as exc:  # the project and its plans were deleted meanwhile
@@ -1188,11 +1290,14 @@ def approve_a_plan(project_id: uuid.UUID, plan_id: uuid.UUID, approval: ApproveR
 
 
 def _check_and_run(request: Request, actor: str, jobs: CouponJobs, response: Response, steps: list[dict[str, Any]], content: dict[str, Any],
-                   project_id: uuid.UUID) -> tuple[CouponCheckResponse | None, Job | None]:
+                   project_id: uuid.UUID, named: Callable[[uuid.UUID], None]) -> tuple[CouponCheckResponse | None, Job | None]:
     """An approved plan's check and run, with its steps set in place as they end: the setup check of the values the page sends for the
     setup as it now stands (`workspaceValues`); when it passes, the run, as the page starts it (by the form's Filled in by or "studio",
     over the coupon's earlier attempts when it has some, and no PDF). A check that does not pass, or a start refused, stops the plan at
-    that step with the reason."""
+    that step with the reason. The job's id is chosen here and the plan is written with it (`named`) before the job is started, so no
+    job runs that its plan does not name; what `named` raises is the caller's, and nothing has been started then. A start that fails
+    in any other way and leaves no job stops the plan at its run step too, in plain words, so the plan names no job that does not
+    exist; the changes stand as the version they were kept as, and the engineer asks for the run again."""
     check_n = planner.step_of(steps, "check")["n"]
     run_n = planner.step_of(steps, "run")["n"]
     values = planner.run_values(content, _every_test(request))
@@ -1212,11 +1317,27 @@ def _check_and_run(request: Request, actor: str, jobs: CouponJobs, response: Res
     try:
         job_request = CouponJobRequest(values=values, run_by=planner.run_by(content), replace=bool(checklist.get("coupon_exists")), pdf=False,
                                        project_id=str(project_id))
-        job = _start_job(request, actor, jobs, job_request, response, project_id)
+    except ValidationError as exc:
+        planner.stop_at(steps, run_n, str(exc).splitlines()[0])
+        return check, None
+    job_id = uuid.uuid4()
+    planner.settle(steps, ("run",), "running")
+    named(job_id)
+    try:
+        job = _start_job(request, actor, jobs, job_request, response, project_id, job_id=job_id)
     except (JobBusy, JobLimited, JobRefused, ValidationError) as exc:
         planner.stop_at(steps, run_n, str(exc).splitlines()[0])
         return check, None
-    planner.settle(steps, ("run",), "running")
+    except Exception as exc:  # noqa: BLE001  the start itself failed: a disk that is full, no thread to run it on
+        try:
+            kept = jobs.get(job_id) is not None
+        except Exception:  # noqa: BLE001  whether it left a job cannot be read now: the plan goes on naming it, and a sweep settles it
+            kept = True
+        if kept:  # the start left a job: the plan names it, and that job's own end settles the run
+            raise
+        print(f"job {job_id} of a plan was not started: {exc.__class__.__name__}: {str(exc).splitlines()[0] if str(exc) else ''}", flush=True)
+        planner.stop_at(steps, run_n, planner.RUN_START_FAILED_NOTE)
+        return check, None
     return check, job
 
 
@@ -1330,9 +1451,14 @@ def report_plan_step(project_id: uuid.UUID, plan_id: uuid.UUID, n: int, report: 
     engine, _, plan = _requesters_plan(request, actor, project_id, plan_id)
     if plan.state not in ("approved", "running", "done", "stopped"):
         raise HTTPException(status_code=409, detail="This plan is not approved, so it has no step to report.")
+    end = _run_end(request, plan)  # how the plan's job ended, when it has: read before the row is locked
 
-    def edit(steps: list[dict[str, Any]]) -> str:
-        return planner.report_step(steps, n, report.state, report.note, _reported_by(plan.kind))
+    def edit(steps: list[dict[str, Any]], job_id: str | None) -> str:
+        if plan.kind not in planner.RUN_KINDS:
+            return planner.report_step(steps, n, report.state, report.note, _reported_by(plan.kind))
+        if end is not None and job_id == plan.job_id:
+            _run_settled(steps, end.state)  # the run as its job ended it, before the step reported is judged
+        return planner.report_run_plan(steps, n, report.state, report.note, job=job_id is not None)
 
     try:
         edited = edit_plan(engine, plan.id, edit, dt.datetime.now(dt.timezone.utc))
@@ -2828,7 +2954,7 @@ def report_repair_plan_step(plan_id: uuid.UUID, n: int, report: StepReport, acto
     if plan.state not in ("approved", "running", "done", "stopped"):
         raise HTTPException(status_code=409, detail="This plan is not approved, so it has no step to report.")
 
-    def edit(steps: list[dict[str, Any]]) -> str:
+    def edit(steps: list[dict[str, Any]], _job: str | None) -> str:
         return planner.report_step(steps, n, report.state, report.note, _reported_by(plan.kind))
 
     try:

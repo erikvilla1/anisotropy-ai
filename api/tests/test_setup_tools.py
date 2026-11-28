@@ -207,6 +207,17 @@ def test_a_version_counts_the_setup_not_the_date_or_blank_rows():
     assert tools.setup_key(tools.change_setup(PLATE, PULLED[:1]).content) != key
 
 
+def test_the_setups_a_version_counts_as_one_are_the_pages_too():
+    """`tests/fixtures/setup-tools/setup-keys.json` is held by the page's `setupKey` too (`tests/model-versions.test.ts`): a setup the
+    server counts as its last must be one the page does not send again."""
+    held = json.loads((Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "setup-tools" / "setup-keys.json").read_text(encoding="utf-8"))
+    for group in held["same"]:
+        assert len({tools.setup_key(setup) for setup in group["setups"]}) == 1, group["name"]
+    for group in held["different"]:
+        assert len({tools.setup_key(setup) for setup in group["setups"]}) == len(group["setups"]), group["name"]
+    assert len(held["same"]) == 5 and len(held["different"]) == 3
+
+
 # ------------------------------------------------------------------------------------------- the routes
 
 @pytest.fixture

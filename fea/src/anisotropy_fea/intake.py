@@ -20,10 +20,12 @@ that system and the decks in `units.deck_units_of` it (ADR-0061). The library sh
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
@@ -31,8 +33,9 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 from . import __version__, enabled, forms, paths, tension_input
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
-from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, load_spec, parse_spec,
+from .spec import (MOST_ELEMENTS_STATED, AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, follows_shape, full_angles, element_count_text, load_spec, parse_spec,
                    to_si)
+from .mesher import hole_blocks
 from .spec import test_name as test_word
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
@@ -73,6 +76,35 @@ WORD_OF_CRITERION = {criterion: word for word, criterion in CRITERION_OF_WORD.it
 VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the workspace sends (ADR-0046 amendment 2)
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
+# The most a coupon's name and a tab's material hold, counted in bytes of UTF-8, as a file counts: what the API's coupon field and a
+# name of a deck hold. A coupon's name is capitals, digits and hyphens (`spec.DESIGNATION`), so its bytes are its characters; a tab's
+# material is free text, where a letter outside ASCII takes 2 to 4 bytes.
+NAME_LENGTH = 80
+# The most bytes of UTF-8 in one word of a text row that is written into a model's file (`FILE_TEXT`). Such a row goes in as comment
+# lines broken between words and never inside one (a source's address would break). A line of an Abaqus input file holds 256 bytes, the text as typed
+# (`write_abaqus.MAX_LINE`); one of a Mechanical APDL file holds 640 characters of ASCII, a letter outside ASCII written as its code
+# of up to ten characters (`write_ansys.ascii_text`). A word of 200 bytes fits both with its line's prefix: at most 205 bytes in the
+# first, and at most 504 characters in the second (fifty letters of four bytes, ten characters each).
+WORD_BYTES = 200
+# The free text rows the writers put into a file for Abaqus or Ansys (`tests/test_studio_tool.py` holds the list against the files). A
+# tab's material goes in too, and into a STEP file, under its own bound, `NAME_LENGTH`. Who filled the form in and the notes reach no file.
+FILE_TEXT = ("size_from", "team_model", "test_data", "own_source")
+
+
+class TooLarge(ValueError):
+    """A whole number too large for a float: JSON may hold one of hundreds of digits."""
+
+
+def real(value) -> float:
+    """A value of a list row as a finite number, or ValueError as for text that is no number: JSON as Python reads it holds Infinity,
+    NaN and whole numbers too large for a float."""
+    try:
+        number = float(value)
+    except OverflowError:
+        raise TooLarge("the number is too large") from None
+    if not math.isfinite(number):
+        raise ValueError(f"{number:g} is not a finite number")
+    return number
 LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
                 "this cell shows its constants")  # shown until a material is picked; an Excel text in a formula holds at most 255 characters
 assert len(LIBRARY_HELP) <= 255 and '"' not in LIBRARY_HELP
@@ -993,6 +1025,10 @@ def check_form(form: FormInput) -> Values:
         value = forms.text_of(cells.get(key))
         if not value and FIELDS[key].required:
             problems.append(f"{form.label(key)}: required")
+        longest = max((len(word.encode("utf-8")) for word in value.split()), default=0)
+        if key in FILE_TEXT and longest > WORD_BYTES:  # no file of the model can hold the word on one line, and none cuts a word
+            problems.append(f"{form.label(key)}: one word of it takes {longest} bytes, and a line of a model file holds a word of at most {WORD_BYTES}; "
+                            "shorten it or put a space in it")
         return value
 
     def number(key: str, whole: bool = False) -> float | int | None:
@@ -1006,6 +1042,12 @@ def check_form(form: FormInput) -> Values:
             number_ = float(str(value).replace(",", ".")) if isinstance(value, str) else float(value)
         except (TypeError, ValueError):
             problems.append(f"{label}: a number is needed, not {forms.text_of(value)!r}")
+            return None
+        except OverflowError:  # a whole number of hundreds of digits, which JSON may hold and a float may not
+            problems.append(f"{label}: the number is too large")
+            return None
+        if not math.isfinite(number_):  # inf and nan are numbers to Python and to no model: said here, before a size is divided by one
+            problems.append(f"{label}: a finite number is needed, not {number_:g}")
             return None
         if whole and number_ != int(number_):
             problems.append(f"{label}: a whole number is needed, not {number_:g}")
@@ -1038,7 +1080,7 @@ def check_form(form: FormInput) -> Values:
             return None
         try:
             parts = [float(p.strip()) for p in raw.replace(";", ",").split(",") if p.strip()]
-            if whole and any(p != int(p) for p in parts):
+            if not all(math.isfinite(p) for p in parts) or whole and any(p != int(p) for p in parts):
                 raise ValueError
             return [int(p) for p in parts] if whole else parts
         except ValueError:
@@ -1140,6 +1182,9 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"{L('tab_thickness')} and {L('tab_bevel')}: give both for bonded tabs, or leave the three tab rows blank")
             if not tab_length:
                 problems.append(f"{L('tab_thickness')}: bonded tabs need a {L('tab_length')} above 0")
+    if tab_material is not None and len(tab_material.encode("utf-8")) > NAME_LENGTH:  # in bytes, as a file counts it
+        problems.append(f"{L('tab_material')}: at most {NAME_LENGTH} bytes (a letter outside the basic Latin letters takes 2 to 4), not "
+                        f"{len(tab_material.encode('utf-8'))}")
     if tab_bevel is not None and tab_bevel > 90:
         problems.append(f"{L('tab_bevel')}: at most 90 (a square end), not {tab_bevel:g}")
     strain_device, strain_length = word("strain_device") or None, number("strain_length")
@@ -1201,7 +1246,9 @@ def check_form(form: FormInput) -> Values:
             problems.append(f"Ply {i}: a blank ply row above it; list the plies without gaps")
             continue
         try:
-            angles.append(float(value))
+            angles.append(real(value))
+        except TooLarge:  # said without its digits, which may be hundreds
+            problems.append(f"Ply {i}: the number is too large")
         except (TypeError, ValueError):
             problems.append(f"Ply {i}: an angle in degrees is needed, not {forms.text_of(value)!r}")
     if not angles and isotropic is None:
@@ -1338,7 +1385,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Regions: entry {i} needs name, x0, x1, y0, y1")
             continue
         try:
-            regions.append({"name": str(r["name"]).strip(), **{k: float(r[k]) for k in ("x0", "x1", "y0", "y1")}})
+            regions.append({"name": str(r["name"]).strip(), **{k: real(r[k]) for k in ("x0", "x1", "y0", "y1")}})
         except (TypeError, ValueError):
             problems.append(f"Regions: entry {i} ({r.get('name')!r}) has a bound that is not a number")
     known = plate_regions_of(tab_length, hole_diameter, regions)
@@ -1355,7 +1402,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Supports: entry {i} ({region}) needs dofs as a list of distinct numbers from 1 to 6")
             dofs = []
         try:
-            value = float(s.get("value") or 0.0)
+            value = real(s.get("value") or 0.0)
         except (TypeError, ValueError):
             problems.append(f"Supports: entry {i} ({region}) has a value that is not a number")
             value = 0.0
@@ -1370,7 +1417,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
             problems.append(f"Loads: entry {i} names region {region!r}, not one of {', '.join(known)}")
         if keys == {"region", "pressure"}:
             try:
-                pressure = float(ld["pressure"])
+                pressure = real(ld["pressure"])
             except (TypeError, ValueError):
                 problems.append(f"Loads: entry {i} ({region}) has a pressure that is not a number")
                 continue
@@ -1380,7 +1427,7 @@ def plate_lists(form: FormInput, problems: list[str], tab_length: float | None, 
         elif keys == {"region", "dof", "total"}:
             dof = ld["dof"]
             try:
-                total = float(ld["total"])
+                total = real(ld["total"])
             except (TypeError, ValueError):
                 problems.append(f"Loads: entry {i} ({region}) has a total that is not a number")
                 continue
@@ -1526,9 +1573,13 @@ def designation_for(values: Values, root: Path) -> Designation:
         other = next((c for c, angles in layups.items() if angles == stacking and c != layup), None)
         if other is not None:
             problems.append(f"Layup code: this stacking sequence already has the code {other}; use it")
+    named = Designation(code, values.test_code, layup)
+    if len(named.name) > NAME_LENGTH:
+        problems.append(f"Material code and Layup code: the coupon's name would be {len(named.name)} characters, and a name is at most {NAME_LENGTH}; "
+                        "give shorter codes")
     if problems:
         raise IntakeError("; ".join(problems))
-    return Designation(code, values.test_code, layup)
+    return named
 
 
 # --------------------------------------------------------------------------------------------- the spec
@@ -1605,6 +1656,108 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
         data["ny"] = rows(L)
         comments["mesh.ny"] = f"about {size:g} {unit} rows"
     return data, comments
+
+
+def stated_elements(values: Values) -> int | None:
+    """How many elements the rows' mesh would have, from the counts `mesh_data` writes into the spec: arithmetic, with nothing built.
+    It is `spec.element_estimate` of the spec these rows make. None when the counts are beyond any number (an element size so small
+    that a length over it is infinite), which is past every limit."""
+    try:
+        data, _ = mesh_data(values)
+        if data["mesher"] == "gmsh":
+            return hole_elements(values, data["element_size"], data["hole"]["circumferential"], data["hole"]["radial_layers"])
+        return data["nx"] * (sum(data["y_seeds"]) if "y_seeds" in data else data["ny"])
+    except OverflowError:  # a length over a size too small to divide by: more rows than any number
+        return None
+
+
+def hole_elements(values: Values, size: float, around: int, rings: int) -> int:
+    """The elements of the rows' plate with a hole at this element size, with this many nodes around the hole and this many rings: the
+    count of the blocks the mesher cuts (`mesher.hole_blocks`), so it is the mesh's own count and not an estimate."""
+    blocks = hole_blocks(values.width, values.length, values.hole_diameter or 0.0, size, around, values.hole["ring_ratio"], values.tab_length or 0.0)
+    return blocks.elements(rings)
+
+
+def size_named(fits: float) -> float:
+    """An element size as a refusal names it: two significant figures, rounded up, so the size named fits."""
+    step = 10 ** math.floor(math.log10(fits) - 1)
+    return float(f"{math.ceil(fits / step) * step:.2g}")  # printed plainly: a size of 100 or more reads "160", never "1.6e+02"
+
+
+def size_that_fits(length: float, width: float, limit: int) -> float:
+    """An element size at which a coupon of this length and width has at most `limit` square elements, in the unit of the two sizes."""
+    return size_named(math.sqrt(length * width / limit))
+
+
+def has_hole_mesh(values: Values) -> bool:
+    """Whether the rows' mesh is the one cut round a hole, where the nodes around the hole and the rings count as the element size does."""
+    return values.seeds is None and (values.kind == "open_hole_tension" or (values.kind in PLATE_KINDS and values.hole_diameter is not None))
+
+
+def most(fits: Callable[[int], bool], stated: int) -> int:
+    """The largest whole number from 1 to `stated` that fits, where a smaller one fits if a larger one does; 0 when not even 1 fits."""
+    if not fits(1):
+        return 0
+    low, high = 1, stated  # low fits
+    while low < high:
+        middle = (low + high + 1) // 2
+        low, high = (middle, high) if fits(middle) else (low, middle - 1)
+    return low
+
+
+def hole_mesh_change(values: Values, limit: int) -> tuple[str, tuple[str, ...]]:
+    """What to change in a plate with a hole so that its mesh has at most `limit` elements, and the rows it is changed in. The column
+    and the band through the hole carry a quarter of the nodes around it across the whole plate, so those nodes can pass the limit at
+    any element size; the rings add the nodes once each. An element size is named only when the element size is the cause: when the
+    mesh would pass the limit with the fewest nodes (8) and one ring too. Else the most nodes, or the most rings, that fit as the
+    other rows stand."""
+    unit = UNIT_LABEL[values.units]["length"]
+    size = values.element_size if values.element_size is not None else element_size_default(values.units)
+    around, rings = int(values.hole["circumferential"]), int(values.hole["radial_layers"])
+
+    def fits(size_: float, around_: int, rings_: int) -> bool:
+        try:
+            return hole_elements(values, size_, around_, rings_) <= limit
+        except OverflowError:
+            return False
+
+    coarsest = 2 * max(values.length, values.width)  # every block outside the square is one element across: no size gives fewer
+    if not fits(size, 8, 1):  # the element size is a cause
+        if not fits(coarsest, around, rings):  # and so are the hole's rows: no element size fits them
+            return ("use a larger element size, and fewer nodes around the hole or fewer element rings around it",
+                    ("element_size", "hole_circumferential", "hole_radial"))
+        low, high = size, coarsest  # high fits, low does not
+        for _ in range(200):
+            middle = math.sqrt(low * high) if low > 0 else high / 2
+            low, high = (low, middle) if fits(middle, around, rings) else (middle, high)
+        named = size_named(high)
+        return f"use an element size of {(named if fits(named, around, rings) else high):g} {unit} or more", ("element_size",)
+    nodes = 4 * most(lambda quarter: fits(size, 4 * quarter, rings), around // 4)
+    layers = most(lambda count: fits(size, around, count), rings)
+    if nodes >= 8 and layers >= 1:
+        return (f"give at most {nodes:,} nodes around the hole, or at most {layers:,} element rings around it",
+                ("hole_circumferential", "hole_radial"))
+    if nodes >= 8:
+        return f"give at most {nodes:,} nodes around the hole", ("hole_circumferential",)
+    if layers >= 1:
+        return f"give at most {layers:,} element rings around the hole", ("hole_radial",)
+    return "give fewer nodes around the hole and fewer element rings around it", ("hole_circumferential", "hole_radial")
+
+
+def mesh_change(values: Values, limit: int) -> tuple[str, tuple[str, ...]]:
+    """What to change so that the rows' mesh has at most `limit` elements, in the form's units, and the rows it is changed in."""
+    if values.seeds is not None:
+        return "give fewer elements across the width or fewer rows per segment", ("mesh_nx", "mesh_seeds")
+    if has_hole_mesh(values):
+        return hole_mesh_change(values, limit)
+    return f"use an element size of {size_that_fits(values.length, values.width, limit):g} {UNIT_LABEL[values.units]['length']} or more", ("element_size",)
+
+
+def too_many_stated(values: Values, count: int | None) -> str:
+    """Why rows whose mesh would have `count` elements are refused whatever is made of them (ADR-0086 amendment 2): the count, the most
+    a setup holds, and what to change, in the form's units."""
+    return (f"the mesh would have {element_count_text(count)} elements; a setup holds at most {MOST_ELEMENTS_STATED:,}, whatever is made of it: "
+            f"{mesh_change(values, MOST_ELEMENTS_STATED)[0]}")
 
 
 def bending_lines_of(values: Values) -> list[float]:
@@ -1889,7 +2042,13 @@ def form_rows_of(message: str, units: str = UNITS) -> list[str]:
 
 
 def build_specs(values: Values, designation: Designation, form_name: str) -> tuple[str, str]:
-    """The team's build and its CalculiX twin as TOML texts, each judged by `parse_spec` before it is returned."""
+    """The team's build and its CalculiX twin as TOML texts, each judged by `parse_spec` before it is returned. Rows whose mesh would
+    pass the most elements a setup holds are refused first, from the counts, before a spec is made of them (ADR-0086 amendment 2)."""
+    count = stated_elements(values)
+    if count is None or count > MOST_ELEMENTS_STATED:
+        rows = mesh_change(values, MOST_ELEMENTS_STATED)[1]
+        raise IntakeError(f"{form_name}: the spec refuses the inputs: {too_many_stated(values, count)} "
+                          f"(form rows: {', '.join(FIELDS[key].label_in(values.units) for key in rows)})")
     texts = []
     for grips_kind, stem in ((values.grips, designation.name), ("nodal", f"{designation.name}-nodal")):
         data, comments, header = spec_data(values, designation, grips_kind, form_name)

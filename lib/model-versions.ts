@@ -31,12 +31,30 @@ export const MAX_VERSIONS = 50;
 const IGNORED = new Set(["date"]);
 const LAYUP_KEYS = new Set([...PLY_KEYS, "symmetric"]);
 
-const clean = (form: StudioForm): StudioForm => Object.fromEntries(Object.entries(form).filter(([k, v]) => !IGNORED.has(k) && (v ?? "").trim() !== ""));
+const clean = (form: StudioForm): StudioForm => Object.fromEntries(Object.entries(form ?? {})
+  .filter(([k, v]) => !IGNORED.has(k) && typeof v === "string" && v.trim() !== ""));
 
-/** The setup as one string, to tell a change from none. */
+/** A value with every object's keys in one order. The server keeps a setup as JSON and answers with its own order of keys, so the lists
+ * the page wrote and the same lists read back are told apart by their values alone. A list keeps its order: it is part of the setup. */
+const keyed = (value: unknown): unknown => (Array.isArray(value) ? value.map(keyed)
+  : typeof value === "object" && value !== null ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, keyed((value as Record<string, unknown>)[k])]))
+    : value);
+
+/** A plate's lists as a version counts them, each one present: a list that is missing or is no list reads as empty, an entry that is no
+ * object is left out, and nothing else the plate holds is counted. This is the server's `lists_of` (`api/src/anisotropy_api/setup_tools.py`),
+ * which another client's setup, written without a list, is read by. */
+const LISTS = ["supports", "loads", "regions"] as const;
+const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const listsOf = (plate: unknown) => Object.fromEntries(LISTS.map((k) => {
+  const list = record(plate) ? plate[k] : null;
+  return [k, Array.isArray(list) ? list.filter(record).map(keyed) : []];
+}));
+
+/** The setup as one string, to tell a change from none, whatever order its keys were written in: the filled rows but the date, and the
+ * plate's three lists. It agrees with the server's `setup_key`, held by `tests/fixtures/setup-tools/setup-keys.json` on both sides. */
 export function setupKey(form: StudioForm, plate: PlateLists): string {
   const rows = clean(form);
-  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), plate]);
+  return JSON.stringify([Object.keys(rows).sort().map((k) => [k, rows[k].trim()]), listsOf(plate)]);
 }
 
 const label = (key: string) => (key === FOLLOWED_KEY ? FOLLOWED_LABEL : fieldByKey[key]?.label ?? key);
@@ -116,19 +134,29 @@ function readResult(value: unknown): VersionResult | null {
 export const versionUpload = (v: ModelVersion) => ({ by: v.by, why: v.why, changes: v.changes, form: v.form as Record<string, string>,
   plate: v.plate as unknown as Record<string, unknown> });
 
+/** What this browser has heard the server answer for since the project opened, so that nothing is sent twice: a version by when it was
+ * made and its setup, a run by its version, its job and whether it carries its answer. */
+export type Answered = ReadonlySet<string>;
+const NOTHING: Answered = new Set<string>();
+export const versionId = (v: ModelVersion): string => `${v.at} ${setupKey(v.form, v.plate)}`;
+type RunMark = { n: number; job: string; result: VersionResult | null };
+const markId = (m: RunMark): string => `run ${m.n} ${m.job} ${m.result ? "answer" : "job"}`;
+
 /** The versions the server does not yet hold, the oldest first: those after the last setup both lists share. All of them when the server
- * holds none, none when the server's last is this browser's last. */
-export function unsent(local: ModelVersion[], server: ModelVersion[]): ModelVersion[] {
-  if (!server.length) return local;
+ * holds none, none when the server's last is this browser's last. A version the server has answered for (`answered`) is never among
+ * them, whatever the two keys say: the server holds it, as a new version or as its last again. */
+export function unsent(local: ModelVersion[], server: ModelVersion[], answered: Answered = NOTHING): ModelVersion[] {
+  const fresh = (list: ModelVersion[]) => (answered.size ? list.filter((v) => !answered.has(versionId(v))) : list);
+  if (!server.length) return fresh(local);
   const last = setupKey(server[server.length - 1].form, server[server.length - 1].plate);
   let i = local.length - 1;
   while (i >= 0 && setupKey(local[i].form, local[i].plate) !== last) i--;
-  return i < 0 ? local.slice(-1) : local.slice(i + 1);
+  return fresh(i < 0 ? local.slice(-1) : local.slice(i + 1));
 }
 
 /** The history as the page shows it once the server holds versions: the server's, each keeping a run this browser marked on the same
  * setup and the server has not yet heard of, then this browser's versions the server does not hold, numbered after its last. */
-export function mergeVersions(server: ModelVersion[], local: ModelVersion[]): ModelVersion[] {
+export function mergeVersions(server: ModelVersion[], local: ModelVersion[], answered: Answered = NOTHING): ModelVersion[] {
   if (!server.length) return local;
   // a run marked here goes on the server's last version of the same setup: the numbers of the two lists need not agree
   const marked = new Map<number, NonNullable<ModelVersion["run"]>>();
@@ -144,16 +172,53 @@ export function mergeVersions(server: ModelVersion[], local: ModelVersion[]): Mo
     return { ...v, run: mine };
   });
   const after = kept[kept.length - 1].n;
-  return [...kept, ...unsent(local, server).map((v, i) => ({ ...v, n: after + i + 1 }))].slice(-MAX_VERSIONS);
+  return [...kept, ...unsent(local, server, answered).map((v, i) => ({ ...v, n: after + i + 1 }))].slice(-MAX_VERSIONS);
 }
 
 /** The runs this browser marked that the server's versions do not yet say: a version's job, or its answer once read. */
-export function runsToSend(server: ModelVersion[], shown: ModelVersion[]): { n: number; job: string; result: VersionResult | null }[] {
+export function runsToSend(server: ModelVersion[], shown: ModelVersion[]): RunMark[] {
   return shown.flatMap((v) => {
     const there = server.find((s) => s.n === v.n);
     if (!there || !v.run || (there.run?.job === v.run.job && (!v.run.result || there.run.result))) return [];
     return [{ n: v.n, job: v.run.job, result: v.run.result }];
   });
+}
+
+/** The server's side of a project as this browser holds it: its versions as last heard, and what it has answered for. */
+export type ServerSide = { list: ModelVersion[]; answered: Set<string>;
+  /** Versions sent once since the project opened whose answer could not be read as a version: not sent again while it is open. */
+  unread?: Set<string> };
+
+/** One sending of what this browser holds and the server does not, in order: the versions after the server's last, then the runs marked.
+ * Each answer is taken as it comes: a version numbered after the server's last joins its list; the server's last again ("the same
+ * setup") ends that send, and the server holds the version. An answer that cannot be read as a version ends that send too, but says
+ * nothing of what the server holds: the version is not sent again while the project is open (`side.unread`) and stays in this browser,
+ * which sends it once more when the project is next opened. So no answer makes the page send without end, whatever its own key makes
+ * of the two setups, and none takes a version out of this browser unless the server said it holds it. `side` is changed in place as the answers come, so what was
+ * answered before a failure is kept. How many requests were made; null when `still` says the project is no longer the one open. What
+ * `add` or `mark` throws is the caller's, and what it was thrown for is sent again by the next sending. */
+export async function sendToServer(shown: ModelVersion[], side: ServerSide,
+  api: { add(version: ModelVersion): Promise<unknown>; mark(run: RunMark): Promise<unknown> }, still: () => boolean = () => true): Promise<number | null> {
+  let sent = 0;
+  for (const version of unsent(shown, side.list, side.answered)) {
+    const id = versionId(version);
+    if (side.unread?.has(id)) continue;
+    sent += 1;
+    const kept = readServerVersions([await api.add(version)]);
+    if (!still()) return null;
+    if (!kept.length) { (side.unread ??= new Set()).add(id); continue; }
+    side.answered.add(id);
+    if (kept[0].n > (side.list[side.list.length - 1]?.n ?? 0)) side.list = [...side.list, kept[0]];
+  }
+  for (const run of runsToSend(side.list, mergeVersions(side.list, shown, side.answered))) {
+    if (side.answered.has(markId(run))) continue;
+    sent += 1;
+    const marked = readServerVersions([await api.mark(run)]);
+    if (!still()) return null;
+    side.answered.add(markId(run));
+    if (marked.length) side.list = side.list.map((v) => (v.n === marked[0].n ? marked[0] : v));
+  }
+  return sent;
 }
 
 const KEY = (project: string) => `anisotropy.versions.${project}`;

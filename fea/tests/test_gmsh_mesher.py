@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from anisotropy_fea.mesher import MeshError, gmsh_available, gmsh_open_hole_plate
+from anisotropy_fea.mesher import MeshError, gmsh_available, gmsh_open_hole_plate, hole_blocks
 
 pytestmark = pytest.mark.skipif(gmsh_available() is None,
                                 reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
@@ -39,6 +39,27 @@ def test_counts_follow_the_block_layout():
     assert mesh.node_count == 5948
     assert mesh.node_sets["Hole"].size == 36 and mesh.node_sets["Grip-Bottom"].size == mesh.node_sets["Grip-Top"].size == 2 * side + n_quarter + 1
     assert mesh.node_sets["Edge-Left"].size == mesh.node_sets["Edge-Right"].size == 2 * band + n_quarter + 1
+
+
+HOLE_GRID = [(width, length, diameter, size, around, rings, ratio, tab)
+             for width, length in ((36.0, 250.0), (100.0, 100.0), (300.0, 120.0)) for diameter in (6.0, 10.0) for size in (2.0, 7.0)
+             for around, rings in ((8, 1), (32, 6), (200, 1), (200, 40), (800, 1)) for ratio, tab in ((1.5, 0.0), (2.0, 30.0))
+             if tab < length / 2 - ratio * diameter / 2]
+
+
+def test_the_count_of_the_blocks_is_the_count_of_the_mesh_for_a_grid_of_holes():
+    """What a setup is refused by (ADR-0086 amendment 2) is `hole_blocks(...).elements`, so it must be no less than the mesh built from
+    the same numbers, and not far above it: it is the same count. The count once added the rings to the rectangle at the element size,
+    which left out that the column and the band through the hole carry a quarter of the nodes around it across the whole plate: 2000
+    nodes around a hole stated a few thousand elements and built several times as many."""
+    assert len(HOLE_GRID) == 120
+    for width, length, diameter, size, around, rings, ratio, tab in HOLE_GRID:
+        stated = hole_blocks(width, length, diameter, size, around, ratio, tab).elements(rings)
+        built = gmsh_open_hole_plate(width, length, diameter, size, around, rings, ratio, 1.2, tab_length=tab).element_count
+        assert stated == built, (width, length, diameter, size, around, rings, ratio, tab)
+    width, length, diameter, size, around, rings, ratio, tab = 100.0, 100.0, 10.0, 2.0, 2000, 1, 2.0, 0.0
+    rectangle_and_rings = math.ceil(width / size) * math.ceil(length / size) + around * rings  # what the count once was
+    assert rectangle_and_rings == 4_500 and hole_blocks(width, length, diameter, size, around, ratio, tab).elements(rings) == 43_600
 
 
 def test_hole_nodes_lie_on_the_circle_and_the_plate_fills_its_rectangle():

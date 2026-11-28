@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea import paths
-from anisotropy_fea.intake import (FIELDS, FORM_VERSION, IntakeError, build_specs, check_form, convert, designation_for, fill_form, read_form,
-                                   read_input, read_values, spec_from_values, values_of_spec, write_blank_form)
-from anisotropy_fea.spec import load_spec, parse_spec, to_si
+from anisotropy_fea.intake import (FIELDS, FILE_TEXT, FORM_VERSION, WORD_BYTES, IntakeError, build_specs, check_form, convert, designation_for, fill_form,
+                                   hole_elements, mesh_change, read_form, read_input, read_values, size_that_fits, spec_from_values, stated_elements,
+                                   values_of_spec, write_blank_form)
+from anisotropy_fea.mesher import gmsh_available
+from anisotropy_fea.spec import MOST_ELEMENTS_STATED, element_estimate, load_spec, parse_spec, to_si
 
 from public_coupon import DESIGNATION, PUBLIC_COUPON
 from test_intake import OHT_FILL, PUBLIC_FILL, own_constants
@@ -100,6 +102,205 @@ def test_a_blank_row_in_the_values_is_refused_as_on_the_form(tmp_path):
     with pytest.raises(IntakeError) as refused:
         specs_of(tmp_path, PUBLIC_FILL, length=None, G23="")
     assert "Length (mm): required" in str(refused.value) and "G23 (MPa): required" in str(refused.value)
+
+
+@pytest.mark.parametrize("changes, said", [
+    ({"width": float("inf")}, "Width (mm): a finite number is needed, not inf"),
+    ({"length": float("nan")}, "Length (mm): a finite number is needed, not nan"),
+    ({"length": "1e999"}, "Length (mm): a finite number is needed, not inf"),
+    ({"element_size": float("-inf")}, "a finite number is needed, not -inf"),
+    ({"tab_thickness": float("inf"), "tab_bevel": 30}, "Tab thickness (mm): a finite number is needed, not inf"),
+    ({"material_code": "A" * 300}, "Material code and Layup code: the coupon's name would be 307 characters, and a name is at most 80; give shorter codes"),
+    ({"layup_code": "L" + "1" * 90}, "the coupon's name would be 99 characters, and a name is at most 80"),
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "g" * 81},
+     "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 81"),
+    # a name is bounded in bytes, as a file counts it: 80 emoji are 320 bytes, more than a line of an Abaqus file holds
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "\U0001F600" * 80}, "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 320"),
+    ({"tab_thickness": 1.5, "tab_bevel": 30, "tab_material": "\u00e9" * 41}, "Tab material: at most 80 bytes (a letter outside the basic Latin letters takes 2 to 4), not 82"),
+    # a whole number of hundreds of digits, which JSON holds and a float does not
+    ({"length": 10 ** 400}, "Length (mm): the number is too large"),
+    ({"mesh_nx": 10 ** 400}, "Your Abaqus mesh: elements across the width: the number is too large"),
+    ({"value": -10 ** 400}, ": the number is too large"),
+    ({"angles": [45, 10 ** 400, -45, 90]}, "Ply 2: the number is too large"),
+    # a word no line of a model file can hold: neither writer cuts a word
+    ({"size_from": "x" * 5000}, "Where the size comes from: one word of it takes 5000 bytes, and a line of a model file holds a word of at most 200; "
+                                "shorten it or put a space in it"),
+    ({"team_model": "job " + "\u00e9" * 101}, "Your Abaqus model of this coupon: one word of it takes 202 bytes, and a line of a model file holds a word of at most 200"),
+    ({"test_data": "\U0001F600" * 51 + " report"}, "Test data: one word of it takes 204 bytes"),
+    ({**own_constants(), "own_source": "report-" + "n" * 194}, ": one word of it takes 201 bytes, and a line of a model file holds a word of at most 200"),
+])
+def test_a_size_that_is_no_finite_number_or_a_name_too_long_is_refused_at_its_row(tmp_path, changes, said):
+    """What a values file may hold and no model may (JSON as Python reads it takes Infinity and NaN, and 1e999 is infinite): each
+    stopped the tool with an error of its own before, one of them naming the folder it wrote in (ADR-0146)."""
+    with pytest.raises(IntakeError) as refused:
+        specs_of(tmp_path, PUBLIC_FILL, **changes)
+    assert said in str(refused.value)
+
+
+def test_a_name_at_its_limit_is_taken(tmp_path):
+    longest = "A" * (80 - len("-UNT-L1"))
+    main, _ = specs_of(tmp_path, PUBLIC_FILL, material_code=longest, layup_code="L1", tab_thickness=1.5, tab_bevel=30, tab_material="g" * 80)
+    spec = parse_spec(main)
+    assert spec.coupon.designation == f"{longest}-UNT-L1" and len(spec.coupon.designation) == 80 and spec.tabs.material == "g" * 80
+    for material in ("\u00e9" * 40, "\U0001F600" * 20):  # 80 bytes of letters that take two and four
+        assert parse_spec(specs_of(tmp_path, PUBLIC_FILL, tab_thickness=1.5, tab_bevel=30, tab_material=material)[0]).tabs.material == material
+
+
+@pytest.mark.parametrize("word", ["w" * WORD_BYTES, "\u00e9" * (WORD_BYTES // 2), "\U0001F600" * (WORD_BYTES // 4)], ids=["ascii", "two bytes", "four bytes"])
+def test_a_word_at_its_limit_is_taken_in_every_text_row_as_typed(tmp_path, word):
+    assert len(word.encode("utf-8")) == WORD_BYTES == 200 and FILE_TEXT == ("size_from", "team_model", "test_data", "own_source")
+    rows = {key: f"see {word} there" for key in ("size_from", "team_model", "test_data", "notes", "filled_by")}
+    values = check_form(read_values(values_file(tmp_path, PUBLIC_FILL, **rows)))
+    assert all(getattr(values, key) == text for key, text in rows.items())
+    assert check_form(read_values(values_file(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_source": f"see {word}"}))).own["source"] == f"see {word}"
+    # a row that reaches no model file is not bounded by what a file's line holds: a long address in the notes is taken
+    long = check_form(read_values(values_file(tmp_path, PUBLIC_FILL, notes="https://example.org/" + word * 3, filled_by=word * 2)))
+    assert long.notes.endswith(word * 3) and long.filled_by == word * 2
+
+
+@pytest.mark.parametrize("changes, said", [
+    ({"length": 10 ** 400}, "Length (mm): the number is too large"),
+    ({"regions": [{"name": "Patch", "x0": 10 ** 400, "x1": 20, "y0": 10, "y1": 20}]}, "Regions: entry 1 ('Patch') has a bound that is not a number"),
+    ({"supports": [{"region": "Edge-Bottom", "dofs": [1, 2, 3], "value": 10 ** 400}]}, "Supports: entry 1 (Edge-Bottom) has a value that is not a number"),
+    ({"loads": [{"region": "Face", "pressure": 10 ** 400}]}, "Loads: entry 1 (Face) has a pressure that is not a number"),
+    ({"loads": [{"region": "Edge-Top", "dof": 2, "total": 10 ** 400}]}, "Loads: entry 1 (Edge-Top) has a total that is not a number"),
+])
+def test_a_whole_number_too_large_for_a_float_is_refused_at_its_row_in_a_plates_lists_too(tmp_path, changes, said):
+    """A length of 1 followed by 400 zeros is JSON, and `float` raises OverflowError for it, which no row caught: the tool stopped and
+    the route answered 503 (ADR-0146, the review's second round)."""
+    from anisotropy_fea import enabled
+
+    plate = dict(filled_by="A. Engineer", date="2026-10-25", test="plate", material_code="AL", layup_code="L1", size_from="a plate",
+                 length=200.0, width=100.0, material_kind="isotropic", own_name="Aluminium", own_E=70000.0, own_nu=0.33, own_source="a handbook",
+                 thickness=2.0, element_size=10.0, supports=[{"region": "Edge-Bottom", "dofs": [1, 2, 3]}], loads=[{"region": "Face", "pressure": 0.01}])
+    with enabled.every_test(True), pytest.raises(IntakeError) as refused:
+        check_form(read_values(values_file(tmp_path, plate, **changes)))
+    assert said in str(refused.value) and len(str(refused.value)) < 600  # and never the number's hundreds of digits
+
+
+# --------------------------------------------------------------------------------------------- the most elements a setup holds (ADR-0086 amendment 2)
+
+def rows_of(fill: dict, **changes) -> dict:
+    return {**{key: value for key, value in fill.items() if not key.startswith("mesh_")}, **changes}
+
+
+@pytest.mark.parametrize("fill", [PUBLIC_FILL, OHT_FILL], ids=["strip", "open hole"])
+def test_the_count_the_rows_state_is_the_count_of_the_spec_they_make(tmp_path, fill):
+    """`stated_elements` is arithmetic on the rows, done before a spec is made of them; it is the spec's own estimate."""
+    from anisotropy_fea import enabled
+
+    finest = size_that_fits(fill["length"], fill["width"], MOST_ELEMENTS_STATED)
+    with enabled.every_test(True):
+        for size in (5.0, 2.0, 0.7, finest):
+            values = check_form(read_values(values_file(tmp_path, rows_of(fill, element_size=size))))
+            spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+            assert stated_elements(values) == element_estimate(spec) <= MOST_ELEMENTS_STATED, size
+        seeded = check_form(read_values(values_file(tmp_path, PUBLIC_FILL)))
+        assert stated_elements(seeded) == 10 * (28 + 27 + 10 + 27 + 28) == element_estimate(spec_from_values(seeded, designation_for(seeded, tmp_path / "none"), "v"))
+
+
+@pytest.mark.parametrize("changes, count, change", [
+    ({"element_size": 0.1}, "625,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 1e-5}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 1e-6}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),
+    ({"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.25 mm or more"),  # a length over it is beyond any number
+    ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999999999, 27, 28"},
+     "more than 1,000,000,000,000", "give fewer elements across the width or fewer rows per segment"),
+    ({"element_size": None, "mesh_nx": 10, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 99999, 27, 28"},
+     "1,001,090", "give fewer elements across the width or fewer rows per segment"),
+    ({"element_size": None, "mesh_nx": 10 ** 12, "mesh_partitions": "56, 110, 140, 194", "mesh_seeds": "28, 27, 10, 27, 28"},
+     "more than 1,000,000,000,000", "give fewer elements across the width or fewer rows per segment"),
+])
+def test_rows_whose_mesh_would_pass_the_most_a_setup_holds_are_refused_by_arithmetic_before_a_spec_is_made(tmp_path, monkeypatch, changes, count, change):
+    """An element size of 1e-5 mm once cost the STEP file 12 s and 1.2 GB, 1e-6 mm over 10 GB, and 99999999999 rows in a segment a 504 for
+    every program: the spec's check built one row per element row (ADR-0086 amendment 2). Here nothing is built: the spec's parser is
+    stood in by one that fails the test if it is called."""
+    import time
+
+    from anisotropy_fea import intake
+
+    values = check_form(read_values(values_file(tmp_path, rows_of(PUBLIC_FILL, **changes))))
+    monkeypatch.setattr(intake, "parse_spec", lambda *args, **kwargs: pytest.fail("a spec was made of the rows"))
+    monkeypatch.setattr(intake, "render_toml", lambda *args, **kwargs: pytest.fail("a spec was written from the rows"))
+    clock = time.perf_counter()
+    with pytest.raises(IntakeError) as refused:
+        build_specs(values, designation_for(values, tmp_path / "none"), "values.json")
+    assert time.perf_counter() - clock < 1.0
+    rows = "Your Abaqus mesh: elements across the width, Your Abaqus mesh: rows per segment" if "mesh_seeds" in changes else "Element size (mm)"
+    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 100,000, "
+                                  f"whatever is made of it: {change} (form rows: {rows})")
+
+
+HOLED_PLATE = {**json.loads((Path(__file__).parents[2] / "tests" / "fixtures" / "studio-plate" / "values.json").read_text(encoding="utf-8")),
+               "length": 200.0, "width": 100.0, "element_size": 2.0, "hole_diameter": 20.0, "regions": [],
+               "supports": [{"region": "Edge-Left", "dofs": [1, 2, 3, 4, 5, 6]}]}  # the workspace's own plate, with a hole
+NODES, RINGS, SIZE = "Nodes around the hole", "Element rings around the hole", "Element size (mm)"
+
+
+@pytest.mark.parametrize("fill, changes, count, change, rows", [
+    (HOLED_PLATE, {"hole_circumferential": 39000, "hole_radial": 1}, "1,113,900", "give at most 3,424 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_circumferential": 190000, "hole_radial": 1}, "5,417,400", "give at most 3,424 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_circumferential": 10 ** 12}, "more than 1,000,000,000,000", "give at most 2,912 nodes around the hole", [NODES]),
+    (HOLED_PLATE, {"hole_radial": 10 ** 6}, "32,003,280", "give at most 3,022 element rings around the hole", [RINGS]),
+    (HOLED_PLATE, {"hole_circumferential": 2000, "hole_radial": 60}, "177,400",
+     "give at most 1,112 nodes around the hole, or at most 21 element rings around it", [NODES, RINGS]),
+    (HOLED_PLATE, {"element_size": 0.01}, "96,176,192", "use an element size of 0.32 mm or more", [SIZE]),
+    (HOLED_PLATE, {"element_size": 5e-324}, "more than 1,000,000,000,000", "use an element size of 0.32 mm or more", [SIZE]),
+    (HOLED_PLATE, {"element_size": 1e-6, "hole_circumferential": 190000}, "more than 1,000,000,000,000",
+     "use a larger element size, and fewer nodes around the hole or fewer element rings around it", [SIZE, NODES, RINGS]),
+    (OHT_FILL, {"hole_circumferential": 39000}, "1,756,728", "give at most 2,180 nodes around the hole", [NODES]),
+], ids=["39000 nodes, one ring", "190000 nodes, one ring", "10^12 nodes", "a million rings", "2000 nodes and 60 rings", "0.01 mm", "5e-324 mm",
+        "1e-6 mm and 190000 nodes", "the open-hole coupon with 39000 nodes"])
+def test_a_hole_whose_mesh_would_pass_the_most_is_refused_by_arithmetic_with_what_to_change_at_the_hole(tmp_path, monkeypatch, fill, changes, count,
+                                                                                                       change, rows):
+    """A plate with a hole and 39,000 or 190,000 nodes around it, with one ring, once stated 44,000 or 195,000 elements, so it passed the
+    check, and its file for Abaqus or Ansys ended at the route's 30 s (ADR-0086 amendment 2, the third review). The count is now the
+    count of the blocks the mesher cuts, and the refusal names what to change by its cause: the nodes, the rings, the element size, or
+    all of them. What it names fits, and one step more does not."""
+    import time
+
+    from anisotropy_fea import enabled, intake
+
+    with enabled.every_test(True):
+        values = check_form(read_values(values_file(tmp_path, rows_of(fill, **changes))))
+        monkeypatch.setattr(intake, "parse_spec", lambda *args, **kwargs: pytest.fail("a spec was made of the rows"))
+        monkeypatch.setattr(intake, "render_toml", lambda *args, **kwargs: pytest.fail("a spec was written from the rows"))
+        clock = time.perf_counter()
+        with pytest.raises(IntakeError) as refused:
+            build_specs(values, designation_for(values, tmp_path / "none"), "values.json")
+        assert time.perf_counter() - clock < 1.0
+    assert str(refused.value) == (f"values.json: the spec refuses the inputs: the mesh would have {count} elements; a setup holds at most 100,000, "
+                                  f"whatever is made of it: {change} (form rows: {', '.join(rows)})")
+    assert mesh_change(values, MOST_ELEMENTS_STATED) == (change, tuple(key for key in ("element_size", "hole_circumferential", "hole_radial")
+                                                                       if FIELDS[key].label in rows))
+    size, around, rings = values.element_size, values.hole["circumferential"], values.hole["radial_layers"]
+    numbers = [int(word.replace(",", "")) for word in change.split() if word.replace(",", "").isdigit()]
+    if change.startswith("give at most") and "nodes" in change:
+        assert hole_elements(values, size, numbers[0], rings) <= MOST_ELEMENTS_STATED < hole_elements(values, size, numbers[0] + 4, rings)
+    if change.startswith("give at most") and "rings" in change:
+        assert hole_elements(values, size, around, numbers[-1]) <= MOST_ELEMENTS_STATED < hole_elements(values, size, around, numbers[-1] + 1)
+    if change.startswith("use an element size of"):
+        named = float(change.split()[5])
+        assert hole_elements(values, named, around, rings) <= MOST_ELEMENTS_STATED < hole_elements(values, named * 0.9, around, rings)
+
+
+@pytest.mark.skipif(gmsh_available() is None, reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
+@pytest.mark.parametrize("fill", [HOLED_PLATE, OHT_FILL], ids=["a plate with a hole", "the open-hole coupon"])
+def test_the_count_a_hole_setup_states_is_the_count_of_the_mesh_built_from_it(tmp_path, fill):
+    """For every kind with a hole, over a grid of element sizes, nodes around the hole, rings and ring ratios: what the rows state, what
+    the spec states and what the mesher builds are one number, so a setup the check lets through is the size the check counted."""
+    from anisotropy_fea import enabled
+    from anisotropy_fea.femodel import build_model
+
+    grid = [(size, around, rings, ratio) for size in (2.0, 5.0) for around, rings in ((8, 1), (32, 6), (400, 1), (400, 30), (2000, 1))
+            for ratio in (1.5, 2.0)]
+    with enabled.every_test(True):
+        for size, around, rings, ratio in grid:
+            rows = rows_of(fill, element_size=size, hole_circumferential=around, hole_radial=rings, hole_ring=ratio)
+            values = check_form(read_values(values_file(tmp_path, rows)))
+            spec = spec_from_values(values, designation_for(values, tmp_path / "none"), "values.json")
+            built = build_model(spec).mesh.element_count
+            assert stated_elements(values) == element_estimate(spec) == built, (size, around, rings, ratio, built)
 
 
 # --------------------------------------------------------------------------------------------- the failure criterion rows (form 0.3)

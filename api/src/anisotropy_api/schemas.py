@@ -598,7 +598,9 @@ class CouponCheckRequest(Contract):
                                   **({"project_id": self.project_id} if self.project_id is not None else {}))
 
 
-ModelProgram = Literal["abaqus", "ansys"]  # the programs a model is written for on request (ADR-0129)
+# What a model is written as on request: a file for the engineer's own solver (ADR-0129), or `step`, its shape as a STEP file for a CAD
+# program (ADR-0146).
+ModelProgram = Literal["abaqus", "ansys", "step"]
 
 
 class CouponModelReceipt(Contract):
